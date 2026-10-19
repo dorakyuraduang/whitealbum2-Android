@@ -58,6 +58,16 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/native_memory.cpp` checks resource-sized REP copies/fills and the cached
+compiled clear loop in owned RAM. It covers forward/backward indices, complete
+CPU/FP state, padding, permission faults with partial writes, unsupported shapes
+and a single preheader fallback attempt. Its optional `--bench` mode checks every
+output byte and records four bounded 4 MiB CPU operations; it creates no window,
+device or game process. Local before/after comparisons link the same test object
+to the saved verified 0.2.29 archive and the current archive, alternate process
+order and compare all recorded CPU states. These are resource-buffer component
+times, not measurements of storage, full fast-forward or Android FPS.
+
 `tests/movie_tracks.cpp` reads the external `res/mv100.pak` to owned decoder
 memory without creating a device, window or game. It checks 64 PCM/YUV/timestamp
 prefixes against ordinary demux order, drains the fixed audio cursor to EOF,

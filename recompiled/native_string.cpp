@@ -1,12 +1,16 @@
 #include "native_string.hpp"
 #include "work_samples.hpp"
 #include <cstring>
+#include <optional>
 
 namespace wa2::aot {
 namespace {
 using Pages=const wr::Memory::NativeIndex* const*;
 constexpr std::uint64_t AddressLimit=std::uint64_t{1}<<32;
-constexpr unsigned MaximumBytes=1024*1024;
+// Scene images routinely exceed 1 MiB. Declining their REP or clear loop
+// re-enters the element-by-element checked path for most of an image.
+// Keep the same bounded admission as the other native image operations.
+constexpr unsigned MaximumBytes=64u*1024*1024;
 
 const wr::Memory::NativePage* page_at(Pages pages,wr::U32 at){
     const auto* index=pages[at>>22];return index?&(*index)[(at>>12)&1023]:nullptr;
@@ -49,12 +53,23 @@ void fill_range(wr::Memory::ExecutionScope& scope,wr::U32 destination,unsigned b
 bool try_bulk_string(wr::Cpu& cpu,wr::Memory& memory,unsigned kind,unsigned width,
                      unsigned address_width,unsigned repeat,unsigned segment){
     if(kind>1 || (width!=8 && width!=16 && width!=32) || address_width!=32 ||
-       (repeat!=1 && repeat!=2) || segment || (cpu.flags&wr::DF))return false;
+       (repeat!=1 && repeat!=2) || segment)return false;
     const auto count=cpu.r[wr::ECX],step=width/8;
     if(!count)return true;
     if(count>MaximumBytes/step)return false;
     if(current_work_samples)++current_work_samples->string_bulk_attempts;
-    const auto bytes=count*step,source=cpu.r[wr::ESI],destination=cpu.r[wr::EDI];
+    const auto bytes=count*step;const bool backwards=(cpu.flags&wr::DF)!=0;
+    // Backwards MOVS/STOS address the current element, not its last byte.
+    // Reject a wrapped accessed range, but allow the final index to wrap.
+    const auto low=[&](wr::U32 at)->std::optional<wr::U32>{
+        if(!backwards)return at;
+        if(at<bytes-step || std::uint64_t(at)+step>AddressLimit)return {};
+        return at-(bytes-step);
+    };
+    const auto target=low(cpu.r[wr::EDI]);
+    const auto input=kind==0?low(cpu.r[wr::ESI]):std::optional<wr::U32>{0};
+    if(!target || !input)return false;
+    const auto source=*input,destination=*target;
     if(kind==0 && source!=destination &&
        std::uint64_t(source)<std::uint64_t(destination)+bytes &&
        std::uint64_t(destination)<std::uint64_t(source)+bytes)return false;
@@ -71,14 +86,14 @@ bool try_bulk_string(wr::Cpu& cpu,wr::Memory& memory,unsigned kind,unsigned widt
                 done+=amount;
             }
         }
-        cpu.r[wr::ESI]+=bytes;
+        cpu.r[wr::ESI]+=backwards?0u-bytes:bytes;
     }else{
         auto word=cpu.r[wr::EAX];
         if(step==1)word=(word&255)*0x01010101u;
         else if(step==2)word=(word&65535)*0x00010001u;
         fill_range(scope,destination,bytes,word);
     }
-    cpu.r[wr::EDI]+=bytes;cpu.r[wr::ECX]=0;
+    cpu.r[wr::EDI]+=backwards?0u-bytes:bytes;cpu.r[wr::ECX]=0;
     if(current_work_samples){++current_work_samples->string_bulk_completed;current_work_samples->string_bulk_bytes+=bytes;}
     return true;
 }
@@ -88,13 +103,17 @@ bool native_vector_clear(wr::Cpu& cpu,wr::Memory& memory){
     // DEC ECX and JNZ. The preceding PXOR has already established XMM0=0.
     // All stores complete before the final flags become visible. Declining
     // leaves even alignment/permission/MXCSR faults at the original store PC.
+    if(current_work_samples)++current_work_samples->vector_clear_attempts;
     const auto count=cpu.r[wr::ECX],destination=cpu.r[wr::EDI];
     if(!count || count>MaximumBytes/128 || (destination&15) ||
        (cpu.fp.get32(24)&0xffff1f80u)!=0x1f80u || cpu.fp.get64(160) || cpu.fp.get64(168))return false;
-    if(current_work_samples)++current_work_samples->vector_clear_attempts;
     auto scope=memory.execution_scope();const auto bytes=count*128;
     if(!admitted(scope.native_pages(),destination,bytes,wr::Memory::Write))return false;
     fill_range(scope,destination,bytes,0);
+    // The checked MOVDQA kernels normalize these FXSAVE fields on the first
+    // store. A resume may arrive with noncanonical padding, unlike the normal
+    // caller whose preceding PXOR already normalized it.
+    cpu.fp.put32(28,0xffff);cpu.fp.clear_x87_padding();
     cpu.r[wr::EDI]+=bytes;cpu.r[wr::ECX]=wr::incdec(cpu,1,32,true);cpu.eip=0x47e7c8;
     if(current_work_samples){++current_work_samples->vector_clear_completed;current_work_samples->vector_clear_bytes+=bytes;}
     return true;

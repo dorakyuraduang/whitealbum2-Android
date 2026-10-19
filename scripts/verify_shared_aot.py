@@ -107,7 +107,7 @@ def main():
     tracked += [ROOT/'tests/host_leaf_calls.cpp',ROOT/'tests/render_cpu.cpp']
     tracked += [ROOT/'tests/integer_registers.cpp']
     tracked += [ROOT/('tests/'+name) for name in ('native_string.cpp','weather_cpu.cpp','interface_handles.cpp','audio_latency.cpp')]
-    tracked += [ROOT/'tests/image_colours.cpp']
+    tracked += [ROOT/'tests/image_colours.cpp',ROOT/'tests/native_memory.cpp']
     tracked += [ROOT/'tests/movie_tracks.cpp']
     tracked += [ROOT/('scripts/'+name) for name in ('prepare_weather_baseline.py','verify_particle_audio.py','prepare_particle_baseline.py','verify_particles.py')]
     baseline=ROOT/'build/performance-0.2.19'
@@ -161,9 +161,15 @@ def main():
     submission_report=build/'render-submission.json'
     run([build/'wa2_render_submission_tests.exe',submission_report],30)
     run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests',
-        'wa2_native_string_tests','wa2_image_colour_tests','wa2_movie_track_tests','wa2_weather_cpu_tests','wa2_interface_handle_tests','wa2_audio_latency_tests','wa2_audio_latency_before','--parallel','1'],600)
+        'wa2_native_string_tests','wa2_native_memory_tests','wa2_image_colour_tests','wa2_movie_track_tests','wa2_weather_cpu_tests','wa2_interface_handle_tests','wa2_audio_latency_tests','wa2_audio_latency_before','--parallel','1'],600)
     string_report=build/'native-string.json'
     run([build/'wa2_native_string_tests.exe',string_report],30)
+    buffer_report=build/'native-memory.json'
+    run([build/'wa2_native_memory_tests.exe',buffer_report],90)
+    buffers=json.loads(buffer_report.read_text())
+    if (not buffers['passed'] or buffers['large_string_cases']!=16 or buffers['precise_partial_fault_cases']!=16 or
+        buffers['integrated_clear_cases']!=10 or buffers['unchanged_declines']!=16 or buffers['single_clear_fallback_attempts']!=8):
+        raise ValueError('Large resource buffers changed CPU/FP/RAM, fault prefixes or one-shot fallback behavior')
     interface_report=build/'interface-handles.json'
     run([build/'wa2_interface_handle_tests.exe',interface_report],30)
     run([sys.executable,ROOT/'scripts/verify_particle_audio.py'],600)
@@ -379,6 +385,7 @@ def main():
                shared_host_leaf_calls=json.loads(leaf_report.read_text()),
                native_integer_registers=json.loads(integer_report.read_text()),
                native_bulk_string_work=json.loads(string_report.read_text()),
+               shared_large_native_buffers=buffers,
                native_interface_handle_memory=json.loads(interface_report.read_text()),
                bounded_particle_audio_comparison=json.loads(particle_audio_report.read_text()),
                bounded_particle_comparison_to_previous_release=json.loads(particle_report.read_text()),

@@ -4,7 +4,9 @@
   "loops": [
     {
       "name": "aligned_vector_buffer_clear",
-      "entry": 4712344,
+      "entry": 4712334,
+      "signature_entry": 4712344,
+      "preheader_signature_hex": "eb08",
       "end": 4712392,
       "implementation": "recompiled/native_string.cpp",
       "function": "wa2::aot::native_vector_clear",

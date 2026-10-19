@@ -590,7 +590,11 @@ def main():
             if any(pc not in owners for pc in loop.get('external_exit_targets',[])):
                 raise ValueError('Weather prefix return must be a checked static source location')
         if 'signature_hex' in loop:
-            actual=bytearray();pc=loop['entry']
+            actual=bytearray();pc=loop.get('signature_entry',loop['entry'])
+            if owners.get(pc)!=owners[loop['entry']]:
+                raise ValueError('native loop signature must remain in its compiled function: '+loop['name'])
+            if pc!=loop['entry'] and bodies[loop['entry']][1].hex()!=loop.get('preheader_signature_hex'):
+                raise ValueError('native loop preheader signature changed: '+loop['name'])
             while pc<loop['end']:
                 if pc not in bodies:raise ValueError('native loop crosses an undiscovered instruction: '+loop['name'])
                 raw=bodies[pc][1];actual.extend(raw);pc+=len(raw)
