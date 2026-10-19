@@ -3,6 +3,8 @@
 #include "host_calls.hpp"
 #include "extended80.hpp"
 #include "../engine/math_environment.hpp"
+#include "../engine/glyph_index.hpp"
+#include "../engine/glyph_geometry_memo.hpp"
 #include <winrecomp/runtime.hpp>
 #include <algorithm>
 #include <cmath>
@@ -14,9 +16,19 @@ namespace wa2::aot {namespace {
 thread_local NativeSpriteCounts counts;
 thread_local NativeGlyphCounts glyph_counts;
 thread_local std::vector<SpriteTile> tile_buffer;
+thread_local wa2::text::GlyphIndex glyph_index;
+thread_local wa2::text::GlyphGeometryMemo<SpriteTile> glyph_geometry;
 struct Declined {};
 template<class T> T read(const std::uint8_t* bytes,unsigned at){T value;std::memcpy(&value,bytes+at,sizeof(value));return value;}
-float ordinary(float value){if(!std::isfinite(value) || (value!=0 && std::fpclassify(value)==FP_SUBNORMAL))throw Declined{};return value;}
+float ordinary(float value){
+    // Every arithmetic boundary rejects nonfinite/subnormal binary32 values.
+    // Classify their representation once, avoiding floating comparisons and
+    // general libm classification on each sprite/grid operation. Both signed
+    // zeros remain accepted. Rejection stays inside the saved host environment.
+    const auto bits=std::bit_cast<std::uint32_t>(value),exponent=bits&0x7f800000u;
+    if(exponent==0x7f800000u || (!exponent && (bits&0x007fffffu)))throw Declined{};
+    return value;
+}
 // Keep the PC24 source's explicit single-precision operation boundaries.
 float add(float a,float b){return ordinary(a+b);}float sub(float a,float b){return ordinary(a-b);}
 float mul(float a,float b){return ordinary(a*b);}float div(float a,float b){if(!b)throw Declined{};return ordinary(a/b);}
@@ -45,7 +57,7 @@ std::pair<int,int> grid_axis(int count,int size,float from,float to,float extent
     return {first,last};
 }
 int channel(unsigned sum,unsigned palette,bool additive){return additive?int(sum)+int(palette)*4-512+(palette>128?2:0):palette<=128?int(sum*palette/128):int(sum+(palette-128)*(510-sum)/127);}
-bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::array<std::uint8_t,256>& s,std::uint32_t override_image){
+bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::array<std::uint8_t,256>& s,std::uint32_t override_image,bool memo_glyph=false){
     if(!memory.load(0xb34004,32))return false;
     const auto si=[&](unsigned at){return read<std::int16_t>(s.data(),at);};
     const auto su=[&](unsigned at){return read<std::uint32_t>(s.data(),at);};
@@ -104,6 +116,13 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
     default:command.blend_enabled=0;command.source_blend=2;command.destination_blend=1;
     }
     command.alpha_argument=dim(0x68)==1?1:2; // selects which ALPHAARG slot the source changes below
+    const auto half_bits=memory.load(0x4c2280,32),pointer=read<std::uint32_t>(image.data(),0x70);
+    std::array<std::uint32_t,256> handles{};
+    if(command.target_kind==SpriteTarget::texture_level_zero && std::uint64_t(pointer)<0xb3400cull && std::uint64_t(pointer)+nx*ny*4>0xb34008ull)return false;
+    memory.copy_out(pointer,{reinterpret_cast<std::uint8_t*>(handles.data()),std::size_t(nx*ny)*4});
+    const bool memo=memo_glyph && !su(0x74);
+    const wa2::text::GlyphGeometryMemo<SpriteTile>::Input key{s,image,palette,half_bits,std::span(handles).first(nx*ny)};
+    if(memo)if(const auto tiles=glyph_geometry.find(key)){command.tiles=*tiles;return true;}
     float u0=sf(0xbc),u1=sf(0xc0),v0=sf(0xc4),v1=sf(0xc8);
     std::array<std::array<float,2>,4> corners;
     const auto ox=sf(0x78),oy=sf(0x7c),sx=sf(0x80),sy=sf(0x84);
@@ -130,13 +149,10 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
     }
     if(image[4]){u0=mul(u0,.5f);u1=mul(u1,.5f);v0=mul(v0,.5f);v1=mul(v1,.5f);}
     if(!(u1>u0 && v1>v0) || u1>width || v1>height)return false;
-    const auto du=sub(u1,u0),dv=sub(v1,v0),half=ordinary(std::bit_cast<float>(memory.load(0x4c2280,32)));
+    const auto du=sub(u1,u0),dv=sub(v1,v0),half=ordinary(std::bit_cast<float>(half_bits));
     std::array<float,18> left{},right{},top{},bottom{},tx{},ty{};
     const auto [first_x,last_x]=grid_axis(nx,tw,u0,u1,du,left,0,right,1,tx);
     const auto [first_y,last_y]=grid_axis(ny,th,v0,v1,dv,top,1,bottom,0,ty);
-    const auto pointer=read<std::uint32_t>(image.data(),0x70);std::array<std::uint32_t,256> handles{};
-    if(command.target_kind==SpriteTarget::texture_level_zero && std::uint64_t(pointer)<0xb3400cull && std::uint64_t(pointer)+nx*ny*4>0xb34008ull)return false;
-    memory.copy_out(pointer,{reinterpret_cast<std::uint8_t*>(handles.data()),std::size_t(nx*ny)*4});
     tile_buffer.clear();if(tile_buffer.capacity()<256)tile_buffer.reserve(256);
     for(int y=first_y;y<last_y;++y)for(int x=first_x;x<last_x;++x){
         if(top[y+1]==bottom[y] || right[x+1]==left[x] || !handles[y*nx+x] || !(u0<float((x+1)*tw) && v0<float((y+1)*th) && float(x*tw)<u1 && float(y*th)<v1))continue;
@@ -147,7 +163,7 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
             out={sub(px,half),sub(py,half),sf(0xa8),sf(0xac+n*4),colour,secondary,n&1?right[x+1]:left[x],n>>1?bottom[y]:top[y+1]};
         }
     }
-    command.tiles=tile_buffer;return true;
+    command.tiles=tile_buffer;if(memo && !std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW))glyph_geometry.remember(key,command.tiles);return true;
 }
 }
 NativeSpriteCounts native_sprite_counts(){return counts;}
@@ -190,17 +206,13 @@ bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){
         const auto left=add(f(1),x),right=add(x,f(3)),top=add(y,f(2)),bottom=add(y,f(4));
         for(unsigned n=0;n<4;++n){put(0x88+n*4,n&1?right:left);put(0x98+n*4,n>>1?bottom:top);put(0x53+n*4,0xff000000u);put(0x63+n*4,args[7]);}
         auto code=std::uint16_t(args[0]);if(std::uint16_t(code+0x4f)>0x2c && code>255)code=std::uint16_t((code<<8)|(code>>8));
-        unsigned index{};bool found{};
-        for(unsigned n=0;n<64;++n){const auto first=memory.load(0x4a14b8+n*4,16),last=memory.load(0x4a14ba+n*4,16);
-            if(last==0xffff || (n && first==0xffff)){found=true;break;}
-            if(first>last)return false;
-            if(code>=first && code<=last){index+=code-first;found=true;break;}index+=last-first+1;
-        }
-        if(!found || index>0x7fffffffu)return false;
+        const auto table=scope.readable(0x4a14b8,256);if(table.size()!=256)return false;
+        const auto resolved=glyph_index.lookup(std::span<const std::uint8_t,256>{table.data(),256},code);
+        if(!resolved || *resolved>0x7fffffffu)return false;const auto index=*resolved;
         const float cell_size=i(8)<2?40.f:24.f;
         const auto u=add(f(5),mul(float(index%80),cell_size)),v=add(mul(float(index/80),cell_size),f(5));
         put(0xbc,u);put(0xc0,add(f(6),u));put(0xc4,v);put(0xc8,add(v,f(6)));put(0x3c,1u);
-        if(!build(cpu,memory,command,sprite,0) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++glyph_counts.declined;return false;}
+        if(!build(cpu,memory,command,sprite,0,true) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++glyph_counts.declined;return false;}
     }catch(const Declined&){++glyph_counts.declined;return false;}catch(const wr::GuestFault&){++glyph_counts.declined;return false;}
     if(!service->submit(command)){++glyph_counts.declined;return false;}
     if(current_native_calls)--current_native_calls->remaining;

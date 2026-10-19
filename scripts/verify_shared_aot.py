@@ -99,6 +99,7 @@ def main():
     tracked += [ROOT/'tests/native_resource_memory.cpp']
     tracked += [ROOT/'tests/resource_loading.cpp',ROOT/'tests/wait_probes.cpp']
     tracked += [ROOT/'tests/lzss_groups.cpp',ROOT/'scripts/compare_lzss_groups.py']
+    tracked += [ROOT/'tests/glyph_index.cpp',ROOT/'tests/glyph_geometry.cpp',ROOT/'tests/byte_equality.cpp',ROOT/'scripts/compare_glyph_cpu.py']
     tracked += [ROOT/'tests/heap_pool_memory.cpp']
     tracked += [ROOT/'tests/large_heap_memory.cpp']
     tracked += [ROOT/'scripts/verify_android_java.py',ROOT/'tests/android/org/wa2/port/ResourceLocationTest.java',ROOT/'android/app/src/main/AndroidManifest.xml']
@@ -162,6 +163,7 @@ def main():
          '-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),
          '-DCMAKE_BUILD_TYPE=MinSizeRel','-DWA2_SHARED_AOT_CHECKS=ON','-DWA2_AOT_DIAGNOSTICS=ON','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'])
     run([cmake,'--build',build,'--target','wa2_shared_aot_tests','wa2_function_process_tests','wa2_portable_scheduler_tests','wa2_portable_registry_tests','wa2_portable_system_tests','wa2_resource_mount_tests','wa2_native_resource_memory_tests','wa2_native_resource_cache_tests','wa2_resource_loading_tests','wa2_lzss_group_tests','wa2_wait_probe_tests','wa2_large_heap_memory_tests','wa2_portable_sound_bridge_tests','wa2_window_resource_tests','wa2_widget_unicode_tests','wa2_window_model_tests','wa2_portable_movie_bridge_tests','wa2_render_submission_tests','wa2_portable_acm_tests','wa2_portable_shell_tests','wa2_crt_math_path_tests','wa2_pixel_transfer_tests','--parallel','1'],2400)
+    run([cmake,'--build',build,'--target','wa2_glyph_index_tests','wa2_glyph_geometry_tests','wa2_byte_equality_tests','--parallel','1'],300)
     submission_report=build/'render-submission.json'
     run([build/'wa2_render_submission_tests.exe',submission_report],30)
     run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests','wa2_image_upload_tests',
@@ -189,19 +191,21 @@ def main():
     dialogue_report=build/'dialogue-cpu.json'
     run([build/'wa2_dialogue_cpu_tests.exe',dialogue_report],30)
     dialogue=json.loads(dialogue_report.read_text())
-    if (not dialogue['passed'] or dialogue['exact_source_variants']!=12 or dialogue['cache_key_checks']<201 or
+    if (not dialogue['passed'] or dialogue['exact_source_variants']!=12 or dialogue['cache_key_checks']<237 or
         dialogue['unrelated_input_variants']!=4 or dialogue['noise_grid_hits']<60 or not dialogue['changing_lines_skip_capture'] or len(dialogue['noisy_paired_ns'])!=5 or
         not dialogue['cached_outputs_bit_exact'] or not dialogue['memo_grid_hits'] or not dialogue['memo_sprite_hits'] or
         dialogue['source_draws']!=46 or dialogue['recorded_driver_packets']!=1):
         raise ValueError('Cached source dialogue geometry or submission replay failed')
     glyph=dialogue['native_glyph_chain']
     if (glyph['exact_source_variants']!=12 or glyph['accepted_glyphs']!=480 or glyph['legacy_api_calls'] or
+        glyph['changing_source_cases']!=16 or len(glyph['changing_native_ns'])!=5 or len(glyph['memo_enabled_pairs'])!=5 or
+        glyph['memo_finds']!=1600 or glyph['memo_hits']<800 or not glyph['memo_captures'] or
         not glyph['raw_vertex_bits_equal'] or not glyph['void_cdecl_abi_preserved'] or len(glyph['paired_ns'])!=5):
         raise ValueError('Complete native glyph path did not preserve the cached drawing output')
     sprite_report=build/'native-sprite-cpu.json'
     run([build/'wa2_native_sprite_cpu_tests.exe',sprite_report],60)
     sprite=json.loads(sprite_report.read_text())
-    if (not sprite['passed'] or sprite['cases']!=256 or sprite.get('visible_grid_cases')!=48 or sprite['decline_cases']!=12 or sprite['renderer_decline_cases']!=1 or sprite['host_environment_cases']!=4 or
+    if (not sprite['passed'] or sprite['cases']!=256 or sprite.get('visible_grid_cases')!=48 or sprite['decline_cases']!=24 or sprite['renderer_decline_cases']!=1 or sprite['host_environment_cases']!=4 or
         not sprite['vertex_bits_and_render_state_equal'] or not sprite['void_cdecl_abi_preserved'] or
         len(sprite['timings'])!=3 or any(len(item['paired_ns'])!=5 or any(min(pair)<=0 for pair in item['paired_ns']) for item in sprite['timings'])):
         raise ValueError('Complete native sprite/particle drawing comparison failed')
@@ -290,6 +294,15 @@ def main():
     if (not lzss_groups['passed'] or lzss_groups['exact_output_dictionary_flags_and_tail_cases']!=945 or
         lzss_groups['unchanged_failure_cases']!=260 or not lzss_groups['guard_bytes_checked'] or
         len(lzss_groups['timings'])!=6):raise ValueError('Grouped LZSS decode output/dictionary/flags/failure contract failed')
+    typography={}
+    for target,name in [('wa2_glyph_index_tests','glyph-index'),('wa2_glyph_geometry_tests','glyph-geometry'),('wa2_byte_equality_tests','byte-equality')]:
+        result_path=build/(name+'.json');run([build/(target+'.exe'),result_path],30);typography[name]=json.loads(result_path.read_text())
+        if not typography[name]['passed']:raise ValueError('Shared typography/byte comparison check failed: '+name)
+    index=typography['glyph-index'];memo=typography['glyph-geometry'];equality=typography['byte-equality']
+    if (index['full_codepoint_tables']!=26 or index['exact_codepoint_cases']!=1703936 or index['mutation_cases']!=256 or index['maximum_cache_bytes']>257*1024 or
+        memo['key_mutations']!=932 or memo['exact_payload_cases']!=517 or memo['unchanged_declines']!=2 or memo['single_use_no_capture']!=512 or memo['maximum_heap_bytes']>256*1024 or
+        not memo['owns_keys_and_tiles'] or equality['fixed_cases']!=9552 or equality['dynamic_cases']!=20488 or equality['word_cases']!=1282 or
+        not equality['unaligned_and_exact_tails'] or not equality['outside_bytes_do_not_affect_result']):raise ValueError('Font index, exact geometry memo or bounded equality contract failed')
     wait_probe_report=build/'wait-probes.json'
     run([build/'wa2_wait_probe_tests.exe',wait_probe_report],30)
     wait_probes=json.loads(wait_probe_report.read_text())
@@ -368,6 +381,8 @@ def main():
     if re.search(r'wa2::aot::f_[0-9a-f]+<true(?:,|>)|f_[0-9a-f]+<false, false>|shared_aot_oracle|native_weather_color_snapshot|wr_x87_|wr_sse_|Zydis|NativeIntegerReferenceScope|native_integer_registers_enabled|NativeIndirectReferenceScope|native_indirect_calls_enabled|NativeMathReferenceScope|native_math_ports_enabled|native_math_test_counts|native_render_math_enabled|NativeRenderMathReferenceScope|native_grid_binary_snapshot|native_grid_stored_binary_snapshot|native_grid_registers_enabled|native_sprite_geometry_enabled|native_grid_float_enabled|native_vertex_grid_enabled|register_fp_enabled|RegisterFpReferenceScope|DecodedCacheReferenceScope|decoded_resource_cache_enabled|sort_objects<true>|vertex_batch<true>|wa2_sort_shift|wr::wa2_sort_objects\(|wr::wa2_vertex_batch\(',symbols):
         raise ValueError('diagnostic/oracle, decoder, or x86 helper leaked into the ARM64 ordinary build')
     if 'wa2_shared_aot_function_count' not in symbols:raise ValueError('shared ARM64 entry is not linked')
+    if re.search(r'wa2::text::GlyphGeometryMemo<[^\n]+>::(?:stats|enabled)',symbols):
+        raise ValueError('Glyph memo comparison controls leaked into the ARM64 ordinary build')
     if re.search(r'ImageColourReferenceScope|image_colours_enabled',symbols):
         raise ValueError('Image-colour comparison controls leaked into the ARM64 ordinary build')
     if re.search(r'GridNativeFloating<true, true, false, true(?:, [^>]+)?>::(?:scalar_get|scalar_set|scalar_push|execute_at|memory_at|binary)',symbols):
@@ -420,6 +435,7 @@ def main():
                native_resource_memory=json.loads(native_memory_report.read_text()),
                shared_general_resource_loading=resource_loading,
                shared_lzss_groups=lzss_groups,
+               shared_typography=typography,
                shared_wait_probes=wait_probes,
                native_resource_cache=json.loads(resource_cache_report.read_text()),
                shared_heap_pool_memory=json.loads(heap_report.read_text()),

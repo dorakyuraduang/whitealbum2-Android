@@ -51,6 +51,14 @@ dictionary, flags, caller-owned dictionary dependencies and failure prefixes;
 these do not establish Android fast-forward speed. The 8 MiB decoded cache limit
 and external PAK storage policy are unchanged.
 
+`0.2.36-shared-aot` shares font-index, glyph-geometry and exact byte-comparison
+optimizations with Windows. A changing font table is fully rechecked; changed
+glyph inputs, images, palettes or texture handles cannot reuse an old tile.
+The two new caches allocate about 0.5 MiB together on first use. A new glyph does
+not capture a complete geometry entry until repeated. These are CPU changes;
+no particle count, render ordering, image scale, game timer or wait deadline is
+reduced. Device FPS and whole fast-forward speed still require phone testing.
+
 Persistent read grants use Android's [Storage Access Framework](https://developer.android.com/training/data-storage/shared/documents-files).
 The launch page has been compiled against API 35 and its routing/location policy
 has bounded checks. Interactive picker/lifecycle behavior and device gameplay

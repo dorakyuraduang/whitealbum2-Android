@@ -44,5 +44,20 @@ inline unsigned geometry_cache_snapshots(){
     CHECK(sparse.lookup(cpu,noise,output,sparse_pending));CHECK(output[0]==expected[0] && output[1]==expected[1]);
     for(unsigned n=2;n<output.size();++n)CHECK(output[n]==37);++checks;
     noise[3]^=1;cpu=base;CHECK(!sparse.lookup(cpu,noise,output,sparse_pending));++checks;
+    // Capture-on-reuse admission must snapshot the second full input, not the
+    // first-use scratch prefix excluded from its fingerprint. A cancelled
+    // first observation cannot publish an earlier occupant's result.
+    using Reuse=wa2::aot::detail::GeometryCache<24,1,1,8,255,true>;
+    Reuse reuse;Reuse::Pending hint{};cpu=base;
+    CHECK(!reuse.lookup(cpu,input,output,hint) && !hint.capture);++checks;
+    auto second=input;second[0]^=0x80;cpu=base;
+    CHECK(!reuse.lookup(cpu,second,output,hint) && hint.capture);++checks;
+    reuse.commit(hint,result,expected);cpu=base;output.fill(0);
+    CHECK(reuse.lookup(cpu,second,output,hint) && output==expected);++checks;
+    cpu=base;CHECK(!reuse.lookup(cpu,input,output,hint));++checks;
+    for(unsigned n=0;n<32;++n){auto changing=input;changing[8]=std::uint8_t(n+101);cpu=base;output.fill(17);
+        CHECK(!reuse.lookup(cpu,changing,output,hint) && !hint.capture);
+        CHECK(cpu.r==base.r && cpu.fp.bytes==base.fp.bytes && output[0]==17);++checks;
+    }
     return checks;
 }

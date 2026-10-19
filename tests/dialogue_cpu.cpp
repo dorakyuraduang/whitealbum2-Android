@@ -5,6 +5,7 @@
 #include "geometry_cache.hpp"
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
+#include "../engine/glyph_geometry_memo.hpp"
 #include "../platform/render/submission_cache.hpp"
 #include <winrecomp/win32_state.hpp>
 #include <bit>
@@ -149,6 +150,8 @@ int main(int argc,char** argv){try{
     const auto sink=[](const a::SpriteCommand& command,void* owner){auto& output=*static_cast<std::vector<std::vector<std::uint8_t>>*>(owner);
         for(const auto& tile:command.tiles){const auto* bytes=reinterpret_cast<const std::uint8_t*>(tile.vertices.data());output.emplace_back(bytes,bytes+sizeof(tile.vertices));}return true;};
     unsigned native_variants{};std::uint64_t native_glyphs{},native_api_calls{};
+    using GlyphMemo=wa2::text::GlyphGeometryMemo<a::SpriteTile>;
+    GlyphMemo::Stats memo_before{},memo_after{};
     {a::FunctionWorkScope quiet(nullptr);a::native_geometry_cache_enabled=true;
       for(variant=0;variant<12;++variant){stack_noise=300+variant;incoming_noise=stack_noise;draws.clear();calls.clear();run(false);
         const auto expected=draws;const auto expected_cpu=p.cpu;
@@ -161,14 +164,36 @@ int main(int argc,char** argv){try{
         native_glyphs+=40;++native_variants;
       }
       variant=0;
+      memo_before=GlyphMemo::stats;
       for(unsigned pair=0;pair<5;++pair)for(unsigned order=0;order<2;++order){const auto side=(pair+order)&1;
         std::optional<a::SpriteService> native;if(side)native.emplace(p.memory,sink,&draws);
         const auto begin=std::chrono::steady_clock::now();
         for(unsigned n=0;n<8;++n){stack_noise=400+pair*16+n;incoming_noise=stack_noise;draws.clear();calls.clear();run(false);CHECK(draws==original_draws);}
         native_paired[pair][side]=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count();
       }
+      memo_after=GlyphMemo::stats;
     }
     CHECK(!native_api_calls);
+    // Changing lines and origins must not reuse an earlier glyph's geometry.
+    // This exercises the actual complete native entry against static output,
+    // independently of the memo's byte-key tests.
+    unsigned changing_native_cases{};
+    for(unsigned n=0;n<16;++n){variant=16+n;stack_noise=900+n;incoming_noise=stack_noise;
+        draws.clear();calls.clear();run(false);const auto expected=draws;
+        draws.clear();calls.clear();{a::SpriteService native(p.memory,sink,&draws);run(false);}
+        CHECK(draws==expected && calls.empty());++changing_native_cases;
+    }
+    std::array<std::uint64_t,5> changing_native_ns{};unsigned line_serial=1000;
+    for(unsigned pair=0;pair<5;++pair){a::SpriteService native(p.memory,sink,&draws);const auto begin=std::chrono::steady_clock::now();
+        for(unsigned line=0;line<8;++line){variant=line_serial++;draws.clear();calls.clear();run(false);CHECK(calls.empty());}
+        changing_native_ns[pair]=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count();}
+    std::array<std::array<std::uint64_t,2>,5> memo_enabled_pairs{};
+    variant=0;
+    for(unsigned pair=0;pair<5;++pair)for(unsigned order=0;order<2;++order){const auto side=(pair+order)&1;GlyphMemo::enabled=bool(side);
+        a::SpriteService native(p.memory,sink,&draws);for(unsigned n=0;n<3;++n){draws.clear();calls.clear();run(false);}
+        const auto begin=std::chrono::steady_clock::now();for(unsigned n=0;n<8;++n){draws.clear();calls.clear();run(false);CHECK(draws==original_draws);}
+        memo_enabled_pairs[pair][side]=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count();}
+    GlyphMemo::enabled=true;
     std::ofstream out(argv[1]);out<<"{\"source_entry\":4481760,\"glyphs\":40,\"source_draws\":"<<original_draws.size()<<",\"fvf\":"<<fvf
         <<",\"bound_texture_units\":"<<max_texture_slots<<",\"elapsed_ns\":"<<elapsed<<",\"paired_glyph_sets\":8,\"uncached_ns\":"<<timing[0]<<",\"cached_ns\":"<<timing[1]
         <<",\"memo_grid_hits\":"<<memo.grid_hits<<",\"memo_grid_misses\":"<<memo.grid_misses<<",\"memo_sprite_hits\":"<<memo.sprite_hits<<",\"memo_sprite_misses\":"<<memo.sprite_misses
@@ -181,6 +206,10 @@ int main(int argc,char** argv){try{
     out<<"],\"noisy_paired_ns\":[";for(unsigned n=0;n<noisy_paired.size();++n){if(n)out<<',';out<<'['<<noisy_paired[n][0]<<','<<noisy_paired[n][1]<<']';}
     out<<"],\"native_glyph_chain\":{\"exact_source_variants\":"<<native_variants<<",\"accepted_glyphs\":"<<native_glyphs<<",\"legacy_api_calls\":"<<native_api_calls<<",\"paired_ns\":[";
     for(unsigned n=0;n<native_paired.size();++n){if(n)out<<',';out<<'['<<native_paired[n][0]<<','<<native_paired[n][1]<<']';}
+    out<<"],\"memo_finds\":"<<memo_after.finds-memo_before.finds<<",\"memo_hits\":"<<memo_after.hits-memo_before.hits<<",\"memo_first_uses\":"<<memo_after.first_uses-memo_before.first_uses<<",\"memo_captures\":"<<memo_after.captures-memo_before.captures;
+    out<<",\"changing_source_cases\":"<<changing_native_cases<<",\"changing_glyph_sets\":8,\"changing_native_ns\":[";
+    for(unsigned n=0;n<5;++n){if(n)out<<',';out<<changing_native_ns[n];}
+    out<<"],\"memo_enabled_pairs\":[";for(unsigned n=0;n<5;++n){if(n)out<<',';out<<'['<<memo_enabled_pairs[n][0]<<','<<memo_enabled_pairs[n][1]<<']';}
     out<<"],\"raw_vertex_bits_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false}";
     out<<",\"work\":"<<work.report()<<",\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";
     std::cout<<"PASS cached dialogue recording: "<<draws.size()<<" source draws, "<<elapsed<<" ns.\n";return 0;

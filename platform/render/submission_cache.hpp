@@ -1,4 +1,5 @@
 #pragma once
+#include "../../engine/byte_equality.hpp"
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -11,7 +12,7 @@ inline bool batch_fixed_vertex_stage(bool programmable_vertex,unsigned primitive
 enum class SubmissionApply {full,textures,reuse};
 inline bool update_shader_constants(std::span<std::uint8_t> target,std::span<const std::uint8_t> source){
     if(target.size()!=source.size())throw std::invalid_argument("shader constant byte count");
-    if(source.empty() || !std::memcmp(target.data(),source.data(),source.size()))return false;
+    if(source.empty() || wa2::memory::equal_bytes(target,source))return false;
     std::memcpy(target.data(),source.data(),source.size());return true;
 }
 inline SubmissionApply submission_apply(bool valid,bool same_config,std::uint64_t word_changes,

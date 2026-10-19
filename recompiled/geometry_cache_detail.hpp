@@ -1,5 +1,6 @@
 #pragma once
 #include "geometry_cache.hpp"
+#include "../engine/byte_equality.hpp"
 #include <winrecomp/runtime.hpp>
 #include <cstring>
 #include <bitset>
@@ -33,17 +34,17 @@ template<unsigned Bytes,unsigned Ways,unsigned Buckets,unsigned CoreOffset=0,uns
             for(unsigned n=0;n<8;++n)if(!(RegistersUsed&(1u<<n)))r[n]=0;
             std::memcpy(x87.data(),cpu.fp.bytes.data(),x87.size());
         }
-        bool same(const Registers& other)const{return r==other.r && eip==other.eip && flags==other.flags && defined==other.defined && x87==other.x87;}
+        bool same(const Registers& other)const{return wa2::memory::equal_words(r,other.r) && eip==other.eip && flags==other.flags && defined==other.defined && wa2::memory::equal_bytes<160>(x87.data(),other.x87.data());}
         void restore(wr::Cpu& cpu)const{for(unsigned n=0;n<8;++n)if(RegistersUsed&(1u<<n))cpu.r[n]=r[n];cpu.eip=eip;cpu.flags=flags;cpu.defined_flags=defined;std::memcpy(cpu.fp.bytes.data(),x87.data(),x87.size());}
     };
     struct Entry {
         std::uint64_t fingerprint{};
         Registers before,after;
-        std::array<std::uint8_t,Bytes> input;
+        std::array<std::uint8_t,Bytes> input{};
         std::vector<std::uint8_t> output;
         std::vector<GeometryRange> reads,writes;
-        Entry(std::uint64_t hash,const Registers& state,std::span<const std::uint8_t,Bytes> bytes):fingerprint(hash),before(state),after(state){std::memcpy(input.data(),bytes.data(),Bytes);}
-        void reset(std::uint64_t hash,const Registers& state,std::span<const std::uint8_t,Bytes> bytes){fingerprint=hash;before=state;after=state;std::memcpy(input.data(),bytes.data(),Bytes);output.clear();}
+        Entry(std::uint64_t hash,const Registers& state,std::span<const std::uint8_t,Bytes> bytes,bool capture=true):fingerprint(hash),before(state),after(state){if(capture)std::memcpy(input.data(),bytes.data(),Bytes);}
+        void reset(std::uint64_t hash,const Registers& state,std::span<const std::uint8_t,Bytes> bytes,bool capture=true){fingerprint=hash;before=state;after=state;if(capture)std::memcpy(input.data(),bytes.data(),Bytes);output.clear();}
     };
     struct Bucket {unsigned next{};std::vector<Entry> entries;};
     std::array<Bucket,Buckets> buckets_{};
@@ -65,15 +66,19 @@ public:
                 entry.reset(code,state,input);pending={index,n,true};return false;
             }
             if(entry.output.size()!=output.size())continue;
-            bool same=true;for(const auto range:entry.reads)if(std::memcmp(entry.input.data()+range.offset,input.data()+range.offset,range.size)){same=false;break;}
+            bool same=true;for(const auto range:entry.reads)if(!wa2::memory::equal_bytes({entry.input.data()+range.offset,range.size},{input.data()+range.offset,range.size})){same=false;break;}
             if(!same)continue;
             for(const auto range:entry.writes)std::memcpy(output.data()+range.offset,entry.output.data()+range.offset,range.size);
             entry.after.restore(cpu);return true;
         }
         // A failed calculation must never leave a reusable partial result.
         if(bucket.entries.empty())bucket.entries.reserve(Ways);
-        if(bucket.entries.size()<Ways){pending={index,unsigned(bucket.entries.size()),!CaptureOnReuse};bucket.entries.emplace_back(code,state,input);}
-        else{pending={index,bucket.next++%Ways,!CaptureOnReuse};bucket.entries[pending.index].reset(code,state,input);}
+        // A first-use fingerprint is only an admission hint, never a reusable
+        // result. On rapidly changing lines avoid copying the complete scratch
+        // frame (over 6 KiB for grids). The second observation snapshots the
+        // CURRENT complete input before calculation/commit, as above.
+        if(bucket.entries.size()<Ways){pending={index,unsigned(bucket.entries.size()),!CaptureOnReuse};bucket.entries.emplace_back(code,state,input,!CaptureOnReuse);}
+        else{pending={index,bucket.next++%Ways,!CaptureOnReuse};bucket.entries[pending.index].reset(code,state,input,!CaptureOnReuse);}
         return false;
     }
     void commit(Pending pending,const wr::Cpu& cpu,std::span<const std::uint8_t> output){

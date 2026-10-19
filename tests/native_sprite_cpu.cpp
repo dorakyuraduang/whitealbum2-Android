@@ -109,12 +109,14 @@ int main(int argc,char** argv){try{
         run(false).same(run(true));++visible_grid_cases;
     }
     unsigned declines{};
-    for(unsigned reason=0;reason<12;++reason){setup(1);p.cpu=base;p.cpu.eip=0x43b7a0;
+    for(unsigned reason=0;reason<24;++reason){setup(1);p.cpu=base;p.cpu.eip=0x43b7a0;
         p.memory.store(base.r[wr::ESP],returning,32);p.memory.store(base.r[wr::ESP]+4,sprite,32);p.memory.store(base.r[wr::ESP]+8,image,32);
         switch(reason){case 0:p.cpu.fp.put16(0,0x37f);break;case 1:p.cpu.fp.bytes[4]=1;break;case 2:p.memory.store(sprite+0x48,2,16);break;
         case 3:p.memory.store(sprite+0x4c,2,16);break;case 4:p.memory.store(sprite+0x16,1,8);break;case 5:p.memory.store(sprite+0xdc,1,32);break;
         case 6:p.memory.store(sprite+0x63+4,17,32);break;case 7:f(sprite+0xbc,-1);break;case 8:f(sprite+0xc0,1000);break;
         case 9:p.memory.store(image+0x64,17,16);break;case 10:p.memory.store(0xb34004,0,32);break;case 11:p.memory.store(sprite+0x48,2,16);p.memory.store(0xa93fb8+2*128+0x68,2,16);break;}
+        if(reason>=12){constexpr std::array<unsigned,12> exceptional{0x7f800000,0xff800000,0x7fc00000,0xffc00000,0x7f800001,0xff800001,0x00000001,0x80000001,0x007fffff,0x807fffff,0x00400000,0x80400000};
+            p.memory.store(sprite+0x88,exceptional[reason-12],32);}
         const auto cpu=p.cpu;recorded=Recorder{};a::SpriteService service(p.memory,[](const a::SpriteCommand& c,void* owner){return static_cast<Recorder*>(owner)->native(c);},&recorded);
         CHECK(!a::native_draw_sprite(p.cpu,p.memory));CHECK(recorded.draws.empty() && p.cpu.r==cpu.r && p.cpu.fp.bytes==cpu.fp.bytes && p.cpu.eip==cpu.eip && p.cpu.flags==cpu.flags && p.cpu.defined_flags==cpu.defined_flags);++declines;
         p.memory.store(0xb34004,1,32);

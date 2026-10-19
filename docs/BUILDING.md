@@ -58,6 +58,24 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/byte_equality.cpp` checks fixed/dynamic byte ranges and words with exact
+tails, unaligned starts and differing bytes just outside the requested region.
+`tests/glyph_index.cpp` compares all 65,536 character codes across 26 generated
+tables, including overlaps, unsorted ranges, terminators and invalid later rows,
+and tests 256 mutations. `tests/glyph_geometry.cpp` changes every sprite/image/
+palette/half-pixel/handle key component, checks payload ownership, replacement,
+bounds and 512 single-use glyphs that must not capture complete entries.
+
+The complete native glyph check retains 12 static-source variants, adds 16
+changing-line cases and compares the enabled/disabled geometry memo within the
+same binary. NaN, infinity and signed subnormal rejection is also checked in the
+native sprite path. `scripts/compare_glyph_cpu.py --baseline-dir build/<saved-baseline> --baseline-release <version>`
+links the same memory-test objects with saved/current shared AOT archives and
+alternates five process pairs. It checks native text, changing lines, precise
+static geometry and sprite paths; the old library stays in the test binaries.
+Saved reports bind both archives/binaries and all changed comparison inputs.
+These bounded memory checks do not establish whole-game or phone performance.
+
 `tests/lzss_groups.cpp` checks generated LZSS streams with all 256 literal masks,
 repeated-word lengths/distances, near matches, dictionary dependencies, guard
 bytes, truncated data and trailing data. The decoder and the length validator
