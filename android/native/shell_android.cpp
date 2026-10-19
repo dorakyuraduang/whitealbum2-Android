@@ -1,7 +1,7 @@
 #include "shell_jni.hpp"
 #include "../../platform/compat/shell.hpp"
 #include "../../platform/compat/codepage.hpp"
-#include <winrecomp/image.hpp>
+#include "../../platform/window/widget_json.hpp"
 #include <SDL_system.h>
 #include <SDL.h>
 #include <condition_variable>
@@ -17,11 +17,11 @@ std::exception_ptr selection_error;
 void JNICALL selection(JNIEnv* env,jclass,jint request,jstring path){std::lock_guard lock(mutex);if(request!=active_request || returned)return;
     try{if(path){const auto length=env->GetStringLength(path);if(length>32768)throw std::runtime_error("selected path limit");const auto* text=env->GetStringChars(path,nullptr);if(!text)throw std::bad_alloc();std::u16string wide;try{wide.assign(reinterpret_cast<const char16_t*>(text),std::size_t(length));}catch(...){env->ReleaseStringChars(path,text);throw;}env->ReleaseStringChars(path,text);selected=std::filesystem::path(wide);}else selected.reset();
     }catch(...){if(env->ExceptionCheck())env->ExceptionClear();selected.reset();selection_error=std::current_exception();}returned=true;changed.notify_all();}
-std::string json_text(std::u16string_view value){const auto encoded=wa2::platform::compat::encode_text(65001,value).bytes;return wr::quote(std::string(encoded.begin(),encoded.end()));}
+using wa2::window::json::text;
 std::optional<std::filesystem::path> pick(const wa2::platform::compat::FileRequest& request,const std::filesystem::path& root){
     auto* env=static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());if(!env || !widgets_class || !pick_method)throw std::runtime_error("Android file chooser unavailable");
     int id{};{std::lock_guard lock(mutex);if(active_request || unloaded)throw std::runtime_error("Android file chooser busy or detached");if(next_request==std::numeric_limits<int>::max())next_request=0;active_request=id=++next_request;returned=false;selected.reset();selection_error=nullptr;}
-    try{std::ostringstream out;out<<"{\"root\":"<<json_text(root.u16string())<<",\"initial\":"<<json_text(request.initial.u16string())<<",\"title\":"<<json_text(request.title)<<",\"extension\":"<<json_text(request.extension)<<",\"name\":"<<json_text(request.suggested_filename)<<",\"save\":"<<(request.save?"true":"false")<<",\"directory\":"<<(request.directory?"true":"false")<<'}';const auto text=out.str();
+    try{std::ostringstream out;out<<"{\"root\":"<<text(root.u16string())<<",\"initial\":"<<text(request.initial.u16string())<<",\"title\":"<<text(request.title)<<",\"extension\":"<<text(request.extension)<<",\"name\":"<<text(request.suggested_filename)<<",\"save\":"<<(request.save?"true":"false")<<",\"directory\":"<<(request.directory?"true":"false")<<'}';const auto text=out.str();
         const auto utf16=wa2::platform::compat::decode_text(65001,std::span(reinterpret_cast<const std::uint8_t*>(text.data()),text.size()),true);const auto value=env->NewString(reinterpret_cast<const jchar*>(utf16.data()),jsize(utf16.size()));if(!value || env->ExceptionCheck())throw std::runtime_error("Android file chooser string allocation failed");env->CallStaticVoidMethod(widgets_class,pick_method,jint(id),value);env->DeleteLocalRef(value);if(env->ExceptionCheck()){env->ExceptionClear();throw std::runtime_error("Android file chooser request failed");}
         std::unique_lock lock(mutex);changed.wait(lock,[]{return returned || unloaded;});auto result=std::move(selected);const auto failure=selection_error;active_request=0;selected.reset();selection_error=nullptr;lock.unlock();if(failure)std::rethrow_exception(failure);return result;
     }catch(...){std::lock_guard lock(mutex);active_request=0;throw;}

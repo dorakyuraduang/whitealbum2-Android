@@ -58,6 +58,15 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/widget_unicode.cpp` exercises the actual native widget serializer without
+JNI or a window. `scripts/verify_widget_unicode.py` independently parses its JSON
+and checks 416 text round-trips: all UTF-16 code units, Chinese/Japanese labels,
+control characters, escaped quotes/paths, supplementary characters and isolated
+surrogate units, plus cached menus/dialogs. It reproduces three previous UTF-8
+byte-quoting failures and preserves 67 menu items' command/state fields and 53
+controls. It does not run Android's JSON parser or prove on-device glyph/layout
+rendering. The same helper is used by the Android file chooser.
+
 `tests/resource_loading.cpp` checks general-resource and script decompression
 with synthetic KCAP/LAC archives and both memory backends. It covers 64 exact
 outputs, 22 failure cases, eight input/output/allocator aliases and two allocator

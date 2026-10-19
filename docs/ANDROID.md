@@ -23,6 +23,16 @@ Requesting a 120 Hz display mode does not guarantee 120 FPS. When disabled, the
 label is not created, and native samples are discarded before allocating display samples. The game keeps its aspect
 ratio; launcher settings do not introduce a separate Android game implementation.
 
+The top-right **☰** button opens the game's original function menu. From
+`0.2.33-shared-aot`, its bounds use 48 dp with centered text rather than 48 raw
+pixels and default button padding. Menu, settings-control and file-chooser text
+is serialized from UTF-16 directly to JSON Unicode escapes. Earlier builds
+escaped each UTF-8 byte as a separate character, corrupting Chinese/Japanese
+labels and non-ASCII file paths. Game command IDs and settings behavior remain
+in the shared window model. Unicode transport has memory-only regression checks;
+actual device layout and Android runtime rendering have not been tested under
+the current contract.
+
 Persistent read grants use Android's [Storage Access Framework](https://developer.android.com/training/data-storage/shared/documents-files).
 The launch page has been compiled against API 35 and its routing/location policy
 has bounded checks. Interactive picker/lifecycle behavior and device gameplay

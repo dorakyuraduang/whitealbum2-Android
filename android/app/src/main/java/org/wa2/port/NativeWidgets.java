@@ -167,8 +167,10 @@ public final class NativeWidgets {
     }
     public static void menu(int owner,String json) { ui(() -> {
         menuOwner=owner;currentMenu=new JSONArray(json);
-        if(menuButton==null) { menuButton=new Button(activity);menuButton.setText("☰");menuButton.setContentDescription("Game menu");menuButton.setAlpha(.65f);
-            FrameLayout.LayoutParams bounds=new FrameLayout.LayoutParams(48,48,Gravity.TOP|Gravity.END);activity.addContentView(menuButton,bounds);
+        if(menuButton==null) { menuButton=new Button(activity);menuButton.setText("☰");menuButton.setContentDescription("游戏功能菜单");menuButton.setAlpha(.65f);
+            menuButton.setPadding(0,0,0,0);menuButton.setMinWidth(0);menuButton.setMinHeight(0);menuButton.setGravity(Gravity.CENTER);
+            int size=Math.round(48f*activity.getResources().getDisplayMetrics().density);
+            FrameLayout.LayoutParams bounds=new FrameLayout.LayoutParams(size,size,Gravity.TOP|Gravity.END);activity.addContentView(menuButton,bounds);
             menuButton.setOnClickListener(view -> { try { openMenu(currentMenu); } catch(Throwable error) { failure(error); } }); }
         menuButton.setVisibility(currentMenu.length()==0?View.GONE:View.VISIBLE);
     }); }

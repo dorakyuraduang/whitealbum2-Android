@@ -103,6 +103,7 @@ def main():
     tracked += [ROOT/'scripts/verify_android_java.py',ROOT/'tests/android/org/wa2/port/ResourceLocationTest.java',ROOT/'android/app/src/main/AndroidManifest.xml']
     tracked += [ROOT/'tests/portable_sound_bridge.cpp',ROOT/'port/audio.hpp']
     tracked += [ROOT/'tests/window_resources.cpp']
+    tracked += [ROOT/'tests/widget_unicode.cpp',ROOT/'scripts/verify_widget_unicode.py']
     tracked += [ROOT/'tests/window_model.cpp']
     tracked += [ROOT/'tests/render_submission.cpp']
     tracked += [ROOT/'tests/host_leaf_calls.cpp',ROOT/'tests/render_cpu.cpp']
@@ -158,7 +159,7 @@ def main():
     run([cmake,'-S',ROOT/'recompiled','-B',build,'-G','Ninja',
          '-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),
          '-DCMAKE_BUILD_TYPE=MinSizeRel','-DWA2_SHARED_AOT_CHECKS=ON','-DWA2_AOT_DIAGNOSTICS=ON','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'])
-    run([cmake,'--build',build,'--target','wa2_shared_aot_tests','wa2_function_process_tests','wa2_portable_scheduler_tests','wa2_portable_registry_tests','wa2_portable_system_tests','wa2_resource_mount_tests','wa2_native_resource_memory_tests','wa2_native_resource_cache_tests','wa2_resource_loading_tests','wa2_wait_probe_tests','wa2_large_heap_memory_tests','wa2_portable_sound_bridge_tests','wa2_window_resource_tests','wa2_window_model_tests','wa2_portable_movie_bridge_tests','wa2_render_submission_tests','wa2_portable_acm_tests','wa2_portable_shell_tests','wa2_crt_math_path_tests','wa2_pixel_transfer_tests','--parallel','1'],2400)
+    run([cmake,'--build',build,'--target','wa2_shared_aot_tests','wa2_function_process_tests','wa2_portable_scheduler_tests','wa2_portable_registry_tests','wa2_portable_system_tests','wa2_resource_mount_tests','wa2_native_resource_memory_tests','wa2_native_resource_cache_tests','wa2_resource_loading_tests','wa2_wait_probe_tests','wa2_large_heap_memory_tests','wa2_portable_sound_bridge_tests','wa2_window_resource_tests','wa2_widget_unicode_tests','wa2_window_model_tests','wa2_portable_movie_bridge_tests','wa2_render_submission_tests','wa2_portable_acm_tests','wa2_portable_shell_tests','wa2_crt_math_path_tests','wa2_pixel_transfer_tests','--parallel','1'],2400)
     submission_report=build/'render-submission.json'
     run([build/'wa2_render_submission_tests.exe',submission_report],30)
     run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests','wa2_image_upload_tests',
@@ -307,6 +308,14 @@ def main():
     run([build/'wa2_portable_sound_bridge_tests.exe',sound_report],30)
     window_report=build/'window-resources.json'
     run([build/'wa2_window_resource_tests.exe',window_report],30)
+    widget_fixture=build/'widget-unicode-fixture.json';widget_report=build/'widget-unicode.json'
+    run([build/'wa2_widget_unicode_tests.exe',widget_fixture],30)
+    run([sys.executable,ROOT/'scripts/verify_widget_unicode.py',widget_fixture,widget_report],15)
+    widget_unicode=json.loads(widget_report.read_text())
+    if (not widget_unicode['passed'] or widget_unicode['unicode_input_cases']!=77 or
+        widget_unicode['cached_menus']!=2 or widget_unicode['cached_dialogs']!=7 or widget_unicode['menu_items']!=67 or
+        widget_unicode['controls']!=53 or widget_unicode['old_byte_quoting_failures_reproduced']!=3 or
+        widget_unicode['utf16_code_units_covered']!=65536):raise ValueError('Native widget Unicode transport or command state changed')
     window_model_report=build/'window-model.json'
     run([build/'wa2_window_model_tests.exe',window_model_report],30)
     movie_report=build/'movie-bridge.json'
@@ -403,6 +412,7 @@ def main():
                shared_large_heap_memory=json.loads(large_heap_report.read_text()),
                shared_sound_bridge=json.loads(sound_report.read_text()),
                window_resources=json.loads(window_report.read_text()),
+               shared_widget_unicode=widget_unicode,
                window_model=json.loads(window_model_report.read_text()),
                render_submission=json.loads(submission_report.read_text()),
                shared_host_leaf_calls=json.loads(leaf_report.read_text()),
