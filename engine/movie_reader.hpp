@@ -41,7 +41,10 @@ class Reader{
     struct Impl;
     std::unique_ptr<Impl> impl_;
 public:
-    explicit Reader(std::shared_ptr<resource::Source> source,std::function<bool()> cancelled={});
+    // A fixed track owns an independent demux cursor and discards the other
+    // track before decoding. Its memory use does not grow with track skew or
+    // with a video tail after audio EOF. The default retains file-order reads.
+    explicit Reader(std::shared_ptr<resource::Source> source,std::function<bool()> cancelled={},Track fixed_track=Track::any);
     ~Reader();
     Reader(const Reader&)=delete;
     Reader& operator=(const Reader&)=delete;
@@ -49,7 +52,9 @@ public:
     ReaderStatistics statistics()const noexcept;
     // Selecting a track buffers only the other track's compressed packets.
     // This handles ASF files with several seconds of video before audio data
-    // without retaining several seconds of decoded full-size pictures.
+    // without retaining several seconds of decoded full-size pictures. For
+    // arbitrarily skewed streams use separate fixed-track Readers, as Player
+    // does; requesting the excluded track then fails explicitly.
     std::optional<Frame> next(Track preference=Track::any);
 };
 }

@@ -30,6 +30,7 @@ struct Codec{
 struct Reader::Impl{
     std::shared_ptr<resource::Source> source;
     std::function<bool()> cancelled;
+    Track fixed_track{Track::any};
     std::uint64_t length{},position{};
     std::exception_ptr io_failure;
     ReaderStatistics stats;
@@ -85,6 +86,11 @@ struct Reader::Impl{
     }
     void open_codec(Codec& output,AVStream* stream,AVCodecID expected){
         if(stream->codecpar->codec_id!=expected)throw Error("unsupported original movie codec");
+        output.stream=stream;
+        if((fixed_track==Track::audio && expected==AV_CODEC_ID_WMV3) ||
+           (fixed_track==Track::video && expected==AV_CODEC_ID_WMAV2)){
+            stream->discard=AVDISCARD_ALL;return;
+        }
         const auto* decoder=avcodec_find_decoder(expected);
         if(!decoder)throw Error("required native movie decoder was not built");
         output.context=avcodec_alloc_context3(decoder);
@@ -93,9 +99,10 @@ struct Reader::Impl{
         output.context->pkt_timebase=stream->time_base;
         // A low-end device must not create an unbounded decoder thread pool.
         output.context->thread_count=1;output.context->thread_type=0;
-        checked(avcodec_open2(output.context,decoder,nullptr),"opening native movie decoder");output.stream=stream;
+        checked(avcodec_open2(output.context,decoder,nullptr),"opening native movie decoder");
     }
     void open(){
+        if(fixed_track!=Track::any && fixed_track!=Track::audio && fixed_track!=Track::video)throw Error("invalid fixed movie track");
         if(!source)throw Error("missing original movie source");length=source->size();
         if(!length || length>std::uint64_t(std::numeric_limits<std::int64_t>::max()))throw Error("invalid original movie length");
         auto* buffer=static_cast<std::uint8_t*>(av_malloc(32768));if(!buffer)throw std::bad_alloc();
@@ -109,15 +116,17 @@ struct Reader::Impl{
         // ASF declares stream parameters in its header; avoid scanning seconds
         // of the file with avformat_find_stream_info before the first frame.
         for(unsigned i=0;i<format->nb_streams;++i){auto* stream=format->streams[i];
-            if(stream->codecpar->codec_type==AVMEDIA_TYPE_VIDEO && !video.context)open_codec(video,stream,AV_CODEC_ID_WMV3);
-            else if(stream->codecpar->codec_type==AVMEDIA_TYPE_AUDIO && !audio.context)open_codec(audio,stream,AV_CODEC_ID_WMAV2);
+            if(stream->codecpar->codec_type==AVMEDIA_TYPE_VIDEO && !video.stream)open_codec(video,stream,AV_CODEC_ID_WMV3);
+            else if(stream->codecpar->codec_type==AVMEDIA_TYPE_AUDIO && !audio.stream)open_codec(audio,stream,AV_CODEC_ID_WMAV2);
         }
-        if(!video.context)throw Error("original movie has no WMV3 video stream");
-        const auto* context=video.context;
-        if(context->width<1 || context->height<1 || context->width>8192 || context->height>8192)throw Error("invalid movie dimensions");
-        info.width=unsigned(context->width);info.height=unsigned(context->height);
-        if(audio.context){
-            const auto rate=audio.context->sample_rate,channels=audio.context->ch_layout.nb_channels;
+        if(!video.stream)throw Error("original movie has no WMV3 video stream");
+        const auto width=video.context?video.context->width:video.stream->codecpar->width;
+        const auto height=video.context?video.context->height:video.stream->codecpar->height;
+        if(width<1 || height<1 || width>8192 || height>8192)throw Error("invalid movie dimensions");
+        info.width=unsigned(width);info.height=unsigned(height);
+        if(audio.stream){
+            const auto rate=audio.context?audio.context->sample_rate:audio.stream->codecpar->sample_rate;
+            const auto channels=audio.context?audio.context->ch_layout.nb_channels:audio.stream->codecpar->ch_layout.nb_channels;
             if(rate<1000 || rate>384000 || channels<1 || channels>2)throw Error("unsupported movie audio format");
             info.audio_rate=unsigned(rate);info.audio_channels=unsigned(channels);
         }
@@ -180,6 +189,10 @@ struct Reader::Impl{
         codec.draining=true;receiving=&codec;if(!value)codec.flushed=true;
     }
     std::optional<Frame> next(Track preference){
+        if(fixed_track!=Track::any){
+            if(preference!=Track::any && preference!=fixed_track)throw Error("movie reader requested a track excluded at construction");
+            preference=fixed_track;
+        }
         Codec* preferred=preference==Track::video?&video:(preference==Track::audio?&audio:nullptr);
         if(preferred && !preferred->context)return {};
         for(;;){
@@ -215,7 +228,7 @@ struct Reader::Impl{
             if(status==AVERROR_EOF){if(io_failure)std::rethrow_exception(io_failure);eof=true;continue;}
             checked(status,"reading original movie packet");++stats.packets;
             auto* target=packet_codec(*packet);
-            if(!target){av_packet_unref(packet);continue;}
+            if(!target || !target->context){av_packet_unref(packet);continue;}
             if(packet->size<0 || packet->size>8*1024*1024){av_packet_unref(packet);throw Error("original movie packet exceeds the buffer limit");}
             if(!preferred || target==preferred){
                 const auto sent=avcodec_send_packet(target->context,packet);av_packet_unref(packet);
@@ -233,8 +246,8 @@ struct Reader::Impl{
         }
     }
 };
-Reader::Reader(std::shared_ptr<resource::Source> source,std::function<bool()> cancelled):impl_(std::make_unique<Impl>()){
-    impl_->source=std::move(source);impl_->cancelled=std::move(cancelled);impl_->open();
+Reader::Reader(std::shared_ptr<resource::Source> source,std::function<bool()> cancelled,Track fixed_track):impl_(std::make_unique<Impl>()){
+    impl_->source=std::move(source);impl_->cancelled=std::move(cancelled);impl_->fixed_track=fixed_track;impl_->open();
 }
 Reader::~Reader()=default;
 const Information& Reader::information()const noexcept{return impl_->info;}

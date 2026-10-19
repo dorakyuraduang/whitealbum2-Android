@@ -108,6 +108,7 @@ def main():
     tracked += [ROOT/'tests/integer_registers.cpp']
     tracked += [ROOT/('tests/'+name) for name in ('native_string.cpp','weather_cpu.cpp','interface_handles.cpp','audio_latency.cpp')]
     tracked += [ROOT/'tests/image_colours.cpp']
+    tracked += [ROOT/'tests/movie_tracks.cpp']
     tracked += [ROOT/('scripts/'+name) for name in ('prepare_weather_baseline.py','verify_particle_audio.py','prepare_particle_baseline.py','verify_particles.py')]
     baseline=ROOT/'build/performance-0.2.19'
     tracked += [baseline/name for name in ('baseline.json','before-pcm_audio.cpp','before-vorbis_stream.cpp',
@@ -160,7 +161,7 @@ def main():
     submission_report=build/'render-submission.json'
     run([build/'wa2_render_submission_tests.exe',submission_report],30)
     run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests',
-        'wa2_native_string_tests','wa2_image_colour_tests','wa2_weather_cpu_tests','wa2_interface_handle_tests','wa2_audio_latency_tests','wa2_audio_latency_before','--parallel','1'],600)
+        'wa2_native_string_tests','wa2_image_colour_tests','wa2_movie_track_tests','wa2_weather_cpu_tests','wa2_interface_handle_tests','wa2_audio_latency_tests','wa2_audio_latency_before','--parallel','1'],600)
     string_report=build/'native-string.json'
     run([build/'wa2_native_string_tests.exe',string_report],30)
     interface_report=build/'interface-handles.json'
@@ -284,6 +285,14 @@ def main():
     run([build/'wa2_window_model_tests.exe',window_model_report],30)
     movie_report=build/'movie-bridge.json'
     run([build/'wa2_portable_movie_bridge_tests.exe',movie_report],30)
+    movie_tracks_report=build/'movie-tracks.json'
+    run([build/'wa2_movie_track_tests.exe',ROOT/'res/mv100.pak',movie_tracks_report],60)
+    movie_tracks=json.loads(movie_tracks_report.read_text())
+    if (not movie_tracks['passed'] or movie_tracks['audio_frames_to_eof']<=16 or movie_tracks['audio_cursor_bytes_read']<=8388608 or
+        movie_tracks['exact_pcm_yuv_timestamp_prefixes']!=64 or movie_tracks['explicit_rejections']!=4 or
+        movie_tracks['compressed_backlog_bytes'] or not movie_tracks['same_source_independent_positions'] or
+        not movie_tracks['audio_eof_does_not_consume_video'] or movie_tracks['peak_video_frames']>4 or movie_tracks['peak_audio_frames']>16384):
+        raise ValueError('Movie fixed-track streaming or full audio EOF/prefix/cancellation check failed')
     acm_report=build/'portable-acm.json'
     run([build/'wa2_portable_acm_tests.exe',acm_report],30)
     shell_report=build/'portable-shell.json'
@@ -351,6 +360,7 @@ def main():
                crt_math_paths=json.loads(crt_math_report.read_text()),
                native_pixel_transfer=json.loads(pixel_report.read_text()),
                shared_native_image_colours=image_colours,
+               shared_bounded_movie_tracks=movie_tracks,
                shaders=shader_proof['checks'],
                shader_verification_sha256=digest(ROOT/'logs/portable-shader-verification.json'),
                function_runtime=json.loads(process_report.read_text()),

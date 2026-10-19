@@ -58,6 +58,16 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/movie_tracks.cpp` reads the external `res/mv100.pak` to owned decoder
+memory without creating a device, window or game. It checks 64 PCM/YUV/timestamp
+prefixes against ordinary demux order, drains the fixed audio cursor to EOF,
+then checks that video starts from its own position. It also covers shared
+source cursor interleaving, cancellation, excluded tracks and the actual
+Player's bounded queues. It needs the user's external movie; no sample is
+embedded or distributed. The earlier 8 MiB compressed backlog failure can be
+reproduced by asking the default single cursor for audio until EOF; production
+Player now uses fixed-track cursors instead of increasing that cache limit.
+
 `tests/image_colours.cpp` replays all six 24/32-bit colour-table loops against
 the cached metered static functions, with 324 exact state/pixel cases, 12
 ordinary compiled resume checks and permission, alias, wrap and partial-page

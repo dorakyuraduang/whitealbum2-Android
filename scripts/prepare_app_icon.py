@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 import zipfile
 import zlib
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 ANDROID_ICON = ROOT / 'android/app/src/main/res/drawable-nodpi/ic_launcher_art.png'
@@ -117,7 +118,7 @@ def verify_windows(path):
     return dict(group_id=101, frames=len(expected), source_images_byte_equal=True)
 
 
-def verify_android(path, manifest_tree):
+def verify_android(path, manifest_tree, resource_values):
     expected = ANDROID_ICON.read_bytes()
     with zipfile.ZipFile(path) as package:
         images = [name for name in package.namelist() if name.startswith('res/') and name.endswith('/ic_launcher_art.png')]
@@ -128,7 +129,16 @@ def verify_android(path, manifest_tree):
     rounded = re.search(r':roundIcon\([^\n]*?=@(0x[0-9a-fA-F]+)', manifest_tree)
     if not regular or not rounded or regular[1] != rounded[1]:
         raise ValueError('Android application icon references are missing or disagree')
-    return dict(artwork=images[0], adaptive_icon=adaptive[0], resource_id=regular[1], source_png_byte_equal=True)
+    colours = ET.parse(ROOT / 'android/app/src/main/res/values/icon_colors.xml').getroot()
+    background = [value.text.strip().lower() for value in colours.findall('color') if value.get('name') == 'ic_launcher_background']
+    if len(background) != 1 or not re.fullmatch(r'#[0-9a-f]{6}(?:[0-9a-f]{2})?', background[0]):
+        raise ValueError('Invalid adaptive launcher background colour')
+    expected_background = '#ff' + background[0][1:] if len(background[0]) == 7 else background[0]
+    compiled_background = re.findall(r'(?mi)^\s*resource\s+0x[0-9a-f]+\s+color/ic_launcher_background\s*\n\s*\(\)\s+(#[0-9a-f]{8})\s*$', resource_values)
+    if compiled_background != [expected_background]:
+        raise ValueError('APK adaptive icon background differs from the configured colour')
+    return dict(artwork=images[0], adaptive_icon=adaptive[0], resource_id=regular[1], source_png_byte_equal=True,
+                adaptive_background_argb=expected_background, compiled_background_matches=True)
 
 
 if __name__ == '__main__':

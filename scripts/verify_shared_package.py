@@ -106,7 +106,8 @@ def verify(status,publish=False):
     if data[:2]!=b'MZ' or struct.unpack_from('<H',data,struct.unpack_from('<I',data,0x3c)[0]+4)[0]!=0x8664:
         raise ValueError('Windows host is not a native x64 PE')
     from prepare_app_icon import verify_windows,verify_android
-    application_icons=dict(windows=verify_windows(win),android=verify_android(apk,tree),source_ico_sha256=digest(ROOT/'icon.ico'))
+    resource_values=run([ROOT/'tools/android-sdk/build-tools/34.0.0/aapt2.exe','dump','resources',apk])
+    application_icons=dict(windows=verify_windows(win),android=verify_android(apk,tree,resource_values),source_ico_sha256=digest(ROOT/'icon.ico'))
     coff=run([binpath/'llvm-readobj.exe','--coff-imports',win]);dlls=re.findall(r'^\s*Name: (.*?\.dll)',coff,re.M|re.I)
     if any(name.lower() in ('d3d9.dll','ddraw.dll','dsound.dll','winmm32.dll') for name in dlls):raise ValueError('Legacy graphics/audio DLL imported')
     relink=Path(status['relink_materials'])

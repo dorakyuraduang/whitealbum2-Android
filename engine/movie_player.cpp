@@ -33,10 +33,20 @@ struct Player::Impl{
         std::lock_guard lock(mutex);if(audio)audio->stop();frames.clear();current.reset();ended=true;
     }
     void rethrow()const{if(failure)std::rethrow_exception(failure);}
+    static ReaderStatistics combined(const Reader& video,const std::unique_ptr<Reader>& audio){
+        auto out=video.statistics();if(!audio)return out;const auto other=audio->statistics();
+        out.bytes_read+=other.bytes_read;out.read_calls+=other.read_calls;out.seek_calls+=other.seek_calls;
+        out.packets+=other.packets;out.video_frames+=other.video_frames;out.audio_frames+=other.audio_frames;
+        out.largest_read=std::max(out.largest_read,other.largest_read);
+        out.queued_packet_bytes+=other.queued_packet_bytes;out.peak_packet_bytes+=other.peak_packet_bytes;out.peak_packet_count+=other.peak_packet_count;
+        return out;
+    }
     void decode(std::shared_ptr<resource::Source> source,std::function<void()> initializer){
         try{
-            if(initializer)initializer();Reader reader(std::move(source),[this]{return stopping.load(std::memory_order_acquire);});
-            const auto info=reader.information();
+            if(initializer)initializer();const auto cancelled=[this]{return stopping.load(std::memory_order_acquire);};
+            Reader video_reader(source,cancelled,Track::video);const auto info=video_reader.information();
+            std::unique_ptr<Reader> audio_reader;
+            if(info.audio_rate)audio_reader=std::make_unique<Reader>(source,cancelled,Track::audio);
             {
                 std::lock_guard lock(mutex);has_audio=info.audio_rate!=0;audio_rate=info.audio_rate;
                 if(has_audio){audio=mixer->create_stream(info.audio_rate,info.audio_channels,16384);audio->gain(amplitude);}opened=true;
@@ -62,8 +72,11 @@ struct Player::Impl{
                         if(stopping.load(std::memory_order_acquire))return;
                     }
                 }
-                auto decoded=reader.next(preference);
-                {std::lock_guard lock(mutex);reader_stats=reader.statistics();}
+                // Independent bounded cursors share the original Source.
+                // Asking for audio beyond its final packet must not retain
+                // the entire remaining video as a compressed backlog.
+                auto decoded=preference==Track::audio?audio_reader->next(Track::audio):video_reader.next(Track::video);
+                {std::lock_guard lock(mutex);reader_stats=combined(video_reader,audio_reader);}
                 if(!decoded){
                     std::lock_guard lock(mutex);
                     if(preference==Track::audio){audio_eof=true;if(audio)audio->finish_input();}else video_eof=true;
