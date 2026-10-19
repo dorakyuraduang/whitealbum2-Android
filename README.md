@@ -1,6 +1,17 @@
-# WA2 Shared Recomp
+# WHITE ALBUM2 静态重编译版（开发中）
 
 面向 Windows x64 与 Android ARM64 的共享静态重编译开发项目。两平台编译同一套游戏静态函数和原生子系统，只在窗口、输入、设备、文件访问和呈现处保留平台适配。
+
+## 版本与分支
+
+本仓库保留两条实现路线，按分支分别维护：
+
+| 版本 | 分支 | 实现路线 |
+| --- | --- | --- |
+| **共享静态重编译版（WA2 Shared Recomp）** | [main（默认）](https://github.com/dorakyuraduang/wa2-godot/tree/main) | C++ 静态函数重编译与原生子系统替换；Windows x64、Android ARM64 编译同一套游戏逻辑和静态函数源码。 |
+| **Godot 移植版** | [godot](https://github.com/dorakyuraduang/wa2-godot/tree/godot) | 此前的 Godot 引擎移植工程，保留原有代码、文档、许可证和提交历史。 |
+
+以下说明针对 `main` 的静态重编译版。Godot 版的安装、构建和许可范围请查看 [godot 分支 README](https://github.com/dorakyuraduang/wa2-godot/blob/godot/README.md)；两条实现的许可证各自适用。
 
 **项目尚未完成。** 当前是“静态重编译主体 + 原生子系统重建”的混合实现，仍保留原游戏的 32 位地址布局、寄存器及部分浮点状态。完整剧情兼容、手机帧率以及接近原版的整体性能尚未验证。
 
