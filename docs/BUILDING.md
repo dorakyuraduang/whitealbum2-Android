@@ -58,6 +58,17 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/lzss_groups.cpp` checks generated LZSS streams with all 256 literal masks,
+repeated-word lengths/distances, near matches, dictionary dependencies, guard
+bytes, truncated data and trailing data. The decoder and the length validator
+must preserve their successful results and error text. The comparison command
+is `scripts/compare_lzss_groups.py --baseline-dir build/<saved-baseline> --baseline-release <version>`.
+It uses source/header bytes saved with their previous successful verification,
+builds both decoders with O3 and renames only the baseline namespace. The old
+decoder is confined to the test binary and is never shipped in either host.
+The bounded component timings do not measure whole-game fast-forward or Android
+FPS.
+
 `tests/android/org/wa2/port/WidgetControlsTest.java` executes the production
 `WidgetControls` and `WidgetSession` helpers on the ordinary JVM. It covers
 complete-snapshot reconciliation, missing/removed/replaced tokens, signed 32-bit

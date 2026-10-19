@@ -43,6 +43,14 @@ including 64 reopen cycles and all 53 cached setting controls. These checks do
 not reproduce a player's actual Android UI interaction or establish device
 compatibility.
 
+`0.2.35-shared-aot` uses the same bounded LZSS repeated-match grouping on ARM64
+and Windows. Eight verified 18-byte matches of one repeating 1/2/4/8/16-byte word
+can be expanded together. Other token layouts, initial dictionary references and
+short buffers keep the existing checked path. Generated RAM checks cover output,
+dictionary, flags, caller-owned dictionary dependencies and failure prefixes;
+these do not establish Android fast-forward speed. The 8 MiB decoded cache limit
+and external PAK storage policy are unchanged.
+
 Persistent read grants use Android's [Storage Access Framework](https://developer.android.com/training/data-storage/shared/documents-files).
 The launch page has been compiled against API 35 and its routing/location policy
 has bounded checks. Interactive picker/lifecycle behavior and device gameplay

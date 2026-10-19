@@ -14,6 +14,34 @@ void range(const Source& s, std::uint64_t at, std::uint64_t length) {
     if (at>s.size() || length>s.size()-at) throw Error("resource range outside archive");
 }
 unsigned fold(unsigned c) noexcept { return c>='A' && c<='Z' ? c+32 : c; }
+// Keep the special block out of the ordinary token loop's instruction cache.
+[[gnu::noinline]] bool copy_repeated_lzss_group(const std::uint8_t* source,std::uint8_t* target,std::size_t written) noexcept {
+    if((source[1]&15)!=15)return false;
+    const unsigned offset=source[0]|((source[1]&0xf0)<<4);
+    const unsigned distance=unsigned((0xfee + written-offset-1)&4095)+1;
+    if(distance>16 || (distance&(distance-1)))return false;
+    unsigned different{};
+#if defined(__clang__)
+#pragma clang loop unroll(full)
+#endif
+    for(unsigned token=1;token<8;++token) {
+        const unsigned expected=(offset+18*token)&4095;
+        different|=unsigned(source[token*2])^(expected&255);
+        different|=unsigned(source[token*2+1])^(((expected>>4)&0xf0)|15);
+    }
+    if(different)return false;
+    // Eight adjacent full-length matches are one repeated pixel/byte word.
+    // Source/destination ranges and complete output history are checked by the
+    // caller. Verify all tokens before touching output, including the last one.
+    if(distance==1)std::memset(target,target[-1],144);
+    else {
+        std::array<std::uint8_t,16> word;
+        std::memcpy(word.data(),target-distance,distance);
+        for(unsigned count=distance;count<16;count*=2)std::memcpy(word.data()+count,word.data(),count);
+        for(unsigned at=0;at<144;at+=16)std::memcpy(target+at,word.data(),16);
+    }
+    return true;
+}
 class MemberSource final : public Source {
     std::shared_ptr<Source> source_;
     std::uint64_t offset_,size_;
@@ -52,6 +80,14 @@ void validate_lzss(std::span<const std::uint8_t> source,std::size_t output_bytes
         if(!(flags&0x100)){
             if(input==source.size())throw Error("truncated LZSS flags");flags=source[input++]|0xff00;
             if((flags&255)==255 && source.size()-input>=8 && output_bytes-written>=8){input+=8;written+=8;flags>>=7;continue;}
+            // An all-match group has exactly 16 input bytes and at most 144
+            // output bytes. Validate its eight lengths together; offsets do
+            // not affect length validation. Short/error tails stay below.
+            if(!(flags&255) && source.size()-input>=16 && output_bytes-written>=144){
+                unsigned length=24;
+                for(unsigned token=0;token<8;++token)length+=source[input+token*2+1]&15;
+                input+=16;written+=length;flags>>=7;continue;
+            }
         }
         const unsigned bytes=(flags&1)?1:2;
         if(bytes>source.size()-input)throw Error("truncated LZSS token");
@@ -78,6 +114,13 @@ unsigned decode_lzss_dictionary(std::span<const std::uint8_t> source,std::span<s
             if((flags&255)==255 && source.size()-input>=8 && output.size()-written>=8) {
                 std::memcpy(output.data()+written,source.data()+input,8);
                 input+=8;written+=8;flags>>=7;continue;
+            }
+            // Eight full matches consume 16 input and 144 output bytes.
+            // Short tails and initial caller-owned dictionary reads retain the
+            // ordinary path, including its partial-output/error behavior.
+            if(!(flags&255) && written>=4096 && source.size()-input>=16 && output.size()-written>=144 &&
+                copy_repeated_lzss_group(source.data()+input,output.data()+written,written)) {
+                input+=16;written+=144;flags>>=7;continue;
             }
         }
         if(flags&1) {
