@@ -28,6 +28,16 @@ if(ANDROID)
     target_link_options(wa2_android PRIVATE "-Wl,--no-undefined" "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
 else()
     add_executable(wa2_native WIN32 windows_main.cpp)
+    if(WIN32)
+        configure_file(app.rc.in "${CMAKE_CURRENT_BINARY_DIR}/app.rc" @ONLY)
+        set(WA2_ICON_RESOURCE "${CMAKE_CURRENT_BINARY_DIR}/app.res")
+        add_custom_command(OUTPUT "${WA2_ICON_RESOURCE}"
+            COMMAND "${WA2_ROOT}/tools/python/ziglang/zig.exe" rc /fo "${WA2_ICON_RESOURCE}" "${CMAKE_CURRENT_BINARY_DIR}/app.rc"
+            DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/app.rc" "${WA2_ROOT}/icon.ico"
+            VERBATIM)
+        set_source_files_properties("${WA2_ICON_RESOURCE}" PROPERTIES GENERATED TRUE EXTERNAL_OBJECT TRUE)
+        target_sources(wa2_native PRIVATE "${WA2_ICON_RESOURCE}")
+    endif()
     target_link_libraries(wa2_native PRIVATE wa2_shared_startup)
     set_target_properties(wa2_native PROPERTIES OUTPUT_NAME WA2_SDL2_x64)
 endif()

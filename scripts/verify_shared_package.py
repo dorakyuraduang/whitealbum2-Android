@@ -105,6 +105,8 @@ def verify(status,publish=False):
     win=Path(status['artifacts']['windows']['file']);data=win.read_bytes()
     if data[:2]!=b'MZ' or struct.unpack_from('<H',data,struct.unpack_from('<I',data,0x3c)[0]+4)[0]!=0x8664:
         raise ValueError('Windows host is not a native x64 PE')
+    from prepare_app_icon import verify_windows,verify_android
+    application_icons=dict(windows=verify_windows(win),android=verify_android(apk,tree),source_ico_sha256=digest(ROOT/'icon.ico'))
     coff=run([binpath/'llvm-readobj.exe','--coff-imports',win]);dlls=re.findall(r'^\s*Name: (.*?\.dll)',coff,re.M|re.I)
     if any(name.lower() in ('d3d9.dll','ddraw.dll','dsound.dll','winmm32.dll') for name in dlls):raise ValueError('Legacy graphics/audio DLL imported')
     relink=Path(status['relink_materials'])
@@ -118,6 +120,7 @@ def verify(status,publish=False):
             if hashlib.sha256(archive.read(name)).hexdigest()!=item['sha256']:raise ValueError('Damaged relink member: '+name)
     result=dict(schema='wa2.shared-package-audit.v1',artifacts=status['artifacts'],libraries=libraries,
         android_resource_table=resource_table,
+        application_icons=application_icons,
         android_signature_v2_verified=True,android_zip_alignment_verified=True,
         android_sdl_java_native_bindings=sdl_jni,
         common_source_set_compiled=True,actual_shared_android_entry_verified=True,android_needed=needed,windows_dlls=dlls,

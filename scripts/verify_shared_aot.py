@@ -71,6 +71,7 @@ def main():
     run([sys.executable,ROOT/'scripts/prepare_static_data.py'])
     run([sys.executable,ROOT/'scripts/generate_trigonometry_tables.py'])
     run([sys.executable,ROOT/'scripts/generate_codepages.py'])
+    run([sys.executable,ROOT/'scripts/prepare_app_icon.py'])
     run([sys.executable,ROOT/'scripts/verify_portable_shaders.py'],900)
     tracked=[p for directory in ('recompiled','generated/shared-aot','generated/static-data','generated/codepages') for p in (ROOT/directory).glob('*') if p.is_file()]
     tracked += [ROOT/'tests/shared_aot.cpp',ROOT/'tests/function_process.cpp',ROOT/'tests/portable_scheduler.cpp',Path(__file__),ROOT/'config/porting_contract.json',ROOT/'scripts/prepare_static_data.py']
@@ -88,6 +89,8 @@ def main():
     tracked += [ROOT/'android/CMakeLists.txt',ROOT/'scripts/verify_sdl_jni.py']
     tracked += list((ROOT/'tools/SDL-release-2.32.10/android-project/app/src/main/java/org/libsdl/app').glob('*.java'))
     tracked += [ROOT/'config/release.json']
+    tracked += [ROOT/'icon.ico',ROOT/'scripts/prepare_app_icon.py']
+    tracked += [p for p in (ROOT/'android/app/src/main/res').rglob('*') if p.is_file()]
     tracked += [ROOT/'config/aot_hot_functions.json']
     tracked += [ROOT/'tests/native_loop_snapshots.hpp',ROOT/'tests/portable_registry.cpp',ROOT/'config/native_loops.json']
     tracked += [ROOT/'scripts/generate_weather_batch.py']

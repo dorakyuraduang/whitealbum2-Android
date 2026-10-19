@@ -62,6 +62,8 @@ def main():
     kernel.SetPriorityClass.argtypes=[ctypes.c_void_p,ctypes.c_uint]
     if not kernel.SetPriorityClass(kernel.GetCurrentProcess(),0x4000):raise ctypes.WinError(ctypes.get_last_error())
     flags=subprocess.BELOW_NORMAL_PRIORITY_CLASS|subprocess.CREATE_NO_WINDOW
+    from prepare_app_icon import prepare as prepare_app_icon
+    prepare_app_icon()
     sdk=ROOT/'tools/android-sdk';ndk=sdk/'ndk/27.0.12077973';bt=sdk/'build-tools/34.0.0'
     jdk=ROOT/'tools/source-analysis/jdk-21.0.12.1+1';api=sdk/'platforms/android-35/android.jar'
     cmake=ROOT/'tools/python/cmake/data/bin/cmake.exe';build=ROOT/'build/shared-host-win64'
@@ -82,6 +84,9 @@ def main():
         ROOT/'tools/mojoshader_assembler-main/LICENSE.txt',ROOT/'tools/SDL-release-2.32.10/LICENSE.txt',ROOT/'third_party/stb/stb_vorbis.c']
     java=sorted((ROOT/'android/app/src/main/java').rglob('*.java'))+sorted((ROOT/'tools/SDL-release-2.32.10/android-project/app/src/main/java').rglob('*.java'))
     tracked+=java;bindings={p.relative_to(ROOT).as_posix():digest(p) for p in tracked}
+    tracked_icons=[ROOT/'icon.ico',ROOT/'scripts/prepare_app_icon.py',ROOT/'hosts/app.rc.in',ROOT/'hosts/CMakeLists.txt']
+    tracked_icons+=sorted((ROOT/'android/app/src/main/res').rglob('*'))
+    bindings.update({p.relative_to(ROOT).as_posix():digest(p) for p in tracked_icons if p.is_file()})
     identity=hashlib.sha256((digest(proof_path)+json.dumps(bindings,sort_keys=True)).encode()).hexdigest()[:16]
     directory=ROOT/'build/shared-apk'/identity;directory.mkdir(parents=True,exist_ok=True)
     output=ROOT/'out';(output/'android').mkdir(parents=True,exist_ok=True)
@@ -121,7 +126,9 @@ def main():
         uses=ET.Element('uses-sdk');uses.set('{'+NS+'}minSdkVersion','26');uses.set('{'+NS+'}targetSdkVersion','35');top.insert(0,uses)
         app=top.find('application');app.set('{'+NS+'}extractNativeLibs','true');app.set('{'+NS+'}debuggable','false')
         ET.register_namespace('android',NS);manifest_path=directory/'AndroidManifest.xml';manifest.write(manifest_path,encoding='utf-8',xml_declaration=True)
-        resources=directory/'resources.apk';run([bt/'aapt2.exe','link','--manifest',manifest_path,'-I',api,'-o',resources])
+        compiled_resources=directory/'compiled-resources.zip'
+        run([bt/'aapt2.exe','compile','--no-crunch','--dir',ROOT/'android/app/src/main/res','-o',compiled_resources])
+        resources=directory/'resources.apk';run([bt/'aapt2.exe','link','--manifest',manifest_path,'-I',api,compiled_resources,'-o',resources])
         unsigned=directory/'unsigned.apk'
         with zipfile.ZipFile(resources) as res,zipfile.ZipFile(unsigned,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as apk:
             # Android 11+ rejects a compressed resources.arsc at install time.
