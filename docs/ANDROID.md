@@ -43,6 +43,23 @@ including 64 reopen cycles and all 53 cached setting controls. These checks do
 not reproduce a player's actual Android UI interaction or establish device
 compatibility.
 
+`0.2.37-shared-aot` fixes `Unsupported source static style 3` when opening the
+original version-information dialogs. Style 3 is an icon, whereas the Android
+static-control factory previously accepted only text/frame styles. The shared
+window model now resolves the cached group/image resource, selects its 32-pixel
+image and transports the original BGRA32 DIB. Android creates an ImageView and
+decodes its alpha channel or legacy transparency mask. Repeated snapshots reuse
+the same bitmap. Missing resources, unsupported formats and unknown styles still
+fail explicitly. The icon is separate from the launcher's `icon.ico` artwork.
+
+Earlier ownership checks used placeholder objects and could not detect this
+missing widget type. New checks execute the production type classifier and icon
+decoder on the JVM, compare both cached icons' pixels, reject malformed inputs
+and exercise 64 version-dialog open/close cycles in the shared memory host.
+Queued messages for known destroyed windows cannot abort a new modal loop.
+These checks do not launch a game or create Android Views; actual device
+presentation remains unverified.
+
 `0.2.35-shared-aot` uses the same bounded LZSS repeated-match grouping on ARM64
 and Windows. Eight verified 18-byte matches of one repeating 1/2/4/8/16-byte word
 can be expanded together. Other token layouts, initial dictionary references and

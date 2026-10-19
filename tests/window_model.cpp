@@ -208,22 +208,30 @@ int main(int argc,char** argv){try{
     CHECK(call("CheckMenuItem",{menu,0,0x400})==8);CHECK(call("EnableMenuItem",{menu,0,0x400})==3);
     CHECK(host->menus==menu_baseline);CHECK(call("GetCursorPos",{work})==1);
     CHECK(host->menus==menu_baseline+1 && (host->last_menu.items[0].state&0xb)==0);
-    unsigned slider_checks{},button_checks{},dialog_visibility_cases{},hidden_dialogs{};
+    unsigned slider_checks{},button_checks{},dialog_visibility_cases{},hidden_dialogs{},about_icons{},about_cycles{},about_close_commands{};
     for(const U32 resource:{104u,108u,109u,112u,113u,114u,115u}){
     const auto d=call("CreateDialogParamA",{p.image_base,resource,window,p.resolve("fixture","dialog_proc"),0x12345678});CHECK(d);
     const bool initial_visible=(host->dialogs.at(d).definition.style&0x10000000u)!=0;
     CHECK(host->dialogs.at(d).visible==initial_visible);hidden_dialogs+=!initial_visible;
     CHECK(call("ShowWindow",{d,5})==U32(initial_visible));CHECK(call("IsWindowVisible",{d})==1);
     const auto controls=host->dialogs.at(d).controls;for(const auto& state:controls){const auto id=call("GetDlgItem",{d,state.definition.id});CHECK(id);
+        if(state.icon){CHECK((resource==112 || resource==114) && state.icon->width==32 && state.icon->height==32 && !state.icon->dib.empty());++about_icons;}
         if(const auto* type=std::get_if<std::u16string>(&state.definition.type);type && *type==u"msctls_trackbar32"){
             CHECK(call("SendMessageA",{id,0x406,1,100u<<16})==0);CHECK(call("SendMessageA",{id,0x405,1,73})==0);CHECK(call("SendMessageA",{id,0x400,0,0})==73);++slider_checks;}
         if(const auto* type=std::get_if<std::uint16_t>(&state.definition.type);type && *type==128){CHECK(call("SendMessageA",{id,0xf1,1,0})==0);CHECK(call("SendMessageA",{id,0xf0,0,0})==1);++button_checks;}}
     CHECK(host->dialogs.at(d).visible);CHECK(call("ShowWindow",{d,0})==1 && !host->dialogs.at(d).visible);++dialog_visibility_cases;
     CHECK(call("EndDialog",{d,1})==1);CHECK(call("DestroyWindow",{d})==1 && !host->dialogs.contains(d));}
-    CHECK(slider_checks==8 && button_checks==24 && dialog_init==7);
+    CHECK(slider_checks==8 && button_checks==24 && dialog_init==7 && about_icons==2);
     CHECK(hidden_dialogs>0);
     p.register_api("fixture","modal_dialog_proc",4,[&](wr::Process& q){if(q.argument(1)==0x110){CHECK(host->dialogs.at(q.argument(0)).visible);CHECK(call("EndDialog",{q.argument(0),42})==1);++dialog_visibility_cases;}return U32(0);});
     CHECK(call("DialogBoxParamA",{p.image_base,104,window,p.resolve("fixture","modal_dialog_proc"),0})==42);
+    p.register_api("fixture","about_dialog_proc",4,[&](wr::Process& q){const auto id=q.argument(0),message=q.argument(1);
+        if(message==0x110){const auto& state=host->dialogs.at(id);CHECK(state.visible);unsigned icons{};
+            for(const auto& control:state.controls)if(control.icon){CHECK(control.icon->width==32 && control.icon->height==32);++icons;}
+            CHECK(icons==1);CHECK(call("PostMessageA",{id,0x111,1,0})==1);++about_cycles;return U32(1);}
+        if(message==0x111 && q.argument(2)==1){CHECK(call("EndDialog",{id,1})==1);++about_close_commands;return U32(1);}return U32(0);});
+    for(unsigned n=0;n<32;++n)for(const U32 resource:{112u,114u})CHECK(call("DialogBoxParamA",{p.image_base,resource,window,p.resolve("fixture","about_dialog_proc"),0})==1);
+    CHECK(about_cycles==64 && about_close_commands==64 && host->dialogs.empty());
     // Assembling an original effect and using its source COM byte buffer must
     // not initialize SDL, a GL context or an audio device.
     const std::string shader_text="ps_3_0\ndcl_color0 v0\nmov oC0, v0\n";const auto source=p.put_string(shader_text);
@@ -239,5 +247,5 @@ int main(int argc,char** argv){try{
     CHECK(call("PostQuitMessage",{7})==0);CHECK(call("GetMessageA",{work,0,0x12,0x12})==0 && m.load(work+8,32)==7);
     CHECK(host->frames==0 && p.executed_instructions==0);
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.shared-window-model.v1\",\"source_callbacks\":"<<callbacks<<",\"pointer_cases\":"<<pointer_cases<<",\"full_mouse_leaf_cases\":"<<hit_cases<<",\"client_viewport_hit_cases\":"<<client_viewport_hit_cases<<",\"dialog_visibility_cases\":"<<dialog_visibility_cases<<",\"initially_hidden_modeless_dialogs\":"<<hidden_dialogs<<",\"backbuffer_to_client_hit_test\":true,\"hit_table_banks_and_indices\":true,\"transient_left_click\":true,\"source_pointer_diagnostics\":true,\"dpi_resize_and_letterbox_mapping\":true,\"per_event_screen_cursor\":true,\"cursor_poll_refresh\":true,\"cached_cursor_poll_prefix\":true,\"dialog_controls\":true,\"message_filter_remove_dispatch\":true,\"menu_updates\":true,\"redundant_menu_calls_checked\":512,\"redundant_native_menu_updates\":0,\"menu_state_changes_coalesced\":true,\"source_pointer_layouts\":true,\"system_metrics_54_55\":true,\"startup_hidden_popup_cases\":"<<startup_popup_cases<<",\"zero_size_popup_preserved\":true,\"unknown_metric_rejected\":true,\"effect_assembly_and_buffer_release\":true,\"native_window_created\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"screen_access\":false,\"game_launched\":false,\"passed\":true}\n";
-    std::cout<<"PASS common window model, 512 redundant menu calls without native updates, coalesced state changes and effect buffers in synthetic memory.\n";return 0;
+    std::cout<<"PASS common window model, 64 version-dialog open/close cycles with icons, 512 redundant menu calls without native updates, coalesced state changes and effect buffers in synthetic memory.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

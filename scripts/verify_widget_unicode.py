@@ -18,7 +18,7 @@ def code_units(value):
 def verify(fixture,report):
     raw=fixture.read_bytes()
     if not raw.isascii():raise ValueError('Widget JSON must be ASCII with Unicode escapes')
-    data=json.loads(raw);strings=0;menu_items=0;control_count=0;non_ascii=0
+    data=json.loads(raw);strings=0;menu_items=0;control_count=0;non_ascii=0;icon_count=0
     def text(value,expected):
         nonlocal strings,non_ascii
         if code_units(value)!=expected:raise ValueError('Widget Unicode changed during JSON transport')
@@ -39,15 +39,22 @@ def verify(fixture,report):
         text(value['title'],source['title'])
         if len(value['controls'])!=len(source['controls']):raise ValueError('Dialog control count changed')
         for control,original in zip(value['controls'],source['controls']):
-            if {k:v for k,v in control.items() if k not in ('type','text','items')}!={k:v for k,v in original.items() if k not in ('type','text','items')}:raise ValueError('Control state/identity changed')
+            if {k:v for k,v in control.items() if k not in ('type','text','items','icon')}!={k:v for k,v in original.items() if k not in ('type','text','items','icon')}:raise ValueError('Control state/identity changed')
+            actual_icon,expected_icon=control['icon'],original['icon']
+            if expected_icon is None:
+                if actual_icon is not None:raise ValueError('Unexpected control icon')
+            else:
+                if (actual_icon['width'],actual_icon['height'],bytes.fromhex(actual_icon['dib']))!=(expected_icon['width'],expected_icon['height'],bytes(expected_icon['bytes'])):raise ValueError('Control icon resource changed in transport')
+                if control['type']!='#130' or control['style']&31!=3:raise ValueError('Icon attached to a text control')
+                icon_count+=1
             text(control['type'],original['type']);text(control['text'],original['text'])
             if len(control['items'])!=len(original['items']):raise ValueError('List item count changed')
             for value_text,source_units in zip(control['items'],original['items']):text(value_text,source_units)
             control_count+=1
-    if data['cached_menus']!=2 or data['cached_dialogs']!=7 or menu_items!=67 or control_count!=53:raise ValueError('Cached resource coverage changed')
+    if data['cached_menus']!=2 or data['cached_dialogs']!=7 or menu_items!=67 or control_count!=53 or icon_count!=2:raise ValueError('Cached resource coverage changed')
     result=dict(schema='wa2.widget-unicode.v1',fixture_sha256=hashlib.sha256(raw).hexdigest(),unicode_input_cases=len(data['strings']),
                 utf16_code_units_covered=65536,old_byte_quoting_failures_reproduced=len(data['before']),cached_menus=data['cached_menus'],
-                cached_dialogs=data['cached_dialogs'],menu_items=menu_items,controls=control_count,exact_text_roundtrips=strings,
+                cached_dialogs=data['cached_dialogs'],menu_items=menu_items,controls=control_count,cached_icons=icon_count,exact_text_roundtrips=strings,
                 non_ascii_roundtrips=non_ascii,command_ids_flags_and_control_state_preserved=True,ascii_json=True,
                 independent_standard_json_parser=True,android_runtime_parser_executed=False,game_launched=False,screen_access=False,source_executable_opened=False,passed=True)
     report.write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')

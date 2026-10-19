@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.graphics.Color;
+import android.graphics.Bitmap;
 import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
 import android.text.InputType;
@@ -19,6 +20,7 @@ import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.RadioButton;
@@ -109,9 +111,8 @@ public final class NativeWidgets {
                 public void afterTextChanged(Editable value) { }
             });result=edit;
         } else if("#130".equals(type)) {
-            if((style&31)>2 && (style&31)!=11 && (style&31)!=12 && (style&31)!=13 && (style&31)!=16 && (style&31)!=17 && (style&31)!=18)
-                throw new IllegalArgumentException("Unsupported source static style " + (style&31));
-            TextView text=new TextView(activity);text.setGravity((style&3)==1?Gravity.CENTER:(style&3)==2?Gravity.END:Gravity.START);result=text;
+            if(WidgetIcon.isIcon(style)){ImageView icon=new ImageView(activity);icon.setScaleType(ImageView.ScaleType.FIT_CENTER);result=icon;}
+            else {TextView text=new TextView(activity);text.setGravity((style&3)==1?Gravity.CENTER:(style&3)==2?Gravity.END:Gravity.START);result=text;}
         } else if("#131".equals(type)) {
             ListView list=new ListView(activity);list.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
             list.setOnItemClickListener((parent,view,position,row) -> { if(!live(owner,token,list))return;
@@ -165,6 +166,11 @@ public final class NativeWidgets {
             for(int i=0;i<children.length();++i) { JSONObject c=children.getJSONObject(i);int token=integer(c,"token");View view=owner.views.get(token);if(view==null)throw new IllegalStateException("Native control snapshot incomplete: window="+owner.token+", token="+token);
                 view.setEnabled(c.getBoolean("enabled"));view.setVisibility(c.getBoolean("visible")?View.VISIBLE:View.INVISIBLE);
                 if(view instanceof TextView) { String text=view instanceof EditText?c.getString("text"):label(c.getString("text"));TextView textView=(TextView)view;if(!textView.getText().toString().equals(text))textView.setText(text); }
+                if(view instanceof ImageView) { ImageView icon=(ImageView)view;JSONObject image=c.optJSONObject("icon");
+                    if(image==null){icon.setImageDrawable(null);icon.setTag(null);}
+                    else {String pixels=image.getString("dib");String identity=image.getInt("width")+":"+image.getInt("height")+":"+pixels;
+                        if(!identity.equals(icon.getTag())){WidgetIcon.Image bitmap=WidgetIcon.decode(image.getInt("width"),image.getInt("height"),pixels);
+                            icon.setImageBitmap(Bitmap.createBitmap(bitmap.argb,bitmap.width,bitmap.height,Bitmap.Config.ARGB_8888));icon.setTag(identity);}} }
                 if(view instanceof CompoundButton)((CompoundButton)view).setChecked(c.getInt("check")!=0);
                 if(view instanceof SeekBar) { SeekBar slider=(SeekBar)view;int minimum=c.getInt("minimum"),maximum=c.getInt("maximum");if((long)maximum-minimum>Integer.MAX_VALUE || maximum<minimum)throw new IllegalArgumentException("Slider range");slider.setMax(maximum-minimum);slider.setProgress(c.getInt("position")-minimum); }
                 if(view instanceof ListView) { JSONArray values=c.getJSONArray("items");ArrayList<String> labels=new ArrayList<>();for(int j=0;j<values.length();++j)labels.add(values.getString(j));ListView list=(ListView)view;list.setAdapter(new ArrayAdapter<>(activity,android.R.layout.simple_list_item_single_choice,labels));int selected=c.getInt("selection");if(selected>=0)list.setItemChecked(selected,true); }

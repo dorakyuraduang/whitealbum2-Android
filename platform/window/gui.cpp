@@ -52,7 +52,11 @@ class Gui final:public wr::GuiBackend {
     }
     U32 call(U32 procedure,U32 id,U32 message,U32 wp,U32 lp){if(!procedure)return default_message(id,message,wp,lp);++callbacks;
         return p.callback(procedure,std::array<U32,4>{id,message,wp,lp});}
-    U32 dispatch(const Message& message){++dispatched;if(!message.window)return 0;auto& target=window(message.window);
+    U32 dispatch(const Message& message){++dispatched;if(!message.window)return 0;
+        // A previously posted message may outlive its dialog. It must not
+        // abort a later modal loop or call a retired source procedure.
+        const auto retired=windows.find(message.window);if(retired!=windows.end() && !retired->second.alive)return 0;
+        auto& target=window(message.window);
         const auto result=call(target.procedure,message.window,message.message,message.wparam,message.lparam);
         if(target.dialog && message.message==WM_CLOSE && !result){end_dialog(target.dialog,2);return 0;}return result;}
     std::array<std::int32_t,2> screen_cursor(std::array<std::int32_t,2> point,bool inverse=false)const{
@@ -158,6 +162,8 @@ class Gui final:public wr::GuiBackend {
         Window w;w.spec={id,a[2],definition.style,definition.extended_style,{},definition.title};w.parent=a[2];w.procedure=a[3];w.dialog=id;w.extra.resize(3);
         windows.emplace(id,std::move(w));
         for(const auto& control:definition.controls){ControlState state;state.definition=control;if(const auto* title=std::get_if<std::u16string>(&control.title))state.text=*title;
+            if(const auto* type=std::get_if<std::uint16_t>(&control.type);type && *type==130 && (control.style&31)==3 && !std::holds_alternative<std::monostate>(control.title))
+                state.icon=load_icon_resource(p.source_image(),control.title);
             state.enabled=(control.style&WS_DISABLED)==0;state.visible=(control.style&WS_VISIBLE)!=0;d.state.controls.push_back(std::move(state));
             const auto child=token();d.state.controls.back().token=child;Window child_window;child_window.spec.token=child;child_window.parent=id;child_window.control=control.id;child_window.dialog=id;
             windows.emplace(child,std::move(child_window));d.handles.emplace(control.id,child);}

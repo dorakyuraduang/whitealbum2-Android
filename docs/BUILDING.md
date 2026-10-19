@@ -106,6 +106,17 @@ byte-quoting failures and preserves 67 menu items' command/state fields and 53
 controls. It does not run Android's JSON parser or prove on-device glyph/layout
 rendering. The same helper is used by the Android file chooser.
 
+Version-dialog checks also preserve both cached `SS_ICON` payloads through the
+actual serializer. `tests/window_resources.cpp` checks icon-size selection,
+missing resources, unsupported headers and every truncated icon prefix;
+`tests/window_model.cpp` performs 64 modal open/command/close cycles without a
+window, including queued messages for retired dialogs. `WidgetIconTest` runs the
+same static-style classifier and BGRA32 decoder used by Android, including
+alpha/mask semantics and bottom-up rows. An independent Python conversion
+supplies expected cached pixels. These checks cover the missing style-3 path
+that the older ownership-only tests did not run; they do not execute ImageView,
+the Android JSON parser or device presentation.
+
 `tests/resource_loading.cpp` checks general-resource and script decompression
 with synthetic KCAP/LAC archives and both memory backends. It covers 64 exact
 outputs, 22 failure cases, eight input/output/allocator aliases and two allocator

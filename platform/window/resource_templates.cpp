@@ -1,5 +1,7 @@
 #include "resource_templates.hpp"
+#include <winrecomp/resources.hpp>
 #include <bit>
+#include <limits>
 #include <stdexcept>
 namespace wa2::window {
 namespace {
@@ -47,5 +49,35 @@ MenuTemplate parse_menu(std::span<const std::uint8_t> bytes){
     Reader r(bytes);const auto version=r.word(),offset=r.word();if(version>1)throw std::runtime_error("unsupported menu resource version");
     MenuTemplate menu;menu.extended=version==1;if(menu.extended)menu.help=r.dword();if(offset<(menu.extended?4:0))throw std::runtime_error("invalid menu header offset");r.position(4+offset);
     unsigned count{};menu.items=menu_items(r,menu.extended,0,count);return menu;
+}
+IconEntry select_icon(std::span<const std::uint8_t> bytes,unsigned desired){
+    Reader r(bytes);if(r.word()!=0 || r.word()!=1)throw std::runtime_error("invalid window icon group");
+    const auto count=r.word();if(!count || count>256 || bytes.size()!=6+14u*count || !desired || desired>256)throw std::runtime_error("invalid window icon directory size");
+    IconEntry best;unsigned best_distance=std::numeric_limits<unsigned>::max();
+    for(unsigned n=0;n<count;++n){IconEntry entry;entry.width=std::uint16_t(r.number(1));entry.height=std::uint16_t(r.number(1));if(!entry.width)entry.width=256;if(!entry.height)entry.height=256;
+        r.number(1);if(r.number(1)!=0)throw std::runtime_error("invalid window icon reserved byte");entry.planes=r.word();entry.bits=r.word();entry.bytes=r.dword();entry.id=r.word();
+        if(!entry.id || !entry.bytes || entry.bytes>1048576)throw std::runtime_error("invalid window icon payload size");
+        const auto distance=(entry.width>desired?entry.width-desired:desired-entry.width)+(entry.height>desired?entry.height-desired:desired-entry.height);
+        if(distance<best_distance || (distance==best_distance && entry.bits>best.bits)){best=entry;best_distance=distance;}
+    }return best;
+}
+IconResource parse_icon_bitmap(std::span<const std::uint8_t> bytes,unsigned width,unsigned height){
+    if(!width || width>256 || !height || height>256 || bytes.size()>1048576)throw std::runtime_error("invalid window icon dimensions");
+    Reader r(bytes);const auto header=r.dword();if(header!=40 && header!=108 && header!=124)throw std::runtime_error("unsupported window icon bitmap header");
+    if(r.dword()!=width || std::bit_cast<std::int32_t>(r.dword())!=int(height*2))throw std::runtime_error("window icon bitmap dimensions disagree");
+    if(r.word()!=1 || r.word()!=32 || r.dword()!=0)throw std::runtime_error("unsupported window icon bitmap format (requires uncompressed BGRA32)");
+    r.dword();r.dword();r.dword();if(r.dword()!=0)throw std::runtime_error("unsupported window icon palette");r.dword();
+    const auto required=std::size_t(header)+width*height*4+((width+31)/32)*4*height;
+    if(bytes.size()<required)throw std::runtime_error("truncated window icon pixels or transparency mask");
+    return {std::uint16_t(width),std::uint16_t(height),{bytes.begin(),bytes.end()}};
+}
+IconResource load_icon_resource(const wr::Image& image,const Name& name){
+    wr::ResourceName key;
+    if(const auto* id=std::get_if<std::uint16_t>(&name))key=*id;else if(const auto* text=std::get_if<std::u16string>(&name))key=*text;else throw std::runtime_error("window icon has no resource name");
+    const auto group=wr::find_resource(image,std::uint16_t(14),key);if(!group)throw std::runtime_error("window icon group resource missing");
+    const auto entry=select_icon(wr::resource_bytes(image,*group));
+    if(entry.planes!=1 || entry.bits!=32)throw std::runtime_error("unsupported window icon group format");
+    const auto icon=wr::find_resource(image,std::uint16_t(3),entry.id,group->language);if(!icon || icon->size!=entry.bytes)throw std::runtime_error("window icon image resource missing or size differs");
+    return parse_icon_bitmap(wr::resource_bytes(image,*icon),entry.width,entry.height);
 }
 }

@@ -104,6 +104,7 @@ def main():
     tracked += [ROOT/'tests/large_heap_memory.cpp']
     tracked += [ROOT/'scripts/verify_android_java.py',ROOT/'tests/android/org/wa2/port/ResourceLocationTest.java',ROOT/'android/app/src/main/AndroidManifest.xml']
     tracked += [ROOT/'tests/android/org/wa2/port/WidgetControlsTest.java']
+    tracked += [ROOT/'tests/android/org/wa2/port/WidgetIconTest.java']
     tracked += [ROOT/'tests/portable_sound_bridge.cpp',ROOT/'port/audio.hpp']
     tracked += [ROOT/'tests/window_resources.cpp']
     tracked += [ROOT/'tests/widget_unicode.cpp',ROOT/'scripts/verify_widget_unicode.py']
@@ -329,13 +330,16 @@ def main():
     run([build/'wa2_portable_sound_bridge_tests.exe',sound_report],30)
     window_report=build/'window-resources.json'
     run([build/'wa2_window_resource_tests.exe',window_report],30)
+    window_resources=json.loads(window_report.read_text())
+    if (not window_resources['passed'] or window_resources['cached_icon_controls']!=2 or
+        window_resources['icon_size_selections']!=6 or window_resources['rejected_icon_inputs']<8000):raise ValueError('Cached version dialog icon resource contracts failed')
     widget_fixture=build/'widget-unicode-fixture.json';widget_report=build/'widget-unicode.json'
     run([build/'wa2_widget_unicode_tests.exe',widget_fixture],30)
     run([sys.executable,ROOT/'scripts/verify_widget_unicode.py',widget_fixture,widget_report],15)
     widget_unicode=json.loads(widget_report.read_text())
     if (not widget_unicode['passed'] or widget_unicode['unicode_input_cases']!=77 or
         widget_unicode['cached_menus']!=2 or widget_unicode['cached_dialogs']!=7 or widget_unicode['menu_items']!=67 or
-        widget_unicode['controls']!=53 or widget_unicode['old_byte_quoting_failures_reproduced']!=3 or
+        widget_unicode['controls']!=53 or widget_unicode['cached_icons']!=2 or widget_unicode['old_byte_quoting_failures_reproduced']!=3 or
         widget_unicode['utf16_code_units_covered']!=65536):raise ValueError('Native widget Unicode transport or command state changed')
     window_model_report=build/'window-model.json'
     run([build/'wa2_window_model_tests.exe',window_model_report],30)
@@ -359,6 +363,9 @@ def main():
     if (not ownership['passed'] or ownership['reopen_cycles']!=64 or ownership['activity_session_cases']!=9 or
         ownership['cached_dialogs']!=7 or ownership['cached_controls']!=53 or not ownership['invalid_snapshot_atomic'] or
         not ownership['stale_sessions_rejected']):raise ValueError('Android widget ownership/session memory contracts failed')
+    widget_icons=java_proof['widget_icons']
+    if (not widget_icons['passed'] or widget_icons['cached_icons']!=2 or widget_icons['exact_cached_pixels']!=2048 or
+        widget_icons['style_cases']!=96 or widget_icons['rejected_inputs']<100 or not widget_icons['alpha_and_mask_checked']):raise ValueError('Android version dialog icon decoding failed')
     run([sys.executable,ROOT/'scripts/verify_sdl_jni.py'],60)
     run([acmake,'-S',ROOT/'tests/shared-aot-android','-B',android,'-G','Ninja',
          '-DCMAKE_MAKE_PROGRAM='+str(ROOT/'tools/android-sdk/cmake/3.22.1/bin/ninja.exe'),
@@ -444,6 +451,7 @@ def main():
                window_resources=json.loads(window_report.read_text()),
                shared_widget_unicode=widget_unicode,
                shared_widget_ownership=ownership,
+               shared_widget_icons=widget_icons,
                window_model=json.loads(window_model_report.read_text()),
                render_submission=json.loads(submission_report.read_text()),
                shared_host_leaf_calls=json.loads(leaf_report.read_text()),

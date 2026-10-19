@@ -17,6 +17,7 @@ struct ControlState {
     std::int32_t selection{-1},position{},minimum{},maximum{100},check{},line_size{1},page_size{20};
     std::int32_t selection_start{},selection_end{};
     std::uint32_t font{};std::vector<std::int32_t> ticks;
+    std::optional<IconResource> icon;
     bool enabled{true},visible{true};
 };
 struct DialogState {std::uint32_t token{},owner{};DialogTemplate definition;std::vector<ControlState> controls;bool visible{true};};

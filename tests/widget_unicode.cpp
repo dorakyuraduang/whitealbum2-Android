@@ -20,7 +20,9 @@ void expected_dialog(std::ostream& out,const w::DialogState& d){
         out<<"{\"id\":"<<c.definition.id<<",\"token\":"<<c.token<<",\"type\":";units(out,type);out<<",\"text\":";units(out,c.text);out<<",\"style\":"<<c.definition.style<<",\"bounds\":[";
         for(unsigned n=0;n<4;++n){if(n)out<<',';out<<c.definition.bounds[n];}
         out<<"],\"check\":"<<c.check<<",\"position\":"<<c.position<<",\"minimum\":"<<c.minimum<<",\"maximum\":"<<c.maximum<<",\"selection\":"<<c.selection<<",\"enabled\":"<<(c.enabled?"true":"false")<<",\"visible\":"<<(c.visible?"true":"false")<<",\"items\":[";
-        bool first_item=true;for(const auto& item:c.items){if(!first_item)out<<',';first_item=false;units(out,item);}out<<"]}";
+        bool first_item=true;for(const auto& item:c.items){if(!first_item)out<<',';first_item=false;units(out,item);}out<<"],\"icon\":";
+        if(!c.icon)out<<"null";else{out<<"{\"width\":"<<c.icon->width<<",\"height\":"<<c.icon->height<<",\"bytes\":[";
+            for(unsigned n=0;n<c.icon->dib.size();++n){if(n)out<<',';out<<unsigned(c.icon->dib[n]);}out<<"]}";}out<<'}';
     }out<<"]}";
 }
 int main(int argc,char** argv){try{
@@ -45,6 +47,7 @@ int main(int argc,char** argv){try{
     for(const auto& resource:wr::resource_directory(image)){const auto* type=std::get_if<std::uint16_t>(&resource.type);if(!type || *type!=5)continue;
         w::DialogState state;state.definition=w::parse_dialog(wr::resource_bytes(image,resource));state.token=0xb1000000+dialogs*16;state.owner=0xb2000010;state.visible=dialogs%2==0;
         for(const auto& control:state.definition.controls){w::ControlState value;value.definition=control;value.token=0xb3000000+unsigned(state.controls.size())*16;if(const auto* text=std::get_if<std::u16string>(&control.title))value.text=*text;
+            if(const auto* kind=std::get_if<std::uint16_t>(&control.type);kind && *kind==130 && (control.style&31)==3)value.icon=w::load_icon_resource(image,control.title);
             value.items={samples[2],samples[4],samples[6]};value.minimum=-17;value.position=13;value.maximum=200;value.selection=-1;value.check=2;value.enabled=state.controls.size()%2==0;value.visible=state.controls.size()%3!=0;state.controls.push_back(std::move(value));}
         if(dialogs++)out<<',';out<<"{\"expected\":";expected_dialog(out,state);out<<",\"transport\":"<<w::json::dialog(state)<<'}';
     }
