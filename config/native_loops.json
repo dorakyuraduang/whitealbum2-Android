@@ -1,0 +1,150 @@
+{
+  "schema": "wa2.native-loop-contracts.v1",
+  "source": "Existing checked C++ subsystem ports and their cached code signatures",
+  "loops": [
+    {
+      "name": "aligned_vector_buffer_clear",
+      "entry": 4712344,
+      "end": 4712392,
+      "implementation": "recompiled/native_string.cpp",
+      "function": "wa2::aot::native_vector_clear",
+      "exit_targets": [
+        4712392
+      ],
+      "signature_hex": "660f7f07660f7f4710660f7f4720660f7f4730660f7f4740660f7f4750660f7f4760660f7f47708dbf800000004975d0"
+    },
+    {
+      "name": "ordinary_snow_position_update",
+      "entry": 4229573,
+      "end": 4229687,
+      "implementation": "recompiled/vertex_grid.cpp",
+      "function": "wa2::aot::native_snow_motion",
+      "exit_targets": [
+        4229687
+      ]
+    },
+    {
+      "name": "sprite_four_corner_geometry",
+      "entry": 4438952,
+      "end": 4439520,
+      "implementation": "recompiled/vertex_grid.cpp",
+      "function": "wa2::aot::native_sprite_geometry",
+      "exit_targets": [
+        4439520
+      ]
+    },
+    {
+      "name": "vertex_colours",
+      "entry": 4439520,
+      "end": 4440320,
+      "implementation": "port/vertex_batch.cpp",
+      "function": "wr::wa2_vertex_full",
+      "exit_targets": [
+        4440320
+      ]
+    },
+    {
+      "name": "sprite_order",
+      "entry": 4465296,
+      "end": 4465524,
+      "implementation": "port/sprite_sort.cpp",
+      "function": "wr::wa2_sort_objects_full",
+      "exit_targets": [
+        4465524
+      ]
+    },
+    {
+      "name": "texture_column_clipping",
+      "entry": 4443213,
+      "end": 4443398,
+      "implementation": "recompiled/uv_clip.cpp",
+      "function": "wa2::aot::native_uv_columns",
+      "exit_targets": [
+        4443398
+      ]
+    },
+    {
+      "name": "texture_row_clipping",
+      "entry": 4443447,
+      "end": 4443632,
+      "implementation": "recompiled/uv_clip.cpp",
+      "function": "wa2::aot::native_uv_rows",
+      "exit_targets": [
+        4443632
+      ]
+    },
+    {
+      "name": "vertex_position_and_colour_interpolation",
+      "entry": 4445133,
+      "end": 4445599,
+      "implementation": "recompiled/uv_clip.cpp",
+      "function": "wa2::aot::native_vertex_interpolation",
+      "exit_targets": [
+        4445599
+      ]
+    },
+    {
+      "name": "complete_vertex_grid",
+      "entry": 4443797,
+      "end": 4445655,
+      "implementation": "recompiled/vertex_grid.cpp",
+      "function": "wa2::aot::native_vertex_grid",
+      "exit_targets": [
+        4445655
+      ]
+    },
+    {
+      "name": "clipped_texture_and_vertex_grid",
+      "entry": 4443159,
+      "end": 4445655,
+      "implementation": "recompiled/vertex_grid.cpp",
+      "function": "wa2::aot::native_vertex_grid",
+      "exit_targets": [
+        4445655
+      ]
+    },
+    {
+      "name": "batched_snow_initial_clear",
+      "code_verification": "shared_aot_direct_closure",
+      "entry": 4229327,
+      "implementation": "recompiled/native_weather.cpp",
+      "header": "recompiled/native_weather.hpp",
+      "function": "wa2::aot::native_weather_batch",
+      "exit_targets": [
+        4229744,
+        4229845,
+        4229950,
+        4231003,
+        4234336
+      ],
+      "external_exit_targets": [
+        4429836,
+        4429857,
+        4437079
+      ]
+    },
+    {
+      "name": "batched_snow_continuation",
+      "code_verification": "shared_aot_direct_closure",
+      "entry": 4229408,
+      "implementation": "recompiled/native_weather.cpp",
+      "header": "recompiled/native_weather.hpp",
+      "function": "wa2::aot::native_weather_batch",
+      "exit_targets": [
+        4229744,
+        4229845,
+        4229950,
+        4231003,
+        4234336
+      ],
+      "external_exit_targets": [
+        4429836,
+        4429857,
+        4437079
+      ]
+    }
+  ],
+  "full_native_execution_has_no_instruction_meter": true,
+  "unsupported_input_uses_same_compiled_function_body": true,
+  "interpreter_fallback": false
+}

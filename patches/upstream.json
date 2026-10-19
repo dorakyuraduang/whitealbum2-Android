@@ -1,0 +1,5 @@
+{
+  "upstream": "https://github.com/Zippingrocks/WindowsRecompTool",
+  "commit": "28903ea344b77ea97b6794151b18c3b63f8e3363",
+  "local_patch": "patches/winrecomp-wa2.patch"
+}

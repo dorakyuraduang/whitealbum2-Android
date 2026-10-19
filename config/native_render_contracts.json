@@ -1,0 +1,39 @@
+{
+  "schema": "wa2.native-render-functions.v1",
+  "functions": [{
+    "name": "textured_uniform_sprite_draw",
+    "entry": "0x43b7a0",
+    "function": "wa2::aot::native_draw_sprite",
+    "header": "recompiled/native_sprites.hpp",
+    "signature_hex": "558bec83e4f8b8a4160000",
+    "implementation": "recompiled/native_sprites.cpp",
+    "adapter": "platform/render/source_graphics.cpp",
+    "source_contract": "Cached void __cdecl(Sprite*, ImageSlot*) prototype, cached checked C++ and complete owning static call closure",
+    "arguments": "Source sprite pointer and optional source image override on the cdecl stack",
+    "admitted": "Masked nearest PC24; empty x87 stack; initialized default target or already-created texture target; ordinary uniform-colour textured quad; all cached capability-dependent mode-2 sampler choices; positive bounded tiled resource; crop inside image; no secondary mask, texture override or programmable effect; admitted native trigonometry",
+    "preserved": ["nonvolatile integer registers", "stack and return ABI", "source FP control", "segment state", "SIMD state", "host fenv", "host errno", "game resource and sprite RAM", "GetSurfaceLevel output and Release lifetime", "DrawPrimitiveUP stream-zero reset", "tile order", "raw vertex bits", "observable drawing state"],
+    "callee_volatile": ["integer flags", "volatile integer registers", "empty x87 register payloads, status and instruction metadata", "dead callee scratch stack"],
+    "raw_x87_bit_exact_contract": false,
+    "decline": "Leave CPU and game RAM unchanged and execute the same checked static function; no decoder or interpreter",
+    "one_source_set_for_all_hosts": true,
+    "game_launched": false
+  }, {
+    "name": "uniform_font_glyph_draw",
+    "entry": "0x4462e0",
+    "function": "wa2::aot::native_draw_glyph",
+    "header": "recompiled/native_glyphs.hpp",
+    "signature_hex": "0fbf442454",
+    "implementation": "recompiled/native_sprites.cpp",
+    "adapter": "platform/render/source_graphics.cpp",
+    "source_contract": "Cached void cdecl glyph function, 256-byte Sprite by value and nine DWORD arguments; complete cached static owning function and call closure",
+    "arguments": "By-value sprite, source character, integer rectangle, margin, cell size, ARGB and font index",
+    "admitted": "Same native sprite admission; nearest PC24; empty x87 stack; bounded actual source font range table; ordinary font texture crop",
+    "preserved": ["nonvolatile integer registers", "stack and void return ABI", "source FP control", "segment state", "SIMD state", "host fenv", "host errno", "game objects and resources", "raw vertex bits", "tile order", "observable drawing state"],
+    "callee_volatile": ["flags and volatile integer registers", "empty x87 payloads, status and instruction metadata", "dead callee scratch", "by-value temporary argument storage"],
+    "known_call_sites": ["0x446f94", "0x4471c0", "0x447310", "0x4473d3", "0x447510"],
+    "raw_x87_bit_exact_contract": false,
+    "decline": "Leave CPU and game RAM unchanged; execute existing checked static function without a decoder or interpreter",
+    "one_source_set_for_all_hosts": true,
+    "game_launched": false
+  }]
+}

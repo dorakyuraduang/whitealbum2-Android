@@ -1,0 +1,93 @@
+{
+  "schema": "wa2.native-math-contracts.v1",
+  "functions": [
+    {
+      "name": "crt_atan2",
+      "entry": "0x47885a",
+      "function": "wa2::aot::native_atan2",
+      "header": "recompiled/native_math.hpp",
+      "signature_hex": "baf0224d00e90cd00000",
+      "source": "Cached checked C++ intrinsic wrapper and nonzero numeric prefix",
+      "public_contract": "https://learn.microsoft.com/en-us/cpp/c-runtime-library/ciatan2?view=msvc-170",
+      "arguments": "Two finite, exact binary64 values on the source FP stack: ST0=X, ST1=Y",
+      "return": "Native binary64 atan2(Y,X), replacing the two source FP values",
+      "admitted_control": "All exceptions masked; nearest rounding; all three supported precision modes",
+      "preserved": [
+        "nonvolatile integer registers",
+        "source FP control word",
+        "deeper FP stack",
+        "host fenv",
+        "host errno"
+      ],
+      "callee_volatile": [
+        "integer flags",
+        "volatile integer and XMM registers",
+        "x87 condition bits and instruction metadata"
+      ],
+      "raw_x87_bit_exact_contract": false,
+      "source_epilogue_in_cache": false,
+      "unknown_epilogue_instructions_synthesized": false,
+      "nonfinite_or_unestablished_input": "Decline without changing state; retain the explicitly checked AOT path",
+      "implementation": "engine/scalar_math.cpp",
+      "adapter": "recompiled/native_math.cpp"
+    },
+    {
+      "name": "crt_cosine",
+      "entry": "0x474990",
+      "function": "wa2::aot::native_cosine",
+      "header": "recompiled/native_math.hpp",
+      "signature_hex": "833d0c83bc0000743283ec080fae5c24048b44240425801f00003d801f0000750fd93c24668b04246683e07f6683f87f8d6424087505e905820000",
+      "source": "Cached ordinary SSE polynomial and constant table, reconstructed in native binary64 operation order",
+      "public_contract": "https://learn.microsoft.com/en-us/cpp/c-runtime-library/cicos?view=msvc-170",
+      "arguments": "One finite source ST0; the admitted source SSE prefix rounds it to binary64",
+      "return_value": "Native binary64 trigonometric result at ST0",
+      "admitted_argument_abs_max": 128,
+      "admitted_control": "Cached SSE feature enabled; masked exceptions; nearest rounding; source SSE DAZ/FTZ disabled",
+      "declined_behavior": "Original static function body; no decoder or instruction interpreter",
+      "preserved": [
+        "nonvolatile integer registers",
+        "source FP control word",
+        "deeper FP stack",
+        "host fenv",
+        "host errno"
+      ],
+      "raw_x87_bit_exact_contract": false,
+      "implementation": "engine/trigonometry.cpp",
+      "adapter": "recompiled/native_math.cpp",
+      "admitted_nonzero_argument_abs_min": "0x1p-252",
+      "binary64_value_bit_exact_contract": true,
+      "constant_table_validation": "The 2160 source data bytes must match the cached admitted table on every replacement call",
+      "native_core": "engine/crt_trigonometry.cpp"
+    },
+    {
+      "name": "crt_sine",
+      "entry": "0x474d50",
+      "function": "wa2::aot::native_sine",
+      "header": "recompiled/native_math.hpp",
+      "signature_hex": "833d0c83bc0000743283ec080fae5c24048b44240425801f00003d801f0000750fd93c24668b04246683e07f6683f87f8d6424087505e9c5920000",
+      "source": "Cached ordinary SSE polynomial and constant table, reconstructed in native binary64 operation order",
+      "public_contract": "https://learn.microsoft.com/en-us/cpp/c-runtime-library/cisin?view=msvc-170",
+      "arguments": "One finite source ST0; the admitted source SSE prefix rounds it to binary64",
+      "return_value": "Native binary64 trigonometric result at ST0",
+      "admitted_argument_abs_max": 128,
+      "admitted_control": "Cached SSE feature enabled; masked exceptions; nearest rounding; source SSE DAZ/FTZ disabled",
+      "declined_behavior": "Original static function body; no decoder or instruction interpreter",
+      "preserved": [
+        "nonvolatile integer registers",
+        "source FP control word",
+        "deeper FP stack",
+        "host fenv",
+        "host errno"
+      ],
+      "raw_x87_bit_exact_contract": false,
+      "implementation": "engine/trigonometry.cpp",
+      "adapter": "recompiled/native_math.cpp",
+      "admitted_nonzero_argument_abs_min": "0x1p-252",
+      "binary64_value_bit_exact_contract": true,
+      "constant_table_validation": "The 2160 source data bytes must match the cached admitted table on every replacement call",
+      "native_core": "engine/crt_trigonometry.cpp"
+    }
+  ],
+  "one_source_set_for_all_hosts": true,
+  "source_executable_opened": false
+}

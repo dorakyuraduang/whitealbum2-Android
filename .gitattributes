@@ -1,0 +1,20 @@
+* text=auto
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.c text eol=lf
+*.h text eol=lf
+*.java text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.cmake text eol=lf
+*.yml text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+# Historical differential archives bind these ABI headers byte for byte.
+# Keep their existing bytes instead of silently normalizing cached inputs.
+/recompiled/functions.hpp -text
+/recompiled/process.hpp -text
+/tools/WindowsRecompTool-main/include/winrecomp/process.hpp -text
+/tools/WindowsRecompTool-main/include/winrecomp/memory.hpp -text
+/tools/WindowsRecompTool-main/include/winrecomp/win32_state.hpp -text

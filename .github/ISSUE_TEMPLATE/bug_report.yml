@@ -1,0 +1,29 @@
+name: Bug or performance report
+description: Report a crash, compatibility problem or measured performance issue.
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Release version
+      placeholder: 0.2.25-shared-aot
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Platform and device
+      description: OS version, CPU/SoC, RAM and GPU if known.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Trigger and observed behavior
+      description: Include whether this occurs on first load or repeated load, normal play or skip, and whether the app is foregrounded. Do not upload original resources or saves.
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error text or bounded measurements
+      description: Include the full error text where available; remove private paths, account information and credentials. Distinguish HUD FPS from component timings.

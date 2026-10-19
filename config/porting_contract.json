@@ -1,0 +1,27 @@
+{
+  "schema": "wa2.porting-contract.v1",
+  "shared_game_sources": ["game", "engine", "recompiled", "generated/shared-aot"],
+  "platform_adapters": ["platform", "android/native", "android/app"],
+  "rules": {
+    "one_game_implementation_for_all_platforms": true,
+    "one_aot_source_set_for_all_host_architectures": true,
+    "platform_specific_game_logic_forbidden": true,
+    "runtime_instruction_decoder_forbidden": true,
+    "jit_forbidden": true,
+    "unknown_game_commands_must_fail": true,
+    "unknown_indirect_targets_must_fail": true,
+    "keep_original_pak_files_external": true,
+    "android_resource_directory": "Wa2Res",
+    "android_resource_directory_user_selectable": true,
+    "source_executable_analysis_allowed": false,
+    "screen_monitoring_allowed": false,
+    "game_launch_during_development_allowed": false,
+    "maximum_build_jobs": 1
+  },
+  "migration": {
+    "legacy_windows_backend": "port",
+    "legacy_windows_backend_is_cross_platform": false,
+    "shared_aot_is_complete": false,
+    "complete_gameplay_verified": false
+  }
+}

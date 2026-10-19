@@ -1,0 +1,5 @@
+add_library(wa2_game_scene STATIC scene.cpp)
+target_compile_features(wa2_game_scene PUBLIC cxx_std_20)
+target_include_directories(wa2_game_scene PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(wa2_game_scene PUBLIC wa2_script wa2_movie)
+set_target_properties(wa2_game_scene PROPERTIES POSITION_INDEPENDENT_CODE ON)

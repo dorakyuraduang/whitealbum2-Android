@@ -1,0 +1,18 @@
+{
+  "schema": "wa2.retired-modules.v1",
+  "input_sha256": "246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327",
+  "modules": [
+    {
+      "name": "ogg_vorbis",
+      "start": "0x4616c0",
+      "end": "0x474330",
+      "native_gateways": ["vorbis_stream_construct", "vorbis_stream_reset", "vorbis_stream_format", "vorbis_stream_decode"],
+      "callback_metadata": [
+        {"start": "0x4b38d0", "end": "0x4b3a10", "purpose": "MSVC codec exception cleanup tables"},
+        {"start": "0x4d0b68", "end": "0x4d101c", "purpose": "Vorbis floor, residue and mapping callbacks"}
+      ],
+      "replacement": "engine/vorbis_stream.cpp",
+      "oracle_retained_in_test_executables": true
+    }
+  ]
+}

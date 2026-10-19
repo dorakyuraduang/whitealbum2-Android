@@ -1,0 +1,3 @@
+[submodule "mojoshader"]
+	path = mojoshader
+	url = https://github.com/icculus/mojoshader

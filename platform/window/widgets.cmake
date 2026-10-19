@@ -1,0 +1,17 @@
+# Native widget adapters contain no game control flow. They receive the same
+# parsed dialogs/menu/control state and return the same typed source events.
+if(WIN32)
+    set(wa2_widgets_source "${CMAKE_CURRENT_LIST_DIR}/widgets_windows.cpp" "${WA2_SHARED_ROOT}/platform/compat/shell_windows.cpp")
+elseif(ANDROID)
+    set(wa2_widgets_source "${WA2_SHARED_ROOT}/android/native/widgets_android.cpp" "${WA2_SHARED_ROOT}/android/native/shell_android.cpp")
+else()
+    message(FATAL_ERROR "A native widget adapter is required for this host")
+endif()
+add_library(wa2_native_widgets STATIC ${wa2_widgets_source})
+target_compile_features(wa2_native_widgets PUBLIC cxx_std_20)
+target_include_directories(wa2_native_widgets PUBLIC "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
+target_link_libraries(wa2_native_widgets PUBLIC ${WA2_SOUND_SDL_TARGET})
+if(WIN32)
+    target_link_libraries(wa2_native_widgets PRIVATE comctl32 comdlg32)
+endif()
+set_target_properties(wa2_native_widgets PROPERTIES POSITION_INDEPENDENT_CODE ON)

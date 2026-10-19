@@ -1,0 +1,32 @@
+The shared Windows/Android media modules use a minimal build of FFmpeg 9.0.2.
+FFmpeg is a general media decoder, not a game engine or game-port project.
+The user authorized this decoder dependency on 2026-10-17.
+
+Official source: https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+Archive SHA256: 8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
+Official signing-key fingerprint: FCF986EA15E6E293A5644F10B4322F04D67658D8
+The detached signature was checked before extraction.
+
+License: GNU Lesser General Public License, version 2.1 or later.
+This build does not enable GPL, nonfree, or version-3-only components.
+See COPYING.LGPLv2.1 alongside this notice and the copyright notices in
+the unmodified source files under tools/ffmpeg-9.0.2.
+
+Only the ASF demuxer, WMV3/WMA2, MS ADPCM, IMA WAV ADPCM, A-law and
+mu-law decoders are requested. Programs,
+network access, encoders, filters, devices, swscale and swresample are
+disabled. The Android build retains ARM64/NEON optimizations. Decoder
+instances use one thread, and library initialization uses platform locks.
+
+Preparation: scripts/prepare_media_sources.py
+Build: scripts/build_media_codec.py --target arm64
+Exact configuration and library hashes: logs/media-codec-arm64-build.json
+Windows build: scripts/build_media_codec.py --target windows
+
+Before distributing a statically linked APK, its distribution must also
+provide this license, the corresponding FFmpeg source and configuration,
+and the application objects/link materials required for relinking with
+a modified LGPL library. These materials must match the distributed APK.
+The SDK packaging workflow supplies the matching source/configuration and
+application link materials in WA2-shared-relink.zip beside the delivered hosts. Those
+materials are kept outside the APK and contain no original game resources.

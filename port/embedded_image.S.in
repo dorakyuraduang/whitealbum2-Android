@@ -1,0 +1,7 @@
+.section .rdata,"dr"
+.balign 16
+.globl wa2_image_begin
+.globl wa2_image_end
+wa2_image_begin:
+.incbin "@WA2_IMAGE_PATH@"
+wa2_image_end:

@@ -1,0 +1,18 @@
+{
+  "schema": "wa2.native-functions.v1",
+  "input_sha256": "246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327",
+  "functions": [
+    {"name": "vorbis_stream_construct", "start": 4548304, "end": 4548337, "arguments": 0, "implementation": "engine/vorbis_stream.cpp", "adapter": "port/native_vorbis.cpp"},
+    {"name": "vorbis_stream_reset", "start": 4548352, "end": 4548501, "arguments": 0, "implementation": "engine/vorbis_stream.cpp", "adapter": "port/native_vorbis.cpp"},
+    {"name": "vorbis_stream_format", "start": 4548528, "end": 4548900, "arguments": 2, "implementation": "engine/vorbis_stream.cpp", "adapter": "port/native_vorbis.cpp"},
+    {"name": "vorbis_stream_decode", "start": 4548912, "end": 4550612, "arguments": 5, "implementation": "engine/vorbis_stream.cpp", "adapter": "port/native_vorbis.cpp"},
+    {"name": "kcap_image_decode", "start": 4419584, "end": 4419913, "arguments": 4, "caller_cleans_stack": true, "implementation": "engine/resource_archive.cpp"},
+    {"name": "kcap_image_exists", "start": 4420128, "end": 4420367, "arguments": 2, "caller_cleans_stack": true, "implementation": "engine/resource_archive.cpp"},
+    {"name": "kcap_image_load", "start": 4420368, "end": 4420880, "arguments": 3, "caller_cleans_stack": true, "implementation": "engine/resource_archive.cpp"},
+    {"name": "resource_decode", "start": 4550672, "end": 4551102, "arguments": 3, "implementation": "engine/resource_archive.cpp"},
+    {"name": "resource_load", "start": 4554832, "end": 4555428, "arguments": 3, "implementation": "engine/resource_archive.cpp"},
+    {"name": "resource_find", "start": 4556960, "end": 4557311, "arguments": 3, "implementation": "engine/resource_archive.cpp"}
+  ],
+  "legacy_abi_adapter": "port/native_resources.cpp",
+  "checked_cpp_fallback_retained": true
+}
