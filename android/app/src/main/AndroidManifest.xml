@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
     <application android:label="WHITE ALBUM2" android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
+        android:icon="@drawable/ic_launcher_art" android:roundIcon="@drawable/ic_launcher_art"
         android:hardwareAccelerated="true" android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
         <activity android:name=".FailureActivity" android:exported="false" />
         <activity android:name=".LauncherActivity" android:exported="true"

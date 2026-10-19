@@ -5,7 +5,6 @@ from pathlib import Path
 import re
 import zipfile
 import zlib
-import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 ANDROID_ICON = ROOT / 'android/app/src/main/res/drawable-nodpi/ic_launcher_art.png'
@@ -68,6 +67,43 @@ def prepare():
     return dict(width=width, height=height, frames=len(images), resized=False)
 
 
+def png_alpha(data):
+    """Read the supplied artwork's RGBA samples; no artwork is modified."""
+    if data[:8] != b'\x89PNG\r\n\x1a\n':
+        raise ValueError('The launcher artwork is not PNG')
+    width, height, depth, colour, compression, filtering, interlace = struct.unpack_from('>IIBBBBB', data, 16)
+    if not width or not height or max(width, height)>4096 or (depth, colour, compression, filtering, interlace)!=(8,6,0,0,0):
+        raise ValueError('Launcher verification requires a bounded RGBA8 PNG')
+    at=8;compressed=bytearray()
+    while at+12<=len(data):
+        size=struct.unpack_from('>I',data,at)[0];kind=data[at+4:at+8]
+        if size>len(data)-at-12:raise ValueError('Truncated launcher PNG')
+        payload=data[at+8:at+8+size]
+        if zlib.crc32(kind+payload)!=struct.unpack_from('>I',data,at+8+size)[0]:raise ValueError('Damaged launcher PNG')
+        if kind==b'IDAT':compressed.extend(payload)
+        at+=size+12
+        if kind==b'IEND':break
+    raw=zlib.decompress(compressed);stride=width*4
+    if len(raw)!=(stride+1)*height:raise ValueError('Invalid launcher PNG rows')
+    previous=bytearray(stride);alpha=[]
+    for y in range(height):
+        pos=y*(stride+1);mode=raw[pos];row=bytearray(raw[pos+1:pos+1+stride])
+        if mode>4:raise ValueError('Unsupported launcher PNG filter')
+        for x in range(stride):
+            left=row[x-4] if x>=4 else 0;up=previous[x];corner=previous[x-4] if x>=4 else 0
+            if mode==1:predict=left
+            elif mode==2:predict=up
+            elif mode==3:predict=(left+up)//2
+            elif mode==4:
+                p=left+up-corner;distances=(abs(p-left),abs(p-up),abs(p-corner));predict=(left,up,corner)[distances.index(min(distances))]
+            else:predict=0
+            row[x]=(row[x]+predict)&255
+        alpha.extend(row[3::4]);previous=row
+    corners=[alpha[0],alpha[width-1],alpha[(height-1)*width],alpha[-1]]
+    if not alpha.count(0) or any(corners):raise ValueError('Launcher PNG does not have transparent corners')
+    return dict(width=width,height=height,transparent_pixels=alpha.count(0),partial_alpha_pixels=sum(0<a<255 for a in alpha),corner_alpha=corners)
+
+
 def verify_windows(path):
     """Inspect only the built host PE, never the source game executable."""
     data = Path(path).read_bytes()
@@ -122,23 +158,18 @@ def verify_android(path, manifest_tree, resource_values):
     expected = ANDROID_ICON.read_bytes()
     with zipfile.ZipFile(path) as package:
         images = [name for name in package.namelist() if name.startswith('res/') and name.endswith('/ic_launcher_art.png')]
-        adaptive = [name for name in package.namelist() if 'mipmap-anydpi-v26/' in name and name.endswith('/ic_launcher.xml')]
-        if len(images) != 1 or package.read(images[0]) != expected or not adaptive:
-            raise ValueError('Android launcher artwork/adaptive icon is missing or changed')
+        wrappers = [name for name in package.namelist() if name.startswith('res/') and ('/ic_launcher.xml' in name or '/ic_launcher_foreground.xml' in name)]
+        if len(images) != 1 or package.read(images[0]) != expected or wrappers:
+            raise ValueError('Android direct PNG icon is missing, changed or still wrapped')
     regular = re.search(r':icon\([^\n]*?=@(0x[0-9a-fA-F]+)', manifest_tree)
     rounded = re.search(r':roundIcon\([^\n]*?=@(0x[0-9a-fA-F]+)', manifest_tree)
     if not regular or not rounded or regular[1] != rounded[1]:
         raise ValueError('Android application icon references are missing or disagree')
-    colours = ET.parse(ROOT / 'android/app/src/main/res/values/icon_colors.xml').getroot()
-    background = [value.text.strip().lower() for value in colours.findall('color') if value.get('name') == 'ic_launcher_background']
-    if len(background) != 1 or not re.fullmatch(r'#[0-9a-f]{6}(?:[0-9a-f]{2})?', background[0]):
-        raise ValueError('Invalid adaptive launcher background colour')
-    expected_background = '#ff' + background[0][1:] if len(background[0]) == 7 else background[0]
-    compiled_background = re.findall(r'(?mi)^\s*resource\s+0x[0-9a-f]+\s+color/ic_launcher_background\s*\n\s*\(\)\s+(#[0-9a-f]{8})\s*$', resource_values)
-    if compiled_background != [expected_background]:
-        raise ValueError('APK adaptive icon background differs from the configured colour')
-    return dict(artwork=images[0], adaptive_icon=adaptive[0], resource_id=regular[1], source_png_byte_equal=True,
-                adaptive_background_argb=expected_background, compiled_background_matches=True)
+    artwork_id=re.findall(r'(?m)^\s*resource\s+(0x[0-9a-fA-F]+)\s+drawable/ic_launcher_art\s*$',resource_values)
+    if artwork_id!=[regular[1]] or 'color/ic_launcher_background' in resource_values:
+        raise ValueError('Application icon must reference the transparent PNG directly')
+    return dict(artwork=images[0],resource_id=regular[1],source_png_byte_equal=True,direct_png_reference=True,
+                adaptive_wrapper=False,added_background=False,alpha=png_alpha(expected),launcher_appearance_device_verified=False)
 
 
 if __name__ == '__main__':

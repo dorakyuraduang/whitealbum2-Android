@@ -150,7 +150,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     struct CopySample {std::uint64_t calls{},pixels{},total_ns{},readback_ns{};};
     std::map<std::string,CopySample> copy_samples;
     CopySample copy_total;
-    std::uint64_t source_bytes_before_crop{},source_bytes_staged{};
+    std::uint64_t source_bytes_before_crop{},source_bytes_staged{},direct_source_copies{},source_staging_bytes_avoided{};
     struct CopyTimer {
         CopySample* sample{};CopySample* total{};std::chrono::steady_clock::time_point start{};
         CopyTimer(CopySample* value,CopySample* overall):sample(value),total(overall),start(std::chrono::steady_clock::now()){}
@@ -476,6 +476,19 @@ U32 Graphics::copy(const std::shared_ptr<ImageData>& d,RECT dr,const std::uint8_
     }
     const bool src32=f==D3DFMT_A8R8G8B8 || f==D3DFMT_X8R8G8B8 || f==D3DFMT_A8B8G8R8 || f==D3DFMT_X8B8G8R8;
     const bool dst32=d->format==D3DFMT_A8R8G8B8 || d->format==D3DFMT_X8R8G8B8 || d->format==D3DFMT_A8B8G8R8 || d->format==D3DFMT_X8B8G8R8;
+    const auto pixel_order=[](D3DFORMAT format){return format==D3DFMT_A8R8G8B8?wa2::image::PixelOrder::bgra8:
+        format==D3DFMT_X8R8G8B8?wa2::image::PixelOrder::bgrx8:format==D3DFMT_X8B8G8R8?wa2::image::PixelOrder::rgbx8:wa2::image::PixelOrder::rgba8;};
+    if(sw==dw && sh==dh && !key && dst32 && (src32 || f==D3DFMT_R8G8B8) &&
+       std::uint64_t(pitch)*sr.bottom<=64u*1024*1024 && std::uint64_t(d->width)*4*dh<=64u*1024*1024){
+        const auto source_bytes=src32?4u:3u;const auto input=source+std::size_t(sr.top)*pitch+std::size_t(sr.left)*source_bytes;
+        const auto begin=reinterpret_cast<std::uintptr_t>(source),output_begin=reinterpret_cast<std::uintptr_t>(d->bytes.data());
+        const bool alias=begin<output_begin+d->bytes.size() && output_begin<begin+std::size_t(pitch)*sr.bottom;
+        if(!alias){auto output=std::span(d->bytes).subspan((std::size_t(dr.top)*d->width+dr.left)*4);
+            const auto bytes=std::size_t(sh-1)*pitch+std::size_t(sw)*source_bytes;
+            if(src32)wa2::image::transfer_32(output,std::size_t(d->width)*4,pixel_order(d->format),{input,bytes},pitch,pixel_order(f),sw,sh);
+            else wa2::image::transfer_bgr24(output,std::size_t(d->width)*4,pixel_order(d->format),{input,bytes},pitch,sw,sh);
+            d->cpu_dirty=true;d->gpu_dirty=false;++uploads;return 0;}
+    }
     if(sw==dw && sh==dh && src32 && dst32){
         const bool source_bgra=f==D3DFMT_A8R8G8B8 || f==D3DFMT_X8R8G8B8,destination_bgra=d->format==D3DFMT_A8R8G8B8 || d->format==D3DFMT_X8R8G8B8;
         const bool source_alpha=f==D3DFMT_A8R8G8B8 || f==D3DFMT_A8B8G8R8,destination_alpha=d->format==D3DFMT_A8R8G8B8 || d->format==D3DFMT_A8B8G8R8;
@@ -968,7 +981,8 @@ void Graphics::install(){
     p.state().reports["frame_timing"]=[this]{return frame_trace.report();};
     p.state().reports["resource_graphics"]=[this]{return "{\"surface_load_calls\":"+std::to_string(copy_total.calls)+
         ",\"pixels_processed\":"+std::to_string(copy_total.pixels)+",\"surface_load_ns\":"+std::to_string(copy_total.total_ns)+
-        ",\"readback_ns\":"+std::to_string(copy_total.readback_ns)+",\"screen_capture\":false}";};
+        ",\"readback_ns\":"+std::to_string(copy_total.readback_ns)+",\"direct_source_copies\":"+std::to_string(direct_source_copies)+
+        ",\"source_staging_bytes_avoided\":"+std::to_string(source_staging_bytes_avoided)+",\"screen_capture\":false}";};
     api(p,"d3d9.dll","Direct3DCreate9",1,[this](Process&,Args a)->U32{enter();if(a[0]!=D3D_SDK_VERSION)return 0;if(!initialized){SDL_SetMainReady();if(SDL_InitSubSystem(SDL_INIT_VIDEO))stop(SDL_GetError());initialized=true;}if(!root)root=make(Kind::d3d);return wrap(root);});
     api(p,"d3dx9_41.dll","D3DXCreateTexture",8,[this](Process&,Args a){enter();get(a[0],Kind::device);p.memory.check(a[7],4,Memory::Write);return out_res(a[7],texture(a[1],a[2],a[3],a[4],a[5]==D3DFMT_UNKNOWN?D3DFMT_A8R8G8B8:D3DFORMAT(a[5]),a[6]));});
     api(p,"d3dx9_41.dll","D3DXLoadSurfaceFromMemory",10,[this](Process&,Args a)->U32{
@@ -980,7 +994,28 @@ void Graphics::install(){
         if(std::uint64_t(width)*height*(indexed?4:size)>MaxBytes)return U32(D3DERR_INVALIDCALL);
         const auto start=std::uint64_t(a[3])+std::uint64_t(original.top)*a[5]+std::uint64_t(original.left)*size;
         if(start+std::uint64_t(height-1)*a[5]+pitch>0x100000000ull)return U32(D3DERR_INVALIDCALL);
-        if(p.options.profile_execution){source_bytes_before_crop+=std::uint64_t(original.bottom)*a[5];source_bytes_staged+=std::uint64_t(pitch)*height;}
+        if(p.options.profile_execution)source_bytes_before_crop+=std::uint64_t(original.bottom)*a[5];
+        // A bad destination pointer used to be reported only after staging the
+        // source. Do not change that error order when declining the shortcut.
+        std::optional<RECT> direct_rectangle;
+        try{direct_rectangle=rectangle(a[2],dst);}catch(const GuestFault&){}
+        const auto order=[](D3DFORMAT format){return format==D3DFMT_A8R8G8B8?wa2::image::PixelOrder::bgra8:
+            format==D3DFMT_X8R8G8B8?wa2::image::PixelOrder::bgrx8:format==D3DFMT_X8B8G8R8?wa2::image::PixelOrder::rgbx8:wa2::image::PixelOrder::rgba8;};
+        const auto is32=[](D3DFORMAT format){return format==D3DFMT_A8R8G8B8 || format==D3DFMT_X8R8G8B8 || format==D3DFMT_A8B8G8R8 || format==D3DFMT_X8B8G8R8;};
+        if(direct_rectangle && !indexed && !a[9] && !dst->gpu_dirty && valid(*direct_rectangle,dst->width,dst->height) &&
+           U32(direct_rectangle->right-direct_rectangle->left)==width && U32(direct_rectangle->bottom-direct_rectangle->top)==height && is32(dst->format) &&
+           (is32(D3DFORMAT(a[4])) || a[4]==D3DFMT_R8G8B8)){
+            const auto dr=*direct_rectangle;
+            const auto begin=std::chrono::steady_clock::now();
+            auto output=std::span(dst->bytes).subspan((std::size_t(dr.top)*dst->width+dr.left)*4);
+            if(wa2::graphics::transfer_source_pixels(p.memory,U32(start),a[5],size,order(D3DFORMAT(a[4])),output,std::size_t(dst->width)*4,order(dst->format),width,height)){
+                ++copy_total.calls;copy_total.pixels+=std::uint64_t(width)*height;
+                copy_total.total_ns+=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count();
+                ++direct_source_copies;source_staging_bytes_avoided+=std::uint64_t(pitch)*height;
+                dst->cpu_dirty=true;dst->gpu_dirty=false;++uploads;return 0;
+            }
+        }
+        if(p.options.profile_execution)source_bytes_staged+=std::uint64_t(pitch)*height;
         // Atlas tiles can have a large top/left offset. Read only the requested
         // rectangle; copying every preceding row repeatedly costs gigabytes
         // during startup and reads bytes outside the API's source rectangle.

@@ -58,6 +58,16 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/image_upload.cpp` checks 320 direct 24/32-bit image rectangles, exact alpha
+and crop/padding bytes, late faults without partial destination mutation,
+unreadable row gaps, unsupported bounds and BGR24 overlap. Its five paired CPU
+timings use generated 1920x1080 images and compare against
+`tests/image_upload_before.cpp`, an O2 reference for the earlier staging and
+per-pixel sequence. They do not run resource I/O or a graphics device. Actual
+GPU-modified images, scaling, colour keys and other formats retain the existing
+adapter path. Neither the memory check nor an APK icon-resource audit establishes
+the game's real loading speed or a particular phone launcher's appearance.
+
 `tests/native_memory.cpp` checks resource-sized REP copies/fills and the cached
 compiled clear loop in owned RAM. It covers forward/backward indices, complete
 CPU/FP state, padding, permission faults with partial writes, unsupported shapes

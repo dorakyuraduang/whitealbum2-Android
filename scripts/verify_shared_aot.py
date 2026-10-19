@@ -107,7 +107,7 @@ def main():
     tracked += [ROOT/'tests/host_leaf_calls.cpp',ROOT/'tests/render_cpu.cpp']
     tracked += [ROOT/'tests/integer_registers.cpp']
     tracked += [ROOT/('tests/'+name) for name in ('native_string.cpp','weather_cpu.cpp','interface_handles.cpp','audio_latency.cpp')]
-    tracked += [ROOT/'tests/image_colours.cpp',ROOT/'tests/native_memory.cpp']
+    tracked += [ROOT/'tests/image_colours.cpp',ROOT/'tests/native_memory.cpp',ROOT/'tests/image_upload.cpp',ROOT/'tests/image_upload_before.cpp']
     tracked += [ROOT/'tests/movie_tracks.cpp']
     tracked += [ROOT/('scripts/'+name) for name in ('prepare_weather_baseline.py','verify_particle_audio.py','prepare_particle_baseline.py','verify_particles.py')]
     baseline=ROOT/'build/performance-0.2.19'
@@ -160,7 +160,7 @@ def main():
     run([cmake,'--build',build,'--target','wa2_shared_aot_tests','wa2_function_process_tests','wa2_portable_scheduler_tests','wa2_portable_registry_tests','wa2_portable_system_tests','wa2_resource_mount_tests','wa2_native_resource_memory_tests','wa2_native_resource_cache_tests','wa2_large_heap_memory_tests','wa2_portable_sound_bridge_tests','wa2_window_resource_tests','wa2_window_model_tests','wa2_portable_movie_bridge_tests','wa2_render_submission_tests','wa2_portable_acm_tests','wa2_portable_shell_tests','wa2_crt_math_path_tests','wa2_pixel_transfer_tests','--parallel','1'],2400)
     submission_report=build/'render-submission.json'
     run([build/'wa2_render_submission_tests.exe',submission_report],30)
-    run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests',
+    run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests','wa2_image_upload_tests',
         'wa2_native_string_tests','wa2_native_memory_tests','wa2_image_colour_tests','wa2_movie_track_tests','wa2_weather_cpu_tests','wa2_interface_handle_tests','wa2_audio_latency_tests','wa2_audio_latency_before','--parallel','1'],600)
     string_report=build/'native-string.json'
     run([build/'wa2_native_string_tests.exe',string_report],30)
@@ -236,6 +236,13 @@ def main():
     run([sys.executable,ROOT/'scripts/verify_fast_dispatch.py','--no-build'],120)
     pixel_report=build/'pixel-transfer.json'
     run([build/'wa2_pixel_transfer_tests.exe',pixel_report],30)
+    upload_report=build/'image-upload.json'
+    run([build/'wa2_image_upload_tests.exe',upload_report],60)
+    image_upload=json.loads(upload_report.read_text())
+    if (not image_upload['passed'] or image_upload['exact_rectangle_cases']!=320 or image_upload['late_faults_unchanged']!=4 or
+        image_upload['unreadable_padding_cases']!=4 or image_upload['unchanged_declines']!=10 or image_upload['bgr24_overlap_cases']!=12 or
+        len(image_upload['timings'])!=4 or any(len(item['paired_ns'])!=5 or item['full_image_staging_bytes_after']!=0 for item in image_upload['timings'])):
+        raise ValueError('Direct image loading changed pixel, crop, padding, source fault or staging behavior')
     image_colour_report=build/'image-colours.json'
     run([build/'wa2_image_colour_tests.exe',image_colour_report],90)
     image_colours=json.loads(image_colour_report.read_text())
@@ -365,6 +372,7 @@ def main():
                differential=json.loads(report.read_text()),
                crt_math_paths=json.loads(crt_math_report.read_text()),
                native_pixel_transfer=json.loads(pixel_report.read_text()),
+               shared_direct_image_upload=image_upload,
                shared_native_image_colours=image_colours,
                shared_bounded_movie_tracks=movie_tracks,
                shaders=shader_proof['checks'],

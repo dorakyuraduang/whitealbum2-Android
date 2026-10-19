@@ -9,4 +9,8 @@ enum class PixelOrder:unsigned {rgba8,bgra8,rgbx8,bgrx8};
 void transfer_32(std::span<std::uint8_t> destination,std::size_t destination_pitch,PixelOrder destination_order,
     std::span<const std::uint8_t> source,std::size_t source_pitch,PixelOrder source_order,
     std::uint32_t width,std::uint32_t height);
+// The source game's 24-bit surface order is BGR. Expand directly into the
+// destination's 32-bit order, without a full RGBA staging image.
+void transfer_bgr24(std::span<std::uint8_t> destination,std::size_t destination_pitch,PixelOrder destination_order,
+    std::span<const std::uint8_t> source,std::size_t source_pitch,std::uint32_t width,std::uint32_t height);
 }

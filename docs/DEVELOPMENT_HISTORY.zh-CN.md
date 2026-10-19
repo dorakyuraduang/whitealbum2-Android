@@ -1,4 +1,4 @@
-> 历史记录，更新至 0.2.30 开发期间。早期构建、运行与测量方法不代表当前授权；现行约束以根目录 AGENTS.md 与 porting_contract.json 为准。历史组件数字不等同于手机帧率。
+> 历史记录，更新至 0.2.31 开发期间。早期构建、运行与测量方法不代表当前授权；现行约束以根目录 AGENTS.md 与 porting_contract.json 为准。历史组件数字不等同于手机帧率。
 
 # WA2 共享静态重编译原型
 
@@ -6,7 +6,13 @@
 
 `recompiled/` 和 `generated/shared-aot/` 是新增的共用函数级 AOT 路径，从已有 C++ 指令体及 CFG 生成直接分支、直接函数调用和带目标检查的本地跳转表，不打开原 EXE，不链接运行时译码器或 JIT。`scripts/verify_shared_aot.py` 先对照旧指令体检查寄存器、标志、浮点状态、内存、预算和故障，再用真实 Android NDK 链接同一份源码，并比较两次构建实际编译的源文件清单。指令级对照实现只进入测试程序。
 
-当前代码版本为 `0.2.30-shared-aot`。Windows 和 Android 宿主入口均使用共享 AOT 路径；1692 个已接纳入口合并为 1381 个本地函数体，覆盖 119649 个指令位置。仍有 181 个未接纳函数入口及未建立的语义边界，完整游戏流程未验证。`generated/shared-aot/manifest.json` 记录覆盖和未知行为，`logs/shared-aot-verification.json` 绑定实际检查的源码与产物；实际交付版本和哈希见 `out/build-info.json`。
+当前代码版本为 `0.2.31-shared-aot`。Windows 和 Android 宿主入口均使用共享 AOT 路径；1692 个已接纳入口合并为 1381 个本地函数体，覆盖 119649 个指令位置。仍有 181 个未接纳函数入口及未建立的语义边界，完整游戏流程未验证。`generated/shared-aot/manifest.json` 记录覆盖和未知行为，`logs/shared-aot-verification.json` 绑定实际检查的源码与产物；实际交付版本和哈希见 `out/build-info.json`。
+
+`0.2.31` 优化不缩放、无色键的普通图片传输。源为 24 位 BGR 或四种 32 位颜色顺序、目标为 32 位 CPU 图像且未被 GPU 修改时，在读取完整性和地址/页边界验证后直接写入目标矩形；连续内存无需整图暂存，分页内存只使用一行临时缓冲。目标矩形之外的字节和源行间填充均不修改；源晚期故障先于目标写入，且不要求读取矩形之外的源填充。已有 CPU 表面复制也复用原生颜色转换，24 位到 32 位不再经过通用的逐像素采样与格式分派。GPU 已修改的目标、缩放、色键、调色板及未接纳格式继续保留原路径；解压缓存和 PAK 的存放方式不变，两平台使用同一实现。
+
+`tests/image_upload.cpp` 对照 320 组颜色/裁剪/行跨度输入、4 个晚期源故障、4 个不可读填充案例、10 次无副作用拒绝和 12 组 24 位重叠缓冲，另保留已有 176 组像素转换检查。五轮 1920×1080 图像组件计时仅比较先整图暂存再逐像素转换的 CPU 参考流程与直接传输；参考文件按旧呈现源码相同的 O2 编译，核心转换使用 O3。它不测 PAK I/O、GPU、完整加载或手机帧率。
+
+图标方面，原 PNG 确有 8,444 个全透明像素和 906 个部分透明像素，四角 Alpha 均为 0。先前只校验颜色值的做法不能证明桌面透明：Android 的 [AdaptiveIconDrawable 绘制实现](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/master/graphics/java/android/graphics/drawable/AdaptiveIconDrawable.java) 会先填黑色。现在普通和圆形图标都直接引用原 PNG，移除 adaptive-icon XML、前景包装和背景色资源；不修改图案。APK 检查明确验证图标引用和 Alpha，而非仅检查透明色值。部分系统桌面仍会通过 [图标工厂](https://android.googlesource.com/platform/packages/apps/Launcher3/+/5cd4333b5c62b249d3f0b52020864bb9598f92c9/iconloaderlib/src/com/android/launcher3/icons/BaseIconFactory.java) 包装普通图标，不能保证所有桌面都不另加底板；没有启动设备或读取屏幕。
 
 `0.2.30` 修复资源缓冲操作的批量范围过小：普通 REP MOVS/STOS 和 128 字节清零循环原先只接纳最多 1 MiB，大图的其余部分仍执行逐元素访问及 SIMD 兼容封装。上限改为与图片原生处理一致的 64 MiB，在完整验证源、目标、页权限和地址边界后执行；新增倒序且不重叠的 MOVS/STOS 批量处理，最终指针仍按原方向更新并保留允许的末尾回绕。重叠、跨越地址边界、不支持的段、预算检查和故障路径沿用原精确实现。清零快速入口移到原跳转前，校验跳转与循环的缓存签名，不在回边反复预检。Windows 与 Android 继续编译同一实现。
 
