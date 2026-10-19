@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cfenv>
 #include <cerrno>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -92,6 +93,21 @@ int main(int argc,char** argv){try{
         run(false).same(run(true));++cases;
     }
     p.memory.store(0xb342a0,0,32);p.memory.store(0xb342c0,0,32);
+    // Compare the complete source function, rather than reimplementing the
+    // optimized grid. Exercise exact tile edges, multi-tile rectangles, the
+    // last partial column, full atlases, fractional fallback and half images.
+    const std::array<std::array<float,4>,12> rectangles{{
+        {0,32,0,32},{252,284,252,284},{256,288,256,288},{224,256,224,256},
+        {3168,3200,3808,3840},{0,3200,0,3840},{-0.f,32,0,32},
+        {.25f,32.75f,256.25f,288.75f},{255.5f,287.5f,255.5f,287.5f},
+        {std::nextafter(256.f,0.f),288,256,288},{256,288,std::nextafter(256.f,0.f),288},
+        {511,1025,767,1281}}};
+    unsigned visible_grid_cases{};
+    for(unsigned half=0;half<2;++half)for(unsigned flip:{0u,3u})for(const auto& rectangle:rectangles){
+        setup(4);p.memory.store(sprite+0x44,flip,32);p.memory.store(image+4,half,8);
+        f(sprite+0xbc,rectangle[0]);f(sprite+0xc0,rectangle[1]);f(sprite+0xc4,rectangle[2]);f(sprite+0xc8,rectangle[3]);
+        run(false).same(run(true));++visible_grid_cases;
+    }
     unsigned declines{};
     for(unsigned reason=0;reason<12;++reason){setup(1);p.cpu=base;p.cpu.eip=0x43b7a0;
         p.memory.store(base.r[wr::ESP],returning,32);p.memory.store(base.r[wr::ESP]+4,sprite,32);p.memory.store(base.r[wr::ESP]+8,image,32);
@@ -134,7 +150,7 @@ int main(int argc,char** argv){try{
     for(unsigned kind=0;kind<3;++kind)for(unsigned pair=0;pair<5;++pair){std::array<std::array<std::uint64_t,3>,2> result;
         for(unsigned order=0;order<2;++order){const auto side=(pair+order)&1;result[side]=sample(kind,side);timing[kind][pair][side]=result[side][0];}
         CHECK(result[0][1]==result[1][1] && result[0][2]==result[1][2]);}
-    std::ofstream out(argv[1]);out<<"{\"cases\":"<<cases<<",\"decline_cases\":"<<declines<<",\"renderer_decline_cases\":"<<rejected_sinks<<",\"host_environment_cases\":"<<environments<<",\"tiles\":"<<tiles<<",\"vertex_bits_and_render_state_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false,\"timings\":[";
+    std::ofstream out(argv[1]);out<<"{\"cases\":"<<cases<<",\"visible_grid_cases\":"<<visible_grid_cases<<",\"decline_cases\":"<<declines<<",\"renderer_decline_cases\":"<<rejected_sinks<<",\"host_environment_cases\":"<<environments<<",\"tiles\":"<<tiles<<",\"vertex_bits_and_render_state_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false,\"timings\":[";
     for(unsigned kind=0;kind<3;++kind){if(kind)out<<',';out<<"{\"sprites_per_sample\":"<<(kind==2?40:400)<<",\"rotated\":"<<(kind==1?"true":"false")<<",\"font_tiles\":"<<(kind==2?"true":"false")<<",\"paired_ns\":[";
         for(unsigned pair=0;pair<5;++pair){if(pair)out<<',';out<<'['<<timing[kind][pair][0]<<','<<timing[kind][pair][1]<<']';}out<<"]}";}
     out<<"],\"whole_game_fps_measured\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";

@@ -14,6 +14,7 @@
     "preserved": ["nonvolatile integer registers", "stack and return ABI", "source FP control", "segment state", "SIMD state", "host fenv", "host errno", "game resource and sprite RAM", "GetSurfaceLevel output and Release lifetime", "DrawPrimitiveUP stream-zero reset", "tile order", "raw vertex bits", "observable drawing state"],
     "callee_volatile": ["integer flags", "volatile integer registers", "empty x87 register payloads, status and instruction metadata", "dead callee scratch stack"],
     "raw_x87_bit_exact_contract": false,
+    "grid_optimization": "For bounded integral UV endpoints, skip clamped-zero prefix spans and unreferenced suffix cells; retain the cumulative PC24 arithmetic through every emitted tile boundary. Fractional UVs keep the full grid calculation. Texture-handle reads and tile order are unchanged.",
     "decline": "Leave CPU and game RAM unchanged and execute the same checked static function; no decoder or interpreter",
     "one_source_set_for_all_hosts": true,
     "game_launched": false

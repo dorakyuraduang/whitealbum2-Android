@@ -186,7 +186,7 @@ def main():
     sprite_report=build/'native-sprite-cpu.json'
     run([build/'wa2_native_sprite_cpu_tests.exe',sprite_report],60)
     sprite=json.loads(sprite_report.read_text())
-    if (not sprite['passed'] or sprite['cases']!=256 or sprite['decline_cases']!=12 or sprite['renderer_decline_cases']!=1 or sprite['host_environment_cases']!=4 or
+    if (not sprite['passed'] or sprite['cases']!=256 or sprite.get('visible_grid_cases')!=48 or sprite['decline_cases']!=12 or sprite['renderer_decline_cases']!=1 or sprite['host_environment_cases']!=4 or
         not sprite['vertex_bits_and_render_state_equal'] or not sprite['void_cdecl_abi_preserved'] or
         len(sprite['timings'])!=3 or any(len(item['paired_ns'])!=5 or any(min(pair)<=0 for pair in item['paired_ns']) for item in sprite['timings'])):
         raise ValueError('Complete native sprite/particle drawing comparison failed')

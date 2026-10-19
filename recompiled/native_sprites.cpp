@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <utility>
 #include <vector>
 #pragma STDC FENV_ACCESS ON
 namespace wa2::aot {namespace {
@@ -21,6 +22,28 @@ float add(float a,float b){return ordinary(a+b);}float sub(float a,float b){retu
 float mul(float a,float b){return ordinary(a*b);}float div(float a,float b){if(!b)throw Declined{};return ordinary(a/b);}
 float mix(float a,float b,float t){return add(mul(sub(b,a),t),a);}
 float clamp(float x){return x>=1?1.f:x<=0?0.f:x;}
+std::pair<int,int> grid_axis(int count,int size,float from,float to,float extent,
+        std::array<float,18>& lower,unsigned lower_offset,std::array<float,18>& upper,unsigned upper_offset,std::array<float,18>& position){
+    int first=0,last=count;
+    // Integral UVs cover glyph cells and ordinary image rectangles. Every
+    // omitted prefix cell has lower==upper==1, hence an exact zero cumulative
+    // span. Its divisions are normal and nonzero. Suffix cells are never used
+    // by an emitted vertex. Endpoints and dimensions are bounded to 32767, so
+    // none of the omitted arithmetic can raise a rejected FP exception.
+    // Fractional/subpixel rectangles retain the complete checked arithmetic.
+    if(count>1 && from==float(int(from)) && to==float(int(to))){
+        first=std::min(count,int(from)/size);
+        last=std::min(count,(int(to)+size-1)/size);
+    }
+    float accumulated=0;
+    for(int n=first;n<=last;++n){
+        lower[n+lower_offset]=clamp(div(sub(from,float(n*size)),float(size)));
+        upper[n+upper_offset]=clamp(div(sub(to,float(n*size)),float(size)));
+        position[n]=div(mul(accumulated,float(size)),extent);
+        accumulated=add(sub(upper[n+upper_offset],lower[n+lower_offset]),accumulated);
+    }
+    return {first,last};
+}
 int channel(unsigned sum,unsigned palette,bool additive){return additive?int(sum)+int(palette)*4-512+(palette>128?2:0):palette<=128?int(sum*palette/128):int(sum+(palette-128)*(510-sum)/127);}
 bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::array<std::uint8_t,256>& s,std::uint32_t override_image){
     if(!memory.load(0xb34004,32))return false;
@@ -109,17 +132,13 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
     if(!(u1>u0 && v1>v0) || u1>width || v1>height)return false;
     const auto du=sub(u1,u0),dv=sub(v1,v0),half=ordinary(std::bit_cast<float>(memory.load(0x4c2280,32)));
     std::array<float,18> left{},right{},top{},bottom{},tx{},ty{};
-    float accum=0;
-    for(int n=0;n<=nx;++n){left[n]=clamp(div(sub(u0,float(n*tw)),float(tw)));right[n+1]=clamp(div(sub(u1,float(n*tw)),float(tw)));
-        tx[n]=div(mul(accum,float(tw)),du);accum=add(sub(right[n+1],left[n]),accum);}
-    accum=0;
-    for(int n=0;n<=ny;++n){top[n+1]=clamp(div(sub(v0,float(n*th)),float(th)));bottom[n]=clamp(div(sub(v1,float(n*th)),float(th)));
-        ty[n]=div(mul(accum,float(th)),dv);accum=add(sub(bottom[n],top[n+1]),accum);}
+    const auto [first_x,last_x]=grid_axis(nx,tw,u0,u1,du,left,0,right,1,tx);
+    const auto [first_y,last_y]=grid_axis(ny,th,v0,v1,dv,top,1,bottom,0,ty);
     const auto pointer=read<std::uint32_t>(image.data(),0x70);std::array<std::uint32_t,256> handles{};
     if(command.target_kind==SpriteTarget::texture_level_zero && std::uint64_t(pointer)<0xb3400cull && std::uint64_t(pointer)+nx*ny*4>0xb34008ull)return false;
     memory.copy_out(pointer,{reinterpret_cast<std::uint8_t*>(handles.data()),std::size_t(nx*ny)*4});
     tile_buffer.clear();if(tile_buffer.capacity()<256)tile_buffer.reserve(256);
-    for(int y=0;y<ny;++y)for(int x=0;x<nx;++x){
+    for(int y=first_y;y<last_y;++y)for(int x=first_x;x<last_x;++x){
         if(top[y+1]==bottom[y] || right[x+1]==left[x] || !handles[y*nx+x] || !(u0<float((x+1)*tw) && v0<float((y+1)*th) && float(x*tw)<u1 && float(y*th)<v1))continue;
         auto& tile=tile_buffer.emplace_back();tile.texture=handles[y*nx+x];
         for(unsigned n=0;n<4;++n){const auto col=x+int(n&1),row=y+int(n>>1);auto& out=tile.vertices[n];
