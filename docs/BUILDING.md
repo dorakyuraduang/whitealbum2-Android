@@ -58,6 +58,23 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/resource_loading.cpp` checks general-resource and script decompression
+with synthetic KCAP/LAC archives and both memory backends. It covers 64 exact
+outputs, 22 failure cases, eight input/output/allocator aliases and two allocator
+mapping changes. It checks the trailing zero, output publication, freeing an
+unpublished allocation and legacy file-position effects. Its bounded timings
+use three generated 2 MiB token distributions; they exclude real PAK I/O and
+whole-game fast-forward. Local comparisons link the same test object to the
+saved 0.2.31 function-runtime archive and the current archive.
+
+`tests/wait_probes.cpp` checks 13 wait contracts including caller-order choice,
+atomic wait-all consumption, recursive mutex ownership, duplicate/invalid
+handles, 64-object waits, memory faults and a real nonzero sleep deadline.
+Bounded API timings count host heap allocations: one-/three-object probes need
+none, and 64-object probes need one allocation per call. The existing scheduler
+test separately retains worker suspension/resume, TLS, abandoned mutex and
+cross-host-thread signal checks. No game timer or scheduler slice is shortened.
+
 `tests/image_upload.cpp` checks 320 direct 24/32-bit image rectangles, exact alpha
 and crop/padding bytes, late faults without partial destination mutation,
 unreadable row gaps, unsupported bounds and BGR24 overlap. Its five paired CPU

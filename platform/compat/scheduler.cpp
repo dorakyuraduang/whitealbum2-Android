@@ -58,23 +58,31 @@ class Scheduler {
         auto& info=mutexes[object.get()];if(info.object.expired())info={object,0,false};return info;
     }
     U32 probe(std::span<const U32> handles,bool all,U32 tid,U32& error){
-        std::vector<std::shared_ptr<Event>> events;std::vector<std::shared_ptr<Win32State::Mutex>> locks;
-        for(auto handle:handles){
-            if(auto e=lookup_event(handle)){events.push_back(std::move(e));locks.push_back({});}
-            else if(auto it=p.state().mutexes.find(handle);it!=p.state().mutexes.end()){events.push_back({});locks.push_back(it->second);}
+        struct Object {std::shared_ptr<Event> event;std::shared_ptr<Win32State::Mutex> mutex;};
+        // Audio/resource workers normally wait on one to four objects. Hold
+        // their references on the stack; larger legal waits need one bounded
+        // allocation instead of two vectors growing independently per probe.
+        std::array<Object,4> local;
+        std::vector<Object> large;if(handles.size()>local.size())large.resize(handles.size());
+        const auto objects=large.empty()?std::span(local).first(handles.size()):std::span(large);
+        for(unsigned i=0;i<handles.size();++i){const auto handle=handles[i];
+            if(auto e=lookup_event(handle))objects[i].event=std::move(e);
+            else if(auto it=p.state().mutexes.find(handle);it!=p.state().mutexes.end())objects[i].mutex=it->second;
             else{error=6;return Failed;}
         }
         std::lock_guard guard(hub->mutex);unsigned first=unsigned(handles.size());
         for(unsigned i=0;i<handles.size();++i){
-            const bool ready=events[i]?events[i]->signaled:!locks[i]->depth || mutex_info(locks[i]).owner==tid;
+            const auto& object=objects[i];
+            const bool ready=object.event?object.event->signaled:!object.mutex->depth || mutex_info(object.mutex).owner==tid;
             if(all && !ready)return Timeout;
             if(ready && first==handles.size())first=i;
         }
         if(first==handles.size())return Timeout;
         U32 result=all?0:first;bool abandoned=false;
         for(unsigned i=0;i<handles.size();++i)if(all || i==first){
-            if(events[i]){if(!events[i]->manual)events[i]->signaled=false;}
-            else{auto& info=mutex_info(locks[i]);if(info.abandoned && !abandoned){result=0x80+i;abandoned=true;}info.abandoned=false;info.owner=tid;++locks[i]->depth;}
+            const auto& object=objects[i];
+            if(object.event){if(!object.event->manual)object.event->signaled=false;}
+            else{auto& info=mutex_info(object.mutex);if(info.abandoned && !abandoned){result=0x80+i;abandoned=true;}info.abandoned=false;info.owner=tid;++object.mutex->depth;}
         }
         return result;
     }
@@ -175,7 +183,14 @@ public:
             if(active->wait_pc!=p.cpu.eip || active->wait_sp!=p.cpu.r[ESP])stop("resumed wait changed its call frame");
             active->ready=false;if(active->result==Failed)p.set_error(active->wait_error);return active->result;
         }
-        if(handles.empty() || handles.size()>64 || std::set<U32>(handles.begin(),handles.end()).size()!=handles.size()){p.set_error(87);return Failed;}
+        if(handles.empty() || handles.size()>64){p.set_error(87);return Failed;}
+        if(handles.size()>1){
+            // Validate duplicates without a heap node per handle. Sort a copy
+            // so wait-any still chooses the caller's first signaled object.
+            std::array<U32,64> sorted;std::copy(handles.begin(),handles.end(),sorted.begin());
+            const auto end=sorted.begin()+handles.size();std::sort(sorted.begin(),end);
+            if(std::adjacent_find(sorted.begin(),end)!=end){p.set_error(87);return Failed;}
+        }
         ++waits;U32 error{};auto result=probe(handles,all,p.state().current_thread_id,error);
         if(result==Failed){p.set_error(error);return result;}if(result!=Timeout || !ms)return result;
         if(active){active->handles.assign(handles.begin(),handles.end());active->all=all;active->deadline=deadline(ms);active->waiting=true;active->wait_pc=p.cpu.eip;active->wait_sp=p.cpu.r[ESP];yield(true);return Timeout;}
@@ -220,7 +235,7 @@ public:
             if(!found->second->depth || info.owner!=p.state().current_thread_id){p.set_error(288);return 0;}
             if(!--found->second->depth)info.owner=0;++hub->generation;hub->changed.notify_all();return 1;
         });
-        bind("WaitForMultipleObjects",4,[this](Process&,Args a)->U32{if(!a[0] || a[0]>64){p.set_error(87);return Failed;}std::vector<U32> handles(a[0]);p.memory.copy_out(a[1],{reinterpret_cast<std::uint8_t*>(handles.data()),handles.size()*4});return wait(handles,a[2]!=0,a[3]);});
+        bind("WaitForMultipleObjects",4,[this](Process&,Args a)->U32{if(!a[0] || a[0]>64){p.set_error(87);return Failed;}std::array<U32,64> handles;const auto values=std::span(handles).first(a[0]);p.memory.copy_out(a[1],{reinterpret_cast<std::uint8_t*>(values.data()),values.size_bytes()});return wait(values,a[2]!=0,a[3]);});
         bind("CreateThread",6,[this](Process&,Args a){return create(a);});
         bind("ExitThread",1,[this](Process&,Args a)->U32{if(!active){p.exit(a[0]);return 0;}active->exit_code=a[0];active->exiting=true;yield(false);return 0;});
         bind("Sleep",1,[this](Process&,Args a)->U32{sleep(a[0]);return 0;});

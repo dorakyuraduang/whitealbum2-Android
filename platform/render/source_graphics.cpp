@@ -234,6 +234,8 @@ class Graphics final:public wa2::graphics::MoviePresenter {
         if(bgra || !rgba32 || i->format==D3DFMT_X8B8G8R8){auto pixels=scratch_pixels(std::size_t(i->width)*i->height*4,rgba);
             if(bgra || rgba32){const auto order=bgra?(i->format==D3DFMT_X8R8G8B8?wa2::image::PixelOrder::bgrx8:wa2::image::PixelOrder::bgra8):wa2::image::PixelOrder::rgbx8;
                 wa2::image::transfer_32(pixels,std::size_t(i->width)*4,wa2::image::PixelOrder::rgba8,i->bytes,std::size_t(i->width)*4,order,i->width,i->height);}
+            else if(i->format==D3DFMT_R8G8B8 && pixels.size()<=64u*1024*1024){
+                wa2::image::transfer_bgr24(pixels,std::size_t(i->width)*4,wa2::image::PixelOrder::rgba8,i->bytes,std::size_t(i->width)*3,i->width,i->height);}
             else{const auto size=bpp(i->format);for(std::size_t n=0;n<pixels.size()/4;++n){const auto c=decode(data+n*size,i->format);std::copy(c.begin(),c.end(),pixels.data()+n*4);}}
             data=pixels.data();}
         GLint active=0,binding=0;gl.GetIntegerv(GL_ACTIVE_TEXTURE,&active);gl.ActiveTexture(GL_TEXTURE0);gl.GetIntegerv(GL_TEXTURE_BINDING_2D,&binding);gl.BindTexture(GL_TEXTURE_2D,i->texture->id);gl.PixelStorei(GL_UNPACK_ALIGNMENT,1);

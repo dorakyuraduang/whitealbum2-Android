@@ -35,6 +35,7 @@ struct ResourceState {
     struct LoadTrace {std::uint64_t start{},elapsed{};U32 bytes{};std::string member;};
     std::deque<LoadTrace> load_trace;
     std::uint64_t lookups{},loads{},decodes{},image_decodes{},single_pass_images{},image_loads{},image_checks{},missing_archives{},bytes{},declined{},errors{},index_opens{},index_hits{},cache_clock{};
+    std::uint64_t direct_resource_decodes{},resource_staging_bytes_avoided{};
     U32 heap_alloc{},heap_free{},get_heap{},debug_string{};
     bool supported(Process& p,U32 entry) {
         if(p.input_sha256=="246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327" && wa2_native_code_verified(p.memory,entry))return true;
@@ -85,15 +86,34 @@ struct ResourceState {
             bool(p.memory.load(entry+31,8))==member.compressed &&
             wa2::resource::compare_names(std::string_view(reinterpret_cast<const char*>(name.data()),length),member.name)==0;
     }
-    U32 allocate(Process& p,std::span<const std::uint8_t> data,U32 output) {
+    bool direct_resource_memory(Process& p) {auto scope=p.memory.execution_scope();return scope.linear_base()!=nullptr;}
+    // Packed input has already been validated before the legacy file seek and
+    // allocator callbacks. Its owned snapshot survives callbacks and aliasing.
+    U32 allocate(Process& p,std::span<const std::uint8_t> data,U32 output,std::optional<U32> expanded={}) {
+        const auto size=expanded.value_or(U32(data.size()));
         p.memory.check(output,4,Memory::Write);
         const auto heap=p.callback(get_heap,{});
-        const std::array<U32,3> args{heap,0,U32(data.size()+1)};
+        const std::array<U32,3> args{heap,0,size+1};
         const auto result=p.callback(heap_alloc,args);
         if(!result){p.memory.store(output,0,32);return 0;}
-        try {p.memory.copy_in(result,data);p.memory.store(result+U32(data.size()),0,8);p.memory.store(output,result,32);}
+        bool direct{};
+        try {
+            if(expanded){
+                auto scope=p.memory.execution_scope();auto* base=scope.linear_base();
+                if(base){
+                    p.memory.check(result,size,Memory::Write);
+                    wa2::resource::decode_lzss(data,{base+result,size});direct=true;
+                }else{
+                    // An allocator hook may change mappings after admission.
+                    // Keep the ordinary checked copy for paged/executable data.
+                    std::vector<std::uint8_t> staged(size);wa2::resource::decode_lzss(data,staged);p.memory.copy_in(result,staged);
+                }
+            }else p.memory.copy_in(result,data);
+            p.memory.store(result+size,0,8);p.memory.store(output,result,32);
+        }
         catch(...) {p.callback(heap_free,std::array<U32,3>{heap,0,result});throw;}
-        return U32(data.size());
+        if(direct){++direct_resource_decodes;resource_staging_bytes_avoided+=size;}
+        return size;
     }
     void trace(Process& p,unsigned flags) {
         const std::array<U32,1> message{flags&0x100?0x4a40ecu:0x4a40f0u};p.callback(debug_string,message);
@@ -276,14 +296,20 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
             }
             // This legacy loader uses a zero dictionary, even when a fixture
             // exposes KCAP data through its normalized record format.
-            auto data=archive->load(member,128u*1024*1024,std::uint8_t(0));
+            auto stored=archive->read(member,128u*1024*1024);
+            const bool direct=stored.compressed && state->direct_resource_memory(q);
+            if(direct)wa2::resource::validate_lzss(stored.bytes,stored.expanded_size);
+            else if(stored.compressed){
+                std::vector<std::uint8_t> decoded(stored.expanded_size);wa2::resource::decode_lzss(stored.bytes,decoded);
+                stored.bytes=std::move(decoded);
+            }
             const auto record=q.memory.load(manager+12,32)+index*0x148,handle=q.memory.load(record,32);
             const auto& entry=archive->members()[member];
             if(!wa2::platform::seek_stream(q.state().files.at(handle).stream,entry.offset+entry.stored_size)) {
                 ++state->errors;q.memory.store(output,0,32);return 0;
             }
-            const auto result=state->allocate(q,data,output);
-            if(result || data.empty()){++state->loads;state->bytes+=data.size();if(entry.compressed)++state->decodes;}
+            const auto result=state->allocate(q,stored.bytes,output,direct?std::optional<U32>(stored.expanded_size):std::nullopt);
+            if(result || !stored.expanded_size){++state->loads;state->bytes+=stored.expanded_size;if(entry.compressed)++state->decodes;}
             return result;
         } catch(const wa2::resource::Error&) {++state->errors;q.memory.store(output,0,32);return 0;}
           catch(const std::bad_alloc&) {++state->errors;q.memory.store(output,0,32);return 0;}
@@ -295,9 +321,14 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         try {
             const auto expanded=q.memory.load(input,32);
             if(compressed>128u*1024*1024 || expanded>128u*1024*1024)throw wa2::resource::Error("resource allocation limit");
-            std::vector<std::uint8_t> source(compressed),data(expanded);q.memory.copy_out(input+4,source);
-            wa2::resource::decode_lzss(source,data);const auto size=state->allocate(q,data,output);
-            if(size || data.empty()){++state->decodes;state->bytes+=data.size();}return size;
+            std::vector<std::uint8_t> source(compressed);q.memory.copy_out(input+4,source);
+            const bool direct=state->direct_resource_memory(q);U32 size{};
+            if(direct){
+                wa2::resource::validate_lzss(source,expanded);size=state->allocate(q,source,output,expanded);
+            }else{
+                std::vector<std::uint8_t> data(expanded);wa2::resource::decode_lzss(source,data);size=state->allocate(q,data,output);
+            }
+            if(size || !expanded){++state->decodes;state->bytes+=expanded;}return size;
         } catch(const wa2::resource::Error&) {++state->errors;q.memory.store(output,0,32);return 0;}
           catch(const std::bad_alloc&) {++state->errors;q.memory.store(output,0,32);return 0;}
     });
@@ -308,6 +339,8 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
             ",\"loads\":"+std::to_string(state->loads)+",\"decodes\":"+std::to_string(state->decodes)+
             ",\"image_decodes\":"+std::to_string(state->image_decodes)+
             ",\"single_pass_image_decodes\":"+std::to_string(state->single_pass_images)+
+            ",\"direct_resource_decodes\":"+std::to_string(state->direct_resource_decodes)+
+            ",\"resource_staging_bytes_avoided\":"+std::to_string(state->resource_staging_bytes_avoided)+
             ",\"image_loads\":"+std::to_string(state->image_loads)+",\"image_index_opens\":"+std::to_string(state->index_opens)+
             ",\"image_checks\":"+std::to_string(state->image_checks)+
             ",\"image_missing_archives\":"+std::to_string(state->missing_archives)+

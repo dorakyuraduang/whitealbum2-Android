@@ -97,6 +97,7 @@ def main():
     tracked += [ROOT/'tests/portable_system.cpp',ROOT/'scripts/generate_codepages.py',ROOT/'port/exceptions.cpp',ROOT/'port/exception_abi.hpp']
     tracked += [ROOT/'tests/resource_mount.cpp']
     tracked += [ROOT/'tests/native_resource_memory.cpp']
+    tracked += [ROOT/'tests/resource_loading.cpp',ROOT/'tests/wait_probes.cpp']
     tracked += [ROOT/'tests/heap_pool_memory.cpp']
     tracked += [ROOT/'tests/large_heap_memory.cpp']
     tracked += [ROOT/'scripts/verify_android_java.py',ROOT/'tests/android/org/wa2/port/ResourceLocationTest.java',ROOT/'android/app/src/main/AndroidManifest.xml']
@@ -157,7 +158,7 @@ def main():
     run([cmake,'-S',ROOT/'recompiled','-B',build,'-G','Ninja',
          '-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),
          '-DCMAKE_BUILD_TYPE=MinSizeRel','-DWA2_SHARED_AOT_CHECKS=ON','-DWA2_AOT_DIAGNOSTICS=ON','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'])
-    run([cmake,'--build',build,'--target','wa2_shared_aot_tests','wa2_function_process_tests','wa2_portable_scheduler_tests','wa2_portable_registry_tests','wa2_portable_system_tests','wa2_resource_mount_tests','wa2_native_resource_memory_tests','wa2_native_resource_cache_tests','wa2_large_heap_memory_tests','wa2_portable_sound_bridge_tests','wa2_window_resource_tests','wa2_window_model_tests','wa2_portable_movie_bridge_tests','wa2_render_submission_tests','wa2_portable_acm_tests','wa2_portable_shell_tests','wa2_crt_math_path_tests','wa2_pixel_transfer_tests','--parallel','1'],2400)
+    run([cmake,'--build',build,'--target','wa2_shared_aot_tests','wa2_function_process_tests','wa2_portable_scheduler_tests','wa2_portable_registry_tests','wa2_portable_system_tests','wa2_resource_mount_tests','wa2_native_resource_memory_tests','wa2_native_resource_cache_tests','wa2_resource_loading_tests','wa2_wait_probe_tests','wa2_large_heap_memory_tests','wa2_portable_sound_bridge_tests','wa2_window_resource_tests','wa2_window_model_tests','wa2_portable_movie_bridge_tests','wa2_render_submission_tests','wa2_portable_acm_tests','wa2_portable_shell_tests','wa2_crt_math_path_tests','wa2_pixel_transfer_tests','--parallel','1'],2400)
     submission_report=build/'render-submission.json'
     run([build/'wa2_render_submission_tests.exe',submission_report],30)
     run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests','wa2_image_upload_tests',
@@ -274,6 +275,18 @@ def main():
     run([build/'wa2_resource_mount_tests.exe',mount_report],30)
     native_memory_report=build/'native-resource-memory.json'
     run([build/'wa2_native_resource_memory_tests.exe',native_memory_report],60)
+    resource_loading_report=build/'resource-loading.json'
+    run([build/'wa2_resource_loading_tests.exe',resource_loading_report],60)
+    resource_loading=json.loads(resource_loading_report.read_text())
+    if (not resource_loading['passed'] or resource_loading['exact_output_cases']!=64 or
+        resource_loading['unchanged_failure_cases']!=22 or resource_loading['snapshot_alias_cases']!=8 or
+        resource_loading['mapping_change_cases']!=2):raise ValueError('General resource decode output/failure contract failed')
+    wait_probe_report=build/'wait-probes.json'
+    run([build/'wa2_wait_probe_tests.exe',wait_probe_report],30)
+    wait_probes=json.loads(wait_probe_report.read_text())
+    if (not wait_probes['passed'] or wait_probes['semantic_cases']!=13 or wait_probes['nonzero_sleep_ns']<8000000 or
+        len(wait_probes['timings'])!=4 or any(v!=0 for item in wait_probes['timings'][:3] for v in item['heap_allocations']) or
+        any(v!=512 for v in wait_probes['timings'][3]['heap_allocations'])):raise ValueError('Wait ordering/consumption/deadline/allocation contract failed')
     resource_cache_report=build/'native-resource-cache.json'
     run([build/'wa2_native_resource_cache_tests.exe',resource_cache_report],90)
     resource_cache=json.loads(resource_cache_report.read_text())
@@ -383,6 +396,8 @@ def main():
                portable_system=json.loads(system_report.read_text()),
                resource_mount=json.loads(mount_report.read_text()),
                native_resource_memory=json.loads(native_memory_report.read_text()),
+               shared_general_resource_loading=resource_loading,
+               shared_wait_probes=wait_probes,
                native_resource_cache=json.loads(resource_cache_report.read_text()),
                shared_heap_pool_memory=json.loads(heap_report.read_text()),
                shared_large_heap_memory=json.loads(large_heap_report.read_text()),
