@@ -58,6 +58,16 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/android/org/wa2/port/WidgetControlsTest.java` executes the production
+`WidgetControls` and `WidgetSession` helpers on the ordinary JVM. It covers
+complete-snapshot reconciliation, missing/removed/replaced tokens, signed 32-bit
+handles, ordering, unchanged-view reuse, failed-factory atomicity, duplicate/count
+rejection, 64 reopen cycles and nine Activity-generation cases. When the cached
+Unicode fixture is present, the Java verifier also checks all 53 controls from
+seven dialog definitions and binds that fixture's hash. The shared verifier
+requires this coverage. These are data/ownership tests: they create no Android
+Views and do not execute the NativeWidgets UI callback integration on a device.
+
 `tests/widget_unicode.cpp` exercises the actual native widget serializer without
 JNI or a window. `scripts/verify_widget_unicode.py` independently parses its JSON
 and checks 416 text round-trips: all UTF-16 code units, Chinese/Japanese labels,

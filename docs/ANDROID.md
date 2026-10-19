@@ -33,6 +33,16 @@ in the shared window model. Unicode transport has memory-only regression checks;
 actual device layout and Android runtime rendering have not been tested under
 the current contract.
 
+`0.2.34-shared-aot` also reconciles each complete dialog snapshot before applying
+control properties. Missing/replaced controls are constructed and obsolete views
+are removed; unchanged views keep their identity and keyboard state. Duplicate or
+invalid definitions still fail explicitly. Queued UI work belongs to its original
+Activity generation, and callbacks from retired views cannot submit commands to
+a new window. Pure JVM checks exercise the production ownership/session helpers,
+including 64 reopen cycles and all 53 cached setting controls. These checks do
+not reproduce a player's actual Android UI interaction or establish device
+compatibility.
+
 Persistent read grants use Android's [Storage Access Framework](https://developer.android.com/training/data-storage/shared/documents-files).
 The launch page has been compiled against API 35 and its routing/location policy
 has bounded checks. Interactive picker/lifecycle behavior and device gameplay

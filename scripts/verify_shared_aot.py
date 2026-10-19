@@ -101,6 +101,7 @@ def main():
     tracked += [ROOT/'tests/heap_pool_memory.cpp']
     tracked += [ROOT/'tests/large_heap_memory.cpp']
     tracked += [ROOT/'scripts/verify_android_java.py',ROOT/'tests/android/org/wa2/port/ResourceLocationTest.java',ROOT/'android/app/src/main/AndroidManifest.xml']
+    tracked += [ROOT/'tests/android/org/wa2/port/WidgetControlsTest.java']
     tracked += [ROOT/'tests/portable_sound_bridge.cpp',ROOT/'port/audio.hpp']
     tracked += [ROOT/'tests/window_resources.cpp']
     tracked += [ROOT/'tests/widget_unicode.cpp',ROOT/'scripts/verify_widget_unicode.py']
@@ -333,6 +334,11 @@ def main():
     shell_report=build/'portable-shell.json'
     run([build/'wa2_portable_shell_tests.exe',shell_report],30)
     run([sys.executable,ROOT/'scripts/verify_android_java.py'],90)
+    java_proof=json.loads((ROOT/'logs/android-java-verification.json').read_text())
+    ownership=java_proof['widget_ownership']
+    if (not ownership['passed'] or ownership['reopen_cycles']!=64 or ownership['activity_session_cases']!=9 or
+        ownership['cached_dialogs']!=7 or ownership['cached_controls']!=53 or not ownership['invalid_snapshot_atomic'] or
+        not ownership['stale_sessions_rejected']):raise ValueError('Android widget ownership/session memory contracts failed')
     run([sys.executable,ROOT/'scripts/verify_sdl_jni.py'],60)
     run([acmake,'-S',ROOT/'tests/shared-aot-android','-B',android,'-G','Ninja',
          '-DCMAKE_MAKE_PROGRAM='+str(ROOT/'tools/android-sdk/cmake/3.22.1/bin/ninja.exe'),
@@ -413,6 +419,7 @@ def main():
                shared_sound_bridge=json.loads(sound_report.read_text()),
                window_resources=json.loads(window_report.read_text()),
                shared_widget_unicode=widget_unicode,
+               shared_widget_ownership=ownership,
                window_model=json.loads(window_model_report.read_text()),
                render_submission=json.loads(submission_report.read_text()),
                shared_host_leaf_calls=json.loads(leaf_report.read_text()),

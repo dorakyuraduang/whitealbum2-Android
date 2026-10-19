@@ -43,7 +43,7 @@ public final class Wa2Activity extends SDLActivity {
         // joins it in its own onDestroy handler.
         ResourceDirectory.detach(this);
         FileChooser.detach();
-        NativeWidgets.detach();
+        NativeWidgets.detach(this);
         FrameHud.detach();
         super.onDestroy();
     }
