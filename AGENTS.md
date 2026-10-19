@@ -15,3 +15,9 @@
   builds or tests. Keep original PAK resources external, under Wa2Res on Android.
 - Follow config/porting_contract.json. Report unknown targets and unsupported
   behavior explicitly. Component tests do not prove whole-game compatibility.
+- After each completed change and its applicable validation, commit the intended
+  source/documentation changes and push to the wa2-godot remote at
+  https://github.com/dorakyuraduang/wa2-godot, normally on main unless the user
+  specifies another branch. Verify the remote commit. If a push fails, retain
+  the local commit and explicitly report the failure. Keep game resources,
+  private analysis caches, credentials and build artifacts out of public source.
