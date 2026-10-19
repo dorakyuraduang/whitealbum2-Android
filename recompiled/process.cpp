@@ -4,6 +4,7 @@
 #include "geometry_cache.hpp"
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
+#include "image_colours.hpp"
 #include "scalar_math.hpp"
 #include "../port/native_resources.hpp"
 #include "../port/native_vorbis.hpp"
@@ -66,6 +67,8 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
             ",\"fp_declined\":"+std::to_string(s.fp_declined)+",\"adapter_declined\":"+std::to_string(s.adapter_declined)+",\"retained_command_cache\":false}";};
     process_.state().reports["native_glyph_commands"]=[]{const auto s=native_glyph_counts();
         return "{\"accepted\":"+std::to_string(s.accepted)+",\"declined\":"+std::to_string(s.declined)+",\"tiles\":"+std::to_string(s.tiles)+",\"retained_command_cache\":false}";};
+    process_.state().reports["native_image_colours"]=[]{const auto s=image_colour_counts();
+        return "{\"attempts\":"+std::to_string(s.attempts)+",\"completed\":"+std::to_string(s.completed)+",\"pixels\":"+std::to_string(s.pixels)+",\"retained_tables\":false}";};
     process_.state().reports["heap_pool_cache"]=[this]{const auto& state=process_.state();
         return "{\"idle_pools\":"+std::to_string(state.idle_heap_pools)+",\"peak_idle_pools\":"+std::to_string(state.peak_idle_heap_pools)+
             ",\"idle_bytes\":"+std::to_string(state.idle_heap_pools*65536ull)+",\"maximum_idle_bytes\":1048576,\"reuses\":"+

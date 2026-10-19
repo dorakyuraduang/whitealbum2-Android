@@ -13,7 +13,7 @@ add_library(wa2_initial_data STATIC "${WA2_SHARED_ROOT}/generated/static-data/im
 target_include_directories(wa2_initial_data PUBLIC "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
 target_compile_features(wa2_initial_data PUBLIC cxx_std_20)
 set_target_properties(wa2_initial_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
-add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp transcend.cpp native_gateways.cpp native_math.cpp native_string.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp native_sprites.cpp
+add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp transcend.cpp native_gateways.cpp native_math.cpp native_string.cpp image_colours.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp native_sprites.cpp
     "${WA2_SHARED_ROOT}/port/sprite_sort.cpp"
     "${WA2_SHARED_ROOT}/port/vertex_batch.cpp" ${WA2_SHARED_AOT_SOURCES})
 target_link_libraries(wa2_shared_aot PUBLIC wa2_initial_data)
@@ -94,6 +94,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Keep the bounded word-fill loop vectorized. Some size-oriented bundled
     # C runtimes implement large memset with a byte loop.
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/native_string.cpp" APPEND PROPERTY COMPILE_OPTIONS "-fno-builtin-memset")
+    set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/image_colours.cpp" PROPERTIES COMPILE_OPTIONS "-O3")
     # LLVM's COFF outliner currently emits invalid SEH frame directives here.
     # This is a host object-format option; both hosts compile the same bodies.
     if(NOT WIN32)
@@ -180,6 +181,8 @@ if(WA2_SHARED_AOT_CHECKS)
     target_link_libraries(wa2_integer_register_tests PRIVATE wa2_shared_aot)
     add_executable(wa2_native_string_tests "${WA2_SHARED_ROOT}/tests/native_string.cpp")
     target_link_libraries(wa2_native_string_tests PRIVATE wa2_shared_aot)
+    add_executable(wa2_image_colour_tests "${WA2_SHARED_ROOT}/tests/image_colours.cpp")
+    target_link_libraries(wa2_image_colour_tests PRIVATE wa2_shared_aot)
     add_executable(wa2_pixel_transfer_tests "${WA2_SHARED_ROOT}/tests/pixel_transfer.cpp")
     target_link_libraries(wa2_pixel_transfer_tests PRIVATE wa2_pixel_transfer wa2_aot_memory)
 endif()

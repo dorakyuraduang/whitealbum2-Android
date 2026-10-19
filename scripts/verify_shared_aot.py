@@ -107,6 +107,7 @@ def main():
     tracked += [ROOT/'tests/host_leaf_calls.cpp',ROOT/'tests/render_cpu.cpp']
     tracked += [ROOT/'tests/integer_registers.cpp']
     tracked += [ROOT/('tests/'+name) for name in ('native_string.cpp','weather_cpu.cpp','interface_handles.cpp','audio_latency.cpp')]
+    tracked += [ROOT/'tests/image_colours.cpp']
     tracked += [ROOT/('scripts/'+name) for name in ('prepare_weather_baseline.py','verify_particle_audio.py','prepare_particle_baseline.py','verify_particles.py')]
     baseline=ROOT/'build/performance-0.2.19'
     tracked += [baseline/name for name in ('baseline.json','before-pcm_audio.cpp','before-vorbis_stream.cpp',
@@ -159,7 +160,7 @@ def main():
     submission_report=build/'render-submission.json'
     run([build/'wa2_render_submission_tests.exe',submission_report],30)
     run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests',
-        'wa2_native_string_tests','wa2_weather_cpu_tests','wa2_interface_handle_tests','wa2_audio_latency_tests','wa2_audio_latency_before','--parallel','1'],600)
+        'wa2_native_string_tests','wa2_image_colour_tests','wa2_weather_cpu_tests','wa2_interface_handle_tests','wa2_audio_latency_tests','wa2_audio_latency_before','--parallel','1'],600)
     string_report=build/'native-string.json'
     run([build/'wa2_native_string_tests.exe',string_report],30)
     interface_report=build/'interface-handles.json'
@@ -228,6 +229,15 @@ def main():
     run([sys.executable,ROOT/'scripts/verify_fast_dispatch.py','--no-build'],120)
     pixel_report=build/'pixel-transfer.json'
     run([build/'wa2_pixel_transfer_tests.exe',pixel_report],30)
+    image_colour_report=build/'image-colours.json'
+    run([build/'wa2_image_colour_tests.exe',image_colour_report],90)
+    image_colours=json.loads(image_colour_report.read_text())
+    if (not image_colours['passed'] or image_colours['exact_loop_cases']!=324 or image_colours['admitted_cases']!=216 or
+        image_colours['integrated_static_resumes']!=12 or image_colours['decline_cases']!=240 or
+        image_colours['precise_fault_cases']<36 or image_colours['partial_store_prefixes']<12 or image_colours['single_fallback_attempts']!=72 or
+        not image_colours['same_generated_static_resumes'] or not image_colours['rgba_alpha_and_padding_exact'] or
+        len(image_colours['timings'])!=4 or any(len(item['paired_ns'])!=5 or any(min(pair)<=0 for pair in item['paired_ns']) for item in image_colours['timings'])):
+        raise ValueError('Shared image-colour loops changed pixels, ABI, source resume or precise fault prefixes')
     crt_math_report=build/'crt-math-paths.json'
     run([build/'wa2_crt_math_path_tests.exe',crt_math_report],30)
     report=build/'differential.json'
@@ -301,6 +311,8 @@ def main():
     if re.search(r'wa2::aot::f_[0-9a-f]+<true(?:,|>)|f_[0-9a-f]+<false, false>|shared_aot_oracle|native_weather_color_snapshot|wr_x87_|wr_sse_|Zydis|NativeIntegerReferenceScope|native_integer_registers_enabled|NativeIndirectReferenceScope|native_indirect_calls_enabled|NativeMathReferenceScope|native_math_ports_enabled|native_math_test_counts|native_render_math_enabled|NativeRenderMathReferenceScope|native_grid_binary_snapshot|native_grid_stored_binary_snapshot|native_grid_registers_enabled|native_sprite_geometry_enabled|native_grid_float_enabled|native_vertex_grid_enabled|register_fp_enabled|RegisterFpReferenceScope|DecodedCacheReferenceScope|decoded_resource_cache_enabled|sort_objects<true>|vertex_batch<true>|wa2_sort_shift|wr::wa2_sort_objects\(|wr::wa2_vertex_batch\(',symbols):
         raise ValueError('diagnostic/oracle, decoder, or x86 helper leaked into the ARM64 ordinary build')
     if 'wa2_shared_aot_function_count' not in symbols:raise ValueError('shared ARM64 entry is not linked')
+    if re.search(r'ImageColourReferenceScope|image_colours_enabled',symbols):
+        raise ValueError('Image-colour comparison controls leaked into the ARM64 ordinary build')
     if re.search(r'GridNativeFloating<true, true, false, true(?:, [^>]+)?>::(?:scalar_get|scalar_set|scalar_push|execute_at|memory_at|binary)',symbols):
         raise ValueError('Scalar geometry helpers must be inlined into the compiled calculation')
     def compiled_sources(directory):
@@ -325,6 +337,8 @@ def main():
             raise ValueError('Both hosts must compile the common audio cores with the same strict optimization options')
         resources=[c['command'] for c in commands if 'wa2_engine.dir' in c['command'] and Path(c['file']).name=='resource_archive.cpp']
         if len(resources)!=1 or '-O3' not in resources[0]:raise ValueError('Both hosts must optimize the same checked resource decoder')
+        colours=[c['command'] for c in commands if 'wa2_shared_aot.dir' in c['command'] and Path(c['file']).name=='image_colours.cpp']
+        if len(colours)!=1 or '-O3' not in colours[0]:raise ValueError('Both hosts must optimize the same native image-colour source')
     for name,value in bindings.items():
         if digest(ROOT/name)!=value:raise ValueError('source changed during verification: '+name)
     manifest=json.loads((ROOT/'generated/shared-aot/manifest.json').read_text())
@@ -336,6 +350,7 @@ def main():
                differential=json.loads(report.read_text()),
                crt_math_paths=json.loads(crt_math_report.read_text()),
                native_pixel_transfer=json.loads(pixel_report.read_text()),
+               shared_native_image_colours=image_colours,
                shaders=shader_proof['checks'],
                shader_verification_sha256=digest(ROOT/'logs/portable-shader-verification.json'),
                function_runtime=json.loads(process_report.read_text()),

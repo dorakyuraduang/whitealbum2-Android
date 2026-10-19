@@ -58,6 +58,13 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+`tests/image_colours.cpp` replays all six 24/32-bit colour-table loops against
+the cached metered static functions, with 324 exact state/pixel cases, 12
+ordinary compiled resume checks and permission, alias, wrap and partial-page
+rejections. Paired timings use generated 1920x1080 images in owned memory;
+they measure image colour processing, not file I/O, GPU work, game fast-forward
+or Android FPS. Both hosts compile `recompiled/image_colours.cpp` with `-O3`.
+
 `tests/native_resource_cache.cpp` creates its own KCAP fixtures and compares raw
 and compressed output, full dictionaries, trace behavior, dependency changes,
 archive invalidation, rejection behavior and bounded cache eviction. It pairs

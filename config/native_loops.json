@@ -142,6 +142,84 @@
         4429857,
         4437079
       ]
+    },
+    {
+      "name": "image_colour_lookup_439156",
+      "entry": 4428118,
+      "end": 4428179,
+      "implementation": "recompiled/image_colours.cpp",
+      "header": "recompiled/image_colours.hpp",
+      "function": "wa2::aot::native_image_colours",
+      "exit_targets": [
+        4428179
+      ],
+      "signature_hex": "8d43018da424000000000fb658010fb61c330fb61c0b8858010fb6180fb61c3b0fb61c0b88180fb658ff0fb61c2b0fb61c0b8858ff83c00483ea0175cd",
+      "contract": "Preheader only, never retried per pixel. No calls or floating operations; exact RGB bytes, untouched alpha, integer/FP/segment state, source-loop continuation; alias, permission, wrap and small inputs retain static loop"
+    },
+    {
+      "name": "image_colour_lookup_4391de",
+      "entry": 4428254,
+      "end": 4428296,
+      "implementation": "recompiled/image_colours.cpp",
+      "header": "recompiled/image_colours.hpp",
+      "function": "wa2::aot::native_image_colours",
+      "exit_targets": [
+        4428296
+      ],
+      "signature_hex": "8d43010fb650010fb6140a8850010fb6100fb6143288100fb650ff0fb6143a8850ff83c00483ed0175d9",
+      "contract": "Preheader only, never retried per pixel. No calls or floating operations; exact RGB bytes, untouched alpha, integer/FP/segment state, source-loop continuation; alias, permission, wrap and small inputs retain static loop"
+    },
+    {
+      "name": "image_colour_lookup_43922a",
+      "entry": 4428330,
+      "end": 4428375,
+      "implementation": "recompiled/image_colours.cpp",
+      "header": "recompiled/image_colours.hpp",
+      "function": "wa2::aot::native_image_colours",
+      "exit_targets": [
+        4428375
+      ],
+      "signature_hex": "8d43018d49000fb650010fb6140a8850010fb6100fb6140a88100fb650ff0fb6140a8850ff83c00483ee0175d9",
+      "contract": "Preheader only, never retried per pixel. No calls or floating operations; exact RGB bytes, untouched alpha, integer/FP/segment state, source-loop continuation; alias, permission, wrap and small inputs retain static loop"
+    },
+    {
+      "name": "image_colour_lookup_4392e6",
+      "entry": 4428518,
+      "end": 4428579,
+      "implementation": "recompiled/image_colours.cpp",
+      "header": "recompiled/image_colours.hpp",
+      "function": "wa2::aot::native_image_colours",
+      "exit_targets": [
+        4428579
+      ],
+      "signature_hex": "8d43018da424000000000fb658010fb61c330fb61c0b8858010fb6180fb61c3b0fb61c0b88180fb658ff0fb61c2b0fb61c0b8858ff83c00383ea0175cd",
+      "contract": "Preheader only, never retried per pixel. No calls or floating operations; exact RGB bytes, untouched alpha, integer/FP/segment state, source-loop continuation; alias, permission, wrap and small inputs retain static loop"
+    },
+    {
+      "name": "image_colour_lookup_43936e",
+      "entry": 4428654,
+      "end": 4428696,
+      "implementation": "recompiled/image_colours.cpp",
+      "header": "recompiled/image_colours.hpp",
+      "function": "wa2::aot::native_image_colours",
+      "exit_targets": [
+        4428696
+      ],
+      "signature_hex": "8d43010fb650010fb6140a8850010fb6100fb6143288100fb650ff0fb6143a8850ff83c00383ed0175d9",
+      "contract": "Preheader only, never retried per pixel. No calls or floating operations; exact RGB bytes, untouched alpha, integer/FP/segment state, source-loop continuation; alias, permission, wrap and small inputs retain static loop"
+    },
+    {
+      "name": "image_colour_lookup_4393ba",
+      "entry": 4428730,
+      "end": 4428775,
+      "implementation": "recompiled/image_colours.cpp",
+      "header": "recompiled/image_colours.hpp",
+      "function": "wa2::aot::native_image_colours",
+      "exit_targets": [
+        4428775
+      ],
+      "signature_hex": "8d43018d49000fb650010fb6140a8850010fb6100fb6140a88100fb650ff0fb6140a8850ff83c00383ee0175d9",
+      "contract": "Preheader only, never retried per pixel. No calls or floating operations; exact RGB bytes, untouched alpha, integer/FP/segment state, source-loop continuation; alias, permission, wrap and small inputs retain static loop"
     }
   ],
   "full_native_execution_has_no_instruction_meter": true,
