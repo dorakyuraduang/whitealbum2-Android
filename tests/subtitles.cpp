@@ -1,6 +1,7 @@
 #include "../engine/subtitles.hpp"
 #include "../recompiled/subtitles.hpp"
 #include "../recompiled/functions.hpp"
+#include "../platform/render/subtitle_layout.hpp"
 #include <winrecomp/memory.hpp>
 #include <algorithm>
 #include <array>
@@ -14,6 +15,7 @@
 #define CHECK(x) do{++checks;if(!(x))throw std::runtime_error(std::string("check failed: ")+#x);}while(false)
 namespace sub=wa2::subtitles;
 unsigned checks{},time_checks{},layout_checks{},abi_checks{},static_returns{},rejected{};
+unsigned projection_cases{},projected_cues{},projected_glyphs{},invalid_viewports{};
 template<class F>void reject(F f){bool failed{};try{f();}catch(const std::exception&){failed=true;}CHECK(failed);++rejected;}
 const sub::Cue* reference(const sub::Track& track,std::uint64_t elapsed){
     for(const auto& cue:track.cues)if(cue.begin_ms<=elapsed && elapsed<cue.end_ms)return &cue;
@@ -59,6 +61,87 @@ void times_and_layout(){
     long_text.push_back(0);long_cue.glyphs=long_text;reject([&]{sub::layout(long_cue,spec,891);});
     const std::array<std::uint16_t,1> unknown{891};reject([&]{sub::layout(sub::Cue{0,1,unknown},spec,891);});
     auto bad=spec;bad.advance=0;reject([&]{sub::layout(*first,bad,891);});
+}
+void presentation_layout(){
+    namespace g=wa2::graphics;
+    struct Case {
+        std::array<int,2> drawable;
+        std::array<unsigned,2> buffer;
+        g::FrameRect source;
+        std::optional<g::FrameRect> destination;
+        float x,y,scale;
+    };
+    const std::array<Case,16> cases{{
+        // Regression: the source renders/presents 1280x720 inside a larger
+        // allocation. Multiplying by the allocation made it 1.5x too large
+        // and moved the caption centre from x=640 to x=960.
+        {{1280,720},{1920,1080},{0,0,1280,720},{},0,0,1},
+        {{1280,720},{1280,720},{0,0,1280,720},{},0,0,1},
+        {{1280,720},{2400,1080},{0,0,1280,720},{},0,0,1},
+        {{1280,720},{1920,1080},{320,180,1600,900},{},0,0,1},
+        {{1280,720},{1920,1080},{0,0,1920,1080},{},0,0,1},
+        {{1280,720},{640,360},{0,0,640,360},{},0,0,1},
+        {{2400,1080},{2400,1080},{0,0,1280,720},{},240,0,1.5f},
+        {{2400,1080},{1920,1080},{0,0,1280,720},{},240,0,1.5f},
+        {{2400,1080},{1280,720},{0,0,1280,720},{},240,0,1.5f},
+        {{2340,1080},{1920,1080},{0,0,1920,1080},{},210,0,1.5f},
+        {{1920,1200},{1920,1080},{0,0,1920,1080},{},0,60,1.5f},
+        {{2560,1440},{1920,1080},{0,0,1280,720},{},0,0,2},
+        {{720,1280},{1920,1080},{0,0,1280,720},{},0,437,.5625f},
+        {{1024,768},{1920,1080},{0,0,1280,720},{},0,96,.8f},
+        {{1280,720},{1920,1080},{0,0,1280,720},g::FrameRect{160,90,1120,630},160,90,.75f},
+        {{2400,1080},{1920,1080},{0,0,1920,1080},g::FrameRect{320,180,960,540},720,270,.75f},
+    }};
+    class MemorySurface final:public g::SurfaceHost {
+    public:
+        SDL_Window* acquire(std::uint32_t,std::uint32_t,std::uint32_t,bool)override{throw std::runtime_error("subtitle test cannot open a window");}
+        bool embedded_gl()const noexcept override{return false;}
+        void source_cursor(std::int32_t,std::int32_t)override{}int cursor_visible(bool)override{return 0;}
+        std::array<int,2> client_size(std::uint32_t)const override{return {1280,720};}
+        void frame_submitted()override{throw std::runtime_error("subtitle test cannot submit a frame");}
+    } host;
+    const auto spec=sub::font_spec();
+    const auto close=[](float a,float b){return std::abs(a-b)<.002f;};
+    for(const auto& c:cases){
+        const auto viewport=host.client_viewport(0,c.drawable[0],c.drawable[1]);
+        const auto frame=g::layout_frame(c.buffer[0],c.buffer[1],c.source,c.destination,viewport);CHECK(frame);
+        const auto projection=g::subtitle_projection(c.drawable[0],c.drawable[1],frame->destination);CHECK(projection);
+        CHECK(close(projection->origin[0],c.x) && close(projection->origin[1],c.y) && close(projection->scale,c.scale));
+        CHECK(projection->clip==frame->destination);++projection_cases;
+        // Round-trip the exact shader input through the physical viewport.
+        const auto pixel=[&](float x,float y){const auto p=projection->position(x,y);
+            CHECK(std::isfinite(p[0]) && std::isfinite(p[1]) && p[2]==0 && p[3]==1);
+            return std::array{(p[0]+1)*c.drawable[0]/2,(1-p[1])*c.drawable[1]/2};};
+        const auto centre=pixel(640,40);
+        CHECK(close(centre[0],(frame->destination[0]+frame->destination[2])/2.f));
+        CHECK(close(centre[1],c.y+40*c.scale));
+        for(const auto& track:sub::main_story_tracks())for(const auto& cue:track.cues){
+            const auto quads=sub::layout(cue,spec,sub::characters().size());++projected_cues;
+            for(const auto& q:quads){
+                const auto a=pixel(q.left,q.top),b=pixel(q.right,q.bottom);
+                CHECK(a[0]>=frame->destination[0]-.002f && b[0]<=frame->destination[2]+.002f &&
+                      a[1]>=frame->destination[1]-.002f && b[1]<=frame->destination[3]+.002f);
+                CHECK(close(b[0]-a[0],spec.cell*c.scale) && close(b[1]-a[1],spec.cell*c.scale));++projected_glyphs;
+            }
+            // Every wrapped line is independently centred, using the pen
+            // advance rather than the transparent padding of the font tile.
+            for(std::size_t first=0;first<quads.size();){
+                auto end=first+1;while(end<quads.size() && quads[end].top==quads[first].top)++end;
+                const auto a=pixel(quads[first].left,quads[first].top);
+                const auto middle=a[0]+(spec.origin_x+(end-first)*spec.advance/2.f)*c.scale;
+                CHECK(close(middle,centre[0]));first=end;
+            }
+        }
+    }
+    // Non-widescreen destinations still preserve the font aspect and fit.
+    const auto square=g::subtitle_projection(1024,768,{0,0,1024,768});CHECK(square);
+    CHECK(close(square->origin[0],0) && close(square->origin[1],96) && close(square->scale,.8f));
+    for(const auto& bad:std::array<g::FrameRect,7>{{{0,0,0,720},{0,0,1280,0},{-1,0,1280,720},
+        {0,-1,1280,720},{0,0,1281,720},{0,0,1280,721},{1,1,0x7fffffff,0x7fffffff}}}){
+        CHECK(!g::subtitle_projection(1280,720,bad));++invalid_viewports;
+    }
+    CHECK(!g::subtitle_projection(0,720,{0,0,1280,720}));++invalid_viewports;
+    CHECK(!g::subtitle_projection(1280,0,{0,0,1280,720}));++invalid_viewports;
 }
 void source_abi(bool linear){
     wr::Memory memory;if(linear)CHECK(memory.enable_linear_memory());
@@ -140,7 +223,7 @@ void source_abi(bool linear){
     CHECK(memory.load(0xa391ec,32)==100);
 }
 int main(int argc,char** argv){try{
-    CHECK(argc==2);times_and_layout();source_abi(false);source_abi(true);
+    CHECK(argc==2);times_and_layout();presentation_layout();source_abi(false);source_abi(true);
     const auto spec=sub::font_spec();const auto font=sub::decode_font(sub::font_coverage(),spec,891);
     CHECK(font.width==spec.cell*spec.columns && font.height==spec.cell*spec.rows);
     std::uint64_t hash=14695981039346656037ull,visible{};
@@ -155,6 +238,8 @@ int main(int argc,char** argv){try{
     std::ofstream output(argv[1]);output<<"{\"schema\":\"wa2.main-story-subtitles.v1\",\"checks\":"<<checks
         <<",\"time_boundaries\":"<<time_checks<<",\"glyph_quads\":"<<layout_checks<<",\"source_audio_events\":"<<abi_checks
         <<",\"generated_static_returns\":"<<static_returns
+        <<",\"presentation_cases\":"<<projection_cases<<",\"projected_cues\":"<<projected_cues<<",\"projected_glyphs\":"<<projected_glyphs
+        <<",\"invalid_viewports\":"<<invalid_viewports<<",\"backbuffer_independent_projection\":true"
         <<",\"rejections\":"<<rejected<<",\"tracks\":46,\"cues\":315,\"characters\":891,\"font_rgba_bytes\":"<<font.rgba.size()
         <<",\"font_rgba_fnv64\":\""<<hash<<"\",\"special_contents_included\":false,\"source_executable_opened\":false,\"game_launched\":false,\"graphics_device_opened\":false,\"screen_access\":false,\"passed\":true}\n";
     CHECK(output);std::cout<<"PASS main-story subtitles: "<<checks<<" checks, 315 cues, both source-memory layouts, embedded coverage and geometry.\n";return 0;

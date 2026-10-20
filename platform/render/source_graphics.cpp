@@ -8,6 +8,7 @@
 #include "movie_presenter.hpp"
 #include "movie_layout.hpp"
 #include "frame_layout.hpp"
+#include "subtitle_layout.hpp"
 #include "submission_cache.hpp"
 #include "screen_vertices.hpp"
 #include "texture_batch.hpp"
@@ -93,10 +94,10 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     std::shared_ptr<wa2::subtitles::Playback> subtitles;
     GLuint subtitle_texture{};MOJOSHADER_glShader* subtitle_shader{};
     const wa2::subtitles::Cue* subtitle_cue{};
-    std::array<int,12> subtitle_bounds{};
+    std::array<int,6> subtitle_bounds{};
     std::vector<DecodedVertex> subtitle_vertices;
     std::uint64_t subtitle_draws{},subtitle_layouts{},subtitle_font_uploads{};
-    void draw_subtitles(int width,int height,const std::array<int,4>& destination,const RECT& source,U32 source_width,U32 source_height);
+    void draw_subtitles(int width,int height,const std::array<int,4>& destination);
     GLuint vertex_buffer{},index_buffer{};
     MOJOSHADER_glShader* default_vertex{};
     MOJOSHADER_glShader* movie_shader{};std::array<GLuint,3> movie_planes{};
@@ -954,10 +955,12 @@ void Graphics::movie_frame(const wa2::movie::VideoFrame& frame,const wa2::graphi
     SDL_GL_SwapWindow(window);host->frame_submitted();
 }
 void Graphics::restore_game(){if(context && backbuffer && !stopped)present(std::array<U32,5>{});}
-void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination,const RECT& source,U32 source_width,U32 source_height){
+void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
     if(!subtitles)return;
     const auto* cue=subtitles->current(wa2::platform::Clock::counter()/1000000);
     if(!cue){subtitle_cue=nullptr;return;}
+    const auto projection=wa2::graphics::subtitle_projection(w,h,destination);
+    if(!projection)return;
     const auto font=wa2::subtitles::font_spec();
     if(!subtitle_texture){
         auto pixels=wa2::subtitles::decode_font(wa2::subtitles::font_coverage(),font,wa2::subtitles::characters().size());
@@ -974,16 +977,12 @@ void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination,c
         const auto shader=MOJOSHADER_glLinkProgram(default_vertex,subtitle_shader);if(!shader)stop(std::string("subtitle shader link: ")+MOJOSHADER_glGetError());
         const auto native=wa2_mojo_program_handle(shader);program=programs.emplace(key,Program{shader,gl.GetUniformLocation(native,"wa2_alpha_mode"),gl.GetUniformLocation(native,"wa2_alpha_reference")}).first;
     }
-    const std::array<int,12> bounds{w,h,destination[0],destination[1],destination[2],destination[3],source.left,source.top,source.right,source.bottom,int(source_width),int(source_height)};
+    const std::array<int,6> bounds{w,h,destination[0],destination[1],destination[2],destination[3]};
     if(cue!=subtitle_cue || bounds!=subtitle_bounds){
         const auto quads=wa2::subtitles::layout(*cue,font,wa2::subtitles::characters().size());
         subtitle_vertices.clear();subtitle_vertices.reserve(quads.size()*6);
-        const float scale_x=float(destination[2]-destination[0])/float(source.right-source.left);
-        const float scale_y=float(destination[3]-destination[1])/float(source.bottom-source.top);
         const auto vertex=[&](float x,float y,float u,float v){
-            const auto px=float(destination[0])+(x*source_width/1280.f-source.left)*scale_x;
-            const auto py=float(destination[1])+(y*source_height/720.f-source.top)*scale_y;
-            DecodedVertex out;out.pos={px*2.f/w-1.f,1.f-py*2.f/h,0,1};out.uv[0]={u,v,0,1};return out;
+            DecodedVertex out;out.pos=projection->position(x,y);out.uv[0]={u,v,0,1};return out;
         };
         for(const auto& q:quads)for(const auto& v:std::array<DecodedVertex,6>{
             vertex(q.left,q.top,q.u0,q.v0),vertex(q.right,q.top,q.u1,q.v0),vertex(q.right,q.bottom,q.u1,q.v1),
@@ -1021,7 +1020,7 @@ U32 Graphics::present(Args a){
     gl.BindFramebuffer(GL_READ_FRAMEBUFFER,i->fbo);
     // Source D3D top rows reside at low texture Y. Flip only presentation.
     gl.BlitFramebuffer(sr.left,sr.top,sr.right,sr.bottom,left,h-top,right,h-bottom,GL_COLOR_BUFFER_BIT,GL_LINEAR);
-    draw_subtitles(w,h,last_present_destination,sr,i->width,i->height);
+    draw_subtitles(w,h,last_present_destination);
     const auto before_error=FrameTrace::now();++frame_error_checks;const auto error=gl.GetError();if(error)stop("GL frame error "+std::to_string(error));
     const auto after_error=FrameTrace::now();SDL_GL_SwapWindow(window);const auto after_swap=FrameTrace::now();++presents;
     frame_trace.presented(presents,present_begin,before_error,after_error,after_swap,copy_total.total_ns,draws,uploads,

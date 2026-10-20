@@ -21,8 +21,8 @@ struct FontImage {std::uint32_t width{},height{};std::vector<std::uint8_t> rgba;
 FontImage decode_font(std::span<const std::uint8_t>,FontSpec,std::size_t glyphs);
 struct GlyphQuad {float left{},top{},right{},bottom{},u0{},v0{},u1{},v1{};};
 // Positions use the original subtitle patch's 1280x720 canvas, at y=40.
-// Wrap only captions wider than the canvas; presentation scales the same
-// geometry to the existing letterboxed game viewport.
+// Wrap only captions wider than the canvas; presentation fits this complete
+// canvas to the visible game viewport, independently of backbuffer allocation.
 std::vector<GlyphQuad> layout(const Cue&,FontSpec,std::size_t glyphs);
 enum class Kind {effect,voice};
 class Playback {
