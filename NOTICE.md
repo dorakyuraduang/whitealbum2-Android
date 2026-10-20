@@ -25,3 +25,11 @@ license; see the upstream notice alongside those files.
 SDL, MojoShader, stb_vorbis and FFmpeg retain their own licenses. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). In particular, the MIT license
 of this project does not remove LGPL obligations for a linked FFmpeg build.
+
+The separately licensed main-story caption data from nxs7's
+WA2-CHS-Subtitle-Patch is included under its upstream MIT terms, preserved in
+`third_party/wa2_subtitles/LICENSE`. This explicit grant covers that imported
+caption file only; it does not grant rights to other translation patches or
+game assets. SpecialContents subtitle data is excluded. The small caption
+bitmap charset uses AOSP Droid Sans Fallback under its separately preserved
+Apache 2.0 font notices.

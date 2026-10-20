@@ -58,6 +58,18 @@ They are local artifacts and are not public source fixtures.
 
 ## Resource loading checks
 
+The main-story caption YAML and generated 891-character bitmap coverage are
+checked-in, separately licensed third-party inputs. Normal builds validate them
+with `scripts/prepare_subtitles.py --check` without downloading a font or adding
+Python packages. Regeneration instructions and exact source hashes are in
+`third_party/wa2_subtitles/README.md`. No SpecialContents subtitle data is used.
+`wa2_subtitle_tests` checks all 315 cues, source audio IDs/stops, both source-memory
+layouts, caption geometry and font decoding without opening a game or device.
+`scripts/verify_subtitles.py` independently compares every font RGBA byte and
+checks the ten generated audio return observers. The portable shader check
+assembles/translates/links the caption shader for desktop GL and GLES3 offline.
+These component checks do not verify real screen appearance or audio timing.
+
 `tests/byte_equality.cpp` checks fixed/dynamic byte ranges and words with exact
 tails, unaligned starts and differing bytes just outside the requested region.
 `tests/glyph_index.cpp` compares all 65,536 character codes across 26 generated

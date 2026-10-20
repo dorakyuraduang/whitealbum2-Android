@@ -1,5 +1,7 @@
 #include "process.hpp"
 #include "movie_settings.hpp"
+#include "subtitles.hpp"
+#include "../platform/clock.hpp"
 #include "work_samples.hpp"
 #include "geometry_cache.hpp"
 #include "native_sprites.hpp"
@@ -22,15 +24,23 @@
 namespace wr {void install_wa2_exceptions(Process&);}
 namespace wa2::aot {
 Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> graphics):
-    process_(wr::FunctionExecutor{[this,samples=std::make_shared<FunctionWorkSamples>(functions())](Context& context,wr::Memory& memory){
+    process_(wr::FunctionExecutor{[this,samples=std::make_shared<FunctionWorkSamples>(functions()),subtitle_player=std::shared_ptr<subtitles::Playback>{}](Context& context,wr::Memory& memory) mutable {
         if(!program_){program_=std::make_unique<Program>(memory);process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};}
+        // Resolve once, then use the captured owner directly at all subsequent
+        // host boundaries. No registry lookup or mutex runs per audio event.
+        if(!subtitle_player){subtitle_player=find_source_subtitles(memory);if(!subtitle_player)throw std::logic_error("missing native subtitle binding");}
         FunctionWorkScope sampled_work{samples.get()};
+        SubtitleEventScope subtitle_events{memory,[](std::uint32_t entry,const wr::Cpu& cpu,wr::Memory& ram,std::uint32_t arguments,void* owner){
+            source_subtitle_return(*static_cast<subtitles::Playback*>(owner),entry,cpu,ram,arguments,platform::Clock::counter()/1000000);
+        },subtitle_player.get()};
         LeafServiceScope services{[](wr::Cpu& cpu,wr::Memory& ram,void* owner){
             auto& process=*static_cast<wr::Process*>(owner);
             return &cpu==&process.cpu && &ram==&process.memory && process.dispatch_leaf_api();
         },&process_};
         return program_->invoke_unmetered(context);
     }},std::move(options),std::move(backends)){
+    auto subtitle_player=bind_source_subtitles(process_.memory);
+    process_.state().shutdown.push_back([subtitle_player,memory=&process_.memory]{unbind_source_subtitles(*memory,subtitle_player.get());subtitle_player->reset();});
     wr::install_wa2_native_resources(process_,true);
     wr::install_wa2_native_vorbis(process_,true);
     wr::install_wa2_registry(process_);
@@ -42,7 +52,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     wa2::platform::compat::install_acm(process_);
     wa2::platform::compat::install_shell(process_,wa2::platform::compat::native_shell_services(process_.options.data_root));
     auto sound=wr::install_wa2_audio_service(process_);
-    if(graphics){auto renderer=wa2::graphics::install(process_,std::move(graphics));
+    if(graphics){auto renderer=wa2::graphics::install(process_,std::move(graphics),subtitle_player);
         wa2::platform::compat::install_media(process_,std::move(sound),std::move(renderer));}
     // Exit/error diagnostics only: these are the input calculator's existing
     // cached data contracts, shared by every host. No frame pixels are read.

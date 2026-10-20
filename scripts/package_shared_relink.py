@@ -57,6 +57,8 @@ def package(artifacts,console,environment,flags):
     materials['build_media_codec.py']=ROOT/'scripts/build_media_codec.py'
     materials['shared_relink.py']=ROOT/'scripts/shared_relink.py'
     materials['SDL2-LICENSE.txt']=ROOT/'tools/SDL-release-2.32.10/LICENSE.txt'
+    for name in ('LICENSE','FONT-NOTICE.txt','README.md','source.json'):
+        materials['licenses/wa2-subtitles/'+name]=ROOT/'third_party/wa2_subtitles'/name
     materials['MojoShader-LICENSE.txt']=ROOT/'tools/mojoshader-main/LICENSE.txt'
     materials['MojoShader-assembler-LICENSE.txt']=ROOT/'tools/mojoshader_assembler-main/LICENSE.txt'
     for name,path in materials.items():

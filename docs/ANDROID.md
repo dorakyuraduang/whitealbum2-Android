@@ -3,6 +3,14 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
+From `0.2.39-shared-aot`, the main-story audio-only captions from nxs7's patch
+are embedded and enabled automatically: 46 audio tracks, 315 timed captions.
+The whole SpecialContents subtitle set is excluded. No subtitle DLL, font file
+or additional subtitle data needs to be placed in Wa2Res. Caption matching and
+rendering use the same sources on Windows and Android; captions follow the
+existing game viewport instead of stretching to the phone screen. See
+[scope, licenses and verification limits](SUBTITLES.md).
+
 1. Place your own original `.pak` files directly in `Wa2Res` and retain the `IC`
    child folder. The default location is internal shared storage `/Wa2Res`.
 2. Open the app to its launch settings page. Choose the local `Wa2Res` folder

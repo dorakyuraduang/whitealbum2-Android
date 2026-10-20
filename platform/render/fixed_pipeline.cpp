@@ -75,6 +75,9 @@ std::string fixed_pixel_assembly(const FixedPipeline& pipeline,unsigned texture_
     }
     body<<"mov oC0, r0\n";return declarations.str()+body.str();
 }
+std::string subtitle_pixel_assembly(){return
+    "ps_2_0\ndcl t0.xy\ndcl_2d s0\ntexld r0, t0, s0\nmov oC0, r0\n";
+}
 std::string movie_pixel_assembly(){return
     "ps_3_0\ndcl_texcoord0 v0\ndcl_2d s0\ndcl_2d s1\ndcl_2d s2\n"
     "texld r0, v0, s0\ntexld r1, v0, s1\ntexld r2, v0, s2\n"

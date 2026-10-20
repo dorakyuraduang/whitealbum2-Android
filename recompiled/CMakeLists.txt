@@ -36,6 +36,7 @@ set(WA2_FUNCTION_RUNTIME_SOURCES
     "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/src/runtime/process.cpp"
     "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/src/runtime/win32.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/process.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/subtitles.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/movie_settings.cpp"
     "${WA2_SHARED_ROOT}/port/native_resources.cpp"
     "${WA2_SHARED_ROOT}/port/native_vorbis.cpp"
@@ -120,6 +121,8 @@ if(WA2_SHARED_AOT_CHECKS)
     target_link_libraries(wa2_shared_aot_tests PRIVATE wa2_aot_fp_oracle)
     add_executable(wa2_function_process_tests "${WA2_SHARED_ROOT}/tests/function_process.cpp")
     target_link_libraries(wa2_function_process_tests PRIVATE wa2_function_process)
+    add_executable(wa2_subtitle_tests "${WA2_SHARED_ROOT}/tests/subtitles.cpp")
+    target_link_libraries(wa2_subtitle_tests PRIVATE wa2_function_process)
     add_executable(wa2_portable_scheduler_tests "${WA2_SHARED_ROOT}/tests/portable_scheduler.cpp")
     target_link_libraries(wa2_portable_scheduler_tests PRIVATE wa2_function_process)
     add_executable(wa2_portable_registry_tests "${WA2_SHARED_ROOT}/tests/portable_registry.cpp")

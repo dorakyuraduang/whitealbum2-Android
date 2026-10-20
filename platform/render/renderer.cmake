@@ -12,7 +12,7 @@ target_compile_definitions(wa2_shared_graphics PUBLIC WA2_STATIC_FUNCTIONS_ONLY=
 target_include_directories(wa2_shared_graphics PUBLIC
     "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
 target_link_libraries(wa2_shared_graphics PUBLIC
-    wa2_fixed_pipeline wa2_common_shader_assembler wa2_common_shader_gl wa2_pixel_transfer ${WA2_SOUND_SDL_TARGET})
+    wa2_fixed_pipeline wa2_common_shader_assembler wa2_common_shader_gl wa2_pixel_transfer wa2_engine wa2_platform ${WA2_SOUND_SDL_TARGET})
 set_target_properties(wa2_shared_graphics PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     set_source_files_properties("${WA2_SHARED_ROOT}/platform/render/source_graphics.cpp" PROPERTIES COMPILE_OPTIONS "-O2")

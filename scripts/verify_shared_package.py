@@ -49,6 +49,9 @@ def verify(status,publish=False):
     if digest(verification)!=status['verification_sha256']:raise ValueError('Compiled verification changed')
     proof=json.loads(verification.read_text())
     if not proof['passed']:raise ValueError('Shared code verification failed')
+    subtitles=proof['shared_main_story_subtitles']
+    if not subtitles['passed'] or subtitles['assets']['special_contents_included'] or subtitles['assets']['cues']!=315:
+        raise ValueError('Missing main-only subtitle proof')
     if not proof['shaders'].get('offline_glsl_compile_and_link_verified'):raise ValueError('Missing offline GLSL compile/link verification')
     for name,sha in proof['source_sha256'].items():
         if digest(ROOT/name)!=sha:raise ValueError('Compiled source/library is stale: '+name)
@@ -65,6 +68,10 @@ def verify(status,publish=False):
                       b'Lorg/wa2/port/NativeWidgets;',b'Lorg/wa2/port/FileChooser;',b'Lorg/libsdl/app/SDLActivity;'):
             if value not in dex:raise ValueError('Missing Android application class/header: '+str(value))
         so_names={name for name in names if name.endswith('.so')}
+        for notice in ('LICENSE','FONT-NOTICE.txt','README.md','source.json'):
+            path='assets/licenses/wa2-subtitles/'+notice
+            if path not in names or package.read(path)!=(ROOT/'third_party/wa2_subtitles'/notice).read_bytes():
+                raise ValueError('Missing or stale subtitle/font attribution in APK')
         if so_names!={'lib/arm64-v8a/'+name for name in status['libraries']}:raise ValueError('Unexpected native APK member')
         for name,item in status['libraries'].items():
             data=package.read('lib/arm64-v8a/'+name);sha=hashlib.sha256(data).hexdigest()
@@ -113,6 +120,9 @@ def verify(status,publish=False):
     relink=Path(status['relink_materials'])
     if digest(relink)!=status['relink_sha256']:raise ValueError('Matching relink materials changed')
     with zipfile.ZipFile(relink) as archive:
+        for notice in ('LICENSE','FONT-NOTICE.txt','README.md','source.json'):
+            if archive.read('licenses/wa2-subtitles/'+notice)!=(ROOT/'third_party/wa2_subtitles'/notice).read_bytes():
+                raise ValueError('Relink package omitted subtitle/font attribution')
         manifest=json.loads(archive.read('manifest.json'))
         if not manifest['relink_recipe_verified']:raise ValueError('Relink recipes not checked')
         for host,artifact in status['artifacts'].items():
@@ -127,6 +137,7 @@ def verify(status,publish=False):
         common_source_set_compiled=True,actual_shared_android_entry_verified=True,android_needed=needed,windows_dlls=dlls,
         runtime_instruction_decoder_linked=False,jit_linked=False,legacy_independent_scene_host_linked=False,
         original_resources_in_apk=False,matching_relink_materials=True,game_launched=False,screen_access=False,
+        main_story_subtitles=dict(tracks=46,cues=315,special_contents_included=False),
         android_device_verified=False,complete_gameplay_verified=False,passed=True)
     if publish:
         (ROOT/'logs/shared-package-verification.json').write_text(json.dumps(result,indent=2)+'\n')

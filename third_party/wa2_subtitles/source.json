@@ -1,0 +1,34 @@
+{
+  "schema": "wa2.main-story-subtitles-source.v1",
+  "upstream": "https://github.com/nxs7/WA2-CHS-Subtitle-Patch",
+  "upstream_commit": "bb3cbc2f459549f8afbcb56cafd4b861d763bd29",
+  "included_path": "script/sub.yaml",
+  "source_blob": "373c94efbaaf9a4df50c8706f832462f8ce51b07",
+  "source_sha256": "7c1da65da51c22f07a9bf6e368336390a7707835639afd7208fe2944830b99e1",
+  "special_contents_included": false,
+  "excluded_directory": "SpecialContents",
+  "license": "MIT",
+  "font": {
+    "family": "Droid Sans Fallback",
+    "license": "Apache-2.0",
+    "source": "https://github.com/aosp-mirror/platform_frameworks_base/blob/android-4.4_r1/data/fonts/DroidSansFallback.ttf",
+    "git_blob": "2b75113962a47a66274144a4fa0d6ae52b5d7db7",
+    "sha256": "05d71b179ef97b82cf1bb91cef290c600a510f77f39b4964359e3ef88378c79d",
+    "bytes": 3939852,
+    "notice_blob": "c5b1efa7aac764ae6d8da63476a2d5cec02a6a5d",
+    "notice_sha256": "38751245389e1e23f73e6f5384b5cbe7fa972cc4410c5adc9c04b082a0b9561a",
+    "source_font_distributed": false,
+    "generated_asset": "WA2 caption bitmap charset",
+    "modifications": "Subset to main-story caption characters; rasterize at 28px with 2px outline; quantize coverage to four bits and RLE encode.",
+    "atlas": {
+      "cell": 37,
+      "columns": 32,
+      "rows": 28,
+      "glyphs": 891,
+      "packed_bytes": 473188,
+      "coverage_sha256": "fe9a6abd246d0d3838397ad397b6f462ea1dccbd2e99166f6af5f230eadc2aa1",
+      "atlas_rgba_bytes": 4906496
+    },
+    "generated_sha256": "b1f620e1876ce33aabbd306b9655be531aab2b2a421de5525ef77791fab94d9c"
+  }
+}

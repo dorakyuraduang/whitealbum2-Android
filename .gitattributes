@@ -15,6 +15,13 @@
 *.cmd text eol=crlf
 *.ico binary
 *.png binary
+# Caption provenance and generated assets have byte-exact build checks.
+/.gitattributes text eol=lf
+/third_party/wa2_subtitles/*.inc text eol=lf
+/third_party/wa2_subtitles/sub.yaml -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+/third_party/wa2_subtitles/LICENSE -text
+# Preserve the upstream YAML's CRLFs and the font license's final blank line.
+/third_party/wa2_subtitles/FONT-NOTICE.txt -text whitespace=blank-at-eol,space-before-tab,-blank-at-eof
 # Historical differential archives bind these ABI headers byte for byte.
 # Keep their existing bytes instead of silently normalizing cached inputs.
 /recompiled/functions.hpp -text

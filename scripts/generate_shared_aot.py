@@ -561,6 +561,18 @@ def main():
     ports_by_entry={int(port['entry'],0):port for port in function_ports}
     if len(ports_by_entry)!=len(function_ports):raise ValueError('duplicate native function port')
     merged,owners=merge_bodies(records,admitted)
+    subtitle_contract=json.loads((ROOT/'config/subtitle_hooks.json').read_text())
+    subtitle_events={int(event['entry'],0):event for event in subtitle_contract['events']}
+    if set(subtitle_events)!={0x40f400,0x40eda0,0x406270,0x40f590,0x40ec30}:
+        raise ValueError('Unexpected main-story subtitle event entry')
+    for entry,event in subtitle_events.items():
+        if entry not in merged or [a for a in admitted if owners[a]==entry]!=[entry]:
+            raise ValueError('Subtitle event must own exactly one cached source function')
+        locations=merged[entry]['locations']
+        snapshot=b''.join(pc.to_bytes(4,'little')+bodies[pc][1] for pc in locations)
+        returns=[pc for pc in locations if any(e['kind']=='return' for e in edges[pc])]
+        if hashlib.sha256(snapshot).hexdigest()!=event['cached_body_sha256'] or returns!=event['return_locations']:
+            raise ValueError('Cached subtitle audio ABI changed: '+event['event'])
     positions={pc:index for record in merged.values() for index,pc in enumerate(record['locations'])}
     vertex_grid(bodies,edges,owners,positions,{row['address']:row for row in graph['instructions']})
     vertex_grid(bodies,edges,owners,positions,{row['address']:row for row in graph['instructions']},
@@ -615,6 +627,8 @@ def main():
         raise ValueError('register floating-point entries must be selected measured hot bodies')
     integer_entries=set(hot_config['register_integer_entries'])
     if integer_entries!=hot:raise ValueError('native integer register lifting must cover exactly the measured hot bodies')
+    if set(subtitle_events)&integer_entries:
+        raise ValueError('Subtitle audio observers require their source ABI registers to be committed at returns')
     header = ['// Generated from the existing C++ oracle; common to all hosts.',
               '#pragma once', '#include "functions.hpp"', 'namespace wa2::aot {']
     for entry in ordered:
@@ -636,6 +650,7 @@ def main():
         sources.append(name)
         output = ['#include "bodies.hpp"','#include "../../port/sprite_sort.hpp"',
                   '#include "../../port/vertex_batch.hpp"','#include "native_string.hpp"', 'namespace wa2::aot {']
+        if set(entries)&set(subtitle_events):output.insert(3,'#include "subtitle_events.hpp"')
         includes=sorted({port['header'] for pc,port in ports_by_entry.items() if owners[pc] in entries} |
                         {loop['header'] for loop in loops if owners[loop['entry']] in entries and 'header' in loop})
         output[3:3]=['#include "../../'+name+'"' for name in includes]
@@ -657,6 +672,12 @@ def main():
                 all_locations.add(pc)
                 body, raw, _ = bodies[pc]
                 native_body = CONTRACT_FAULT if pc in pending_semantics else emit_body(pc, body, edges, owners,positions).replace('wr::string_op(', 'wr::aot_string_op<Metered>(')
+                if entry in subtitle_events and pc in subtitle_events[entry]['return_locations']:
+                    if not native_body.endswith('\nreturn;'):
+                        raise ValueError('Subtitle event must follow an ordinary source RET')
+                    native_body=('const auto subtitle_arguments=std::uint32_t(s.r[wr::ESP]+4u);\n'+
+                        native_body[:-len('\nreturn;')]+
+                        f'\nnotify_subtitle_return<Metered>(0x{entry:x}u,s,m,subtitle_arguments);\nreturn;')
                 for target in integer_entries:native_body=native_body.replace(f'f_{target:x}<Metered>(',f'dispatch_f_{target:x}<Metered>(')
                 if pc in dead_flags:
                     operation=dead_flags[pc]
@@ -812,6 +833,7 @@ def main():
                                  unavailable_callees=sorted(set(record['calls']) - admitted)))
     inputs = ['logs/cfg.json', 'port/native_functions.json', 'port/retired_modules.json',
               'config/porting_contract.json', 'config/native_loops.json', 'config/native_math_contracts.json','config/native_render_contracts.json','config/aot_hot_functions.json','scripts/generate_shared_aot.py','scripts/generate_weather_batch.py']
+    inputs += ['config/subtitle_hooks.json','recompiled/subtitle_events.hpp']
     inputs += [loop['implementation'] for loop in loops]
     inputs += [name for port in function_ports for name in (port['implementation'],port['adapter'],port['header'])]
     provenance.update({name: digest(ROOT/name) for name in inputs})
@@ -843,6 +865,9 @@ def main():
                   deferred_reasons=dict(Counter(reason for r in deferred for reason in r['reasons'])),
                   whole_program_complete=False,original_cfg_whole_program_complete=graph['whole_program_complete'],
                   one_source_set_for_all_hosts=True,per_instruction_runtime_dispatch=False,
+                  main_story_subtitle_events=dict(function_entries=sorted(subtitle_events),
+                      return_locations=sum(len(e['return_locations']) for e in subtitle_events.values()),
+                      original_functions_preserved=True,per_instruction_polling=False),
                   resumable_host_boundaries=True,indirect_targets_checked_against_static_entries=True,
                   original_candidate_entries=sorted(admitted),
                   runtime_decoder=False,jit=False,source_executable_opened=False,

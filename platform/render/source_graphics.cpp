@@ -14,6 +14,8 @@
 #include "frame_metrics.hpp"
 #include "../../recompiled/native_sprites.hpp"
 #include "pixel_transfer.hpp"
+#include "../../engine/subtitles.hpp"
+#include "../clock.hpp"
 #include "source_pixels.hpp"
 #include "gl_api.hpp"
 #include <mojoshader_assembler.h>
@@ -88,6 +90,13 @@ struct DecodedVertex {
 class Graphics final:public wa2::graphics::MoviePresenter {
     Process& p;wa2::platform::compat::InterfaceHandles handles;GlApi gl;SDL_Window* window{};SDL_GLContext context{};MOJOSHADER_glContext* mojo{};
     std::shared_ptr<wa2::graphics::SurfaceHost> host;
+    std::shared_ptr<wa2::subtitles::Playback> subtitles;
+    GLuint subtitle_texture{};MOJOSHADER_glShader* subtitle_shader{};
+    const wa2::subtitles::Cue* subtitle_cue{};
+    std::array<int,12> subtitle_bounds{};
+    std::vector<DecodedVertex> subtitle_vertices;
+    std::uint64_t subtitle_draws{},subtitle_layouts{},subtitle_font_uploads{};
+    void draw_subtitles(int width,int height,const std::array<int,4>& destination,const RECT& source,U32 source_width,U32 source_height);
     GLuint vertex_buffer{},index_buffer{};
     MOJOSHADER_glShader* default_vertex{};
     MOJOSHADER_glShader* movie_shader{};std::array<GLuint,3> movie_planes{};
@@ -283,7 +292,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     U32 copy(const std::shared_ptr<ImageData>&,RECT,const std::uint8_t*,U32,D3DFORMAT,RECT,U32,U32);
     std::vector<DWORD> shader(U32);U32 compile(U32,U32,Kind);
 public:
-    explicit Graphics(Process& q,std::shared_ptr<wa2::graphics::SurfaceHost> h):p(q),handles(q),host(std::move(h)){if(!host)throw std::invalid_argument("graphics surface host required");}~Graphics(){shutdown();}
+    explicit Graphics(Process& q,std::shared_ptr<wa2::graphics::SurfaceHost> h,std::shared_ptr<wa2::subtitles::Playback> subs):p(q),handles(q),host(std::move(h)),subtitles(std::move(subs)){if(!host)throw std::invalid_argument("graphics surface host required");}~Graphics(){shutdown();}
     void install();void shutdown() noexcept;
     void movie_frame(const wa2::movie::VideoFrame&,const wa2::graphics::MovieView&)override;
     void restore_game()override;
@@ -531,6 +540,8 @@ void Graphics::shutdown() noexcept {
     for(auto& [key,program]:programs)MOJOSHADER_glDeleteProgram(program.shader);programs.clear();
     if(default_vertex){MOJOSHADER_glDeleteShader(default_vertex);default_vertex=nullptr;}
     if(movie_shader){MOJOSHADER_glDeleteShader(movie_shader);movie_shader=nullptr;}
+    if(subtitle_shader){MOJOSHADER_glDeleteShader(subtitle_shader);subtitle_shader=nullptr;}
+    if(subtitle_texture)gl.DeleteTextures(1,&subtitle_texture);subtitle_texture=0;subtitle_cue=nullptr;subtitle_vertices.clear();
     if(movie_planes[0])gl.DeleteTextures(3,movie_planes.data());movie_planes={};
     for(auto& [key,shader]:fixed_pixels)MOJOSHADER_glDeleteShader(shader);fixed_pixels.clear();
     for(auto& w:resources)if(auto r=w.lock())if(r->cleanup){r->cleanup();r->cleanup={};r->shader=nullptr;}
@@ -943,6 +954,57 @@ void Graphics::movie_frame(const wa2::movie::VideoFrame& frame,const wa2::graphi
     SDL_GL_SwapWindow(window);host->frame_submitted();
 }
 void Graphics::restore_game(){if(context && backbuffer && !stopped)present(std::array<U32,5>{});}
+void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination,const RECT& source,U32 source_width,U32 source_height){
+    if(!subtitles)return;
+    const auto* cue=subtitles->current(wa2::platform::Clock::counter()/1000000);
+    if(!cue){subtitle_cue=nullptr;return;}
+    const auto font=wa2::subtitles::font_spec();
+    if(!subtitle_texture){
+        auto pixels=wa2::subtitles::decode_font(wa2::subtitles::font_coverage(),font,wa2::subtitles::characters().size());
+        if(pixels.width>U32(max_texture) || pixels.height>U32(max_texture))stop("subtitle atlas exceeds texture dimensions");
+        gl.GenTextures(1,&subtitle_texture);gl.ActiveTexture(GL_TEXTURE0);gl.BindTexture(GL_TEXTURE_2D,subtitle_texture);
+        gl.PixelStorei(GL_UNPACK_ALIGNMENT,1);gl.PixelStorei(GL_UNPACK_ROW_LENGTH,0);
+        gl.TexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,pixels.width,pixels.height,0,GL_RGBA,GL_UNSIGNED_BYTE,pixels.rgba.data());
+        gl.TexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);gl.TexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        gl.TexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);gl.TexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);++subtitle_font_uploads;
+    }
+    if(!subtitle_shader)subtitle_shader=assemble_shader(wa2::graphics::subtitle_pixel_assembly());
+    const auto key=std::pair{default_vertex,subtitle_shader};auto program=programs.find(key);
+    if(program==programs.end()){
+        const auto shader=MOJOSHADER_glLinkProgram(default_vertex,subtitle_shader);if(!shader)stop(std::string("subtitle shader link: ")+MOJOSHADER_glGetError());
+        const auto native=wa2_mojo_program_handle(shader);program=programs.emplace(key,Program{shader,gl.GetUniformLocation(native,"wa2_alpha_mode"),gl.GetUniformLocation(native,"wa2_alpha_reference")}).first;
+    }
+    const std::array<int,12> bounds{w,h,destination[0],destination[1],destination[2],destination[3],source.left,source.top,source.right,source.bottom,int(source_width),int(source_height)};
+    if(cue!=subtitle_cue || bounds!=subtitle_bounds){
+        const auto quads=wa2::subtitles::layout(*cue,font,wa2::subtitles::characters().size());
+        subtitle_vertices.clear();subtitle_vertices.reserve(quads.size()*6);
+        const float scale_x=float(destination[2]-destination[0])/float(source.right-source.left);
+        const float scale_y=float(destination[3]-destination[1])/float(source.bottom-source.top);
+        const auto vertex=[&](float x,float y,float u,float v){
+            const auto px=float(destination[0])+(x*source_width/1280.f-source.left)*scale_x;
+            const auto py=float(destination[1])+(y*source_height/720.f-source.top)*scale_y;
+            DecodedVertex out;out.pos={px*2.f/w-1.f,1.f-py*2.f/h,0,1};out.uv[0]={u,v,0,1};return out;
+        };
+        for(const auto& q:quads)for(const auto& v:std::array<DecodedVertex,6>{
+            vertex(q.left,q.top,q.u0,q.v0),vertex(q.right,q.top,q.u1,q.v0),vertex(q.right,q.bottom,q.u1,q.v1),
+            vertex(q.left,q.top,q.u0,q.v0),vertex(q.right,q.bottom,q.u1,q.v1),vertex(q.left,q.bottom,q.u0,q.v1)})subtitle_vertices.push_back(v);
+        subtitle_cue=cue;subtitle_bounds=bounds;++subtitle_layouts;
+    }
+    const int left=std::max(0,destination[0]),top=std::max(0,destination[1]);
+    const int right=std::min(w,destination[2]),bottom=std::min(h,destination[3]);
+    if(left>=right || top>=bottom)return;
+    gl.BindFramebuffer(GL_FRAMEBUFFER,0);gl.Viewport(0,0,w,h);
+    gl.Disable(GL_DEPTH_TEST);gl.Disable(GL_STENCIL_TEST);gl.Disable(GL_CULL_FACE);gl.ColorMask(1,1,1,1);
+    gl.Enable(GL_SCISSOR_TEST);gl.Scissor(left,h-bottom,right-left,bottom-top);
+    gl.Enable(GL_BLEND);gl.BlendEquationSeparate(GL_FUNC_ADD,GL_FUNC_ADD);
+    gl.BlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ONE,GL_ONE_MINUS_SRC_ALPHA);
+    gl.ActiveTexture(GL_TEXTURE0);gl.BindTexture(GL_TEXTURE_2D,subtitle_texture);
+    MOJOSHADER_glBindProgram(program->second.shader);if(program->second.alpha_mode>=0)gl.Uniform1i(program->second.alpha_mode,0);
+    submit(GL_TRIANGLES,subtitle_vertices,{});++subtitle_draws;
+    // Presentation already invalidates the game-state cache. The next game
+    // draw reapplies all source state; the overlay never mutates that state.
+    applied.reset();
+}
 U32 Graphics::present(Args a){
     const auto present_begin=FrameTrace::now();
     frame_trace.source_fp_control=p.cpu.fp.get16(0);
@@ -959,6 +1021,7 @@ U32 Graphics::present(Args a){
     gl.BindFramebuffer(GL_READ_FRAMEBUFFER,i->fbo);
     // Source D3D top rows reside at low texture Y. Flip only presentation.
     gl.BlitFramebuffer(sr.left,sr.top,sr.right,sr.bottom,left,h-top,right,h-bottom,GL_COLOR_BUFFER_BIT,GL_LINEAR);
+    draw_subtitles(w,h,last_present_destination,sr,i->width,i->height);
     const auto before_error=FrameTrace::now();++frame_error_checks;const auto error=gl.GetError();if(error)stop("GL frame error "+std::to_string(error));
     const auto after_error=FrameTrace::now();SDL_GL_SwapWindow(window);const auto after_swap=FrameTrace::now();++presents;
     frame_trace.presented(presents,present_begin,before_error,after_error,after_swap,copy_total.total_ns,draws,uploads,
@@ -966,6 +1029,8 @@ U32 Graphics::present(Args a){
     if(p.state().stop_after_presents && presents>=p.state().stop_after_presents){p.state().diagnostic_stop=true;p.exit(0);}return 0;
 }
 void Graphics::install(){
+    p.state().reports["main_story_subtitles"]=[this]{return "{\"tracks\":46,\"cues\":315,\"special_contents_included\":false,\"draws\":"+
+        std::to_string(subtitle_draws)+",\"layouts\":"+std::to_string(subtitle_layouts)+",\"font_uploads\":"+std::to_string(subtitle_font_uploads)+"}";};
     sprite_service.emplace(p.memory,[](const wa2::aot::SpriteCommand& command,void* owner){return static_cast<Graphics*>(owner)->sprite_command(command);},this);
     // Bind implementations before load so their leaf contracts belong to
     // these exact handlers. Guest vtables remain lazy source-memory objects.
@@ -1049,11 +1114,11 @@ void Graphics::install(){
     });
 }
 } // namespace
-std::shared_ptr<wa2::graphics::MoviePresenter> install_wa2_shared_graphics(Process& p,std::shared_ptr<wa2::graphics::SurfaceHost> host){
-    auto state=std::make_shared<Graphics>(p,std::move(host));state->install();
+std::shared_ptr<wa2::graphics::MoviePresenter> install_wa2_shared_graphics(Process& p,std::shared_ptr<wa2::graphics::SurfaceHost> host,std::shared_ptr<wa2::subtitles::Playback> subtitles){
+    auto state=std::make_shared<Graphics>(p,std::move(host),std::move(subtitles));state->install();
     p.state().shutdown.push_back([state]{state->shutdown();});p.state().reports["direct3d9"]=[state]{return state->report();};
     return state;
 }
 } // namespace wr
-namespace wa2::graphics {std::shared_ptr<MoviePresenter> install(wr::Process& p,std::shared_ptr<SurfaceHost> host){return wr::install_wa2_shared_graphics(p,std::move(host));}}
+namespace wa2::graphics {std::shared_ptr<MoviePresenter> install(wr::Process& p,std::shared_ptr<SurfaceHost> host,std::shared_ptr<subtitles::Playback> subtitles){return wr::install_wa2_shared_graphics(p,std::move(host),std::move(subtitles));}}
 

@@ -61,6 +61,7 @@ unsigned check_shader(const std::string& assembly,bool pixel,std::set<std::pair<
 int main(int argc,char** argv){try{
     CHECK(argc==3);source_directory=argv[2];std::filesystem::create_directories(source_directory);
     unsigned translations=check_shader(g::fixed_vertex_assembly(),false)+check_shader(g::movie_pixel_assembly(),true,{{MOJOSHADER_USAGE_TEXCOORD,0}}),variants{};
+    translations+=check_shader(g::subtitle_pixel_assembly(),true,{{MOJOSHADER_USAGE_TEXCOORD,0}});
     // Shader model 2 uses implicit colour/texture semantics. Preserve that ABI
     // while retaining the explicit usage/index fields required by model 3.
     translations+=check_shader("ps_2_0\ndcl v0\ndcl t0.xy\ndcl_2d s0\ntexld r0, t0, s0\nmul oC0, r0, v0\n",true,{{MOJOSHADER_USAGE_COLOR,0},{MOJOSHADER_USAGE_TEXCOORD,0}});

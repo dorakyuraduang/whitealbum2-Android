@@ -66,6 +66,7 @@ def main():
          '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON','-DCMAKE_BUILD_TYPE=MinSizeRel'])
     run([acmake,'--build',sdl_build,'--target','SDL2','--parallel','1'],1200)
     run([sys.executable,ROOT/'tests/aot_liveness.py'])
+    run([sys.executable,ROOT/'scripts/prepare_subtitles.py','--check'])
     run([sys.executable,ROOT/'scripts/verify_fp_kernel.py'],600)
     run([sys.executable,ROOT/'scripts/generate_shared_aot.py'])
     run([sys.executable,ROOT/'scripts/prepare_static_data.py'])
@@ -76,6 +77,8 @@ def main():
     tracked=[p for directory in ('recompiled','generated/shared-aot','generated/static-data','generated/codepages') for p in (ROOT/directory).glob('*') if p.is_file()]
     tracked += [ROOT/'tests/shared_aot.cpp',ROOT/'tests/function_process.cpp',ROOT/'tests/portable_scheduler.cpp',Path(__file__),ROOT/'config/porting_contract.json',ROOT/'scripts/prepare_static_data.py']
     tracked += [ROOT/'tests/aot_liveness.py']
+    tracked += [ROOT/'tests/subtitles.cpp',ROOT/'scripts/prepare_subtitles.py',ROOT/'scripts/verify_subtitles.py',ROOT/'config/subtitle_hooks.json']
+    tracked += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*') if p.is_file()]
     tracked += [ROOT/'tests/texture_batch_snapshots.hpp']
     tracked += [ROOT/'tests/portrait_submission_snapshots.hpp']
     tracked += [ROOT/'tests/dialogue_cpu.cpp',ROOT/'tests/geometry_cache_snapshots.hpp']
@@ -166,6 +169,11 @@ def main():
          '-DCMAKE_BUILD_TYPE=MinSizeRel','-DWA2_SHARED_AOT_CHECKS=ON','-DWA2_AOT_DIAGNOSTICS=ON','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'])
     run([cmake,'--build',build,'--target','wa2_shared_aot_tests','wa2_function_process_tests','wa2_portable_scheduler_tests','wa2_portable_registry_tests','wa2_portable_system_tests','wa2_resource_mount_tests','wa2_native_resource_memory_tests','wa2_native_resource_cache_tests','wa2_resource_loading_tests','wa2_lzss_group_tests','wa2_wait_probe_tests','wa2_large_heap_memory_tests','wa2_portable_sound_bridge_tests','wa2_window_resource_tests','wa2_widget_unicode_tests','wa2_window_model_tests','wa2_portable_movie_bridge_tests','wa2_render_submission_tests','wa2_portable_acm_tests','wa2_portable_shell_tests','wa2_crt_math_path_tests','wa2_pixel_transfer_tests','--parallel','1'],2400)
     run([cmake,'--build',build,'--target','wa2_glyph_index_tests','wa2_glyph_geometry_tests','wa2_byte_equality_tests','--parallel','1'],300)
+    run([cmake,'--build',build,'--target','wa2_subtitle_tests','--parallel','1'],300)
+    subtitle_report=build/'subtitles.json'
+    run([build/'wa2_subtitle_tests.exe',subtitle_report],30)
+    from verify_subtitles import verify as verify_subtitles
+    subtitle_checks=verify_subtitles(subtitle_report,ROOT/'generated/shared-aot/manifest.json')
     submission_report=build/'render-submission.json'
     run([build/'wa2_render_submission_tests.exe',submission_report],30)
     run([cmake,'--build',build,'--target','wa2_host_leaf_tests','wa2_render_cpu_tests','wa2_dialogue_cpu_tests','wa2_native_sprite_cpu_tests','wa2_particle_pipeline_tests','wa2_integer_register_tests','wa2_heap_pool_memory_tests','wa2_image_upload_tests',
@@ -458,6 +466,7 @@ def main():
                shared_widget_ownership=ownership,
                shared_widget_icons=widget_icons,
                shared_touch_gestures=touch_gestures,
+               shared_main_story_subtitles=subtitle_checks,
                window_model=json.loads(window_model_report.read_text()),
                render_submission=json.loads(submission_report.read_text()),
                shared_host_leaf_calls=json.loads(leaf_report.read_text()),

@@ -82,6 +82,7 @@ def main():
         ROOT/'scripts/package_android.py',ROOT/'scripts/build_android.py',ROOT/'scripts/verify_android_apk.py',
         ROOT/'third_party/ffmpeg/NOTICE.txt',ROOT/'third_party/ffmpeg/COPYING.LGPLv2.1',ROOT/'tools/mojoshader-main/LICENSE.txt',
         ROOT/'tools/mojoshader_assembler-main/LICENSE.txt',ROOT/'tools/SDL-release-2.32.10/LICENSE.txt',ROOT/'third_party/stb/stb_vorbis.c']
+    tracked += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*') if p.is_file()]
     java=sorted((ROOT/'android/app/src/main/java').rglob('*.java'))+sorted((ROOT/'tools/SDL-release-2.32.10/android-project/app/src/main/java').rglob('*.java'))
     tracked+=java;bindings={p.relative_to(ROOT).as_posix():digest(p) for p in tracked}
     tracked_icons=[ROOT/'icon.ico',ROOT/'scripts/prepare_app_icon.py',ROOT/'hosts/app.rc.in',ROOT/'hosts/CMakeLists.txt']
@@ -144,6 +145,8 @@ def main():
                 (ROOT/'third_party/ffmpeg/NOTICE.txt','FFmpeg-NOTICE.txt'),(ROOT/'tools/SDL-release-2.32.10/LICENSE.txt','SDL2-LICENSE.txt'),
                 (ROOT/'tools/mojoshader-main/LICENSE.txt','MojoShader-LICENSE.txt'),
                 (ROOT/'tools/mojoshader_assembler-main/LICENSE.txt','MojoShader-assembler-LICENSE.txt')):apk.write(path,'assets/licenses/'+name)
+            for name in ('LICENSE','FONT-NOTICE.txt','README.md','source.json'):
+                apk.write(ROOT/'third_party/wa2_subtitles'/name,'assets/licenses/wa2-subtitles/'+name)
             vorbis=(ROOT/'third_party/stb/stb_vorbis.c').read_text(errors='replace');apk.writestr('assets/licenses/stb-vorbis-LICENSE.txt',vorbis[vorbis.rfind('ALTERNATIVE A -'):])
         aligned=directory/'aligned.apk';run([bt/'zipalign.exe','-f','4',unsigned,aligned])
         key=ROOT/'build/android-signing/wa2-native-dev.p12'
@@ -174,6 +177,9 @@ def main():
         destinations={'android':output/'android/WA2-arm64-dev.apk','windows':output/'WA2_SDL2_x64.exe'}
         for host,path in destinations.items():
             publish_file(artifacts[host]['file'],path);artifacts[host]['file']=str(path)
+        notices=output/'licenses/wa2-subtitles';notices.mkdir(parents=True,exist_ok=True)
+        for name in ('LICENSE','FONT-NOTICE.txt','README.md','source.json'):
+            publish_file(ROOT/'third_party/wa2_subtitles'/name,notices/name)
         resource_copy=ROOT/'res/WA2_SDL2_x64.exe'
         if resource_copy.is_file():publish_file(windows_stripped,resource_copy)
         status['artifacts']=artifacts

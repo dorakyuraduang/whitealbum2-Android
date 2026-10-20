@@ -1,0 +1,57 @@
+{
+  "schema": "wa2.main-story-subtitle-hooks.v1",
+  "upstream_commit": "bb3cbc2f459549f8afbcb56cafd4b861d763bd29",
+  "original_executable_read": false,
+  "events": [
+    {
+      "entry": "0x40f400",
+      "event": "sound_effect",
+      "arguments": 6,
+      "cached_body_sha256": "5624bd035c9c544dc5abc7162bc566466f656e0f9fd35e38852b421210140007",
+      "return_locations": [
+        4256842,
+        4257048,
+        4257107,
+        4257160
+      ]
+    },
+    {
+      "entry": "0x40eda0",
+      "event": "voice",
+      "arguments": 7,
+      "cached_body_sha256": "7d82d0fce026a29c231178ad66fa865923f150851d58d825c40614a5c845af2e",
+      "return_locations": [
+        4256766
+      ]
+    },
+    {
+      "entry": "0x406270",
+      "event": "interview",
+      "arguments": 2,
+      "cached_body_sha256": "20c33bb03cb5e0ee8da18544f49bca059d67c54972ac1feef9bd8011f42b1c70",
+      "return_locations": [
+        4219724
+      ]
+    },
+    {
+      "entry": "0x40f590",
+      "event": "stop_effect",
+      "arguments": 2,
+      "cached_body_sha256": "fe5ff74a9c3aec77857b76e7ed84dee4845efb63d96e834eec6f5e3b0fd6c29d",
+      "return_locations": [
+        4257224,
+        4257259
+      ]
+    },
+    {
+      "entry": "0x40ec30",
+      "event": "stop_voice",
+      "arguments": 2,
+      "cached_body_sha256": "8da538bbe0e94ea90ff40fb166e5235cb705185d1d73ffad8f2cf764d6e725cd",
+      "return_locations": [
+        4254925,
+        4254959
+      ]
+    }
+  ]
+}

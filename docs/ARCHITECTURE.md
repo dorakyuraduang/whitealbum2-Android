@@ -35,6 +35,15 @@ the selected folder in a background worker, persists a durable read grant and
 passes the bounded PAK index to the game activity. The optional FPS HUD counts
 successful game presents rather than Android UI refreshes.
 
+The shared runtime observes the returns of five cached source audio functions
+for the embedded main-story audio-only captions. Original bodies and source
+ABI results remain intact; no generic instruction hook or executable patch is
+added. Immutable caption data, timer selection, compact font decoding and
+geometry are common engine code. The common graphics adapter overlays captions
+after presentation into the existing letterboxed viewport. Only upstream
+`script/sub.yaml` is imported; all SpecialContents subtitle data is excluded.
+See `docs/SUBTITLES.md` for source scope and validation boundaries.
+
 Decoded image caching retains up to 8 MiB/32 entries, with a 4 MiB per-entry
 limit and repeat-use admission. Reused resources receive new mutable game
 buffers; cached bytes remain private. The allocator can separately retain at

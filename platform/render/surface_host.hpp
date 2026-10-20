@@ -5,6 +5,7 @@
 #include <optional>
 struct SDL_Window;
 namespace wr {class Process;}
+namespace wa2::subtitles {class Playback;}
 namespace wa2::graphics {
 class MoviePresenter;
 struct ClientViewport {
@@ -33,5 +34,5 @@ public:
                                             std::uint32_t source_width,std::uint32_t source_height) const;
     virtual void frame_submitted()=0;
 };
-std::shared_ptr<MoviePresenter> install(wr::Process&,std::shared_ptr<SurfaceHost>);
+std::shared_ptr<MoviePresenter> install(wr::Process&,std::shared_ptr<SurfaceHost>,std::shared_ptr<subtitles::Playback> subtitles={});
 }
