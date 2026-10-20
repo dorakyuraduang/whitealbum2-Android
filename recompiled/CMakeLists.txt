@@ -96,6 +96,9 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # C runtimes implement large memset with a byte loop.
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/native_string.cpp" APPEND PROPERTY COMPILE_OPTIONS "-fno-builtin-memset")
     set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/image_colours.cpp" PROPERTIES COMPILE_OPTIONS "-O3")
+    # Resource admission/snapshots run on every new image/script load. Keep
+    # these native loops optimized on both hosts without expanding AOT bodies.
+    set_source_files_properties("${WA2_SHARED_ROOT}/port/native_resources.cpp" PROPERTIES COMPILE_OPTIONS "-O3")
     # LLVM's COFF outliner currently emits invalid SEH frame directives here.
     # This is a host object-format option; both hosts compile the same bodies.
     if(NOT WIN32)

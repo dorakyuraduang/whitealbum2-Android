@@ -66,7 +66,7 @@ Stream pattern(unsigned mask,unsigned distance,unsigned length,unsigned prefix=4
     return stream;
 }
 int main(int argc,char** argv){try{
-    CHECK(argc==2);unsigned exact{},errors{};
+    CHECK(argc==2);unsigned exact{},errors{},literal_transitions{},literal_failures{},literal_aliases{};
     constexpr std::array<unsigned,16> distances{1,2,3,4,7,8,9,15,16,17,18,31,127,255,4095,4096};
     for(unsigned mask=0;mask<256;++mask){valid(pattern(mask,distances[mask&15],3+(mask>>4)));++exact;}
     for(unsigned distance:distances)for(unsigned length=3;length<=18;++length){valid(pattern(0,distance,length,4096,16));++exact;}
@@ -79,6 +79,16 @@ int main(int argc,char** argv){try{
         auto candidate=pattern(255,1,18,4352,0);
         for(unsigned n=0;n<8;++n)candidate.match(n==token && variant<16?distances[variant]:1,n==token && variant>=16?3+(variant&15):18);
         for(unsigned n=0;n<160;++n)candidate.literal(std::uint8_t(n));valid(candidate);++exact;
+    }
+    // An apparent literal block may change at any one of its eight flag
+    // positions. Exhaust all 256 flags there, including embedded 0xff data.
+    for(unsigned group=0;group<8;++group)for(unsigned mask=0;mask<256;++mask){
+        Stream candidate;for(unsigned n=0;n<8;++n)candidate.literal(255);
+        for(unsigned part=0;part<8;++part)for(unsigned token=0;token<8;++token){
+            if(part!=group || (mask&(1u<<token)))candidate.literal(255);
+            else candidate.match(1+((part*8+token)%31),3+((part+token)%16));
+        }
+        valid(candidate);++exact;++literal_transitions;
     }
     // Error parity includes speculative bytes inside the declared destination;
     // a failed decode never publishes the private dictionary.
@@ -94,11 +104,38 @@ int main(int argc,char** argv){try{
         for(unsigned cut=1;cut<=64;++cut)failed(std::span(stream.packed).first(stream.packed.size()-cut),stream.bytes);
         for(unsigned cut=1;cut<=64;++cut)failed(stream.packed,stream.bytes-cut);}
     auto trailing=stream.packed;trailing.push_back(0);failed(trailing,stream.bytes);failed({},1);failed(std::array<std::uint8_t,1>{0},3);failed(std::array<std::uint8_t,2>{0,0},3);
+    stream=pattern(255,1,18);
+    for(unsigned cut=1;cut<=80;++cut){
+        failed(std::span(stream.packed).first(stream.packed.size()-cut),stream.bytes);
+        failed(stream.packed,stream.bytes-cut);literal_failures+=2;
+    }
+    // Output can overlap future packed flags even when each individual
+    // eight-byte literal copy is nonoverlapping. Batch lookahead must not
+    // change those earlier read/write dependencies.
+    for(unsigned size:{72u,80u,128u,256u})for(unsigned offset:{size/2,size/2+9,size-8}){
+        Stream aliased;for(unsigned n=0;n<size;++n)aliased.literal(std::uint8_t(n*37+3));
+        const auto run=[&](Decoder decoder){
+            Result result{Bytes(32+std::max(aliased.packed.size(),std::size_t(offset+size))+32,0xa5),initial()};
+            std::copy(aliased.packed.begin(),aliased.packed.end(),result.storage.begin()+32);
+            try{result.flags=decoder(std::span<const std::uint8_t>(result.storage).subspan(32,aliased.packed.size()),
+                std::span(result.storage).subspan(32+offset,size),result.ring,&result.tail);}
+            catch(const std::exception& e){result.error=e.what();}
+            CHECK(std::all_of(result.storage.begin(),result.storage.begin()+32,[](auto b){return b==0xa5;}));
+            CHECK(std::all_of(result.storage.end()-32,result.storage.end(),[](auto b){return b==0xa5;}));return result;
+        };
+        const auto actual=run(current);
+#ifdef WA2_LZSS_BASELINE
+        const auto before=run(wa2_lzss_before::resource::decode_lzss_dictionary);
+        CHECK(actual.storage==before.storage && actual.ring==before.ring && actual.flags==before.flags && actual.tail==before.tail && actual.error==before.error);
+#endif
+        ++literal_aliases;
+    }
     struct Timing {unsigned mask,distance;std::array<std::uint64_t,5> ns;};std::vector<Timing> timings;
 #ifdef WA2_LZSS_BASELINE
     std::vector<Timing> before_timings;
 #endif
     std::uint64_t fingerprint{};
+    constexpr unsigned Repetitions=16;
     for(auto [mask,distance]:std::array<std::pair<unsigned,unsigned>,6>{{{0,1},{0,4},{0,16},{0,32},{0x55,9},{0xff,1}}}){
         auto sample=pattern(mask,distance,18,4352,8192);Bytes output(sample.bytes);auto ring=initial();Timing item{mask,distance};
 #ifdef WA2_LZSS_BASELINE
@@ -106,7 +143,7 @@ int main(int argc,char** argv){try{
 #endif
         for(unsigned round=0;round<5;++round){
             auto measure=[&](Decoder decoder){const auto start=std::chrono::steady_clock::now();
-                for(unsigned repeat=0;repeat<4;++repeat)fingerprint+=decoder(sample.packed,output,ring,nullptr)+output[sample.bytes/2];
+                for(unsigned repeat=0;repeat<Repetitions;++repeat)fingerprint+=decoder(sample.packed,output,ring,nullptr)+output[sample.bytes/2];
                 return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count();};
 #ifdef WA2_LZSS_BASELINE
             if(round&1){item.ns[round]=measure(current);before.ns[round]=measure(wa2_lzss_before::resource::decode_lzss_dictionary);}
@@ -120,8 +157,10 @@ int main(int argc,char** argv){try{
         before_timings.push_back(before);
 #endif
     }
-    std::ofstream file(argv[1]);file<<"{\"schema\":\"wa2.lzss-groups.v1\",\"exact_output_dictionary_flags_and_tail_cases\":"<<exact<<",\"unchanged_failure_cases\":"<<errors<<",\"timings\":[";
-    for(unsigned n=0;n<timings.size();++n){if(n)file<<',';const auto& item=timings[n];file<<"{\"literal_mask\":"<<item.mask<<",\"distance\":"<<item.distance<<",\"repetitions\":4,\"ns\":[";
+    std::ofstream file(argv[1]);file<<"{\"schema\":\"wa2.lzss-groups.v1\",\"exact_output_dictionary_flags_and_tail_cases\":"<<exact<<",\"unchanged_failure_cases\":"<<errors
+        <<",\"literal_block_transition_cases\":"<<literal_transitions<<",\"literal_block_failure_cases\":"<<literal_failures
+        <<",\"literal_alias_cases\":"<<literal_aliases<<",\"timings\":[";
+    for(unsigned n=0;n<timings.size();++n){if(n)file<<',';const auto& item=timings[n];file<<"{\"literal_mask\":"<<item.mask<<",\"distance\":"<<item.distance<<",\"repetitions\":"<<Repetitions<<",\"ns\":[";
         for(unsigned k=0;k<5;++k){if(k)file<<',';file<<item.ns[k];}file<<']';
 #ifdef WA2_LZSS_BASELINE
         file<<",\"before_ns\":[";for(unsigned k=0;k<5;++k){if(k)file<<',';file<<before_timings[n].ns[k];}file<<']';

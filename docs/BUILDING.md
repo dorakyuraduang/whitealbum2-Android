@@ -99,6 +99,21 @@ decoder is confined to the test binary and is never shipped in either host.
 The bounded component timings do not measure whole-game fast-forward or Android
 FPS.
 
+From `0.2.41`, the same decoder and validator can process eight consecutive
+all-literal groups together: 72 stored bytes produce 64 output bytes. Every flag
+and bound is checked before the block copy; mixed/short groups use the existing
+token path. The copy stays outside that hot token loop, and overlapping buffers
+retain the earlier sequence. Tests cover 2,993 exact streams and 420 failures,
+including 2,048 flag-transition cases and 160 new literal-block error cases;
+12 overlapping-buffer cases also compare complete storage against the baseline.
+The shared native resource adapter also compiles with O3 on both hosts, while
+unrelated static functions keep their size settings. The local 0.2.40 comparison
+links the same resource-loading test object with the saved verified engine and
+runtime archives, alternates process order and checks allocation callbacks,
+snapshot aliases, failed publication and mapping changes. Its 2 MiB generated
+loads include fixture input staging, validation, allocation, decoding and
+publication. These timings do not measure real PAK I/O or whole fast-forward.
+
 `tests/android/org/wa2/port/WidgetControlsTest.java` executes the production
 `WidgetControls` and `WidgetSession` helpers on the ordinary JVM. It covers
 complete-snapshot reconciliation, missing/removed/replaced tokens, signed 32-bit

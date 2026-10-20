@@ -14,6 +14,21 @@ void range(const Source& s, std::uint64_t at, std::uint64_t length) {
     if (at>s.size() || length>s.size()-at) throw Error("resource range outside archive");
 }
 unsigned fold(unsigned c) noexcept { return c>='A' && c<='Z' ? c+32 : c; }
+bool eight_literal_groups(const std::uint8_t* source) noexcept {
+    return (source[0]&source[9]&source[18]&source[27]&source[36]&source[45]&source[54]&source[63])==255;
+}
+[[gnu::noinline]] std::size_t copy_literal_lzss_groups(std::span<const std::uint8_t> source,std::span<std::uint8_t> output) noexcept {
+    const auto source_start=reinterpret_cast<std::uintptr_t>(source.data()),target_start=reinterpret_cast<std::uintptr_t>(output.data());
+    if(source_start+source.size()>target_start && target_start+output.size()>source_start)return 0;
+    const auto maximum=std::min(source.size()/9,output.size()/8);std::size_t copied{};
+    for(;maximum-copied>=8 && eight_literal_groups(source.data()+copied*9);copied+=8){
+#if defined(__clang__)
+#pragma clang loop unroll(full)
+#endif
+        for(unsigned group=0;group<8;++group)std::memcpy(output.data()+(copied+group)*8,source.data()+(copied+group)*9+1,8);
+    }
+    return copied;
+}
 // Keep the special block out of the ordinary token loop's instruction cache.
 [[gnu::noinline]] bool copy_repeated_lzss_group(const std::uint8_t* source,std::uint8_t* target,std::size_t written) noexcept {
     if((source[1]&15)!=15)return false;
@@ -79,7 +94,11 @@ void validate_lzss(std::span<const std::uint8_t> source,std::size_t output_bytes
         flags>>=1;
         if(!(flags&0x100)){
             if(input==source.size())throw Error("truncated LZSS flags");flags=source[input++]|0xff00;
-            if((flags&255)==255 && source.size()-input>=8 && output_bytes-written>=8){input+=8;written+=8;flags>>=7;continue;}
+            if((flags&255)==255 && source.size()-input>=8 && output_bytes-written>=8){
+                input+=8;written+=8;
+                while(source.size()-input>=72 && output_bytes-written>=64 && eight_literal_groups(source.data()+input)){input+=72;written+=64;}
+                flags>>=7;continue;
+            }
             // An all-match group has exactly 16 input bytes and at most 144
             // output bytes. Validate its eight lengths together; offsets do
             // not affect length validation. Short/error tails stay below.
@@ -113,7 +132,14 @@ unsigned decode_lzss_dictionary(std::span<const std::uint8_t> source,std::span<s
             // bytes inside the declared source and destination, on any CPU.
             if((flags&255)==255 && source.size()-input>=8 && output.size()-written>=8) {
                 std::memcpy(output.data()+written,source.data()+input,8);
-                input+=8;written+=8;flags>>=7;continue;
+                input+=8;written+=8;
+                // Verify all eight flag bytes before copying 64 literal bytes.
+                // Every source/destination byte fits; a short or mixed group
+                // falls through to the same token/error path as before.
+                if(source.size()-input>=72 && output.size()-written>=64 && source[input]==255) [[unlikely]] {
+                    const auto copied=copy_literal_lzss_groups(source.subspan(input),output.subspan(written));input+=copied*9;written+=copied*8;
+                }
+                flags>>=7;continue;
             }
             // Eight full matches consume 16 input and 144 output bytes.
             // Short tails and initial caller-owned dictionary reads retain the

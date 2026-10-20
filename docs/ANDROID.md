@@ -11,6 +11,12 @@ rendering use the same sources on Windows and Android; captions follow the
 existing game viewport instead of stretching to the phone screen. See
 [scope, licenses and verification limits](SUBTITLES.md).
 
+`0.2.41-shared-aot` shares batched literal resource decoding and an optimized
+native loading adapter with Windows. First-use loads can benefit without a
+larger decoded cache or extracted assets. Generated CPU comparisons cover the
+decoder and the native loading boundary; whole-game fast-forward and ARM64
+device performance remain unmeasured.
+
 1. Place your own original `.pak` files directly in `Wa2Res` and retain the `IC`
    child folder. The default location is internal shared storage `/Wa2Res`.
 2. Open the app to its launch settings page. Choose the local `Wa2Res` folder

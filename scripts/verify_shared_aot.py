@@ -301,8 +301,9 @@ def main():
     lzss_report=build/'lzss-groups.json'
     run([build/'wa2_lzss_group_tests.exe',lzss_report],30)
     lzss_groups=json.loads(lzss_report.read_text())
-    if (not lzss_groups['passed'] or lzss_groups['exact_output_dictionary_flags_and_tail_cases']!=945 or
-        lzss_groups['unchanged_failure_cases']!=260 or not lzss_groups['guard_bytes_checked'] or
+    if (not lzss_groups['passed'] or lzss_groups['exact_output_dictionary_flags_and_tail_cases']!=2993 or
+        lzss_groups['unchanged_failure_cases']!=420 or lzss_groups['literal_block_transition_cases']!=2048 or
+        lzss_groups['literal_block_failure_cases']!=160 or lzss_groups['literal_alias_cases']!=12 or not lzss_groups['guard_bytes_checked'] or
         len(lzss_groups['timings'])!=6):raise ValueError('Grouped LZSS decode output/dictionary/flags/failure contract failed')
     typography={}
     for target,name in [('wa2_glyph_index_tests','glyph-index'),('wa2_glyph_geometry_tests','glyph-geometry'),('wa2_byte_equality_tests','byte-equality')]:
