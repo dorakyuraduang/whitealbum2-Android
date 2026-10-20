@@ -11,4 +11,10 @@ final class LaunchSettings {
     static void setShowFps(Context context, boolean value) {
         context.getSharedPreferences("launcher", Context.MODE_PRIVATE).edit().putBoolean("show-fps", value).apply();
     }
+    static boolean longPressFastForward(Context context) {
+        return context.getSharedPreferences("launcher", Context.MODE_PRIVATE).getBoolean("long-press-fast-forward", true);
+    }
+    static void setLongPressFastForward(Context context, boolean value) {
+        context.getSharedPreferences("launcher", Context.MODE_PRIVATE).edit().putBoolean("long-press-fast-forward", value).apply();
+    }
 }

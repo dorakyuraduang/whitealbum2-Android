@@ -31,7 +31,8 @@ def main():
     location_test=ROOT/'tests/android/org/wa2/port/ResourceLocationTest.java'
     widget_test=ROOT/'tests/android/org/wa2/port/WidgetControlsTest.java'
     icon_test=ROOT/'tests/android/org/wa2/port/WidgetIconTest.java'
-    inputs = {str(p.relative_to(ROOT)):digest(p) for p in [*own,Path(__file__),manifest,location_test,widget_test,icon_test]}
+    touch_test=ROOT/'tests/android/org/wa2/port/TouchGesturesTest.java'
+    inputs = {str(p.relative_to(ROOT)):digest(p) for p in [*own,Path(__file__),manifest,location_test,widget_test,icon_test,touch_test]}
     fixture=ROOT/'build/shared-aot-x64/widget-unicode-fixture.json'
     widget_args=[]
     if not fixture.exists():raise ValueError('Missing cached native widget fixture; run shared verification first')
@@ -61,7 +62,7 @@ def main():
     with (ROOT/'logs/android-java-compile.log').open('wb') as console:
         subprocess.run(command,cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,
                        creationflags=flags,timeout=60,check=True)
-        subprocess.run([str(javac),'-J-XX:ActiveProcessorCount=1','-J-Xmx128m','-encoding','UTF-8','-cp',str(directory),'-d',str(directory),str(location_test),str(widget_test),str(icon_test)],
+        subprocess.run([str(javac),'-J-XX:ActiveProcessorCount=1','-J-Xmx128m','-encoding','UTF-8','-cp',str(directory),'-d',str(directory),str(location_test),str(widget_test),str(icon_test),str(touch_test)],
             cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,creationflags=flags,timeout=30,check=True)
         location_report=directory/'resource-location.json'
         subprocess.run([str(java_home/'bin/java.exe'),'-XX:ActiveProcessorCount=1','-Xmx128m','-cp',str(directory),'org.wa2.port.ResourceLocationTest',str(location_report)],
@@ -71,6 +72,9 @@ def main():
             cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,creationflags=flags,timeout=15,check=True)
         icon_report=directory/'widget-icons.json'
         subprocess.run([str(java_home/'bin/java.exe'),'-XX:ActiveProcessorCount=1','-Xmx128m','-cp',str(directory),'org.wa2.port.WidgetIconTest',str(icon_report),str(icon_fixture)],
+            cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,creationflags=flags,timeout=15,check=True)
+        touch_report=directory/'touch-gestures.json'
+        subprocess.run([str(java_home/'bin/java.exe'),'-XX:ActiveProcessorCount=1','-Xmx128m','-cp',str(directory),'org.wa2.port.TouchGesturesTest',str(touch_report)],
             cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,creationflags=flags,timeout=15,check=True)
     ns='{http://schemas.android.com/apk/res/android}'
     activities=ET.parse(manifest).getroot().find('application').findall('activity')
@@ -89,6 +93,7 @@ def main():
                  resource_location=json.loads(location_report.read_text()),launcher_before_game=True,fps_setting_compiled=True,
                  widget_ownership=json.loads(widget_report.read_text()),
                  widget_icons=json.loads(icon_report.read_text()),
+                 touch_gestures=json.loads(touch_report.read_text()),long_press_setting_compiled=True,
                  game_launched=False,screen_access=False,android_device_verified=False,apk_created=False,passed=True)
     (ROOT/'logs/android-java-verification.json').write_text(json.dumps(proof,indent=2)+'\n')
     print('PASS: Android activity, external PAK directory and FPS HUD compile against official Android API-35 and the existing SDL Java layer.')

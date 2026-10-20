@@ -8,10 +8,28 @@ external; the APK contains no PAKs and requires no whole-archive extraction.
 2. Open the app to its launch settings page. Choose the local `Wa2Res` folder
    through Android's system directory picker. A nested Wa2Res or SD-card Wa2Res
    is supported; select the resource folder itself rather than its parent or IC.
-3. Set **显示 FPS 和帧耗时** as desired. Both the folder grant and this switch are
-   remembered for later launches.
+3. Set **显示 FPS 和帧耗时** and **长按快进** as desired. Long-press fast-forward is
+   enabled by default. The folder grant and both switches are remembered for
+   later launches; changing a switch saves it immediately.
 4. Tap **开始游戏**. The folder is checked in a background worker before the game
    initializes. Returning to the launcher allows settings to be changed.
+
+With **长按快进** enabled, hold one finger still on the game canvas to hold the
+original game's Ctrl input. The threshold follows Android's long-press setting
+(normally about half a second); lifting, dragging, adding a finger, opening a
+dialog or losing focus releases the touch hold. A physical Ctrl key remains
+independently usable. With the switch disabled, a stationary touch sends one
+ordinary click when lifted. Pressing the menu button never initiates a skip hold.
+
+Tap with two fingers to hide the top-right **☰** button; repeat to show it. The
+gesture also works over the button's area and is recognized before child views
+split a multi-touch stream. Both fingers must form a brief tap within 300 ms and
+the normal touch slop. Moving, three fingers or holding two fingers does not
+toggle it. A recognized pair sends no ordinary game or button click. Menu
+updates preserve the hidden state for this game session; a new Activity starts
+with the button visible. Native setting dialogs and the launcher use their own
+normal input. These input paths have JVM trace and API compilation checks; actual
+Android touch dispatch and device behavior have not been exercised.
 
 The app requests persistent read access to that selected directory, not blanket
 storage permissions. If access is revoked or the folder is moved, choose it

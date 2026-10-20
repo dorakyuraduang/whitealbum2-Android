@@ -105,6 +105,7 @@ def main():
     tracked += [ROOT/'scripts/verify_android_java.py',ROOT/'tests/android/org/wa2/port/ResourceLocationTest.java',ROOT/'android/app/src/main/AndroidManifest.xml']
     tracked += [ROOT/'tests/android/org/wa2/port/WidgetControlsTest.java']
     tracked += [ROOT/'tests/android/org/wa2/port/WidgetIconTest.java']
+    tracked += [ROOT/'tests/android/org/wa2/port/TouchGesturesTest.java']
     tracked += [ROOT/'tests/portable_sound_bridge.cpp',ROOT/'port/audio.hpp']
     tracked += [ROOT/'tests/window_resources.cpp']
     tracked += [ROOT/'tests/widget_unicode.cpp',ROOT/'scripts/verify_widget_unicode.py']
@@ -366,6 +367,10 @@ def main():
     widget_icons=java_proof['widget_icons']
     if (not widget_icons['passed'] or widget_icons['cached_icons']!=2 or widget_icons['exact_cached_pixels']!=2048 or
         widget_icons['style_cases']!=96 or widget_icons['rejected_inputs']<100 or not widget_icons['alpha_and_mask_checked']):raise ValueError('Android version dialog icon decoding failed')
+    touch_gestures=java_proof['touch_gestures']
+    if (not touch_gestures['passed'] or touch_gestures['gesture_traces']!=289 or touch_gestures['two_finger_taps']!=76 or touch_gestures['cancel_release_cases']!=69 or
+        touch_gestures['control_source_traces']!=288 or not touch_gestures['disabled_long_press_checked'] or
+        not touch_gestures['two_finger_taps_never_forward_clicks']):raise ValueError('Android touch/keyboard gesture input contracts failed')
     run([sys.executable,ROOT/'scripts/verify_sdl_jni.py'],60)
     run([acmake,'-S',ROOT/'tests/shared-aot-android','-B',android,'-G','Ninja',
          '-DCMAKE_MAKE_PROGRAM='+str(ROOT/'tools/android-sdk/cmake/3.22.1/bin/ninja.exe'),
@@ -452,6 +457,7 @@ def main():
                shared_widget_unicode=widget_unicode,
                shared_widget_ownership=ownership,
                shared_widget_icons=widget_icons,
+               shared_touch_gestures=touch_gestures,
                window_model=json.loads(window_model_report.read_text()),
                render_submission=json.loads(submission_report.read_text()),
                shared_host_leaf_calls=json.loads(leaf_report.read_text()),

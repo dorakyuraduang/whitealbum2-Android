@@ -58,6 +58,10 @@ public final class LauncherActivity extends Activity {
         Switch fps = new Switch(this); fps.setText("显示 FPS 和帧耗时"); fps.setTextColor(TEXT); fps.setTextSize(16); fps.setPadding(0, dp(12), 0, dp(12));
         fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> LaunchSettings.setShowFps(this, checked));
         content.addView(fps, row(16));
+        Switch longPress = new Switch(this); longPress.setText("长按快进"); longPress.setTextColor(TEXT); longPress.setTextSize(16); longPress.setPadding(0, dp(12), 0, dp(12));
+        longPress.setChecked(LaunchSettings.longPressFastForward(this)); longPress.setOnCheckedChangeListener((button, checked) -> LaunchSettings.setLongPressFastForward(this, checked));
+        content.addView(longPress, row(4));
+        content.addView(text("单指长按画面快进，松手停止。双指轻点画面可隐藏或显示右上角菜单按钮。", 13, MUTED), row(4));
         start = new Button(this); start.setText("开始游戏"); start.setAllCaps(false); start.setTextColor(0xff102723);
         start.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); content.addView(start, row(16));
         start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));

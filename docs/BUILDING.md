@@ -117,6 +117,18 @@ supplies expected cached pixels. These checks cover the missing style-3 path
 that the older ownership-only tests did not run; they do not execute ImageView,
 the Android JSON parser or device presentation.
 
+`TouchGesturesTest` executes the production touch policy with synthetic pointer
+IDs and clock values: 289 gesture traces, 76 two-finger taps, 69 cancel/release
+cases and 288 physical-left/physical-right/touch Ctrl source traces. It checks
+disabled holds, timing/slop boundaries, swapped lift order, third/replacement
+fingers, delayed timers, coalesced moved releases and focus/pause cancellation.
+The Activity adapter compiles against Android API 35 and forwards committed
+events through Android/SDL's existing dispatch and Ctrl JNI methods. It schedules
+one pending long-press deadline and sends key-state edges. Menu visibility is
+kept independently of native menu refreshes. The checks create no Views and do
+not execute Android's MotionEvent dispatch, SharedPreferences disk persistence
+or real-device gestures.
+
 `tests/resource_loading.cpp` checks general-resource and script decompression
 with synthetic KCAP/LAC archives and both memory backends. It covers 64 exact
 outputs, 22 failure cases, eight input/output/allocator aliases and two allocator

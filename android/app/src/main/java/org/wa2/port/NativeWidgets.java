@@ -39,6 +39,8 @@ public final class NativeWidgets {
     private static final SparseArray<Window> windows = new SparseArray<>();
     private static final SparseArray<View> controls = new SparseArray<>();
     private static Button menuButton;
+    private static boolean menuHidden;
+    private static final int[] menuLocation=new int[2];
     private static JSONArray currentMenu = new JSONArray();
     private static int menuOwner;
     private interface UiAction { void run() throws Exception; }
@@ -57,7 +59,7 @@ public final class NativeWidgets {
         for (int i = 0; i < windows.size(); ++i) { Window owner=windows.valueAt(i);owner.updating=true;owner.dialog.dismiss();owner.views.clear(); }
         windows.clear(); controls.clear();
         if(menuButton!=null && menuButton.getParent() instanceof ViewGroup)((ViewGroup)menuButton.getParent()).removeView(menuButton);
-        menuButton = null;currentMenu=new JSONArray();menuOwner=0;
+        menuButton = null;menuHidden=false;currentMenu=new JSONArray();menuOwner=0;
     }
     public static void attach(Activity owner) { if(session.attach(owner)){activity=owner;clearWidgets();} }
     public static void detach(Activity owner) {
@@ -199,7 +201,11 @@ public final class NativeWidgets {
             int size=Math.round(48f*activity.getResources().getDisplayMetrics().density);
             FrameLayout.LayoutParams bounds=new FrameLayout.LayoutParams(size,size,Gravity.TOP|Gravity.END);activity.addContentView(menuButton,bounds);
             menuButton.setOnClickListener(view -> { try { openMenu(currentMenu); } catch(Throwable error) { failure(error); } }); }
-        menuButton.setVisibility(currentMenu.length()==0?View.GONE:View.VISIBLE);
+        updateMenuVisibility();
     }); }
+    private static void updateMenuVisibility(){if(menuButton!=null)menuButton.setVisibility(menuHidden || currentMenu.length()==0?View.GONE:View.VISIBLE);}
+    public static void toggleMenuButton(){ui(() -> {menuHidden=!menuHidden;updateMenuVisibility();});}
+    static boolean menuButtonContains(float x,float y){if(menuButton==null || !menuButton.isShown())return false;menuButton.getLocationInWindow(menuLocation);
+        return x>=menuLocation[0] && y>=menuLocation[1] && x<menuLocation[0]+menuButton.getWidth() && y<menuLocation[1]+menuButton.getHeight();}
     private NativeWidgets() { }
 }
