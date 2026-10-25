@@ -68,6 +68,7 @@ def main():
     run([sys.executable,ROOT/'tests/aot_liveness.py'])
     run([sys.executable,ROOT/'scripts/prepare_subtitles.py','--check'])
     run([sys.executable,ROOT/'scripts/verify_fp_kernel.py'],600)
+    run([sys.executable,ROOT/'scripts/recover_cached_callbacks.py'],300)
     run([sys.executable,ROOT/'scripts/generate_shared_aot.py'])
     run([sys.executable,ROOT/'scripts/prepare_static_data.py'])
     run([sys.executable,ROOT/'scripts/generate_trigonometry_tables.py'])
@@ -102,6 +103,7 @@ def main():
     tracked += [ROOT/'tests/resource_mount.cpp']
     tracked += [ROOT/'tests/test_profile.cpp']
     tracked += [ROOT/'tests/script_wait_callback.cpp',ROOT/'scripts/extend_cached_callbacks.py']
+    tracked += [ROOT/'tests/cached_callbacks.cpp',ROOT/'scripts/recover_cached_callbacks.py',ROOT/'scripts/cached_operands.py']
     tracked += [ROOT/'tests/native_resource_memory.cpp']
     tracked += [ROOT/'tests/resource_loading.cpp',ROOT/'tests/wait_probes.cpp']
     tracked += [ROOT/'tests/lzss_groups.cpp',ROOT/'scripts/compare_lzss_groups.py']
@@ -176,6 +178,16 @@ def main():
     run([cmake,'--build',build,'--target','wa2_single_tile_geometry_tests','--parallel','1'],300)
     run([cmake,'--build',build,'--target','wa2_test_profile_tests','--parallel','1'],300)
     run([cmake,'--build',build,'--target','wa2_script_wait_callback_tests','--parallel','1'],300)
+    run([cmake,'--build',build,'--target','wa2_cached_callback_tests','--parallel','1'],300)
+    callback_report=build/'cached-callbacks.json'
+    run([build/'wa2_cached_callback_tests.exe',callback_report],30)
+    callbacks=json.loads(callback_report.read_text())
+    if (not callbacks['passed'] or callbacks['memory_modes']!=2 or callbacks['completed_calls']!=82 or
+        callbacks['accessor_cases']!=10 or callbacks['destructor_cases']!=16 or callbacks['format_cases']!=34 or
+        callbacks['positive_cases']!=16 or callbacks['filter_cases']!=6 or callbacks['continuation_cases']!=2 or
+        callbacks['guard_cases']!=6 or callbacks['vtable_entries']!=10 or callbacks['game_launched'] or
+        callbacks['source_executable_opened'] or callbacks['screen_access']):
+        raise ValueError('Recovered callback memory semantics or code guards failed')
     script_wait_report=build/'script-wait-callback.json'
     run([build/'wa2_script_wait_callback_tests.exe',script_wait_report],30)
     script_wait=json.loads(script_wait_report.read_text())
@@ -490,6 +502,8 @@ def main():
                portable_system=json.loads(system_report.read_text()),
                resource_mount=json.loads(mount_report.read_text()),chapter_test_profile=test_profile,
                shared_script_wait_callback=script_wait,
+               recovered_callback_memory=callbacks,
+               cached_callback_audit=manifest['cached_callback_audit'],
                native_resource_memory=json.loads(native_memory_report.read_text()),
                shared_general_resource_loading=resource_loading,
                shared_lzss_groups=lzss_groups,

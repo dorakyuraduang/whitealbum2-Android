@@ -137,7 +137,7 @@ def write(name, text):
         path.write_text(text, encoding='utf-8', newline='\n')
 
 
-def analyze():
+def analyze(include_cached_callbacks=True):
     graph = json.loads((ROOT / 'logs/cfg.json').read_text())
     instructions = {i['address']: i for i in graph['instructions']}
     bodies, provenance = {}, {}
@@ -156,6 +156,9 @@ def analyze():
         raise ValueError('existing CFG and generated instruction inventory differ')
     from extend_cached_callbacks import extend
     extend(graph, bodies, provenance)
+    if include_cached_callbacks:
+        from recover_cached_callbacks import extend as extend_referenced_callbacks
+        extend_referenced_callbacks(graph, bodies, provenance)
     edges = defaultdict(list)
     for edge in graph['edges']:
         edges[edge['from']].append(edge)
@@ -220,6 +223,18 @@ def analyze():
     admitted = {entry for entry,r in records.items() if set(r['reasons'])<= {'transcendental_contract_pending'}}
     if not set(graph['cached_callback_extensions']['extension_entries']) <= admitted:
         raise ValueError('A registered script extension callback is missing from shared AOT')
+    if include_cached_callbacks and not set(graph['cached_callback_audit']['restored_entries']) <= admitted:
+        failures = {hex(pc): records[pc]['reasons'] for pc in graph['cached_callback_audit']['restored_entries'] if pc not in admitted}
+        raise ValueError('Recovered callback closure is not admitted: '+str(failures))
+    if include_cached_callbacks:
+        live = {pc for entry in admitted for pc in records[entry]['locations']}
+        gateways = {f['start'] for f in native['functions']}
+        control = {'call_direct','jump_direct','branch_taken','branch_not_taken','fallthrough','call_continuation','jump_table_static'}
+        missing = {edge['to'] for pc in live for edge in edges[pc]
+                   if edge['kind'] in control and edge['to'] not in live and edge['to'] not in gateways}
+        if missing:
+            raise ValueError('Compiled control edges have unregistered targets: '+str(sorted(missing)))
+        graph['cached_callback_audit']['all_compiled_direct_edges_resolve'] = True
     return graph, bodies, edges, records, admitted, provenance
 
 
@@ -844,6 +859,7 @@ def main():
     report = dict(schema='wa2.shared-function-aot.v1',source_sha256=provenance,
                   existing_discovered_instructions=len(bodies),candidate_function_entries=len(records),
                   cached_callback_extensions=graph['cached_callback_extensions'],
+                  cached_callback_audit=graph['cached_callback_audit'],
                   admitted_functions=len(admitted),native_function_bodies=len(merged),unique_instruction_locations=len(all_locations),
                   speed_optimized_function_entries=sorted(hot),
                   floating_neutral_leaf_callees=sorted(fp_neutral),

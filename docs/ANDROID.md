@@ -3,6 +3,13 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
+`0.2.45-shared-aot` extends the missing-target repair to 34 additional referenced
+callbacks and their supporting call chains, including virtual destructors,
+exception cleanup, floating-format callbacks and a catch resumption prefix.
+Both platforms compile the same recovered static source set. The generator
+checks the full direct-call/branch destination inventory and refuses unresolved
+targets. Install over the existing app; phone gameplay remains unverified.
+
 `0.2.44-shared-aot` fixes the missing static callback at `4548176` (`0x456650`).
 The shared AOT generator now includes this four-argument script wait command
 from existing cached analysis and checked C++ templates. Its original wait

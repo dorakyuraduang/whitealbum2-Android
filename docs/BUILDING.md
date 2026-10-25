@@ -25,6 +25,26 @@ existing C++ templates; it neither decodes an EXE nor rewrites the input CFG.
 `tests/script_wait_callback.cpp` exercises the resulting static callback,
 controlled clocks, cancellation, ABI preservation and rejection guards in RAM.
 
+The broader callback audit uses `build/cached-listing/listing.json`, exported
+from the **existing** analysis database with `ExportCachedListing.java` under
+`-noanalysis -readOnly` (never `-import`). It enumerates saved listing records;
+it does not disassemble, decompile, modify the database or access the EXE.
+`recover_cached_callbacks.py` verifies initialized pointer tables, cached code
+references, complete byte signatures and the direct-call closure. Most added
+instructions relocate checked C++ templates. The bounded cached-operand parser
+passes the remaining forms to the original offline C++ emitter, and must
+reproduce 96,614 existing instruction bodies exactly before admitting them.
+The original emitter source, Zydis enum libraries and listing are private build
+prerequisites; neither the emitter nor a decoder is linked into the game.
+
+The supplement under `generated/cached-callbacks/` is hash-bound to its inputs;
+stale proofs, unresolved referenced entries and compiled direct edges without
+registered destinations stop generation. `tests/cached_callbacks.cpp` exercises
+vtable calls, inline string/destructor behavior, floating classification and
+format conversion, exception-filter declines, catch resumption and code guards
+using bounded synthetic memory. These checks do not establish complete C++
+exception handling or whole-game/device compatibility.
+
 ## Toolchains and dependencies
 
 The development workspace uses Windows/PowerShell, Python 3.12, CMake/Ninja,

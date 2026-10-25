@@ -24,11 +24,19 @@ raise an explicit unsupported error.
 | `android/app/` | Launcher, folder authorization and optional frame HUD |
 | `game/`, `engine/script_*` | Earlier incomplete story experiments; not the production shared game entry |
 
-The admitted set currently contains 1,692 entries, 1,381 owning bodies and
-119,649 instruction locations. There are 181 deferred entries and 13 remaining
+The admitted set currently contains 1,750 entries, 1,424 owning bodies and
+122,950 instruction locations. There are 181 deferred entries and 13 remaining
 unsupported transcendental sites. Complete gameplay is not verified. Consult
 the locally generated manifest and verification reports for exact boundaries;
 these numbers do not constitute a whole-game compatibility claim.
+
+Callback discovery also checks the existing analysis database's references
+against initialized pointer tables and active code. Missing virtual, cleanup
+and formatting callbacks are recovered through exact cached templates or
+already-decoded operands passed to the original offline emitter. A generated
+supplement and its complete direct-call closure enter the same AOT inventory;
+there is no host-specific callback implementation or runtime fallback. Catch
+continuations must have an explicit cached control-flow proof as well.
 
 The Android launcher initializes no game or SDL native library. It first checks
 the selected folder in a background worker, persists a durable read grant and
