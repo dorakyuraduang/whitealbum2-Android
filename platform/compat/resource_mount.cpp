@@ -64,6 +64,19 @@ void install_resource_mount(wr::Process& p,std::shared_ptr<wr::ReadOnlyFiles> mo
     if(!mount)throw std::invalid_argument("missing resource mount");if(p.entry)throw std::logic_error("resource mount must be installed before image load");
     if(p.options.allow_file_write && mount->info("IC"))std::filesystem::create_directory(p.options.data_root/"IC");p.state().read_only_files=std::move(mount);
 }
+std::shared_ptr<wr::ReadOnlyFiles> local_resource_mount(const std::filesystem::path& root){
+    std::vector<wr::ReadOnlyFileInfo> files;
+    for(const auto* sub:{"","IC"}){
+        const auto folder=*sub?root/sub:root;
+        if(!std::filesystem::exists(folder))continue;
+        for(const auto& item:std::filesystem::directory_iterator(folder)){
+            if(!item.is_regular_file())continue;
+            const auto name=(*sub?std::string(sub)+"/":"")+item.path().filename().string();
+            if(archive_name(key(name)))files.push_back({name,item.file_size(),0,0x21});
+        }
+    }
+    return std::make_shared<ResourceMount>(std::move(files),[root](std::string_view name){return std::fopen((root/std::filesystem::path(name)).string().c_str(),"rb");});
+}
 std::optional<wr::ReadOnlyFileInfo> mounted_resource_info(wr::Process& p,const std::filesystem::path& path){
     return p.state().read_only_files?p.state().read_only_files->info(logical(p,path)):std::nullopt;
 }

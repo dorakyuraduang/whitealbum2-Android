@@ -8,11 +8,15 @@
 #include <SDL.h>
 #include <SDL_main.h>
 #include <android/log.h>
-extern "C" int SDL_main(int,char**){
+#include <string_view>
+extern "C" int SDL_main(int argc,char** argv){
     try{SDL_SetMainReady();SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON,"1");
         char* value=SDL_GetPrefPath("WA2","shared-game");if(!value)throw std::runtime_error(SDL_GetError());wa2::host::Startup startup;
         try{startup.options.data_root=value;SDL_free(value);}catch(...){SDL_free(value);throw;}
         startup.options.allow_file_write=true;
+        for(int n=1;n<argc;++n){const std::string_view argument=argv[n];
+            if(argument=="--test-mode")startup.test_mode=true;
+            else throw std::runtime_error("Unknown Android launch argument: "+std::string(argument));}
         startup.report_file=startup.options.data_root/"wa2-runtime.json";
         wa2::window::SdlHostOptions options;options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();options.frame_submitted=wa2::android::frame_presented;
         startup.window=wa2::window::sdl_host(std::move(options));startup.mount_resources=wa2::android::mount_compiled_resources;

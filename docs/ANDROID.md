@@ -29,11 +29,32 @@ library; they do not measure Android gameplay or GPU throughput.
 2. Open the app to its launch settings page. Choose the local `Wa2Res` folder
    through Android's system directory picker. A nested Wa2Res or SD-card Wa2Res
    is supported; select the resource folder itself rather than its parent or IC.
-3. Set **显示 FPS 和帧耗时** and **长按快进** as desired. Long-press fast-forward is
-   enabled by default. The folder grant and both switches are remembered for
+3. Set **显示 FPS 和帧耗时**, **长按快进**, and **测试模式（解锁全部章节）** as desired. Long-press fast-forward is
+   enabled by default; test mode is off by default. The folder grant and switches are remembered for
    later launches; changing a switch saves it immediately.
 4. Tap **开始游戏**. The folder is checked in a background worker before the game
    initializes. Returning to the launcher allows settings to be changed.
+
+From `0.2.43-shared-aot`, **测试模式（解锁全部章节）** starts a separate test profile
+with the known IC, CC and CODA chapter menu gates unlocked. Toggle it on at the
+launcher, then tap **开始游戏**; use the original game's chapter choices. Changing
+the switch takes effect on the next game start, rather than changing a running
+story. Turn it off and start again to return to the normal profile.
+
+Normal progress and settings are left in their existing location. Test progress,
+manual/quick saves and game settings use the `test-mode` child of the private game
+data directory. The common save adapter initializes `Documents/Leaf/WHITE ALBUM2`,
+`WHITE ALBUM2 -closing chapter-` and `WHITE ALBUM2 -introductory chapter-` there.
+Existing test saves remain; known unlock bits are restored on every test launch.
+The adapter changes only the 14 verified chapter/ending gate bits in `Sys.sav`,
+not all global variables, choice history or gallery contents. It neither fabricates
+a playable scene snapshot nor unlocks resources absent from Wa2Res. Original PAKs
+stay external. Windows `--test-mode` uses this same implementation.
+
+Memory checks invoke the actual static system-save readers/getter and check
+normal-save isolation, repeated activation, retained manual saves and unsupported
+private formats. They do not exercise the chapter UI or prove complete gameplay
+on a phone.
 
 With **长按快进** enabled, hold one finger still on the game canvas to hold the
 original game's Ctrl input. The threshold follows Android's long-press setting

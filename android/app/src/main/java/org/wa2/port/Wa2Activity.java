@@ -14,6 +14,7 @@ public final class Wa2Activity extends SDLActivity {
         if (!ResourceDirectory.finishGame(this, this::finishNormally)) super.finish();
     }
     @Override protected String[] getLibraries() { return new String[] { "SDL2", "wa2_android" }; }
+    @Override protected String[] getArguments() { return LaunchSettings.testMode(this) ? new String[] { "--test-mode" } : new String[0]; }
     private static native void nativeResetFrameMetrics();
     private static void resetFrameMetricsIfLoaded() {
         // SDL itself reports native-library loading errors. An optional HUD

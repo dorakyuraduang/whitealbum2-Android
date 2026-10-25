@@ -100,6 +100,7 @@ def main():
     tracked += [ROOT/'scripts/generate_weather_batch.py']
     tracked += [ROOT/'tests/portable_system.cpp',ROOT/'scripts/generate_codepages.py',ROOT/'port/exceptions.cpp',ROOT/'port/exception_abi.hpp']
     tracked += [ROOT/'tests/resource_mount.cpp']
+    tracked += [ROOT/'tests/test_profile.cpp']
     tracked += [ROOT/'tests/native_resource_memory.cpp']
     tracked += [ROOT/'tests/resource_loading.cpp',ROOT/'tests/wait_probes.cpp']
     tracked += [ROOT/'tests/lzss_groups.cpp',ROOT/'scripts/compare_lzss_groups.py']
@@ -172,6 +173,17 @@ def main():
     run([cmake,'--build',build,'--target','wa2_glyph_index_tests','wa2_glyph_geometry_tests','wa2_byte_equality_tests','--parallel','1'],300)
     run([cmake,'--build',build,'--target','wa2_subtitle_tests','--parallel','1'],300)
     run([cmake,'--build',build,'--target','wa2_single_tile_geometry_tests','--parallel','1'],300)
+    run([cmake,'--build',build,'--target','wa2_test_profile_tests','--parallel','1'],300)
+    test_profile_report=build/'test-profile.json'
+    run([build/'wa2_test_profile_tests.exe',test_profile_report],30)
+    test_profile=json.loads(test_profile_report.read_text())
+    if (not test_profile['passed'] or test_profile['seeded_profiles']!=3 or test_profile['chapter_flags']!=14 or
+        test_profile['preserved_flag_bytes']!=4096 or test_profile['actual_static_save_reader_blocks']!=6 or
+        test_profile['actual_static_flag_reads']!=28 or test_profile['invalid_private_save_rejections']!=2 or
+        not test_profile['normal_saves_unchanged'] or not test_profile['test_manual_saves_retained'] or
+        not test_profile['unlock_reapplied_on_launch'] or test_profile['save_bytes']!=2528384 or
+        test_profile['game_launched'] or test_profile['game_ui_exercised']):
+        raise ValueError('Isolated chapter-unlocked test profile did not preserve the source save format')
     single_tile_report=build/'single-tile-geometry.json'
     run([build/'wa2_single_tile_geometry_tests.exe',single_tile_report],30)
     single_tile_checks=json.loads(single_tile_report.read_text())
@@ -464,7 +476,7 @@ def main():
                portable_scheduler=json.loads(scheduler_report.read_text()),
                portable_registry=json.loads(registry_report.read_text()),
                portable_system=json.loads(system_report.read_text()),
-               resource_mount=json.loads(mount_report.read_text()),
+               resource_mount=json.loads(mount_report.read_text()),chapter_test_profile=test_profile,
                native_resource_memory=json.loads(native_memory_report.read_text()),
                shared_general_resource_loading=resource_loading,
                shared_lzss_groups=lzss_groups,

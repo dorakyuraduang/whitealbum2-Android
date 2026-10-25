@@ -22,7 +22,8 @@ int main(int argc,char** argv){
         for(int n=1;n<argc;++n){const std::string argument=argv[n];if(argument=="--root" && n+1<argc)startup.options.data_root=std::filesystem::u8path(argv[++n]);
             else if(argument=="--report" && n+1<argc)startup.report_file=std::filesystem::u8path(argv[++n]);
             else if(argument=="--no-pause")continue;
-            else if(argument=="--help"){std::cout<<"Place this program beside the original PAKs, or use --root <resource directory>.\n";return 0;}else throw std::runtime_error("Unknown launch argument: "+argument);}
+            else if(argument=="--test-mode")startup.test_mode=true;
+            else if(argument=="--help"){std::cout<<"Place this program beside the original PAKs, or use --root <resource directory>.\n--test-mode uses separate chapter-unlocked saves.\n";return 0;}else throw std::runtime_error("Unknown launch argument: "+argument);}
         wa2::window::SdlHostOptions options;options.widgets=wa2::window::native_widgets();startup.window=wa2::window::sdl_host(std::move(options));
         return int(wa2::host::run(std::move(startup)));
     }catch(const std::exception& error){std::cerr<<error.what()<<'\n';SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"WA2 startup failed",error.what(),nullptr);return 1;}

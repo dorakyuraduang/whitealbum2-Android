@@ -62,6 +62,10 @@ public final class LauncherActivity extends Activity {
         longPress.setChecked(LaunchSettings.longPressFastForward(this)); longPress.setOnCheckedChangeListener((button, checked) -> LaunchSettings.setLongPressFastForward(this, checked));
         content.addView(longPress, row(4));
         content.addView(text("单指长按画面快进，松手停止。双指轻点画面可隐藏或显示右上角菜单按钮。", 13, MUTED), row(4));
+        Switch testMode = new Switch(this); testMode.setText("测试模式（解锁全部章节）"); testMode.setTextColor(TEXT); testMode.setTextSize(16); testMode.setPadding(0, dp(12), 0, dp(12));
+        testMode.setChecked(LaunchSettings.testMode(this)); testMode.setOnCheckedChangeListener((button, checked) -> LaunchSettings.setTestMode(this, checked));
+        content.addView(testMode, row(12));
+        content.addView(text("开启后默认解锁 IC、CC、CODA，使用独立测试存档。关闭后恢复普通存档；切换后从本页重新启动游戏生效。", 13, MUTED), row(4));
         start = new Button(this); start.setText("开始游戏"); start.setAllCaps(false); start.setTextColor(0xff102723);
         start.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); content.addView(start, row(16));
         start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));

@@ -93,7 +93,7 @@ def main():
                  resource_location=json.loads(location_report.read_text()),launcher_before_game=True,fps_setting_compiled=True,
                  widget_ownership=json.loads(widget_report.read_text()),
                  widget_icons=json.loads(icon_report.read_text()),
-                 touch_gestures=json.loads(touch_report.read_text()),long_press_setting_compiled=True,
+                 touch_gestures=json.loads(touch_report.read_text()),long_press_setting_compiled=True,test_mode_setting_compiled=True,
                  game_launched=False,screen_access=False,android_device_verified=False,apk_created=False,passed=True)
     (ROOT/'logs/android-java-verification.json').write_text(json.dumps(proof,indent=2)+'\n')
     print('PASS: Android activity, external PAK directory and FPS HUD compile against official Android API-35 and the existing SDL Java layer.')

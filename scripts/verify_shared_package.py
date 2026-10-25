@@ -67,6 +67,10 @@ def verify(status,publish=False):
         for value in (b'dex\n',b'Lorg/wa2/port/LauncherActivity;',b'Lorg/wa2/port/LaunchSettings;',b'Lorg/wa2/port/Wa2Activity;',b'Lorg/wa2/port/FrameHud;',b'Lorg/wa2/port/ResourceDirectory;',
                       b'Lorg/wa2/port/NativeWidgets;',b'Lorg/wa2/port/FileChooser;',b'Lorg/libsdl/app/SDLActivity;'):
             if value not in dex:raise ValueError('Missing Android application class/header: '+str(value))
+        for value in (b'--test-mode',b'test-mode',b'setTestMode',b'getArguments'):
+            if value not in dex:raise ValueError('Missing Android test-mode launch setting: '+str(value))
+        if not proof['chapter_test_profile']['normal_saves_unchanged']:
+            raise ValueError('Missing chapter test-mode save-isolation verification')
         so_names={name for name in names if name.endswith('.so')}
         for notice in ('LICENSE','FONT-NOTICE.txt','README.md','source.json'):
             path='assets/licenses/wa2-subtitles/'+notice

@@ -17,4 +17,10 @@ final class LaunchSettings {
     static void setLongPressFastForward(Context context, boolean value) {
         context.getSharedPreferences("launcher", Context.MODE_PRIVATE).edit().putBoolean("long-press-fast-forward", value).apply();
     }
+    static boolean testMode(Context context) {
+        return context.getSharedPreferences("launcher", Context.MODE_PRIVATE).getBoolean("test-mode", false);
+    }
+    static void setTestMode(Context context, boolean value) {
+        context.getSharedPreferences("launcher", Context.MODE_PRIVATE).edit().putBoolean("test-mode", value).apply();
+    }
 }
