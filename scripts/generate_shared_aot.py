@@ -140,10 +140,6 @@ def write(name, text):
 def analyze():
     graph = json.loads((ROOT / 'logs/cfg.json').read_text())
     instructions = {i['address']: i for i in graph['instructions']}
-    edges = defaultdict(list)
-    for edge in graph['edges']:
-        edges[edge['from']].append(edge)
-    tables = {t['branch']: t for t in graph['recovered_tables']}
     bodies, provenance = {}, {}
     for page in sorted((ROOT / 'generated/wa2-win64').glob('code_page_*.cpp')):
         provenance[page.relative_to(ROOT).as_posix()] = digest(page)
@@ -158,6 +154,12 @@ def analyze():
             bodies[pc] = (match[2][proof.end():].strip(), raw, match[2])
     if set(bodies) != set(instructions):
         raise ValueError('existing CFG and generated instruction inventory differ')
+    from extend_cached_callbacks import extend
+    extend(graph, bodies, provenance)
+    edges = defaultdict(list)
+    for edge in graph['edges']:
+        edges[edge['from']].append(edge)
+    tables = {t['branch']: t for t in graph['recovered_tables']}
     records = {}
     native = json.loads((ROOT/'port/native_functions.json').read_text())
     retired = json.loads((ROOT/'port/retired_modules.json').read_text())
@@ -216,6 +218,8 @@ def analyze():
     # including its ordinary, already precise SSE path. Compile the known
     # paths and retain a checked stop at each unestablished instruction.
     admitted = {entry for entry,r in records.items() if set(r['reasons'])<= {'transcendental_contract_pending'}}
+    if not set(graph['cached_callback_extensions']['extension_entries']) <= admitted:
+        raise ValueError('A registered script extension callback is missing from shared AOT')
     return graph, bodies, edges, records, admitted, provenance
 
 
@@ -839,6 +843,7 @@ def main():
     provenance.update({name: digest(ROOT/name) for name in inputs})
     report = dict(schema='wa2.shared-function-aot.v1',source_sha256=provenance,
                   existing_discovered_instructions=len(bodies),candidate_function_entries=len(records),
+                  cached_callback_extensions=graph['cached_callback_extensions'],
                   admitted_functions=len(admitted),native_function_bodies=len(merged),unique_instruction_locations=len(all_locations),
                   speed_optimized_function_entries=sorted(hot),
                   floating_neutral_leaf_callees=sorted(fp_neutral),

@@ -101,6 +101,7 @@ def main():
     tracked += [ROOT/'tests/portable_system.cpp',ROOT/'scripts/generate_codepages.py',ROOT/'port/exceptions.cpp',ROOT/'port/exception_abi.hpp']
     tracked += [ROOT/'tests/resource_mount.cpp']
     tracked += [ROOT/'tests/test_profile.cpp']
+    tracked += [ROOT/'tests/script_wait_callback.cpp',ROOT/'scripts/extend_cached_callbacks.py']
     tracked += [ROOT/'tests/native_resource_memory.cpp']
     tracked += [ROOT/'tests/resource_loading.cpp',ROOT/'tests/wait_probes.cpp']
     tracked += [ROOT/'tests/lzss_groups.cpp',ROOT/'scripts/compare_lzss_groups.py']
@@ -174,6 +175,17 @@ def main():
     run([cmake,'--build',build,'--target','wa2_subtitle_tests','--parallel','1'],300)
     run([cmake,'--build',build,'--target','wa2_single_tile_geometry_tests','--parallel','1'],300)
     run([cmake,'--build',build,'--target','wa2_test_profile_tests','--parallel','1'],300)
+    run([cmake,'--build',build,'--target','wa2_script_wait_callback_tests','--parallel','1'],300)
+    script_wait_report=build/'script-wait-callback.json'
+    run([build/'wa2_script_wait_callback_tests.exe',script_wait_report],30)
+    script_wait=json.loads(script_wait_report.read_text())
+    if (not script_wait['passed'] or script_wait['entry']!=0x456650 or
+        script_wait['memory_clock_configurations']!=4 or script_wait['scenarios']!=52 or
+        script_wait['completed_calls']!=80 or script_wait['indirect_dispatches']!=4 or
+        script_wait['registered_extension_entries']!=16 or script_wait['guard_cases']!=12 or
+        script_wait['controlled_clock_calls']!=20 or not script_wait['source_wait_logic_preserved'] or
+        script_wait['source_executable_opened'] or script_wait['game_launched'] or script_wait['screen_access']):
+        raise ValueError('Cached script wait callback semantics or immutable-code guards failed')
     test_profile_report=build/'test-profile.json'
     run([build/'wa2_test_profile_tests.exe',test_profile_report],30)
     test_profile=json.loads(test_profile_report.read_text())
@@ -477,6 +489,7 @@ def main():
                portable_registry=json.loads(registry_report.read_text()),
                portable_system=json.loads(system_report.read_text()),
                resource_mount=json.loads(mount_report.read_text()),chapter_test_profile=test_profile,
+               shared_script_wait_callback=script_wait,
                native_resource_memory=json.loads(native_memory_report.read_text()),
                shared_general_resource_loading=resource_loading,
                shared_lzss_groups=lzss_groups,

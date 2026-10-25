@@ -3,6 +3,14 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
+`0.2.44-shared-aot` fixes the missing static callback at `4548176` (`0x456650`).
+The shared AOT generator now includes this four-argument script wait command
+from existing cached analysis and checked C++ templates. Its original wait
+callee, timer boundaries, fast-forward and input cancellation remain intact.
+All four entries in the separate extension table are checked at generation.
+This fixes a known missing entrance; complete chapter/device compatibility
+still requires gameplay testing. Install the update over the existing app.
+
 From `0.2.39-shared-aot`, the main-story audio-only captions from nxs7's patch
 are embedded and enabled automatically: 46 audio tracks, 315 timed captions.
 The whole SpecialContents subtitle set is excluded. No subtitle DLL, font file

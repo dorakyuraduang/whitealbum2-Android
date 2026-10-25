@@ -17,6 +17,14 @@ prerequisite failure; do not work around this by running the old EXE-based build
 entry points. A reproducible public bootstrap for these private inputs remains
 unfinished.
 
+The omitted extension callback `0x456650` additionally uses the existing
+`build/source-analysis/functions-typed/00456650.c` and `.json` records plus
+the cached `generated/static-data/text.inc` and `data.inc`. The bounded step in
+`scripts/extend_cached_callbacks.py` checks the full signature and reuses
+existing C++ templates; it neither decodes an EXE nor rewrites the input CFG.
+`tests/script_wait_callback.cpp` exercises the resulting static callback,
+controlled clocks, cancellation, ABI preservation and rejection guards in RAM.
+
 ## Toolchains and dependencies
 
 The development workspace uses Windows/PowerShell, Python 3.12, CMake/Ninja,
