@@ -2,6 +2,7 @@
 // No source EXE, game startup, window, GL context, PAK or frame loop.
 #include "process.hpp"
 #include "native_sprites.hpp"
+#include "../engine/single_tile_geometry.hpp"
 #include "../platform/render/submission_cache.hpp"
 #include <winrecomp/win32_state.hpp>
 #include <bit>
@@ -108,6 +109,28 @@ int main(int argc,char** argv){try{
         f(sprite+0xbc,rectangle[0]);f(sprite+0xc0,rectangle[1]);f(sprite+0xc4,rectangle[2]);f(sprite+0xc8,rectangle[3]);
         run(false).same(run(true));++visible_grid_cases;
     }
+    unsigned single_tile_cases{},single_tile_hits{},single_tile_fallbacks{};
+    const auto compare_tile=[&]{const auto before=wa2::geometry::single_tile_diagnostics.accepted;
+        run(false).same(run(true));++single_tile_cases;
+        if(wa2::geometry::single_tile_diagnostics.accepted>before)++single_tile_hits;else ++single_tile_fallbacks;
+    };
+    for(unsigned size:{64u,128u,256u,512u})for(unsigned variant=0;variant<16;++variant){
+        setup(variant%8);const unsigned tw=size,th=size/2;
+        for(const auto [offset,value]:{std::pair{0x5cu,tw*4},{0x5eu,th*4},{0x60u,tw},{0x62u,th},{0x64u,4u},{0x66u,4u}})p.memory.store(image+offset,value,16);
+        const float u=float((variant%4)*tw)+.25f,v=float((variant/4)*th)+.5f;
+        f(sprite+0xbc,u);f(sprite+0xc0,u+32.5f);f(sprite+0xc4,v);f(sprite+0xc8,v+24.25f);compare_tile();
+    }
+    // Multi-cell crops, non-power-of-two cells and high-magnitude positions
+    // stay on the original arithmetic, with the same complete source output.
+    for(unsigned kind=0;kind<3;++kind)for(unsigned variant=0;variant<8;++variant){
+        setup(variant);const unsigned tw=kind==1?192:256,th=kind==1?96:128;
+        for(const auto [offset,value]:{std::pair{0x5cu,tw*4},{0x5eu,th*4},{0x60u,tw},{0x62u,th},{0x64u,4u},{0x66u,4u}})p.memory.store(image+offset,value,16);
+        f(sprite+0xbc,kind==0?float(tw)-16:4);f(sprite+0xc0,kind==0?float(tw)+16:36);
+        f(sprite+0xc4,4);f(sprite+0xc8,36);
+        if(kind==2){f(sprite+0x78,0);f(sprite+0x7c,0);f(sprite+0x80,1);f(sprite+0x84,1);
+            for(unsigned n=0;n<4;++n){f(sprite+0x88+n*4,32769.f+float(n&1?32:0));f(sprite+0x98+n*4,float(n>>1?32:0));}}
+        compare_tile();
+    }
     unsigned declines{};
     for(unsigned reason=0;reason<24;++reason){setup(1);p.cpu=base;p.cpu.eip=0x43b7a0;
         p.memory.store(base.r[wr::ESP],returning,32);p.memory.store(base.r[wr::ESP]+4,sprite,32);p.memory.store(base.r[wr::ESP]+8,image,32);
@@ -152,7 +175,9 @@ int main(int argc,char** argv){try{
     for(unsigned kind=0;kind<3;++kind)for(unsigned pair=0;pair<5;++pair){std::array<std::array<std::uint64_t,3>,2> result;
         for(unsigned order=0;order<2;++order){const auto side=(pair+order)&1;result[side]=sample(kind,side);timing[kind][pair][side]=result[side][0];}
         CHECK(result[0][1]==result[1][1] && result[0][2]==result[1][2]);}
-    std::ofstream out(argv[1]);out<<"{\"cases\":"<<cases<<",\"visible_grid_cases\":"<<visible_grid_cases<<",\"decline_cases\":"<<declines<<",\"renderer_decline_cases\":"<<rejected_sinks<<",\"host_environment_cases\":"<<environments<<",\"tiles\":"<<tiles<<",\"vertex_bits_and_render_state_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false,\"timings\":[";
+    std::ofstream out(argv[1]);out<<"{\"cases\":"<<cases<<",\"visible_grid_cases\":"<<visible_grid_cases<<",\"decline_cases\":"<<declines<<",\"renderer_decline_cases\":"<<rejected_sinks<<",\"host_environment_cases\":"<<environments<<",\"tiles\":"<<tiles
+        <<",\"single_tile_source_cases\":"<<single_tile_cases<<",\"single_tile_candidate_hits\":"<<single_tile_hits<<",\"single_tile_fallback_cases\":"<<single_tile_fallbacks
+        <<",\"vertex_bits_and_render_state_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false,\"timings\":[";
     for(unsigned kind=0;kind<3;++kind){if(kind)out<<',';out<<"{\"sprites_per_sample\":"<<(kind==2?40:400)<<",\"rotated\":"<<(kind==1?"true":"false")<<",\"font_tiles\":"<<(kind==2?"true":"false")<<",\"paired_ns\":[";
         for(unsigned pair=0;pair<5;++pair){if(pair)out<<',';out<<'['<<timing[kind][pair][0]<<','<<timing[kind][pair][1]<<']';}out<<"]}";}
     out<<"],\"whole_game_fps_measured\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";

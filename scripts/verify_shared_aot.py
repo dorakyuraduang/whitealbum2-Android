@@ -83,6 +83,7 @@ def main():
     tracked += [ROOT/'tests/portrait_submission_snapshots.hpp']
     tracked += [ROOT/'tests/dialogue_cpu.cpp',ROOT/'tests/geometry_cache_snapshots.hpp']
     tracked += [ROOT/'tests/native_sprite_cpu.cpp',ROOT/'config/native_render_contracts.json']
+    tracked += [ROOT/'tests/single_tile_geometry.cpp']
     tracked += [ROOT/'tests/particle_pipeline.cpp',ROOT/'tests/native_resource_cache.cpp']
     tracked += [ROOT/'scripts/verify_vertex_grid.py']
     tracked += [ROOT/'scripts/verify_fast_dispatch.py']
@@ -170,6 +171,15 @@ def main():
     run([cmake,'--build',build,'--target','wa2_shared_aot_tests','wa2_function_process_tests','wa2_portable_scheduler_tests','wa2_portable_registry_tests','wa2_portable_system_tests','wa2_resource_mount_tests','wa2_native_resource_memory_tests','wa2_native_resource_cache_tests','wa2_resource_loading_tests','wa2_lzss_group_tests','wa2_wait_probe_tests','wa2_large_heap_memory_tests','wa2_portable_sound_bridge_tests','wa2_window_resource_tests','wa2_widget_unicode_tests','wa2_window_model_tests','wa2_portable_movie_bridge_tests','wa2_render_submission_tests','wa2_portable_acm_tests','wa2_portable_shell_tests','wa2_crt_math_path_tests','wa2_pixel_transfer_tests','--parallel','1'],2400)
     run([cmake,'--build',build,'--target','wa2_glyph_index_tests','wa2_glyph_geometry_tests','wa2_byte_equality_tests','--parallel','1'],300)
     run([cmake,'--build',build,'--target','wa2_subtitle_tests','--parallel','1'],300)
+    run([cmake,'--build',build,'--target','wa2_single_tile_geometry_tests','--parallel','1'],300)
+    single_tile_report=build/'single-tile-geometry.json'
+    run([build/'wa2_single_tile_geometry_tests.exe',single_tile_report],30)
+    single_tile_checks=json.loads(single_tile_report.read_text())
+    if (not single_tile_checks['passed'] or single_tile_checks['exact_hardware_coordinates']!=16777217 or
+        single_tile_checks['exact_hardware_ratios']!=98328 or single_tile_checks['rejected_coordinates']!=16 or
+        single_tile_checks['host_environment_cases']!=4 or single_tile_checks['input_quantization'] or
+        single_tile_checks['game_launched'] or single_tile_checks['screen_access'] or single_tile_checks['graphics_device_opened']):
+        raise ValueError('Exact integer coordinate encoding or host environment contract failed')
     subtitle_report=build/'subtitles.json'
     run([build/'wa2_subtitle_tests.exe',subtitle_report],30)
     from verify_subtitles import verify as verify_subtitles
@@ -209,13 +219,15 @@ def main():
     glyph=dialogue['native_glyph_chain']
     if (glyph['exact_source_variants']!=12 or glyph['accepted_glyphs']!=480 or glyph['legacy_api_calls'] or
         glyph['changing_source_cases']!=16 or len(glyph['changing_native_ns'])!=5 or len(glyph['memo_enabled_pairs'])!=5 or
-        glyph['memo_finds']!=1600 or glyph['memo_hits']<800 or not glyph['memo_captures'] or
+        glyph['memo_finds']!=240 or glyph['memo_hits']<200 or not glyph['memo_captures'] or
+        glyph['integer_glyphs']<7000 or glyph['integer_host_environment_cases']!=4 or
         not glyph['raw_vertex_bits_equal'] or not glyph['void_cdecl_abi_preserved'] or len(glyph['paired_ns'])!=5):
         raise ValueError('Complete native glyph path did not preserve the cached drawing output')
     sprite_report=build/'native-sprite-cpu.json'
     run([build/'wa2_native_sprite_cpu_tests.exe',sprite_report],60)
     sprite=json.loads(sprite_report.read_text())
     if (not sprite['passed'] or sprite['cases']!=256 or sprite.get('visible_grid_cases')!=48 or sprite['decline_cases']!=24 or sprite['renderer_decline_cases']!=1 or sprite['host_environment_cases']!=4 or
+        sprite['single_tile_source_cases']!=88 or sprite['single_tile_candidate_hits']!=64 or sprite['single_tile_fallback_cases']!=24 or
         not sprite['vertex_bits_and_render_state_equal'] or not sprite['void_cdecl_abi_preserved'] or
         len(sprite['timings'])!=3 or any(len(item['paired_ns'])!=5 or any(min(pair)<=0 for pair in item['paired_ns']) for item in sprite['timings'])):
         raise ValueError('Complete native sprite/particle drawing comparison failed')
@@ -399,7 +411,7 @@ def main():
     run([reader.with_name('llvm-strip.exe'),'--strip-all','-o',stripped,library])
     symbols=subprocess.run([str(reader.with_name('llvm-nm.exe')),'--defined-only','--demangle',str(library)],
                            cwd=ROOT,env=environment,creationflags=flags,capture_output=True,text=True,check=True,timeout=10).stdout
-    if re.search(r'wa2::aot::f_[0-9a-f]+<true(?:,|>)|f_[0-9a-f]+<false, false>|shared_aot_oracle|native_weather_color_snapshot|wr_x87_|wr_sse_|Zydis|NativeIntegerReferenceScope|native_integer_registers_enabled|NativeIndirectReferenceScope|native_indirect_calls_enabled|NativeMathReferenceScope|native_math_ports_enabled|native_math_test_counts|native_render_math_enabled|NativeRenderMathReferenceScope|native_grid_binary_snapshot|native_grid_stored_binary_snapshot|native_grid_registers_enabled|native_sprite_geometry_enabled|native_grid_float_enabled|native_vertex_grid_enabled|register_fp_enabled|RegisterFpReferenceScope|DecodedCacheReferenceScope|decoded_resource_cache_enabled|sort_objects<true>|vertex_batch<true>|wa2_sort_shift|wr::wa2_sort_objects\(|wr::wa2_vertex_batch\(',symbols):
+    if re.search(r'wa2::aot::f_[0-9a-f]+<true(?:,|>)|f_[0-9a-f]+<false, false>|shared_aot_oracle|native_weather_color_snapshot|wr_x87_|wr_sse_|Zydis|NativeIntegerReferenceScope|native_integer_registers_enabled|NativeIndirectReferenceScope|native_indirect_calls_enabled|NativeMathReferenceScope|native_math_ports_enabled|native_math_test_counts|native_render_math_enabled|NativeRenderMathReferenceScope|native_grid_binary_snapshot|native_grid_stored_binary_snapshot|native_grid_registers_enabled|native_sprite_geometry_enabled|native_grid_float_enabled|native_vertex_grid_enabled|register_fp_enabled|RegisterFpReferenceScope|DecodedCacheReferenceScope|decoded_resource_cache_enabled|single_tile_reference_enabled|single_tile_diagnostics|sort_objects<true>|vertex_batch<true>|wa2_sort_shift|wr::wa2_sort_objects\(|wr::wa2_vertex_batch\(',symbols):
         raise ValueError('diagnostic/oracle, decoder, or x86 helper leaked into the ARM64 ordinary build')
     if 'wa2_shared_aot_function_count' not in symbols:raise ValueError('shared ARM64 entry is not linked')
     if re.search(r'wa2::text::GlyphGeometryMemo<[^\n]+>::(?:stats|enabled)',symbols):
@@ -468,6 +480,7 @@ def main():
                shared_widget_icons=widget_icons,
                shared_touch_gestures=touch_gestures,
                shared_main_story_subtitles=subtitle_checks,
+               shared_single_tile_geometry=single_tile_checks,
                window_model=json.loads(window_model_report.read_text()),
                render_submission=json.loads(submission_report.read_text()),
                shared_host_leaf_calls=json.loads(leaf_report.read_text()),

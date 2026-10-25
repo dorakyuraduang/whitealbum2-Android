@@ -6,10 +6,13 @@
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
 #include "../engine/glyph_geometry_memo.hpp"
+#include "../engine/single_tile_geometry.hpp"
 #include "../platform/render/submission_cache.hpp"
 #include <winrecomp/win32_state.hpp>
 #include <bit>
 #include <chrono>
+#include <cerrno>
+#include <cfenv>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -150,6 +153,7 @@ int main(int argc,char** argv){try{
     const auto sink=[](const a::SpriteCommand& command,void* owner){auto& output=*static_cast<std::vector<std::vector<std::uint8_t>>*>(owner);
         for(const auto& tile:command.tiles){const auto* bytes=reinterpret_cast<const std::uint8_t*>(tile.vertices.data());output.emplace_back(bytes,bytes+sizeof(tile.vertices));}return true;};
     unsigned native_variants{};std::uint64_t native_glyphs{},native_api_calls{};
+    const auto single_tile_before=wa2::geometry::single_tile_diagnostics;
     using GlyphMemo=wa2::text::GlyphGeometryMemo<a::SpriteTile>;
     GlyphMemo::Stats memo_before{},memo_after{};
     {a::FunctionWorkScope quiet(nullptr);a::native_geometry_cache_enabled=true;
@@ -194,6 +198,16 @@ int main(int argc,char** argv){try{
         const auto begin=std::chrono::steady_clock::now();for(unsigned n=0;n<8;++n){draws.clear();calls.clear();run(false);CHECK(draws==original_draws);}
         memo_enabled_pairs[pair][side]=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count();}
     GlyphMemo::enabled=true;
+    unsigned integer_environment_cases{};variant=0;
+    for(int rounding:{FE_TONEAREST,FE_DOWNWARD,FE_UPWARD,FE_TOWARDZERO}){
+        std::fenv_t saved;CHECK(!std::fegetenv(&saved));const auto saved_error=errno;
+        CHECK(!std::fesetround(rounding));std::feclearexcept(FE_ALL_EXCEPT);std::feraiseexcept(FE_DIVBYZERO);errno=ERANGE;
+        const auto raised=std::fetestexcept(FE_ALL_EXCEPT);
+        draws.clear();calls.clear();{a::SpriteService native(p.memory,sink,&draws);run(false);}
+        CHECK(draws==original_draws && calls.empty());
+        CHECK(std::fegetround()==rounding && std::fetestexcept(FE_ALL_EXCEPT)==raised && errno==ERANGE);
+        CHECK(!std::fesetenv(&saved));errno=saved_error;++integer_environment_cases;
+    }
     std::ofstream out(argv[1]);out<<"{\"source_entry\":4481760,\"glyphs\":40,\"source_draws\":"<<original_draws.size()<<",\"fvf\":"<<fvf
         <<",\"bound_texture_units\":"<<max_texture_slots<<",\"elapsed_ns\":"<<elapsed<<",\"paired_glyph_sets\":8,\"uncached_ns\":"<<timing[0]<<",\"cached_ns\":"<<timing[1]
         <<",\"memo_grid_hits\":"<<memo.grid_hits<<",\"memo_grid_misses\":"<<memo.grid_misses<<",\"memo_sprite_hits\":"<<memo.sprite_hits<<",\"memo_sprite_misses\":"<<memo.sprite_misses
@@ -210,7 +224,11 @@ int main(int argc,char** argv){try{
     out<<",\"changing_source_cases\":"<<changing_native_cases<<",\"changing_glyph_sets\":8,\"changing_native_ns\":[";
     for(unsigned n=0;n<5;++n){if(n)out<<',';out<<changing_native_ns[n];}
     out<<"],\"memo_enabled_pairs\":[";for(unsigned n=0;n<5;++n){if(n)out<<',';out<<'['<<memo_enabled_pairs[n][0]<<','<<memo_enabled_pairs[n][1]<<']';}
-    out<<"],\"raw_vertex_bits_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false}";
+    out<<"],\"single_tile_attempts\":"<<wa2::geometry::single_tile_diagnostics.attempts-single_tile_before.attempts
+        <<",\"single_tile_builds\":"<<wa2::geometry::single_tile_diagnostics.accepted-single_tile_before.accepted
+        <<",\"integer_glyphs\":"<<wa2::geometry::single_tile_diagnostics.integer_glyphs-single_tile_before.integer_glyphs
+        <<",\"integer_host_environment_cases\":"<<integer_environment_cases
+        <<",\"raw_vertex_bits_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false}";
     out<<",\"work\":"<<work.report()<<",\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";
     std::cout<<"PASS cached dialogue recording: "<<draws.size()<<" source draws, "<<elapsed<<" ns.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

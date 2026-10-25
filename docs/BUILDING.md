@@ -88,6 +88,17 @@ static geometry and sprite paths; the old library stays in the test binaries.
 Saved reports bind both archives/binaries and all changed comparison inputs.
 These bounded memory checks do not establish whole-game or phone performance.
 
+`tests/single_tile_geometry.cpp` checks all 16,777,217 signed coordinates on
+the supported 1/256 grid against hardware binary32 results, plus 98,328 UV
+ratios, 16 invalid inputs and all four host rounding modes. No input is
+quantized: ineligible values take the existing arithmetic. The sprite test
+adds 88 complete cached-source comparisons: 64 eligible power-of-two-cell
+cases and 24 crossing/non-power-of-two/large-coordinate fallbacks. The dialogue
+test also checks host fenv/errno preservation in the actual glyph path.
+The new same-object comparison still links the saved verified 0.2.41 AOT
+library for the baseline, including changing-line workloads; this measures
+CPU packet generation rather than storage, GPU work or whole fast-forward.
+
 `tests/lzss_groups.cpp` checks generated LZSS streams with all 256 literal masks,
 repeated-word lengths/distances, near matches, dictionary dependencies, guard
 bytes, truncated data and trailing data. The decoder and the length validator

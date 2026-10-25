@@ -17,6 +17,13 @@ larger decoded cache or extracted assets. Generated CPU comparisons cover the
 decoder and the native loading boundary; whole-game fast-forward and ARM64
 device performance remain unmeasured.
 
+`0.2.42-shared-aot` adds the same exact integer glyph path and single-cell
+sprite geometry used on Windows. Eligible inputs construct identical IEEE
+coordinate words, without rounding positions, reducing glyph density or
+changing timing. Other inputs retain the existing native floating path. The
+checks compare against cached static drawing and the verified previous native
+library; they do not measure Android gameplay or GPU throughput.
+
 1. Place your own original `.pak` files directly in `Wa2Res` and retain the `IC`
    child folder. The default location is internal shared storage `/Wa2Res`.
 2. Open the app to its launch settings page. Choose the local `Wa2Res` folder

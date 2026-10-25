@@ -14,7 +14,7 @@
     "preserved": ["nonvolatile integer registers", "stack and return ABI", "source FP control", "segment state", "SIMD state", "host fenv", "host errno", "game resource and sprite RAM", "GetSurfaceLevel output and Release lifetime", "DrawPrimitiveUP stream-zero reset", "tile order", "raw vertex bits", "observable drawing state"],
     "callee_volatile": ["integer flags", "volatile integer registers", "empty x87 register payloads, status and instruction metadata", "dead callee scratch stack"],
     "raw_x87_bit_exact_contract": false,
-    "grid_optimization": "For bounded integral UV endpoints, skip clamped-zero prefix spans and unreferenced suffix cells; retain the cumulative PC24 arithmetic through every emitted tile boundary. Fractional UVs keep the full grid calculation. Texture-handle reads and tile order are unchanged.",
+    "grid_optimization": "For bounded integral UV endpoints, skip clamped-zero prefix spans and unreferenced suffix cells; retain the cumulative PC24 arithmetic through every emitted tile boundary. A complete crop inside one power-of-two cell with exact 1/256 UVs and bounded dyadic corners uses the proven 0/1 interpolation endpoints directly. Other fractional UVs keep the full grid calculation. Texture-handle reads and tile order are unchanged.",
     "decline": "Leave CPU and game RAM unchanged and execute the same checked static function; no decoder or interpreter",
     "one_source_set_for_all_hosts": true,
     "game_launched": false
@@ -32,6 +32,7 @@
     "preserved": ["nonvolatile integer registers", "stack and void return ABI", "source FP control", "segment state", "SIMD state", "host fenv", "host errno", "game objects and resources", "raw vertex bits", "tile order", "observable drawing state"],
     "callee_volatile": ["flags and volatile integer registers", "empty x87 payloads, status and instruction metadata", "dead callee scratch", "by-value temporary argument storage"],
     "known_call_sites": ["0x446f94", "0x4471c0", "0x447310", "0x4473d3", "0x447510"],
+    "integer_native_path": "For zero rotation/flip and unit scale, representable 1/256-unit inputs and bounded intermediate coordinates, build exactly the same IEEE binary32 coordinate words with integer operations. A single power-of-two atlas cell is required. No input is rounded or quantized. Resource/renderer admission is unchanged, and other inputs retain the checked native floating path. The integer path preserves host fenv and errno without per-glyph fenv switching or the full geometry memo.",
     "raw_x87_bit_exact_contract": false,
     "decline": "Leave CPU and game RAM unchanged; execute existing checked static function without a decoder or interpreter",
     "one_source_set_for_all_hosts": true,
