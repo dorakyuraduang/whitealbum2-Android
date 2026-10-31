@@ -3,6 +3,18 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
+`0.2.46-shared-aot` expands the isolated test profile to all known content:
+chapters/endings, CG differences, music, replay entries, watched movies and read
+text. Existing chapter-only test saves are upgraded on the next test launch.
+The local APK has a **new development signing identity** because the previous
+key was deleted with the build directory and has no backup. It cannot update
+an installation signed with the old key. The additional `parallel-test.apk`
+uses application ID `org.wa2.port.test` and launcher name **WA2 全内容测试**, so
+it can be installed beside the old app without uninstalling it. Both packages
+contain identical DEX/native libraries; only the installation identity and label
+differ. The parallel app has separate saves and preferences: select Wa2Res again
+and enable **测试模式（解锁全部内容）** there. It does not import old private saves.
+
 `0.2.45-shared-aot` extends the missing-target repair to 34 additional referenced
 callbacks and their supporting call chains, including virtual destructors,
 exception cleanup, floating-format callbacks and a catch resumption prefix.
@@ -44,32 +56,40 @@ library; they do not measure Android gameplay or GPU throughput.
 2. Open the app to its launch settings page. Choose the local `Wa2Res` folder
    through Android's system directory picker. A nested Wa2Res or SD-card Wa2Res
    is supported; select the resource folder itself rather than its parent or IC.
-3. Set **显示 FPS 和帧耗时**, **长按快进**, and **测试模式（解锁全部章节）** as desired. Long-press fast-forward is
+3. Set **显示 FPS 和帧耗时**, **长按快进**, and **测试模式（解锁全部内容）** as desired. Long-press fast-forward is
    enabled by default; test mode is off by default. The folder grant and switches are remembered for
    later launches; changing a switch saves it immediately.
 4. Tap **开始游戏**. The folder is checked in a background worker before the game
    initializes. Returning to the launcher allows settings to be changed.
 
-From `0.2.43-shared-aot`, **测试模式（解锁全部章节）** starts a separate test profile
-with the known IC, CC and CODA chapter menu gates unlocked. Toggle it on at the
-launcher, then tap **开始游戏**; use the original game's chapter choices. Changing
-the switch takes effect on the next game start, rather than changing a running
-story. Turn it off and start again to return to the normal profile.
+From `0.2.46-shared-aot`, **测试模式（解锁全部内容）** uses a separate test
+profile with all known content gates unlocked. Toggle it on and tap **开始游戏**.
+Changing this switch takes effect on the next game start; turn it off and start
+again to return to the normal profile.
 
-Normal progress and settings are left in their existing location. Test progress,
-manual/quick saves and game settings use the `test-mode` child of the private game
-data directory. The common save adapter initializes `Documents/Leaf/WHITE ALBUM2`,
+Normal progress and settings remain in their existing location. Test progress,
+manual/quick saves and settings use the `test-mode` child of the private game
+data directory. The common adapter prepares `Documents/Leaf/WHITE ALBUM2`,
 `WHITE ALBUM2 -closing chapter-` and `WHITE ALBUM2 -introductory chapter-` there.
-Existing test saves remain; known unlock bits are restored on every test launch.
-The adapter changes only the 14 verified chapter/ending gate bits in `Sys.sav`,
-not all global variables, choice history or gallery contents. It neither fabricates
-a playable scene snapshot nor unlocks resources absent from Wa2Res. Original PAKs
-stay external. Windows `--test-mode` uses this same implementation.
+On each test launch it upgrades existing chapter-only system saves in place:
 
-Memory checks invoke the actual static system-save readers/getter and check
-normal-save isolation, repeated activation, retained manual saves and unsupported
-private formats. They do not exercise the chapter UI or prove complete gameplay
-on a phone.
+- Set the low bit of 122 known content flags: 18 completion/second-playthrough,
+  64 music, 16 watched-movie and 24 replay flags.
+- Unlock all 272 valid CG variant IDs from the 149 nonempty gallery groups, in
+  both saved gallery banks. Empty catalogue entries and index zero stay empty.
+- Mark the 0x80000-byte reading-history block as read, permitting read-only skip
+  throughout the test profile. This does not alter the game's skip timing.
+
+The rest of the gallery block, unknown system flags, choice-state flags 99/900,
+and all high bits are preserved. Manual/quick saves and settings are untouched;
+an already-unlocked Sys.sav is not rewritten. The adapter does not create a
+playable scene snapshot or supply content absent from Wa2Res. Original PAKs stay
+external. Windows `--test-mode` uses the same implementation.
+
+Memory checks load synthetic saves with the actual static readers, enumerate
+all CG groups/differences with the static getters, and check reading bits,
+upgrade behavior, normal-save isolation, retained manual saves and malformed
+private saves. They do not exercise game UI or prove phone gameplay compatibility.
 
 With **长按快进** enabled, hold one finger still on the game canvas to hold the
 original game's Ctrl input. The threshold follows Android's long-press setting

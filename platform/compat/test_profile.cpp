@@ -1,6 +1,5 @@
 #include "test_profile.hpp"
 #include "../../engine/test_progress.hpp"
-#include <array>
 #include <fstream>
 #include <stdexcept>
 #include <vector>
@@ -23,19 +22,19 @@ void seed(const std::filesystem::path& file){
         if(std::filesystem::file_size(file)!=testing::system_save_bytes)throw std::runtime_error("Unsupported test Sys.sav length; normal saves were not changed");
     }else{
         std::vector<std::uint8_t> data(testing::system_save_bytes);
-        testing::unlock_chapters(std::span(data).subspan(testing::system_flags_offset));
+        testing::unlock_all_content(data);
         std::ofstream output(file,std::ios::binary|std::ios::trunc);
         output.write(reinterpret_cast<const char*>(data.data()),std::streamsize(data.size()));output.close();
         if(!output)throw std::runtime_error("Cannot create test Sys.sav");
         return;
     }
     std::fstream stream(file,std::ios::binary|std::ios::in|std::ios::out);
-    std::array<std::uint8_t,testing::system_flags_bytes> flags;
-    stream.seekg(testing::system_flags_offset);stream.read(reinterpret_cast<char*>(flags.data()),flags.size());
-    if(!stream)throw std::runtime_error("Cannot read test Sys.sav flags");
-    if(testing::unlock_chapters(flags)){
-        stream.seekp(testing::system_flags_offset);stream.write(reinterpret_cast<const char*>(flags.data()),flags.size());stream.flush();
-        if(!stream)throw std::runtime_error("Cannot unlock test Sys.sav chapters");
+    std::vector<std::uint8_t> data(testing::system_save_bytes);
+    stream.read(reinterpret_cast<char*>(data.data()),std::streamsize(data.size()));
+    if(!stream)throw std::runtime_error("Cannot read test Sys.sav");
+    if(testing::unlock_all_content(data)){
+        stream.seekp(0);stream.write(reinterpret_cast<const char*>(data.data()),std::streamsize(data.size()));stream.flush();
+        if(!stream)throw std::runtime_error("Cannot unlock test Sys.sav content");
     }
 }
 }

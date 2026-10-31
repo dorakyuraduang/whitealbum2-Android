@@ -149,7 +149,11 @@ def main():
                 apk.write(ROOT/'third_party/wa2_subtitles'/name,'assets/licenses/wa2-subtitles/'+name)
             vorbis=(ROOT/'third_party/stb/stb_vorbis.c').read_text(errors='replace');apk.writestr('assets/licenses/stb-vorbis-LICENSE.txt',vorbis[vorbis.rfind('ALTERNATIVE A -'):])
         aligned=directory/'aligned.apk';run([bt/'zipalign.exe','-f','4',unsigned,aligned])
-        key=ROOT/'build/android-signing/wa2-native-dev.p12'
+        # Keep the signing identity outside disposable build outputs. Retain
+        # the former location as a compatibility fallback; never create a new
+        # identity silently when an existing installation needs an update.
+        key=ROOT/'private/android-signing/wa2-native-dev.p12'
+        if not key.is_file():key=ROOT/'build/android-signing/wa2-native-dev.p12'
         if not key.is_file():raise ValueError('The existing development signing identity is missing')
         signed=directory/'WA2-arm64-dev.apk'
         run([jdk/'bin/java.exe','-XX:ActiveProcessorCount=1','-Xmx256m','-jar',bt/'lib/apksigner.jar','sign','--ks',key,

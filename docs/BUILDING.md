@@ -261,3 +261,32 @@ cleanup on heap destruction.
 These checks establish the bounded inputs tested. They do not establish actual
 Android frame rate, full gameplay, cold flash-storage performance or a tenfold
 whole-game improvement.
+
+
+## Test-profile update and signing identity (0.2.46)
+
+`tests/test_profile.cpp` exercises full content unlock through the shared save
+adapter and existing static save/gallery/bit readers. Both linear and paged
+memory are checked, including old chapter-only profile upgrades, 2952 gallery
+queries, all 122 flag values, unknown-field preservation and normal-save isolation.
+This is a memory component check, not a game launch or an Android device test.
+
+The 0.2.46 local build recovered unchanged static libraries and link inputs from
+the hashed 0.2.45 LGPL relink archive after the build directory was removed.
+It recompiles the same changed adapter and versioned startup on both hosts,
+relinks both applications, and recompiles Android Java/resources. Its focused
+report is `logs/test-content-0.2.46.json`; the historical whole-suite proof is
+not relabeled as a fresh full verification. The missing historical baselines
+must be restored to run the complete `verify_shared_aot.py` pipeline again.
+
+Keep the development signing key at the ignored private location
+`private/android-signing/wa2-native-dev.p12`, outside the disposable build tree,
+and keep a separate secure backup. Packaging accepts the old
+`build/android-signing/wa2-native-dev.p12` location as a fallback and fails if
+neither key exists; it never silently creates an identity. The old local key
+was lost without backup, so 0.2.46's replacement signature cannot update an
+old-signature installation. A parallel test APK changes only the manifest package
+to `org.wa2.port.test` and label to `WA2 全内容测试`; activity names are fully
+qualified as `org.wa2.port.*`. It is verified to contain identical DEX, native
+libraries and licensed assets, and keeps its private data separate. Neither keys
+nor passwords belong in public source.

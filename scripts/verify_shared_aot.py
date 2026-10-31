@@ -203,11 +203,16 @@ def main():
     test_profile=json.loads(test_profile_report.read_text())
     if (not test_profile['passed'] or test_profile['seeded_profiles']!=3 or test_profile['chapter_flags']!=14 or
         test_profile['preserved_flag_bytes']!=4096 or test_profile['actual_static_save_reader_blocks']!=6 or
-        test_profile['actual_static_flag_reads']!=28 or test_profile['invalid_private_save_rejections']!=2 or
+        test_profile['content_flags']!=122 or test_profile['actual_static_flag_reads']!=244 or test_profile['invalid_private_save_rejections']!=2 or
+        test_profile['gallery_groups']!=149 or test_profile['gallery_variants']!=272 or
+        test_profile['actual_static_gallery_reads']!=2952 or test_profile['actual_static_history_reads']!=32 or
+        test_profile['music_flags']!=64 or test_profile['movie_flags']!=16 or test_profile['replay_flags']!=24 or
+        not test_profile['old_profile_upgraded'] or not test_profile['empty_gallery_slots_preserved'] or
+        not test_profile['unchanged_save_not_rewritten'] or
         not test_profile['normal_saves_unchanged'] or not test_profile['test_manual_saves_retained'] or
         not test_profile['unlock_reapplied_on_launch'] or test_profile['save_bytes']!=2528384 or
         test_profile['game_launched'] or test_profile['game_ui_exercised']):
-        raise ValueError('Isolated chapter-unlocked test profile did not preserve the source save format')
+        raise ValueError('Isolated content-unlocked test profile did not preserve the source save format')
     single_tile_report=build/'single-tile-geometry.json'
     run([build/'wa2_single_tile_geometry_tests.exe',single_tile_report],30)
     single_tile_checks=json.loads(single_tile_report.read_text())
