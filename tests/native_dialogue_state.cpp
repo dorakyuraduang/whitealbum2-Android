@@ -35,9 +35,11 @@ int main(int argc,char** argv){try{
     rejects([&]{t::restore_layout(patch(exact,52,4097));});++guards;
     auto corrupt=exact;corrupt.back()^=1;rejects([&]{t::restore_layout(corrupt);});++guards;
     i::ImageStore images(fixture());t::FontBook fonts(fixture(true));const auto loader=[&](auto name){++loads;return images.request(name);};
+    auto deferred=fonts.defer(t::layout("ABC"));const auto deferred_layout=t::checkpoint_layout(deferred.metrics());CHECK(deferred.image_bytes()==0 && deferred.metrics().letters.size()==3 && !fonts.source_bytes());++cases;
+    rejects([&]{fonts.materialize(deferred);});CHECK(!deferred.image_bytes() && t::checkpoint_layout(deferred.metrics())==deferred_layout);++guards;
     s::SceneDialogue dialogue(fonts,loader,[&](auto id){CHECK(id==7 || id==8);++seen;},[]{}),restored(fonts,loader,{},[]{});
     restored.restore(dialogue.checkpoint());CHECK(dialogue.checkpoint()==restored.checkpoint() && !loads);++cases;
-    invoke(dialogue,131,{s::Value(std::string("\\k")),s::Value(7),s::Value(1)});CHECK(seen==1 && dialogue.text().metrics().pages.size()==2);++cases;
+    invoke(dialogue,131,{s::Value(std::string("ABC\\kDEF")),s::Value(7),s::Value(1)});CHECK(seen==1 && dialogue.text().metrics().pages.size()==2 && dialogue.text().metrics().letters.size()==6 && !dialogue.text().image_bytes());++cases;
     until([&]{dialogue.update();return dialogue.ready();});const auto opening=dialogue.checkpoint();restored.restore(opening);CHECK(restored.checkpoint()==opening && seen==1);++cases;
     for(unsigned n=0;n<4;++n){dialogue.update();restored.update();CHECK(dialogue.checkpoint()==restored.checkpoint());}++cases;
     until([&]{dialogue.update();return dialogue.phase()==s::DialoguePhase::waiting;});dialogue.advance();CHECK(dialogue.page()==1 && dialogue.phase()==s::DialoguePhase::typing);++cases;
@@ -53,6 +55,8 @@ int main(int argc,char** argv){try{
         rejects([&]{dialogue.restore(patch(stable,at,value));});CHECK(dialogue.checkpoint()==stable);++guards;
     }
     CHECK(seen==1 && !fonts.source_bytes());++cases;
+    {s::SceneDialogue visible(fonts,loader,{},[]{});invoke(visible,131,{s::Value(std::string("ABC")),s::Value(8),s::Value(1)});until([&]{visible.update();return visible.ready();});visible.update(true);
+        const auto state=visible.checkpoint();rejects([&]{visible.sprites();});CHECK(visible.checkpoint()==state && !visible.text().image_bytes() && !fonts.source_bytes());++guards;++cases;}
     std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-dialogue-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"metadata_text_layouts\":"<<layouts<<",\"glyph_pixels_decoded\":false,\"synthetic_only\":true,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";
     std::cout<<"PASS native dialogue/layout checkpoints and skin reload: "<<cases<<" cases.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

@@ -275,6 +275,15 @@ is transient and is never added to an APK/resource package. Owned-memory checks
 preserve sampled colours and reduce six alternating-texture draws to one;
 this finite submission check is not a game FPS or device performance test.
 
+Dialogue now defers glyph raster construction until its text is actually drawn.
+Logic updates and restored dialogue retain complete layout/page/typewriter
+metadata, so undisplayed fast-forward messages allocate no glyph atlas. The
+visible message is materialized once and reuses its immutable pixels on later
+frames. Resource failures preserve the logical text state. Synthetic checks
+now resume nonempty dialogue without reading a font atlas and check that a
+failed first materialization does not change its checkpoint. Actual restored
+font pixels still require presentation validation.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

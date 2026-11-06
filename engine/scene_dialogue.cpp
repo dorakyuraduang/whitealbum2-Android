@@ -40,14 +40,14 @@ void SceneDialogue::name(std::string_view value,std::int32_t speaker){
     old_name_text_=std::move(name_text_);name_=value;name_elapsed_=0;
     if(name_.empty()){name_text_={};return;}
     text::TextStyle style;style.columns=36;style.rows=1;style.spacing=2;style.line_gap=0;style.colour=text::speaker_colour(text::speaker_style(speaker_,name_));
-    name_text_=fonts_.prepare(text::layout(name_,style));
+    name_text_=fonts_.defer(text::layout(name_,style));
 }
 void SceneDialogue::message(std::string_view value,std::int32_t id,bool replace){
     const bool append=!replace && !raw_.empty();const auto previous_pages=body_.metrics().pages.size();
     if(append)raw_+="\\k";else raw_.clear();
     raw_+=value;text::TextStyle style;style.colour=text::speaker_colour(text::speaker_style(speaker_,name_));
     if(novel_.enabled()){style.columns=40;style.rows=15;}
-    body_=fonts_.prepare(text::layout(raw_,style));
+    body_=fonts_.defer(text::layout(raw_,style));
     page_=append?previous_pages:0;
     // Previous portions of an appended message are already displayed. Explicit
     // \k controls in the new portion still suspend for a subsequent click.
@@ -150,7 +150,7 @@ void SceneDialogue::restore(std::span<const std::uint8_t> bytes){
     next.phase_=DialoguePhase(phase);
     // Rebuild only transient glyph textures. Neither dialogue history nor
     // script callbacks are replayed; original resources remain external.
-    next.body_=fonts_.prepare(std::move(body));next.name_text_=fonts_.prepare(std::move(name));next.old_name_text_=fonts_.prepare(std::move(old_name));
+    next.body_=fonts_.defer(std::move(body));next.name_text_=fonts_.defer(std::move(name));next.old_name_text_=fonts_.defer(std::move(old_name));
     settings_=next.settings_;novel_=std::move(next.novel_);body_=std::move(next.body_);name_text_=std::move(next.name_text_);old_name_text_=std::move(next.old_name_text_);
     raw_=std::move(next.raw_);name_=std::move(next.name_);phase_=next.phase_;budget_=next.budget_;open_elapsed_=next.open_elapsed_;name_elapsed_=next.name_elapsed_;idle_elapsed_=next.idle_elapsed_;close_ticks_=next.close_ticks_;page_=next.page_;
     speaker_=next.speaker_;message_=next.message_;visible_=next.visible_;picture_=next.picture_;has_text_=next.has_text_;fast_=next.fast_;transparent_=next.transparent_;
@@ -172,6 +172,7 @@ std::span<const image::Sprite> SceneDialogue::sprites(){
     for(std::size_t i=0;i<button_x.size();++i)add(2,float(button_x[i]),680,40,40,float(i*40),0,40,40,std::uint8_t(settings_.button_alpha*alpha/255));
     add(3,0,672,1280,48,208,104,120,48,alpha);
     if(has_text_ && (!novel_.enabled() || novel_.text_visible())){
+        if(page_ || budget_)fonts_.materialize(body_);
         const float x=novel_.enabled()?75.f:274.f,y=novel_.enabled()?26.f:536.f;
         for(std::size_t prior=0;prior<page_;++prior)body_.append(sprites_,std::uint32_t(prior),std::numeric_limits<std::uint32_t>::max()/32,x,y,alpha);
         body_.append(sprites_,std::uint32_t(page_),budget_,x,y,alpha);
@@ -179,8 +180,8 @@ std::span<const image::Sprite> SceneDialogue::sprites(){
     const auto name_alpha=std::uint8_t(name_elapsed_*255/10);
     const auto offset=float(10-name_elapsed_)*float(10-name_elapsed_)*.32f;
     if(!novel_.enabled()){
-        if(!name_.empty())name_text_.append(sprites_,0,100000,274-offset,508,std::uint8_t(name_alpha*alpha/255));
-        if(name_elapsed_<10)old_name_text_.append(sprites_,0,100000,274+32-offset,508,std::uint8_t((255-name_alpha)*alpha/255));
+        if(!name_.empty() && name_alpha){fonts_.materialize(name_text_);name_text_.append(sprites_,0,100000,274-offset,508,std::uint8_t(name_alpha*alpha/255));}
+        if(name_elapsed_<10){fonts_.materialize(old_name_text_);old_name_text_.append(sprites_,0,100000,274+32-offset,508,std::uint8_t((255-name_alpha)*alpha/255));}
     }
     return sprites_;
 }

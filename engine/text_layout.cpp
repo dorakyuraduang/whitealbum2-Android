@@ -142,6 +142,13 @@ const FontBook::Atlas& FontBook::atlas(unsigned index){
     return *atlases_[index];
 }
 std::size_t FontBook::source_bytes()const noexcept {std::size_t result=0;for(const auto& item:atlases_)if(item)result+=item->source.size();return result;}
+PreparedText FontBook::defer(Layout layout){PreparedText result;result.layout_=std::move(layout);return result;}
+bool FontBook::materialize(PreparedText& text){
+    if(text.image_ || text.layout_.letters.empty())return false;
+    // Prepare from a copy so a resource/decoder failure preserves the logical
+    // text state. This copy happens once for visible text, never per frame.
+    auto ready=prepare(text.layout_);text=std::move(ready);return true;
+}
 PreparedText FontBook::prepare(Layout layout){
     PreparedText result;result.layout_=std::move(layout);if(result.layout_.letters.empty())return result;
     std::map<std::pair<std::uint16_t,bool>,unsigned> slots;

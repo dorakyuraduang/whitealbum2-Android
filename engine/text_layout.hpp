@@ -52,6 +52,8 @@ class FontBook {
     const Atlas& atlas(unsigned index);
 public:
     explicit FontBook(resource::Archive archive):archive_(std::move(archive)){}
+    static PreparedText defer(Layout);
+    bool materialize(PreparedText&);
     PreparedText prepare(Layout layout);
     std::size_t source_bytes()const noexcept;
 };
