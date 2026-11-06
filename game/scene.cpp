@@ -13,6 +13,7 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();},[this]{return reading_.status(replay_mode_);}),
     progress_(progress_store_),
     choices_(progress_store_,[this]()->std::string_view{return session_.active()?session_.active()->program().name():statistics_.scene;}),
+    calendar_([this](auto name){return resources_.image("grp",name);},[this]{for(const auto& variable:library_.globals().variables())if(variable.name=="FLG_00")return variable.value.integer();throw script::Error("Missing calendar theme global FLG_00");}),
     music_([this](auto id,bool loop){return music(id,loop);},[this](auto id){
         if(!progress_store_)throw script::Error("Missing native music progress storage");progress_store_->state().set_flag(std::uint32_t(100+id),1);progress_store_->flush();}),
     effects_([this](auto id,bool loop){return sound(id,loop);},[this]{return skipping();},[this](auto id,bool loop,bool paused){return sound(id,loop,paused);}),
@@ -74,6 +75,7 @@ script::CommandResult Scene::command(script::Command& call){
     if(auto value=controls_.dispatch(call)){voices_.adult_mode(controls_.modes().adult_mode!=0);return *value;}
     if(auto value=progress_.dispatch(call))return *value;
     if(auto value=choices_.dispatch(call))return *value;
+    if(auto value=calendar_.dispatch(call))return *value;
     if(auto value=music_.dispatch(call))return *value;
     if(auto value=effects_.dispatch(call))return *value;
     if(auto value=voices_.dispatch(call))return *value;
@@ -106,6 +108,7 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     const auto duration=[this](std::int32_t frames){return skipping()?0:frames==-1?15:frames==-2?30:frames;};
     movies_.update(monotonic_us);music_.update(duration);effects_.update(duration);voices_.update(duration);weather_.update();
     backgrounds_.update(duration);colour_.update(duration);bitmaps_.update(duration);characters_.update(duration);dialogue_.update(skipping());
+    calendar_.update([this](auto frames){return skipping()?frames/3:frames;});
     if(background_changing_ && !backgrounds_.busy()){weather_.stop(true);bitmaps_.clear_retired();characters_.clear_retired();background_changing_=false;}
     const auto state=session_.advance([this](auto& call){return command(call);});
     if(session_.active())statistics_.scene=session_.active()->program().name();

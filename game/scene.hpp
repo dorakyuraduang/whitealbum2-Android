@@ -1,4 +1,5 @@
 #pragma once
+#include "scene_calendar.hpp"
 #include "resource_catalog.hpp"
 #include "native_random.hpp"
 #include "script_session.hpp"
@@ -41,6 +42,7 @@ class Scene {
     script::SceneControls controls_;
     script::SceneProgress progress_;
     script::SceneChoices choices_;
+    script::SceneCalendar calendar_;
     script::SceneMusic music_;
     script::SceneEffects effects_;
     script::SceneVoices voices_;
@@ -73,6 +75,7 @@ public:
     const Statistics& statistics()const noexcept{return statistics_;}
     const script::SceneDialogue& dialogue_state()const noexcept{return dialogue_;}
     const script::SceneChoices& choices()const noexcept{return choices_;}
+    std::span<const image::Sprite> calendar(){return calendar_.sprites();}
     bool title_requested()const noexcept{return title_requested_;}
     void skip_read_only(bool value){skip_read_only_=value;}
     void replay_mode(bool value){replay_mode_=value;}

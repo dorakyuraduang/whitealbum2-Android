@@ -30,6 +30,8 @@ restore failures and conditionally visible selections. `--resource-root res`
 optionally parses the external ck-gal.pak scripts to validate every instruction
 and label boundary and catalogue command reference. This static resource audit
 does not execute script commands or create a game scene/window/device.
+It also checks the four original calendar atlas headers and crop bounds without
+decoding or presenting their pixels.
 
 Camera/background checks cover interrupted pans, easing, both camera banks,
 timed pauses, skip completion, checkpoint continuation, pixel/scale command

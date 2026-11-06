@@ -77,6 +77,14 @@ including overwritten values. Live particle count is tracked separately from
 fixed slot indices, so density reductions cannot strand later active slots.
 Types 0/1/2/5 and the alternate snow atlas remain explicit unsupported cases.
 
+The native Calendar command computes date/weekday state, retains the 2010..2013
+holiday facts and selects the original three calendar image atlases. Its shared
+state machine handles the background, moving digit/weekday crops and line
+transitions, including the source's one-third skip timing. Display requests
+outside the retained year table fail explicitly; date-only assignments remain
+valid. Its overlay has a separate scene accessor for presentation after dialogue.
+Calendar checkpoints reload resource handles without executing script commands.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations
