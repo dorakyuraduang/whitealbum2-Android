@@ -197,6 +197,13 @@ bank independently; failed preparation publishes no partial bank. Synthetic
 PCM checks cover restart, overlap, silence, volume and failed-load recovery
 without an audio device. Original cue playback is not device-verified.
 
+Native background effects 11/12/13/14 now reproduce the cached zoom-in,
+zoom-out, combined zoom and quadratic overshoot curves. Effects 16/17/18/19
+push both complete worlds vertically/horizontally with the original integer
+distance and alpha counters. Constructed cached-state samples cover the curves
+and four directions; zero-duration/skip completion releases the old world.
+Other unknown effect codes retain explicit unsupported errors.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

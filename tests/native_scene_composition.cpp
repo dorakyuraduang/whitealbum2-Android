@@ -32,6 +32,13 @@ int main(int argc,char** argv){try{
         auto mask=std::make_shared<i::Raster>(i::Raster{1,1,{0,0,0,128}});frame.mask=s::BackgroundFrame::Mask{mask,0,1};item.world=i::SpriteWorld::both;
         colour=render();CHECK(colour[0]==0 && close(colour[1],255) && colour[2]==0);++cases;
         item.world=i::SpriteWorld::previous;colour=render();CHECK(colour[0]==0 && close(colour[1],127) && close(colour[2],128));++cases;
+        frame.mask.reset();frame.transition->previous.transform.x=-640;frame.transition->current.transform.x=640;frame.transition->current.opacity=255;item.world=i::SpriteWorld::both;render();
+        CHECK(pixel(surface.get(),8,18)[1]==255 && pixel(surface.get(),56,18)[1]==255);++cases;
+        CHECK(pixel(surface.get(),24,18)[0]==255 && pixel(surface.get(),40,18)[2]==255);++cases;
+        frame.transition->previous.transform={};frame.transition->current.transform={};frame.transition->current.transform.scale=.5f;colour=render();
+        CHECK(colour[1]==255 && pixel(surface.get(),20,18)[2]==255 && pixel(surface.get(),3,3)[0]==255);++cases;
+        frame.transition->current.transform.scale=1.75f;render(false);CHECK(pixel(surface.get(),3,3)[2]==255);++cases;
+        frame.transition->current.transform={};frame.transition->current.opacity=128;render(false);CHECK(close(pixel(surface.get(),32,18)[0],127) && close(pixel(surface.get(),32,18)[2],128));++cases;
         frame.mask.reset();frame.transition.reset();frame.previous.reset();frame.current->opacity=255;colour=render(false);CHECK(colour[0]==0 && colour[1]==0 && colour[2]==255);++cases;
         const auto steady_draws=canvas->statistics().draws;render(false);CHECK(canvas->statistics().draws-steady_draws==1);++cases;
         frame.current.reset();red.reset();blue.reset();green.reset();mask.reset();item={};render(false);CHECK(scene.texture_count()==0);++cases;

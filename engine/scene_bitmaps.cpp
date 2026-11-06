@@ -41,7 +41,7 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
         }
         return CommandResult{!item.loading(),item.loading(),Value{}};
     }
-    case 178:case 182:return std::nullopt; // Text-image loaders retain their own explicit boundary.
+    case 178:case 182:return std::nullopt; // AVI bitmaps/animation playback control remain explicit boundaries.
     case 179:count(1);return done(!checked(value(0)).loading());
     case 180:count(1);checked(value(0))={};return done();
     case 181:count(1);return done(!checked(value(0)).allocated);

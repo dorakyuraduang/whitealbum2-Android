@@ -18,7 +18,8 @@ void SceneBackground::begin(Command& command,std::int32_t time_mode){
     if(extended)command.arguments[10].integer();
     const bool reuse=number==-2 && variant==0;
     const bool masked=effect>=128 && (effect&~0x19ff)==0;
-    if(effect!=-1 && effect!=0 && effect!=1 && effect!=12 && effect!=17 && !masked)throw Unsupported("unimplemented native background effect "+std::to_string(effect));
+    const bool scaled=effect>=11 && effect<=14,sliding=effect>=16 && effect<=19;
+    if(effect!=-1 && effect!=0 && effect!=1 && !scaled && !sliding && !masked)throw Unsupported("unimplemented native background effect "+std::to_string(effect));
     const bool event=command.index==148 || command.index==149 || command.index==227 || command.index==228;
     if((number<0 && !reuse) || number>(event?99999:9999) || variant<0 || variant>9 || time_mode<0 || time_mode>9)
         throw Unsupported("unimplemented native background image selector");
@@ -105,10 +106,27 @@ BackgroundFrame SceneBackground::frame()const{
     transform(previous,unsigned(current_^1));transform(current,unsigned(current_));BackgroundFrame result{std::move(previous),std::move(current),loading_?std::nullopt:mask_};
     if(active_ && !loading_){
         result.transition.emplace();auto& transition=*result.transition;transition.current.opacity=layers_[current_]->opacity;
-        if(effect_==12){const auto t=float(elapsed_)/effective_duration_;transition.previous.transform.scale=2-(1-t)*(1-t);}
-        if(effect_==17){const auto alpha=std::int64_t(elapsed_)*255/effective_duration_,remaining=256-alpha;
-            const auto distance=720-remaining*remaining*720/65536;
-            transition.previous.transform.y=float(-distance);transition.current.transform.y=float(720-distance);
+        if(effect_>=11 && effect_<=13){const auto remaining=float(1.-double(elapsed_)/effective_duration_),square=float(double(remaining)*remaining);
+            if(effect_!=12)transition.current.transform.scale=1+square;
+            if(effect_!=11)transition.previous.transform.scale=2-square;
+        }
+        if(effect_==14){
+            // Cached bounce curve: .5 + 2t - 1.5t^2. Keep its stored
+            // binary32 intermediates rather than replacing it with a spring.
+            const auto duration=float(effective_duration_),elapsed=float(elapsed_);
+            const auto centre=double(duration)*2./3.;const auto centre_squared=float(double(float(centre))*float(centre));
+            const auto delta=float(double(elapsed)-centre),delta_squared=float(double(delta)*delta);
+            const auto numerator=float(double(centre_squared)-delta_squared),tail=float(double(duration)-float(centre));
+            const auto tail_squared=float(double(tail)*tail),ratio=float(double(numerator)/(double(centre_squared)-tail_squared));
+            transition.current.transform.scale=float(double(ratio)*.5+.5);
+        }
+        if(effect_>=16 && effect_<=19){const auto alpha=std::int64_t(elapsed_)*255/effective_duration_,remaining=256-alpha;
+            const auto extent=effect_<18?720:1280;const auto distance=extent-remaining*remaining*extent/65536;
+            auto& before=transition.previous.transform;auto& after=transition.current.transform;
+            if(effect_==16){before.y=float(distance);after.y=float(distance-extent);}
+            if(effect_==17){before.y=float(-distance);after.y=float(extent-distance);}
+            if(effect_==18){before.x=float(-distance);after.x=float(extent-distance);}
+            if(effect_==19){before.x=float(distance);after.x=float(distance-extent);}
             transition.previous.opacity=transition.current.opacity=std::uint8_t(alpha);
         }
     }

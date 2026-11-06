@@ -3,6 +3,7 @@
 #include "scene_bitmaps.hpp"
 #include "scene_characters.hpp"
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -50,23 +51,36 @@ int main(int argc,char** argv){try{
     unsigned requests{};s::SceneBackground backgrounds([&](auto){++requests;return request;});
     std::array<s::Value,9> args{s::Value(1),s::Value(0),s::Value(0),s::Value(1),s::Value(0),s::Value(0),s::Value(0),s::Value(1280.f),s::Value(720.f)};
     s::Command call{146,args};backgrounds.dispatch(call,0);backgrounds.update();CHECK(!backgrounds.frame().transition);++cases;
-    for(int effect:{12,17}){
+    for(int effect:{11,12,13,14,16,17,18,19}){
         args[0]=s::Value(effect);args[3]=s::Value(60);call={146,args};CHECK(!backgrounds.dispatch(call,0)->complete);
         for(int tick=1;tick<=60;++tick){backgrounds.update();const auto frame=backgrounds.frame();
             if(tick==60){CHECK(!frame.previous && !frame.transition && frame.current->opacity==255);continue;}
             CHECK(frame.previous && frame.current && frame.transition);
-            if(effect==12){const auto t=float(tick)/60;CHECK(frame.transition->previous.transform.scale==2-(1-t)*(1-t) && frame.transition->previous.opacity==255 && frame.transition->current.opacity==tick*255/60);
-                if(tick==15)CHECK(frame.transition->previous.transform.scale==1.4375f);if(tick==30)CHECK(frame.transition->previous.transform.scale==1.75f);
-            }else{const auto alpha=tick*255/60;CHECK(frame.transition->previous.opacity==alpha && frame.transition->current.opacity==alpha);
-                if(tick==1)CHECK(frame.transition->previous.transform.y==-23 && frame.transition->current.transform.y==697);
-                if(tick==15)CHECK(frame.transition->previous.transform.y==-311 && frame.transition->current.transform.y==409);
-                if(tick==30)CHECK(frame.transition->previous.transform.y==-538 && frame.transition->current.transform.y==182);
-                if(tick==59)CHECK(frame.transition->previous.transform.y==-720 && frame.transition->current.transform.y==0);
+            const auto& before=frame.transition->previous;const auto& after=frame.transition->current;
+            CHECK(after.opacity==tick*255/60);
+            if(effect<=14){CHECK(before.opacity==255);
+                // Constructed-state observations from the cached transition
+                // function, independent of this engine's implementation.
+                for(unsigned n=0;n<4;++n)if(tick==std::array<int,4>{1,15,30,59}[n]){
+                    const auto in=std::array<float,4>{1.96694446f,1.5625f,1.25f,1.00027776f}[n];
+                    const auto out=std::array<float,4>{1.03305554f,1.4375f,1.75f,1.99972224f}[n];
+                    const auto bounce=std::array<float,4>{.532916665f,.90625f,1.125f,1.01625001f}[n];
+                    CHECK(std::abs(before.transform.scale-((effect==12 || effect==13)?out:1))<.000002f);
+                    CHECK(std::abs(after.transform.scale-(effect==14?bounce:effect==11 || effect==13?in:1))<.000002f);
+                }
+            }else{CHECK(before.opacity==after.opacity);
+                for(unsigned n=0;n<4;++n)if(tick==std::array<int,4>{1,15,30,59}[n]){
+                    const auto distance=effect<18?std::array<int,4>{23,311,538,720}[n]:std::array<int,4>{40,553,955,1280}[n];
+                    if(effect==16)CHECK(before.transform.y==distance && after.transform.y==distance-720);
+                    if(effect==17)CHECK(before.transform.y==-distance && after.transform.y==720-distance);
+                    if(effect==18)CHECK(before.transform.x==-distance && after.transform.x==1280-distance);
+                    if(effect==19)CHECK(before.transform.x==distance && after.transform.x==distance-1280);
+                }
             }
         }CHECK(backgrounds.dispatch(call,0)->complete);++cases;
     }
-    const auto before=requests;args[0]=s::Value(18);call={146,args};rejects([&]{backgrounds.dispatch(call,0);});CHECK(requests==before && !backgrounds.busy());++guards;
-    args[0]=s::Value(12);call={146,args};backgrounds.dispatch(call,0);backgrounds.update([](auto){return 0;});CHECK(!backgrounds.frame().transition && !backgrounds.busy());++cases;
+    const auto before=requests;args[0]=s::Value(15);call={146,args};rejects([&]{backgrounds.dispatch(call,0);});CHECK(requests==before && !backgrounds.busy());++guards;
+    for(int effect:{11,12,13,14,16,17,18,19}){args[0]=s::Value(effect);call={146,args};backgrounds.dispatch(call,0);backgrounds.update([](auto){return 0;});CHECK(!backgrounds.frame().transition && !backgrounds.busy());++cases;}
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-world-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"synthetic_only\":true,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native world ownership and composite transition states.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
