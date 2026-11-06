@@ -26,12 +26,17 @@ void SceneWeather::create(std::size_t index,bool filled,bool opposite){
         // Existing 0x407190, including RNG calls whose first speed values are
         // overwritten: later particles must consume the same random sequence.
         const auto category=random()%32;
+        bool medium=category>0 && category<3,small=category>=3;
         if(category==0){
             p.kind=std::int16_t(random()%16);
             random();random();p.rotation=float(random()%8+10);p.scale=float(random()%8+10);
-        }else if(category<3){
+            medium=(flags_&0x200)!=0;
+        }
+        if(medium){
             p.kind=std::int16_t(random()%48+192);p.rotation=float(random()%4+5);p.scale=float(random()%4+5);
-        }else{
+            small=(flags_&0x400)!=0;
+        }
+        if(small){
             p.kind=std::int16_t(random()%8+248);
             p.rotation=float((double(random()%((256-p.kind)*100))/100.0+1.0)*.5);
             p.scale=float((double(random()%((256-p.kind)*100))/100.0+1.0)*.5);
@@ -45,6 +50,8 @@ void SceneWeather::create(std::size_t index,bool filled,bool opposite){
     p.radius=float(filled?random()%1300+100:random()%100+(opposite?1300:100));
     if(filled){p.phase=std::int16_t(random()%360);p.scale=float(random()%360);}
     else{p.phase=0;p.scale=1;}
+    if(type_==6 && filled){p.growth=1;p.velocity=0;
+        for(int n=0;n<p.phase;++n){p.velocity=float(double(p.velocity)+(double(p.kind+2)/1000.0)*speed_y_/10.0);p.growth+=p.velocity;}}
     p.rate=float(double(random()%30)/10.0-1.0);
     if(p.rate>=0 && p.rate<.4f)p.rate=.4f;
     if(p.rate<0 && p.rate>-.4f)p.rate=-.4f;
@@ -52,18 +59,20 @@ void SceneWeather::create(std::size_t index,bool filled,bool opposite){
     p.scale=float((double(random()%((4-p.kind)*100))/100.0+1.0)*.5);
 }
 void SceneWeather::begin(Command& command){
-    if(command.arguments.size()!=6)throw Error("invalid native SetWeather parameters");
+    const bool extended=command.index==229;
+    if(command.arguments.size()!=(extended?7u:6u))throw Error("invalid native SetWeather parameters");
     const auto code=command.arguments[0].integer(),mode=code&255;
-    if((mode!=3 && mode!=4) || (code&~0xfff)!=0)throw Unsupported("unimplemented native weather type "+std::to_string(code));
-    if((code&0xe00)!=0)throw Unsupported("unimplemented native weather colour flags");
+    const auto amplitude=extended?command.arguments[6].integer():0;
+    if((mode!=3 && mode!=4 && mode!=6) || (code&~0xfff)!=0)throw Unsupported("unimplemented native weather type "+std::to_string(code));
+    if((code&0x800)!=0)throw Unsupported("unimplemented native weather alternate-atlas flag");
     const auto priority=command.arguments[4].integer(),scope=command.arguments[5].integer();
     if(priority<0 || priority>2 || scope<0 || scope>2)throw Unsupported("unimplemented native weather layer");
     auto request=loader_("weather.tga");if(!request)throw Error("native weather loader returned no request");
     stop(true);particles_={};extent_=0;frame_=0;stopping_=false;
-    type_=mode;prefill_=(code&0x100)!=0;priority_=priority;scope_=scope;
+    type_=mode;flags_=code&0xe00;prefill_=(code&0x100)!=0;priority_=priority;scope_=scope;
     target_x_=command.arguments[1].integer();target_y_=command.arguments[2].integer();
     density_=density(command.arguments[3].integer());speed_x_=float(target_x_);speed_y_=float(target_y_);
-    amplitude_=target_amplitude_=0;request_=std::move(request);image_.reset();enabled_=true;
+    amplitude_=amplitude;target_amplitude_=0;request_=std::move(request);image_.reset();enabled_=true;
 }
 void SceneWeather::stop(bool immediately){
     if(!immediately){density_=0;stopping_=true;return;}
@@ -72,22 +81,23 @@ void SceneWeather::stop(bool immediately){
 }
 bool SceneWeather::stopped(){
     if(!stopping_)return false;
-    for(std::size_t n=0;n<extent_;++n)if(particles_[n].active)return false;
+    for(const auto& particle:particles_)if(particle.active)return false;
     stop(true);return true;
 }
 std::optional<CommandResult> SceneWeather::dispatch(Command& command){
     const auto count=[&](std::size_t n){if(command.arguments.size()!=n)throw Error("invalid native weather parameters");};
     const auto value=[&](std::size_t n){return command.arguments[n].integer();};
     switch(command.index){
-    case 173:
+    case 173:case 229:
         if(!command.continuation){begin(command);command.continuation=1;}
         return CommandResult{!loading(),false,Value{}};
-    case 174:
-        count(5);
+    case 174:case 230:
+        count(command.index==174?5:6);
         if(value(3)!=-1000 && (value(3)<0 || value(3)>2))throw Unsupported("unimplemented native weather priority");
         if(value(4)!=-1000 && (value(4)<0 || value(4)>2))throw Unsupported("unimplemented native weather scope");
         if(value(0)!=-1000)target_x_=value(0);if(value(1)!=-1000)target_y_=value(1);
-        target_amplitude_=0;if(value(2)!=-1000)density_=density(value(2));
+        if(command.index==174)target_amplitude_=0;else if(value(5)!=-1000)target_amplitude_=value(5);
+        if(value(2)!=-1000)density_=density(value(2));
         if(value(3)!=-1000)priority_=value(3);if(value(4)!=-1000)scope_=value(4);
         return CommandResult{true,false,Value{}};
     case 175:
@@ -107,9 +117,12 @@ void SceneWeather::update(){
     if(prefill_){prefill_=false;for(std::size_t n=0;n<std::size_t(density_*4/5);++n){create(n,true);++extent_;}}
     const auto root=float(std::sqrt(double(density_)));
     const auto period=std::max(4,integer(100.0/std::max(1.f,root)));
-    if(extent_<std::size_t(density_) && frame_%std::uint32_t(period)==0){create(extent_,false);++extent_;}
+    if(extent_<std::size_t(density_) && frame_%std::uint32_t(period)==0){
+        for(std::size_t n=0;n<std::size_t(density_);++n)if(!particles_[n].active){create(n,false);++extent_;break;}}
     sprites_.clear();
-    for(std::size_t n=0;n<extent_;++n){auto& p=particles_[n];if(!p.active)continue;
+    // Active count and slot index are different after density decreases. Walk
+    // fixed live slots so a retiring low slot cannot strand a higher particle.
+    for(std::size_t n=0;n<particles_.size();++n){auto& p=particles_[n];if(!p.active)continue;
         if(type_==3){
             const auto wave=weather_curve[(unsigned(p.phase)+64)&255];
             const auto sway=float((double(speed_y_)*wave*p.rotation*(1.0/4096.0))/40.0);
@@ -125,6 +138,24 @@ void SceneWeather::update(){
             sprites_.push_back({image_,float(integer(p.angle)),float(integer(p.radius)),size,size,0,32,32,32,
                 255,255,255,std::uint8_t(std::clamp(alpha,0,255))});
             sprites_.back().layer=scope_?0x1043:p.kind<241?10:1;sprites_.back().order=0x99+std::int32_t(n);
+            p.phase=std::bit_cast<std::int16_t>(std::uint16_t(std::uint16_t(p.phase)+1));continue;
+        }
+        if(type_==6){
+            p.rotation=p.rotation>360?0:float(double(p.rotation)+(double(p.kind+2)/10.0)*speed_x_/10.0);
+            const auto unwrapped=float(double(p.rotation)+(double(p.scale)*p.phase/5.0)*speed_x_/10.0);
+            const auto angle=double(float(double(unwrapped)-std::trunc(double(unwrapped)/360.0)*360.0))*.01745329238474369;
+            const auto base_x=integer(640.0-std::cos(angle)*p.growth*speed_y_*.5),base_y=integer(360.0+std::sin(angle)*p.growth*speed_y_*.5);
+            const auto wave=[&](int at){return double(weather_curve[unsigned(at)&255])*p.phase*(1.0/4096.0)*amplitude_/100.0;};
+            const auto x=integer(base_x+wave(p.phase)),y=integer(base_y+wave(p.phase+64));
+            const auto boundary=-300.0-double(amplitude_)*2;
+            if(x<boundary || x>=1580.0+double(amplitude_)*2 || y<boundary || y>=1020.0+double(amplitude_)*2){p.active=false;--extent_;continue;}
+            p.velocity=float(double(p.velocity)+(double(p.kind+2)/1000.0)*speed_y_/20.0);p.growth+=p.velocity;
+            const auto spread=double(p.growth)*speed_y_;
+            const auto alpha=integer(std::clamp(spread<=450?spread-30:200-(spread-450)/5,0.0,200.0));
+            const auto size=float((5-p.kind)*std::min(1.f,p.growth)*.25);
+            if(!std::isfinite(size) || size<0)throw Unsupported("Native type-6 weather inverted particle growth");
+            sprites_.push_back({image_,float(x),float(y),size,size,0,0,32,32,255,255,255,std::uint8_t(alpha)});
+            sprites_.back().layer=scope_?(priority_==0?0x1034:priority_==1?0x1039:0x1043):10;sprites_.back().order=0x99+std::int32_t(n);
             p.phase=std::bit_cast<std::int16_t>(std::uint16_t(std::uint16_t(p.phase)+1));continue;
         }
         p.rotation=p.rotation>360?0:float(double(p.rotation)+.2);

@@ -71,6 +71,12 @@ separate text visibility and the original fade-counter order. A bounded novel
 checkpoint preserves suspended backing fades. ADV message-window animation is
 kept separate. Device presentation and full scene snapshots remain pending.
 
+SetWeather2/ChangeWeather2 now drive native type-6 particle growth and sway.
+Snow density-selection flags 0x200/0x400 retain the cached RNG call sequence,
+including overwritten values. Live particle count is tracked separately from
+fixed slot indices, so density reductions cannot strand later active slots.
+Types 0/1/2/5 and the alternate snow atlas remain explicit unsupported cases.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations

@@ -9,6 +9,7 @@ struct WeatherParticle {
     bool active{};
     std::int16_t kind{},phase{};
     float angle{},radius{},rate{},rotation{},scale{};
+    float growth{1},velocity{};
 };
 class SceneWeather {
 public:
@@ -35,7 +36,7 @@ private:
     std::vector<image::Sprite> sprites_;
     std::size_t extent_{};
     std::uint32_t frame_{};
-    std::int32_t type_{},priority_{},scope_{},density_{},target_x_{},target_y_{},amplitude_{},target_amplitude_{};
+    std::int32_t type_{},flags_{},priority_{},scope_{},density_{},target_x_{},target_y_{},amplitude_{},target_amplitude_{};
     float speed_x_{},speed_y_{};
     bool enabled_{},prefill_{},stopping_{};
     std::uint32_t random();
