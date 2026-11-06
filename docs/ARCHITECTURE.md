@@ -85,6 +85,15 @@ outside the retained year table fail explicitly; date-only assignments remain
 valid. Its overlay has a separate scene accessor for presentation after dialogue.
 Calendar checkpoints reload resource handles without executing script commands.
 
+`engine/sprite_animation.*` parses the original INAS sprite-animation containers
+into native frame rectangles, texture names and timed sequences. The native
+player supports nested repetition, finite/continuous passes, rational clock
+rates, empty frames and bounded playback checkpoints. Unimplemented transforms,
+blend overrides and events fail explicitly. Static checks parse the eight local
+animation definitions and their texture headers; only synthetic sequences run.
+LoadBmpAnime, rain and other scene consumers still need integration with this
+player; this component does not make those commands complete yet.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations

@@ -3,6 +3,7 @@
 // synthetic progress test. They are not the released application's ABI.
 #include "scene.hpp"
 #include "progress_storage.hpp"
+#include "sprite_animation.hpp"
 #if defined(_WIN32)
 #define WA2_LINK_CHECK __declspec(dllexport)
 #else
@@ -22,4 +23,7 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_tick(void* pointer,std::in
 extern "C" WA2_LINK_CHECK void wa2_native_link_start(void* pointer){static_cast<wa2::game::Scene*>(pointer)->start();}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_script_state(wa2::script::Session* session,const std::uint8_t* data,std::size_t size){
     if(data)session->restore({data,size});return session->checkpoint().size();
+}
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_animation(const std::uint8_t* data,std::size_t size){
+    auto definition=wa2::image::Animation::parse({data,size});wa2::image::AnimationPlayer player(definition);player.tick();return player.checkpoint().size();
 }

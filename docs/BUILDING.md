@@ -32,6 +32,9 @@ and label boundary and catalogue command reference. This static resource audit
 does not execute script commands or create a game scene/window/device.
 It also checks the four original calendar atlas headers and crop bounds without
 decoding or presenting their pixels.
+The same audit validates original INAS animation structure and texture-crop
+bounds without advancing its sequences. Animation clock/loop/checkpoint tests
+use constructed containers only.
 
 Camera/background checks cover interrupted pans, easing, both camera banks,
 timed pauses, skip completion, checkpoint continuation, pixel/scale command

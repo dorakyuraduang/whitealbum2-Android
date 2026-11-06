@@ -3,6 +3,7 @@
 #include "script_runtime.hpp"
 #include "file_io.hpp"
 #include "resource_catalog.hpp"
+#include "sprite_animation.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -37,9 +38,16 @@ int main(int argc,char** argv){try{
         std::cout<<names[n]<<' '<<header.width<<'x'<<header.height<<'\n';
         if(header.width<width || header.height<height)throw std::runtime_error("Original calendar atlas crop exceeds image dimensions: "+std::string(names[n]));++calendar_atlases;
     }
+    unsigned animations{},animation_frames{};
+    for(bool introductory:{false,true})if(const auto* bank=resources.optional("grp",introductory))for(const auto& member:bank->members())if(member.name.ends_with(".ani")){
+        const auto data=wa2::image::Animation::parse(bank->load(bank->find_first(member.name)));++animations;animation_frames+=unsigned(data->frames().size());
+        std::vector<wa2::image::TgaLayout> headers;for(const auto& texture:data->textures())headers.push_back(wa2::image::inspect_game_tga(resources.data("grp",texture)));
+        for(const auto& frame:data->frames())for(const auto& piece:frame.pieces){const auto& header=headers.at(piece.texture);
+            if(unsigned(piece.source_x)+unsigned(piece.width)>header.width || unsigned(piece.source_y)+unsigned(piece.height)>header.height)throw std::runtime_error("Original animation source crop exceeds texture dimensions");}
+    }
     std::ofstream report(argv[2]);report<<"{\"schema\":\"wa2.native-script-catalogue.v1\",\"scenes\":"<<scenes<<",\"labels\":"<<labels<<",\"command_sites\":"<<calls<<",\"command_indices\":[";
     bool first=true;for(auto id:commands){if(!first)report<<',';first=false;report<<id;}
-    report<<"],\"calendar_atlas_headers\":"<<calendar_atlases<<",\"resource_metadata_and_script_data_only\":true,\"script_executed\":false,\"source_executable_opened\":false,\"screen_access\":false,\"game_launched\":false,\"whole_game_verified\":false,\"passed\":true}\n";
+    report<<"],\"calendar_atlas_headers\":"<<calendar_atlases<<",\"sprite_animations\":"<<animations<<",\"animation_frames\":"<<animation_frames<<",\"animation_sequences_executed\":false,\"resource_metadata_and_script_data_only\":true,\"script_executed\":false,\"source_executable_opened\":false,\"screen_access\":false,\"game_launched\":false,\"whole_game_verified\":false,\"passed\":true}\n";
     report.close();if(!report)throw std::runtime_error("Cannot write original script structure report");
     std::cout<<"PASS static resource script structure: "<<scenes<<" scripts, "<<labels<<" labels, "<<calls<<" command sites; no gameplay executed.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
