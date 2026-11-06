@@ -14,6 +14,7 @@ public:
     std::optional<CommandResult> dispatch(Command& command);
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     std::size_t active()const noexcept;
+    bool loading()const;
     std::uint64_t played()const noexcept{return played_;}
     void settings(std::int32_t master,std::int32_t speech,bool mute_adult=false);
     void adult_mode(bool value)noexcept{adult_mode_=value;}

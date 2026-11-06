@@ -17,6 +17,7 @@ SceneCharacters::Slot* SceneCharacters::find(std::int32_t id){for(auto& item:slo
 const SceneCharacters::Slot* SceneCharacters::find(std::int32_t id)const{return const_cast<SceneCharacters*>(this)->find(id);}
 std::size_t SceneCharacters::count()const noexcept{std::size_t n=0;for(const auto& item:slots_)n+=item.id!=-1;return n;}
 bool SceneCharacters::busy(std::int32_t id)const{auto* item=find(id);return item && (item->request || item->changing);}
+bool SceneCharacters::loading()const noexcept{for(const auto& slot:slots_)if(slot.request)return true;for(const auto& slot:retired_)if(slot.request)return true;return false;}
 void SceneCharacters::clear(){slots_={};retired_.clear();sprites_.clear();}
 void SceneCharacters::retire_background(){for(auto& item:slots_)if(item.id!=-1)item.retiring=true;}
 void SceneCharacters::clear_retired(){for(auto& item:slots_)if(item.retiring)item={};retired_.clear();}

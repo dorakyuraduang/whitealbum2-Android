@@ -22,6 +22,7 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_tick(void* pointer,std::in
     return scene.environment().size()+scene.foreground().size()+scene.dialogue().size()+scene.calendar().size()+scene.captions().size()+scene.selection().size();
 }
 extern "C" WA2_LINK_CHECK void wa2_native_link_start(void* pointer){static_cast<wa2::game::Scene*>(pointer)->start();}
+extern "C" WA2_LINK_CHECK std::uint32_t wa2_native_link_frame(void* pointer,std::int64_t now){return static_cast<wa2::game::Scene*>(pointer)->advance_frame(now,{},[now]{return now;}).ticks;}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_script_state(wa2::script::Session* session,const std::uint8_t* data,std::size_t size){
     if(data)session->restore({data,size});return session->checkpoint().size();
 }

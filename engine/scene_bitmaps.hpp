@@ -34,6 +34,7 @@ public:
     void retire_background(){for(auto& item:slots_)if(item.allocated && !item.independent)item.retiring=true;}
     void clear_retired(){for(auto& item:slots_)if(item.retiring)item={};retired_.clear();}
     void clear();
+    bool loading()const noexcept;
 private:
     Loader loader_;
     AnimationLoader animation_loader_;

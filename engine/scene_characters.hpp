@@ -13,6 +13,7 @@ public:
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     std::span<const image::Sprite> sprites();
     bool busy(std::int32_t id)const;
+    bool loading()const noexcept;
     void clear();
     void retire_background();
     void clear_retired();

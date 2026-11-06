@@ -23,9 +23,12 @@
 #include "scene_captions.hpp"
 #include "system_sounds.hpp"
 #include "timeline.hpp"
+#include "frame_batch.hpp"
 
 namespace wa2::game {
-struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;};
+struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;
+    Input continued()const{auto next=*this;next.advance=next.toggle_window=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=0;return next;}
+};
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
 // Shared native migration core; not yet the released app's game entry.
 // It contains ordinary game state and the original LSCR language, no CPU state,
@@ -74,6 +77,7 @@ public:
     explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={});
     void start(std::string_view scene="1001",std::int32_t label=0);
     script::RunState update(std::int64_t monotonic_us,Input input={});
+    FrameBatch advance_frame(std::int64_t monotonic_us,Input input,const std::function<std::int64_t()>& budget_clock,FrameBudget budget={});
     void pause(bool paused,std::int64_t monotonic_us);
     void stop_movie(){movies_.stop();}
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
@@ -94,5 +98,7 @@ public:
     void skip_read_only(bool value){skip_read_only_=value;}
     void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
     void flush_progress(){reading_.finish();}
+private:
+    bool can_accelerate()const;
 };
 }

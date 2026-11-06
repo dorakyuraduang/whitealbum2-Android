@@ -291,6 +291,16 @@ Source origin, palette bounds and destination bounds remain checked. Synthetic
 24/32-bit palettes in both TGA row orientations compare byte-for-byte with
 the previous region-decoder blue values, including reserved alpha bytes.
 
+The native scene exposes a bounded skip-frame entry. It advances multiple logic
+ticks without presenting intermediate states, with a default 2 ms/256-tick
+budget, and stops extra work at asynchronous image/audio waits, choices, movies,
+calendar animation, script termination or an exhausted script slice. Held skip
+and pointer position persist; click/confirm/navigation/window-toggle edges and
+direct choices are consumed once. Normal updates remain one logic tick. A
+constant/broken budget clock cannot create an unbounded loop. Fake-step/clock
+tests cover this scheduling policy without instantiating a scene or measuring
+FPS. The released AOT application does not use this native entry yet.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

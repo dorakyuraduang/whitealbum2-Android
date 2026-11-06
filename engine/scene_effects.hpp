@@ -20,6 +20,7 @@ public:
     void once(std::int32_t sound,std::int32_t volume);
     void stop(std::int32_t channel,std::int32_t fade=0);
     void stop_all();
+    bool loading()const;
     void volume(std::int32_t channel,std::int32_t value,std::int32_t fade);
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     std::optional<CommandResult> dispatch(Command&);

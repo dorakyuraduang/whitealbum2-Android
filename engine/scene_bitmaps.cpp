@@ -12,6 +12,7 @@ SceneBitmaps::SceneBitmaps(Loader loader,AnimationLoader animations):loader_(std
 BitmapSlot& SceneBitmaps::checked(std::int32_t index){if(index<0 || std::size_t(index)>=slots_.size())throw Error("native bitmap index out of range");return slots_[std::size_t(index)];}
 const BitmapSlot& SceneBitmaps::slot(std::int32_t index)const{return const_cast<SceneBitmaps*>(this)->checked(index);}
 void SceneBitmaps::clear(){slots_={};retired_.clear();sprites_.clear();}
+bool SceneBitmaps::loading()const noexcept{for(const auto& slot:slots_)if(slot.loading())return true;for(const auto& slot:retired_)if(slot.loading())return true;return false;}
 std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
     if(command.index<176 || command.index>192)return std::nullopt;
     const auto count=[&](std::size_t n){if(command.arguments.size()!=n)throw Error("invalid native bitmap parameters");};

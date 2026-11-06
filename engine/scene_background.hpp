@@ -36,6 +36,7 @@ public:
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     BackgroundFrame frame()const;
     bool busy()const noexcept{return loading_ || active_;}
+    bool loading()const noexcept{return loading_;}
     bool picture()const noexcept{return picture_;}
     const SceneCamera& camera()const noexcept{return camera_;}
 private:

@@ -65,6 +65,7 @@ void SceneEffects::stop_all(){
     for(auto& value:slots_)halt(value);
     for(auto& value:ones_){if(value.voice)value.voice->stop();value={};}
 }
+bool SceneEffects::loading()const{for(const auto& slot:slots_)if(slot.voice && !slot.voice->ready())return true;for(const auto& slot:ones_)if(slot.voice && !slot.voice->ready())return true;return false;}
 void SceneEffects::update(const std::function<std::int32_t(std::int32_t)>& adjust){
     for(auto& value:ones_)if(value.voice){check_voice(*value.voice);if(value.voice->finished()){value.voice->stop();value={};}}
     for(auto& value:slots_)if(value.voice){

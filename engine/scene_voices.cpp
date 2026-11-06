@@ -12,6 +12,7 @@ SceneVoices::~SceneVoices(){for(auto& item:slots_)stop(item);}
 SceneVoices::Slot& SceneVoices::checked(std::int32_t index){if(index<0 || std::size_t(index)>=slots_.size())throw Error("native voice channel out of range");return slots_[std::size_t(index)];}
 void SceneVoices::stop(Slot& item){if(item.voice){if(events_.stopped)events_.stopped(std::uint32_t(&item-slots_.data()));item.voice->stop();}item={};}
 std::size_t SceneVoices::active()const noexcept{std::size_t count=0;for(const auto& item:slots_)count+=bool(item.voice);return count;}
+bool SceneVoices::loading()const{for(const auto& slot:slots_)if(slot.voice && !slot.voice->ready())return true;return false;}
 void SceneVoices::apply(Slot& item){if(item.voice)item.voice->gain(std::uint8_t(std::clamp(std::int64_t(item.volume)*master_*speech_/65536,std::int64_t(0),std::int64_t(255))));}
 void SceneVoices::settings(std::int32_t master,std::int32_t speech,bool mute_adult){
     master_=std::clamp(master,0,256);speech_=std::clamp(speech,0,256);mute_adult_=mute_adult;for(auto& item:slots_)apply(item);

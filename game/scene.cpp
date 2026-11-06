@@ -138,6 +138,17 @@ void Scene::pause(bool value,std::int64_t monotonic_us){
     movies_.pause(value,monotonic_us);captions_.pause(value,std::uint64_t(monotonic_us)/1000);
     if(!value)mixer_->pause(false);
 }
+bool Scene::can_accelerate()const{
+    if(timeline_.paused() || title_requested_ || !skipping() || choices_.active() || movies_.active() || calendar_.busy())return false;
+    if(backgrounds_.loading() || bitmaps_.loading() || characters_.loading() || weather_.loading() || effects_.loading() || voices_.loading())return false;
+    if(dialogue_.phase()!=script::DialoguePhase::closed && !dialogue_.ready())return false;
+    for(const auto& slot:music_.slots())if(slot.voice && !slot.voice->ready())return false;
+    return true;
+}
+FrameBatch Scene::advance_frame(std::int64_t now,Input input,const std::function<std::int64_t()>& clock,FrameBudget budget){
+    if(!clock)throw std::invalid_argument("Missing native frame budget clock");const auto continued=input.continued();
+    return run_frame_batch([&](bool first){const auto state=update(now,first?input:continued);return FrameTick{state,can_accelerate()};},clock,budget);
+}
 script::BackgroundFrame Scene::background()const{
     auto frame=backgrounds_.frame();frame.transform=shake_.world();const auto channels=colour_.channels();if(frame.previous)frame.previous->colour=channels;if(frame.current)frame.current->colour=channels;return frame;
 }

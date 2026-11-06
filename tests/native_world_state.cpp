@@ -28,7 +28,7 @@ int main(int argc,char** argv){try{
         CHECK(i::in_world(world,true)==(world!=i::SpriteWorld::current) && i::in_world(world,false)==(world!=i::SpriteWorld::previous));++cases;
     }
     unsigned character_loads{};s::SceneCharacters characters([&](auto){++character_loads;return request;});
-    CHECK(!invoke(characters,155,{s::Value(10),s::Value(1111),s::Value(1),s::Value(0),s::Value(255),s::Value(128)}).complete);characters.update();
+    CHECK(!invoke(characters,155,{s::Value(10),s::Value(1111),s::Value(1),s::Value(0),s::Value(255),s::Value(128)}).complete);CHECK(characters.loading());characters.update();CHECK(!characters.loading());
     CHECK(characters.sprites().size()==1 && characters.sprites()[0].world==i::SpriteWorld::both);const auto old_x=characters.sprites()[0].x;++cases;
     characters.retire_background();CHECK(characters.sprites().size()==1 && characters.sprites()[0].world==i::SpriteWorld::previous);++cases;
     CHECK(invoke(characters,155,{s::Value(10),s::Value(1111),s::Value(80.f),s::Value(0),s::Value(255),s::Value(128)}).complete);characters.update();
@@ -42,7 +42,7 @@ int main(int argc,char** argv){try{
     characters.retire_background();characters.clear_retired();CHECK(!characters.count() && characters.sprites().empty());++cases;
     s::SceneBitmaps bitmaps([&](auto,auto,auto){return request;});
     const auto load=[&](bool independent){return invoke(bitmaps,176,{s::Value(7),s::Value(std::string("synthetic.tga")),s::Value(14),s::Value(1),s::Value(std::string()),s::Value(256),s::Value(std::string("grp")),s::Value(int(independent))});};
-    CHECK(!load(false).complete);bitmaps.update();CHECK(bitmaps.sprites().size()==1 && bitmaps.sprites()[0].world==i::SpriteWorld::current && bitmaps.sprites()[0].order==0x18);++cases;
+    CHECK(!load(false).complete && bitmaps.loading());bitmaps.update();CHECK(!bitmaps.loading() && bitmaps.sprites().size()==1 && bitmaps.sprites()[0].world==i::SpriteWorld::current && bitmaps.sprites()[0].order==0x18);++cases;
     bitmaps.retire_background();CHECK(bitmaps.sprites()[0].world==i::SpriteWorld::previous);CHECK(!load(false).complete);bitmaps.update();
     layers=bitmaps.sprites();CHECK(layers.size()==2 && layers[0].world==i::SpriteWorld::previous && layers[1].world==i::SpriteWorld::current && layers[0].order==0x18 && layers[1].order==0x18);++cases;
     bitmaps.clear_retired();CHECK(bitmaps.slot(7).allocated && bitmaps.sprites().size()==1);++cases;
