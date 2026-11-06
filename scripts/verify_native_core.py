@@ -23,6 +23,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--zig-cache',type=Path,default=ROOT/'build/zig-cache')
     parser.add_argument('--resource-root',type=Path,help='Optionally parse external ck-gal.pak script records; never execute them')
+    parser.add_argument('--sdl-archive',type=Path,help='Optional existing Windows SDL2 archive for finite owned-memory composition checks')
     args=parser.parse_args()
     if os.name!='nt':raise SystemExit('This local verifier requires the existing Windows Zig/Android NDK tools')
     kernel=ctypes.WinDLL('kernel32',use_last_error=True);kernel.GetCurrentProcess.restype=ctypes.c_void_p
@@ -42,7 +43,7 @@ def main():
         path.mkdir(parents=True,exist_ok=True);env[name]=str(path)
     inputs=[ROOT/'config/porting_contract.json',Path(__file__),ROOT/'native/CMakeLists.txt',ROOT/'game/CMakeLists.txt',
         ROOT/'tests/native_progress.cpp',ROOT/'tests/native_script_state.cpp',ROOT/'tests/native_control_state.cpp',ROOT/'tests/native_camera_state.cpp',ROOT/'tests/native_script_catalogue.cpp',ROOT/'tests/native_core_link.cpp',ROOT/'platform/progress_storage.cpp',ROOT/'platform/progress_storage.hpp',ROOT/'platform/file_io.cpp',ROOT/'platform/file_io.hpp',ROOT/'platform/sdl_scene.cpp',ROOT/'platform/sdl_scene.hpp',ROOT/'platform/sdl_canvas.hpp',
-        ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/native_voices.cpp',ROOT/'tests/native_novel_state.cpp',ROOT/'tests/native_weather_state.cpp',ROOT/'tests/native_calendar_state.cpp',ROOT/'tests/native_animation_state.cpp',ROOT/'tests/native_scene_geometry.cpp',ROOT/'tests/native_shake_state.cpp']
+        ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/native_voices.cpp',ROOT/'tests/native_novel_state.cpp',ROOT/'tests/native_weather_state.cpp',ROOT/'tests/native_calendar_state.cpp',ROOT/'tests/native_animation_state.cpp',ROOT/'tests/native_scene_geometry.cpp',ROOT/'tests/native_shake_state.cpp',ROOT/'tests/native_world_state.cpp',ROOT/'tests/native_scene_composition.cpp',ROOT/'platform/sdl_canvas.cpp',ROOT/'platform/sdl_mask.cpp',ROOT/'platform/sdl_mask.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
     bindings={p.relative_to(ROOT).as_posix():digest(p) for p in inputs}
@@ -58,22 +59,24 @@ def main():
             if status:raise subprocess.CalledProcessError(status,command)
     def output(command):
         return subprocess.run(list(map(str,command)),cwd=ROOT,env=env,creationflags=flags,capture_output=True,text=True,encoding='utf-8',errors='replace',check=True,timeout=60).stdout
-    sources={};artifacts={};codec_bindings={}
+    sources={};artifacts={};codec_bindings={};composition_state=None;composition_artifact=None
+    composition_sdl_sha=digest(args.sdl_archive) if args.sdl_archive else None
     with (ROOT/'logs/native-core-build.log').open('wb') as console:
         for host in ('windows','android'):
             directory=build/host
             configure=[cmake,'-S',ROOT/'native','-B',directory,'-G','Ninja','-DCMAKE_BUILD_TYPE=MinSizeRel',
                 '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DCMAKE_MAKE_PROGRAM='+str(ninja)]
-            if host=='windows':configure+=['-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake')]
+            if host=='windows':configure+=['-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DWA2_NATIVE_SDL_ARCHIVE='+(str(args.sdl_archive.resolve()) if args.sdl_archive else '')]
             else:configure+=['-DCMAKE_TOOLCHAIN_FILE='+str(ndk/'build/cmake/android.toolchain.cmake'),'-DANDROID_ABI=arm64-v8a','-DANDROID_PLATFORM=android-26','-DANDROID_STL=c++_shared']
             print('Configuring and building '+host+' native core; one hidden low-priority job.',flush=True)
             run(configure,console)
-            targets=['wa2_native_link_check','wa2_native_presentation_check']+(['wa2_native_progress_tests','wa2_native_script_state_tests','wa2_native_control_state_tests','wa2_native_camera_state_tests','wa2_native_voice_state_tests','wa2_native_novel_state_tests','wa2_native_weather_state_tests','wa2_native_calendar_state_tests','wa2_native_animation_state_tests','wa2_native_scene_geometry_tests','wa2_native_shake_state_tests'] if host=='windows' else [])
+            targets=['wa2_native_link_check','wa2_native_presentation_check']+(['wa2_native_progress_tests','wa2_native_script_state_tests','wa2_native_control_state_tests','wa2_native_camera_state_tests','wa2_native_voice_state_tests','wa2_native_novel_state_tests','wa2_native_weather_state_tests','wa2_native_calendar_state_tests','wa2_native_animation_state_tests','wa2_native_scene_geometry_tests','wa2_native_shake_state_tests','wa2_native_world_state_tests'] if host=='windows' else [])
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
+            if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             run([cmake,'--build',directory,'--target',*targets,'--parallel','1'],console,2400)
             commands=json.loads((directory/'compile_commands.json').read_text())
             names={Path(item['file']).resolve().relative_to(ROOT).as_posix() for item in commands}
-            allowed=('engine/','game/','platform/progress_storage.cpp','platform/file_io.cpp','platform/sdl_scene.cpp','tests/native_core_link.cpp','tests/native_progress.cpp','tests/native_script_state.cpp','tests/native_control_state.cpp','tests/native_camera_state.cpp','tests/native_script_catalogue.cpp','tests/native_voices.cpp','tests/native_novel_state.cpp','tests/native_weather_state.cpp','tests/native_calendar_state.cpp','tests/native_animation_state.cpp','tests/native_scene_geometry.cpp','tests/native_shake_state.cpp','tests/pcm_audio.cpp')
+            allowed=('engine/','game/','platform/progress_storage.cpp','platform/file_io.cpp','platform/sdl_scene.cpp','platform/sdl_canvas.cpp','platform/sdl_mask.cpp','tests/native_core_link.cpp','tests/native_progress.cpp','tests/native_script_state.cpp','tests/native_control_state.cpp','tests/native_camera_state.cpp','tests/native_script_catalogue.cpp','tests/native_voices.cpp','tests/native_novel_state.cpp','tests/native_weather_state.cpp','tests/native_calendar_state.cpp','tests/native_animation_state.cpp','tests/native_scene_geometry.cpp','tests/native_shake_state.cpp','tests/native_world_state.cpp','tests/native_scene_composition.cpp','tests/pcm_audio.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -160,6 +163,17 @@ def main():
                 run([directory/'wa2_native_shake_state_tests.exe',directory/'native-shake-state.json'],console,90)
                 shake_state=json.loads((directory/'native-shake-state.json').read_text())
                 if not shake_state['passed'] or shake_state['cases']<35 or shake_state['guards']<8 or shake_state['game_launched'] or shake_state['screen_access']:raise ValueError('Native shake checks failed')
+                run([directory/'wa2_native_world_state_tests.exe',directory/'native-world-state.json'],console,90)
+                world_state=json.loads((directory/'native-world-state.json').read_text())
+                if not world_state['passed'] or world_state['cases']<18 or world_state['guards']<1 or world_state['devices_opened'] or world_state['game_launched'] or world_state['screen_access']:raise ValueError('Native world state checks failed')
+                if args.sdl_archive:
+                    run([directory/'wa2_native_scene_composition_tests.exe',directory/'native-scene-composition.json'],console,90)
+                    composition_state=json.loads((directory/'native-scene-composition.json').read_text())
+                    if not composition_state['passed'] or composition_state['cases']<12 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
+                    composition_graph=output([ninja,'-C',directory,'-t','graph','wa2_native_scene_composition_tests.exe']).replace('\\','/').lower()
+                    if any(token in composition_graph for token in forbidden):raise ValueError('AOT dependency in owned-memory composition test')
+                    composition_artifact=dict(sha256=digest(directory/'wa2_native_scene_composition_tests.exe'),
+                        native_link_graph_sha256=hashlib.sha256(composition_graph.encode()).hexdigest())
                 if args.resource_root:
                     run([directory/'wa2_native_script_catalogue_tests.exe',args.resource_root.resolve(),directory/'native-script-catalogue.json'],console,90)
                     catalogue=json.loads((directory/'native-script-catalogue.json').read_text())
@@ -167,8 +181,9 @@ def main():
     if sources['windows']!=sources['android']:raise ValueError('Native game sources differ between host platforms')
     for name,sha in bindings.items():
         if digest(ROOT/name)!=sha:raise ValueError('Native verification source changed: '+name)
+    if args.sdl_archive and digest(args.sdl_archive)!=composition_sdl_sha:raise ValueError('SDL archive changed during owned-memory verification')
     report=dict(schema='wa2.native-core.v1',source_sha256=bindings,codec_archives_sha256=codec_bindings,
-        native_compiled_sources=sources['windows'],same_native_game_sources=True,artifacts=artifacts,progress=checks,script_state=script_state,control_state=control_state,camera_state=camera_state,voice_state=voice_state,novel_state=novel_state,weather_state=weather_state,calendar_state=calendar_state,animation_state=animation_state,geometry_state=geometry_state,shake_state=shake_state,presentation_adapter_compiled=True,presentation_adapter_linked=False,resource_script_catalogue=catalogue,
+        native_compiled_sources=sources['windows'],same_native_game_sources=True,artifacts=artifacts,progress=checks,script_state=script_state,control_state=control_state,camera_state=camera_state,voice_state=voice_state,novel_state=novel_state,weather_state=weather_state,calendar_state=calendar_state,animation_state=animation_state,geometry_state=geometry_state,shake_state=shake_state,world_state=world_state,composition_state=composition_state,composition_artifact=composition_artifact,composition_sdl_archive_sha256=composition_sdl_sha,presentation_adapter_compiled=True,presentation_adapter_linked=composition_state is not None,resource_script_catalogue=catalogue,
         recompiled_game_linked=False,guest_cpu_and_memory_linked=False,source_executable_opened=False,screen_access=False,
         game_launched=False,emulator_launched=False,android_device_verified=False,complete_gameplay_verified=False,
         native_engine_is_complete=False,apk_created=False,current_release_replaced=False,maximum_build_jobs=1,passed=True)

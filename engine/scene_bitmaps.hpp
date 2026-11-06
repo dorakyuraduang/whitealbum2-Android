@@ -14,6 +14,7 @@ struct BitmapSlot {
     std::vector<std::shared_ptr<const image::Raster>> textures;
     float x{},y{},width{},height{},source_x{},source_y{},source_width{},source_height{},scale{1},angle{},pivot_x{},pivot_y{};
     std::int32_t layer{},blend{1},alpha{255},from{255},target{255},elapsed{},duration{};
+    std::int32_t order_index{};
     std::array<std::int32_t,3> colour{128,128,128};
     std::uint32_t flip{};
     bool allocated{},visible{true},independent{};
@@ -31,12 +32,13 @@ public:
     const BitmapSlot& slot(std::int32_t index)const;
     std::span<const image::Sprite> sprites(std::int32_t first_layer=0,std::int32_t last_layer=255,int independent=-1);
     void retire_background(){for(auto& item:slots_)if(item.allocated && !item.independent)item.retiring=true;}
-    void clear_retired(){for(auto& item:slots_)if(item.retiring)item={};}
+    void clear_retired(){for(auto& item:slots_)if(item.retiring)item={};retired_.clear();}
     void clear();
 private:
     Loader loader_;
     AnimationLoader animation_loader_;
     std::array<BitmapSlot,32> slots_;
+    std::vector<BitmapSlot> retired_;
     std::vector<image::Sprite> sprites_;
     BitmapSlot& checked(std::int32_t index);
 };

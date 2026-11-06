@@ -12,6 +12,7 @@ struct BackgroundLayer {
     std::array<std::int32_t,3> colour{128,128,128};
     float angle{},pivot_x{640},pivot_y{360};
     float source_x{},source_y{},source_width{},source_height{},scale_x{1},scale_y{1};
+    bool operator==(const BackgroundLayer&)const=default;
 };
 struct BackgroundFrame {
     std::optional<BackgroundLayer> previous,current;
@@ -22,6 +23,9 @@ struct BackgroundFrame {
     };
     std::optional<Mask> mask;
     image::SceneTransform transform;
+    struct Composite {image::SceneTransform transform;std::uint8_t opacity{255};};
+    struct Transition {Composite previous,current;};
+    std::optional<Transition> transition;
 };
 // Original B/BW image selection, placement, dissolves and PAK mask transitions.
 class SceneBackground {
@@ -46,7 +50,7 @@ private:
     std::array<std::optional<BackgroundLayer>,2> layers_;
     std::size_t current_{};
     SceneCamera camera_;
-    std::int32_t elapsed_{},duration_{1},effect_{1},mask_mode_{},x_{},y_{};
+    std::int32_t elapsed_{},duration_{1},effective_duration_{1},effect_{1},mask_mode_{},x_{},y_{};
     float width_{1280},height_{720},angle_{};
     bool extended_{};
     bool loading_{},active_{},picture_{};

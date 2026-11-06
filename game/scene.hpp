@@ -39,7 +39,7 @@ class Scene {
     std::uint32_t milliseconds_{};
     Input input_;
     Statistics statistics_;
-    bool background_changing_{},window_visible_{true},title_requested_{},skip_read_only_{true},replay_mode_{};
+    bool background_changing_{},preserve_characters_{},window_visible_{true},title_requested_{},skip_read_only_{true},replay_mode_{};
     script::SceneControls controls_;
     script::SceneProgress progress_;
     script::SceneChoices choices_;

@@ -18,7 +18,7 @@ void SceneBackground::begin(Command& command,std::int32_t time_mode){
     if(extended)command.arguments[10].integer();
     const bool reuse=number==-2 && variant==0;
     const bool masked=effect>=128 && (effect&~0x19ff)==0;
-    if(effect!=-1 && effect!=0 && effect!=1 && !masked)throw Unsupported("unimplemented native background effect "+std::to_string(effect));
+    if(effect!=-1 && effect!=0 && effect!=1 && effect!=12 && effect!=17 && !masked)throw Unsupported("unimplemented native background effect "+std::to_string(effect));
     const bool event=command.index==148 || command.index==149 || command.index==227 || command.index==228;
     if((number<0 && !reuse) || number>(event?99999:9999) || variant<0 || variant>9 || time_mode<0 || time_mode>9)
         throw Unsupported("unimplemented native background image selector");
@@ -60,6 +60,7 @@ std::optional<CommandResult> SceneBackground::dispatch(Command& command,std::int
 void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& adjust){
     camera_.update(adjust);
     const auto duration=adjust?adjust(duration_):duration_;
+    effective_duration_=duration;
     // A skip can shorten an in-flight transition. Drop a queued mask request
     // before waiting for it; the new background image itself is still needed.
     if(duration<=1){mask_request_.reset();mask_.reset();}
@@ -101,6 +102,16 @@ BackgroundFrame SceneBackground::frame()const{
     const auto transform=[&](std::optional<BackgroundLayer>& layer,unsigned index){if(!layer)return;const auto& pose=camera_.pose(index);
         layer->source_x=pose.x;layer->source_y=pose.y;layer->source_width=layer->width;layer->source_height=layer->height;
         layer->scale_x=pose.scale_x;layer->scale_y=pose.scale_y;layer->angle=pose.angle;layer->pivot_x=pose.pivot_x;layer->pivot_y=pose.pivot_y;};
-    transform(previous,unsigned(current_^1));transform(current,unsigned(current_));return {std::move(previous),std::move(current),loading_?std::nullopt:mask_};
+    transform(previous,unsigned(current_^1));transform(current,unsigned(current_));BackgroundFrame result{std::move(previous),std::move(current),loading_?std::nullopt:mask_};
+    if(active_ && !loading_){
+        result.transition.emplace();auto& transition=*result.transition;transition.current.opacity=layers_[current_]->opacity;
+        if(effect_==12){const auto t=float(elapsed_)/effective_duration_;transition.previous.transform.scale=2-(1-t)*(1-t);}
+        if(effect_==17){const auto alpha=std::int64_t(elapsed_)*255/effective_duration_,remaining=256-alpha;
+            const auto distance=720-remaining*remaining*720/65536;
+            transition.previous.transform.y=float(-distance);transition.current.transform.y=float(720-distance);
+            transition.previous.opacity=transition.current.opacity=std::uint8_t(alpha);
+        }
+    }
+    return result;
 }
 }

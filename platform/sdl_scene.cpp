@@ -27,12 +27,16 @@ void SdlScene::draw(const script::BackgroundLayer& layer){
     }
 }
 void SdlScene::sprites(std::span<const image::Sprite> items,const image::SceneTransform& transform){
+    sprites_pass(items,transform,{});
+}
+void SdlScene::sprites_pass(std::span<const image::Sprite> items,const image::SceneTransform& transform,std::optional<bool> previous){
     if(items.size()>65536)throw std::runtime_error("native sprite batch exceeds limit");
     std::erase_if(uploads_,[](const auto& item){return item.image.expired();});
     auto& vertices=sprite_vertices_;vertices.clear();std::shared_ptr<const image::Raster> source;auto blend=image::SpriteBlend::alpha;
     if(vertices.capacity()<items.size()*6)vertices.reserve(items.size()*6);
     const auto flush=[&]{if(!vertices.empty()){canvas_.triangles(texture(source),vertices,blend==image::SpriteBlend::add?CanvasBlend::add:CanvasBlend::alpha);vertices.clear();}};
     for(const auto& item:items){
+        if(previous && !image::in_world(item.world,*previous))continue;
         if(!item.image || !item.alpha)continue;
         const auto quad=image::scene_quad({item.x,item.y,item.width,item.height,item.source_x,item.source_y,item.source_width,item.source_height,
             item.angle,item.pivot_x,item.pivot_y,1,1,item.flip,transform},item.image->width,item.image->height);if(!quad)continue;
@@ -47,33 +51,36 @@ void SdlScene::background(const script::BackgroundFrame& frame,std::span<const i
     if(!world_target_)world_target_=canvas_.target(1280,720);
     canvas_.render_to(world_target_,[&]{background_contents(frame,environment);});
     canvas_.clip({});canvas_.clear({0,0,0,255});
-    const auto quad=image::scene_quad({0,0,1280,720,0,0,1280,720,0,0,0,1,1,0,frame.transform},1280,720);
-    if(quad){std::array<CanvasVertex,6> vertices;for(unsigned n=0;n<vertices.size();++n){const auto& v=(*quad)[n];vertices[n]={v.x,v.y,v.u,v.v,{255,255,255,255}};}canvas_.triangles(world_target_,vertices);}
+    draw_target(world_target_,frame.transform,255);
+}
+void SdlScene::draw_target(const std::shared_ptr<CanvasTexture>& target,const image::SceneTransform& transform,std::uint8_t opacity){
+    if(!opacity)return;const auto quad=image::scene_quad({0,0,1280,720,0,0,1280,720,0,0,0,1,1,0,transform},1280,720);
+    if(quad){std::array<CanvasVertex,6> vertices;for(unsigned n=0;n<vertices.size();++n){const auto& v=(*quad)[n];vertices[n]={v.x,v.y,v.u,v.v,{255,255,255,opacity}};}canvas_.triangles(target,vertices);}
 }
 void SdlScene::background_contents(const script::BackgroundFrame& frame,std::span<const image::Sprite> environment){
-    // Retain one fixed-size render target across transitions, but release the
-    // source image immediately so fast-forward cannot keep old scenes alive.
-    if(!frame.mask)mask_source_.reset();
+    const bool composite=frame.current && (frame.mask || frame.transition || (frame.previous && frame.current->opacity<255));
+    if(!composite){mask_source_.reset();previous_source_.reset();}
     std::erase_if(uploads_,[](const auto& item){return item.image.expired();});
     canvas_.clip({});canvas_.clear({0,0,0,255});
-    if(frame.mask && frame.current){
-        const auto& layer=*frame.current;const auto& mask=*frame.mask;
-        if(!mask.image || !layer.image)throw std::runtime_error("missing native background mask image");
-        if(!mask_source_ || mask_source_->image!=layer.image || mask_source_->x!=layer.x || mask_source_->y!=layer.y ||
-            mask_source_->width!=layer.width || mask_source_->height!=layer.height || mask_source_->colour!=layer.colour ||
-            mask_source_->angle!=layer.angle || mask_source_->pivot_x!=layer.pivot_x || mask_source_->pivot_y!=layer.pivot_y ||
-            mask_source_->source_x!=layer.source_x || mask_source_->source_y!=layer.source_y || mask_source_->source_width!=layer.source_width ||
-            mask_source_->source_height!=layer.source_height || mask_source_->scale_x!=layer.scale_x || mask_source_->scale_y!=layer.scale_y){
-            mask_source_=layer;if(!mask_target_)mask_target_=canvas_.target(1280,720);
-            canvas_.render_to(mask_target_,[&]{canvas_.clear({0,0,0,255});auto opaque=layer;opaque.opacity=255;draw(opaque);});
-        }
-        if(frame.previous)draw(*frame.previous);
-        sprites(environment);
+    if(!frame.current){if(frame.previous)draw(*frame.previous);sprites_pass(environment,{},true);return;}
+    if(!composite){draw(*frame.current);sprites_pass(environment,{},false);return;}
+    // Both bounded world targets include their own characters/particles. A
+    // preserved character therefore participates in both sides of a fade.
+    // Constant empty environments reuse their image upload and target; live
+    // animation invalidates only its participating bank, never the old PAKs.
+    const auto render_world=[&](bool previous){
+        auto& target=previous?previous_target_:mask_target_;auto& cache=previous?previous_source_:mask_source_;
+        auto layer=previous?frame.previous:frame.current;if(layer)layer->opacity=255;
+        const bool dynamic=std::any_of(environment.begin(),environment.end(),[&](const auto& item){return item.image && item.alpha && image::in_world(item.world,previous);});
+        if(!target)target=canvas_.target(1280,720);
+        if(dynamic || !layer || !cache || *cache!=*layer){canvas_.render_to(target,[&]{canvas_.clip({});canvas_.clear({0,0,0,255});if(layer)draw(*layer);sprites_pass(environment,{},previous);});
+            if(dynamic)cache.reset();else cache=std::move(layer);}
+    };
+    render_world(true);render_world(false);
+    const auto transition=frame.transition.value_or(script::BackgroundFrame::Transition{{},{{},frame.current->opacity}});
+    draw_target(previous_target_,transition.previous.transform,transition.previous.opacity);
+    if(frame.mask){const auto& mask=*frame.mask;if(!mask.image)throw std::runtime_error("Missing native background mask image");
         canvas_.masked(mask_target_,texture(mask.image),*mask.image,mask.bias,mask.gain,mask.flip_x,mask.flip_y,mask.invert);
-    }else{
-        if(frame.previous){draw(*frame.previous);sprites(environment);}
-        if(frame.current)draw(*frame.current);
-        if(!frame.previous)sprites(environment);
-    }
+    }else draw_target(mask_target_,transition.current.transform,transition.current.opacity);
 }
 }

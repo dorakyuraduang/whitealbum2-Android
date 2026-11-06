@@ -131,6 +131,20 @@ The shake checkpoint contains its parameters, counter and scopes; the common
 RNG state remains the enclosing scene's responsibility. Constructed state and
 vertex checks do not verify whole-scene rendering or device performance.
 
+Native background transitions now carry separate old/new world transforms.
+Effect 12 enlarges the old world by `2-(1-t)^2` while the new world dissolves;
+effect 17 retains its integer-alpha vertical push and both composite opacities.
+Their synthetic state vectors agree with bounded memory-only cached-function
+calls. Bitmap/character replacements retain bounded retiring snapshots until
+the old bank is released, and sprite membership distinguishes the previous,
+current and shared worlds. A BC-preserved character can participate in both
+sides of the dissolve instead of being covered by the new background.
+The renderer uses at most two reusable transition targets and an optional
+shake target; steady backgrounds bypass these composites. Image-only targets
+are reused, while participating live sprites invalidate their bank. Optional
+software-reference checks use only constructed solid-colour layers and owned
+memory pixels. They do not verify original whole-scene pixels or frame rates.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations

@@ -11,15 +11,15 @@ std::int32_t short_integer(std::int32_t n){return std::bit_cast<std::int16_t>(st
 bool effect_supported(std::int32_t effect){return effect>=-2 && (effect<=3 || effect==6 || effect==7);}
 }
 SceneCharacters::SceneCharacters(Loader loader):loader_(std::move(loader)){
-    if(!loader_)throw Error("missing native character loader");sprites_.reserve(16);
+    if(!loader_)throw Error("missing native character loader");sprites_.reserve(32);retired_.reserve(8);
 }
 SceneCharacters::Slot* SceneCharacters::find(std::int32_t id){for(auto& item:slots_)if(item.id==id)return &item;return nullptr;}
 const SceneCharacters::Slot* SceneCharacters::find(std::int32_t id)const{return const_cast<SceneCharacters*>(this)->find(id);}
 std::size_t SceneCharacters::count()const noexcept{std::size_t n=0;for(const auto& item:slots_)n+=item.id!=-1;return n;}
 bool SceneCharacters::busy(std::int32_t id)const{auto* item=find(id);return item && (item->request || item->changing);}
-void SceneCharacters::clear(){slots_={};sprites_.clear();}
+void SceneCharacters::clear(){slots_={};retired_.clear();sprites_.clear();}
 void SceneCharacters::retire_background(){for(auto& item:slots_)if(item.id!=-1)item.retiring=true;}
-void SceneCharacters::clear_retired(){for(auto& item:slots_)if(item.retiring)item={};}
+void SceneCharacters::clear_retired(){for(auto& item:slots_)if(item.retiring)item={};retired_.clear();}
 void SceneCharacters::set(std::int32_t id,std::int32_t number,const Value& position,std::int32_t layer,
                           std::int32_t effect,std::int32_t duration,std::int32_t alpha,std::int32_t brightness){
     id=short_integer(id);
@@ -35,11 +35,13 @@ void SceneCharacters::set(std::int32_t id,std::int32_t number,const Value& posit
     if(!item)throw Error("more than eight active native characters");
     Pose target{nullptr,number,layer,std::clamp(short_integer(alpha),0,255),brightness,offset};
     const bool same_image=item->id==id && item->current.number==number;
-    if(same_image){target.image=item->current.image;if(target==item->current)return;}
+    if(same_image){target.image=item->current.image;if(target==item->current && !item->retiring)return;}
     std::shared_ptr<image::ImageRequest> request;
     if(!same_image){std::array<char,32> name{};std::snprintf(name.data(),name.size(),"%s%06d.tga",character_prefixes[id].data(),int(number));
         request=loader_(name.data());if(!request)throw Error("native character loader returned no request");}
+    if(item->retiring){if(retired_.size()>=slots_.size())throw Error("Native retired character bank is full");retired_.push_back(*item);}
     item->previous=item->current;item->current=std::move(target);item->request=std::move(request);item->id=id;
+    item->order_index=std::int32_t(item-slots_.data());
     item->effect=effect;item->duration=short_integer(duration);item->elapsed=0;item->progress=0;item->changing=true;item->removing=false;item->retiring=false;
 }
 void SceneCharacters::remove(std::int32_t id,std::int32_t effect,std::int32_t duration){
@@ -63,7 +65,7 @@ std::optional<CommandResult> SceneCharacters::dispatch(Command& command){
     return CommandResult{complete,!complete,Value{}};
 }
 void SceneCharacters::update(const std::function<std::int32_t(std::int32_t)>& adjust){
-    for(auto& item:slots_){if(item.id==-1)continue;
+    const auto update=[&](auto& items){for(auto& item:items){if(item.id==-1)continue;
         if(item.request){auto image=item.request->get();if(!image)continue;item.current.image=std::move(image);item.request.reset();}
         if(!item.changing)continue;
         const auto duration=adjust?adjust(item.duration):item.duration;
@@ -71,10 +73,10 @@ void SceneCharacters::update(const std::function<std::int32_t(std::int32_t)>& ad
         if(item.progress>=1){
             if(item.removing)item={};else{item.elapsed=std::max(duration,0);item.changing=false;item.previous={};}
         }
-    }
+    }};update(slots_);update(retired_);
 }
 std::span<const image::Sprite> SceneCharacters::sprites(){
-    sprites_.clear();for(std::size_t n=0;n<slots_.size();++n){const auto& item=slots_[n];if(item.id==-1)continue;
+    sprites_.clear();const auto append_bank=[&](const auto& bank){for(std::size_t n=0;n<bank.size();++n){const auto& item=bank[n];if(item.id==-1)continue;
         const auto t=item.changing?item.progress:1.f;
         const auto progress=item.removing?1-t:t;const auto ease=1-(1-progress)*(1-progress);
         const auto centre=[](const Pose& pose){return pose.image?float((1280-int(pose.image->width))/2)+pose.position:0.f;};
@@ -97,9 +99,10 @@ std::span<const image::Sprite> SceneCharacters::sprites(){
             const auto brightness=std::uint8_t(std::min(pose.brightness*2,255));
             sprites_.push_back({pose.image,x,y,width*scale,height*scale,0,0,width,height,brightness,brightness,brightness,
                 std::uint8_t(std::clamp(int(std::nearbyint(alpha)),0,255))});
-            sprites_.back().layer=2+pose.layer;sprites_.back().order=0x379+std::int32_t(n)*2+(previous?0:1);
+            sprites_.back().layer=2+pose.layer;sprites_.back().order=0x379+item.order_index*2+(previous?0:1);
+            sprites_.back().world=item.retiring?image::SpriteWorld::previous:image::SpriteWorld::both;
         };
         if(item.changing && replacement)append(item.previous,true);append(item.current,false);
-    }return sprites_;
+    }};append_bank(retired_);append_bank(slots_);return sprites_;
 }
 }

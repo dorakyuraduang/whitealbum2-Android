@@ -24,7 +24,7 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     },[this]{return dialogue_.speaker();},[this]{return controls_.modes().voice_offset;},[this]{return skipping();},[this]{return input_.advance;}),
     weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto name){return image::Animation::parse(resources_.data("grp",name));}),
     shake_([this]{return random_.next();}),
-    backgrounds_([this](auto name){return resources_.image("bak",name);},[this](bool keep_characters){background_changing_=true;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
+    backgrounds_([this](auto name){return resources_.image("bak",name);},[this](bool keep_characters){bitmaps_.clear_retired();characters_.clear_retired();background_changing_=true;preserve_characters_=keep_characters;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
         [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name);}),
     bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);},[this](auto name,auto group){return image::Animation::parse(resources_.data(group,name));}),
     characters_([this](auto name){return resources_.image("char",name);}),
@@ -122,7 +122,9 @@ script::BackgroundFrame Scene::background()const{
 }
 std::span<const image::Sprite> Scene::environment(){
     environment_.clear();const auto add=[this](auto items){environment_.insert(environment_.end(),items.begin(),items.end());};
-    for(const auto& item:weather_.sprites())if(item.layer<0x1000)environment_.push_back(item);add(bitmaps_.sprites(0,255,0));add(characters_.sprites());
+    for(auto item:weather_.sprites())if(item.layer<0x1000){if(background_changing_ && !backgrounds_.picture() && weather_.scope()==0)item.world=image::SpriteWorld::previous;environment_.push_back(std::move(item));}
+    add(bitmaps_.sprites(0,255,0));for(auto item:characters_.sprites()){
+        if(background_changing_ && !preserve_characters_ && item.world!=image::SpriteWorld::previous)item.world=image::SpriteWorld::current;environment_.push_back(std::move(item));}
     std::sort(environment_.begin(),environment_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});
     const auto colour=colour_.channels();for(auto& item:environment_){item.red=std::uint8_t(unsigned(item.red)*unsigned(std::min(colour[0]*2,255))/255);
         item.green=std::uint8_t(unsigned(item.green)*unsigned(std::min(colour[1]*2,255))/255);item.blue=std::uint8_t(unsigned(item.blue)*unsigned(std::min(colour[2]*2,255))/255);}

@@ -25,7 +25,7 @@ private:
         bool operator==(const Pose&)const=default;
     };
     struct Slot {
-        std::int32_t id{-1},effect{},duration{},elapsed{};
+        std::int32_t id{-1},effect{},duration{},elapsed{},order_index{};
         float progress{};
         Pose current,previous;
         std::shared_ptr<image::ImageRequest> request;
@@ -33,6 +33,7 @@ private:
     };
     Loader loader_;
     std::array<Slot,8> slots_;
+    std::vector<Slot> retired_;
     std::vector<image::Sprite> sprites_;
     Slot* find(std::int32_t id);
     const Slot* find(std::int32_t id)const;

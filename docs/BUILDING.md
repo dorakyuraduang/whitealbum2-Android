@@ -39,8 +39,15 @@ use constructed containers only.
 Camera/background checks cover interrupted pans, easing, both camera banks,
 timed pauses, skip completion, checkpoint continuation, pixel/scale command
 conventions, preserved transforms and BC character retention. The shared SDL
-scene adapter also compiles on both toolchains without being executed or linked
-to a device backend by this component verifier.
+scene adapter also compiles on both toolchains. For a finite composition check,
+pass `--sdl-archive /path/to/an/existing/SDL2.a` pointing to a Windows x64 SDL2
+build with the software renderer enabled. The optional test links the real
+scene/canvas adapter but initializes no video, audio or event subsystem. It
+draws synthetic solid-colour worlds into a privately allocated memory surface
+and checks pixels and retired-image lifetime; no window, screen, PAK artwork,
+game scene or timing/pressure loop is involved. The SDL archive, test executable
+and actual native link graph are bound into the verification report. This
+does not verify GLES output or device performance.
 
 ## Public source boundary
 
