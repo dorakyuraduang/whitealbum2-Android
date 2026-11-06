@@ -334,6 +334,15 @@ Synthetic checks cover supported transitions, pending styles, replacement,
 retired worlds, removal and failed restore. Whole-scene and device validation
 remain separate.
 
+Bitmap checkpoints retain all 32 active slots and bounded retired copies,
+source/destination rectangles, pivots, scale/angle, reflection, colour, blend,
+fade counters and exact pending/loaded image references. INAS definitions are
+reopened by saved member/group and matched through the playback fingerprint;
+texture requests and sequence progress are restored without ticking the player.
+Failed restore leaves existing logical slots intact. Synthetic checks cover
+static/animated loads, fades and transforms, independent/retired layers and
+changed definitions. These remain component checks, not whole-game saves.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

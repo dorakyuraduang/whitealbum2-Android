@@ -3,12 +3,14 @@
 #include "image_store.hpp"
 #include "scene_sprite.hpp"
 #include "sprite_animation.hpp"
+#include "image_reference.hpp"
 
 namespace wa2::script {
 struct BitmapSlot {
     std::shared_ptr<image::ImageRequest> request;
     std::shared_ptr<const image::Raster> image;
     std::shared_ptr<const image::Animation> animation;
+    std::string animation_name,animation_group;
     std::optional<image::AnimationPlayer> player;
     std::vector<std::shared_ptr<image::ImageRequest>> texture_requests;
     std::vector<std::shared_ptr<const image::Raster>> textures;
@@ -35,6 +37,8 @@ public:
     void clear_retired(){for(auto& item:slots_)if(item.retiring)item={};retired_.clear();}
     void clear();
     bool loading()const noexcept;
+    std::vector<std::uint8_t> checkpoint(const resource::Catalog&)const;
+    void restore(std::span<const std::uint8_t>,resource::Catalog&,const image::Resolve&);
 private:
     Loader loader_;
     AnimationLoader animation_loader_;

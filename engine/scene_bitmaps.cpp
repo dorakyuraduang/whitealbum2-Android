@@ -1,4 +1,6 @@
 #include "scene_bitmaps.hpp"
+#include "resource_catalog.hpp"
+#include "checkpoint_codec.hpp"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -40,7 +42,7 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
             if(value(2)<0 || value(2)>255 || (value(6)!=0 && value(6)!=1))throw Unsupported("Native animated bitmap drawing layer");
             auto data=animation_loader_(command.arguments[1].text(),command.arguments[5].text());if(!data)throw Error("Native animation loader returned no definition");
             if(data->textures().size()>8)throw Unsupported("Native animated bitmap has more than eight concurrent textures");
-            BitmapSlot next;next.animation=std::move(data);next.player.emplace(next.animation);next.width=1280;next.height=720;next.layer=value(2);next.order_index=value(0);next.independent=value(6)!=0;next.allocated=true;
+            BitmapSlot next;next.animation_name=command.arguments[1].text();next.animation_group=command.arguments[5].text();next.animation=std::move(data);next.player.emplace(next.animation);next.width=1280;next.height=720;next.layer=value(2);next.order_index=value(0);next.independent=value(6)!=0;next.allocated=true;
             for(const auto& name:next.animation->textures()){auto request=loader_(name,command.arguments[5].text(),1);if(!request)throw Error("Native animation texture loader returned no request");next.texture_requests.push_back(std::move(request));}
             next.textures.resize(next.texture_requests.size());if(item.retiring){if(retired_.size()>=slots_.size())throw Error("Native retired bitmap bank is full");retired_.push_back(item);}item=std::move(next);command.continuation=1;
         }
@@ -108,5 +110,38 @@ std::span<const image::Sprite> SceneBitmaps::sprites(std::int32_t first_layer,st
     }};append_bank(retired_);append_bank(slots_);
     std::sort(sprites_.begin(),sprites_.end(),[](const auto& a,const auto& b){if(a.layer!=b.layer)return a.layer<b.layer;if(a.order!=b.order)return a.order<b.order;return a.world<b.world;});
     return sprites_;
+}
+std::vector<std::uint8_t> SceneBitmaps::checkpoint(const resource::Catalog& resources)const{
+    checkpoint::Writer out;out.u32(std::uint32_t(retired_.size()));
+    const auto pixels=[&](const auto& request,const auto& image){out.boolean(bool(request));if(request)out.blob(image::checkpoint_reference(resources.reference(request)));out.boolean(bool(image));if(image)out.blob(image::checkpoint_image(resources,image));};
+    const auto slot=[&](const BitmapSlot& value){
+        for(auto v:{value.x,value.y,value.width,value.height,value.source_x,value.source_y,value.source_width,value.source_height,value.scale,value.angle,value.pivot_x,value.pivot_y})out.u32(std::bit_cast<std::uint32_t>(v));
+        for(auto v:{value.layer,value.blend,value.alpha,value.from,value.target,value.elapsed,value.duration,value.order_index})out.i32(v);for(auto v:value.colour)out.i32(v);out.u32(value.flip);
+        out.boolean(value.allocated);out.boolean(value.visible);out.boolean(value.independent);out.boolean(value.retiring);pixels(value.request,value.image);
+        out.boolean(bool(value.animation));if(value.animation){if(!value.player || value.textures.size()!=value.texture_requests.size())throw Error("Invalid native bitmap animation state");out.string(value.animation_name);out.string(value.animation_group);out.blob(value.player->checkpoint());out.u32(std::uint32_t(value.textures.size()));for(unsigned n=0;n<value.textures.size();++n)pixels(value.texture_requests[n],value.textures[n]);}
+    };
+    for(const auto& item:slots_)slot(item);for(const auto& item:retired_)slot(item);return out.seal("LSBM");
+}
+void SceneBitmaps::restore(std::span<const std::uint8_t> bytes,resource::Catalog& resources,const image::Resolve& resolve){
+    if(!resolve)throw Error("Missing saved bitmap image resolver");auto in=checkpoint::Reader::open("LSBM",bytes);const auto count=in.u32();if(count>32)throw Error("Saved retired bitmap count exceeds thirty-two");
+    const auto pixels=[&](auto& request,auto& image){if(in.boolean())request=resources.image(image::restore_reference(in.blob(2048)));if(in.boolean())image=image::restore_image(in.blob(4096),resources,resolve);if(request && image)throw Error("Saved bitmap is both pending and loaded");};
+    const auto slot=[&]{BitmapSlot value;for(auto* v:{&value.x,&value.y,&value.width,&value.height,&value.source_x,&value.source_y,&value.source_width,&value.source_height,&value.scale,&value.angle,&value.pivot_x,&value.pivot_y}){*v=std::bit_cast<float>(in.u32());if(!std::isfinite(*v) || std::abs(*v)>1.e9f)throw Error("Invalid saved bitmap geometry");}
+        for(auto* v:{&value.layer,&value.blend,&value.alpha,&value.from,&value.target,&value.elapsed,&value.duration,&value.order_index})*v=in.i32();for(auto& v:value.colour)v=in.i32();value.flip=in.u32();
+        if(value.scale<0 || value.scale>100 || value.layer<0 || value.layer>255 || value.alpha<0 || value.alpha>255 || value.from<0 || value.from>255 || value.target<0 || value.target>255 || value.duration<0 || value.duration>32767 || value.elapsed<0 || value.elapsed>32767 || value.order_index<0 || value.order_index>31 || (value.flip&~3u))throw Error("Invalid saved bitmap transition");sprite_blend(value.blend);for(auto v:value.colour)if(v<0 || v>128)throw Error("Invalid saved bitmap colour");
+        value.allocated=in.boolean();value.visible=in.boolean();value.independent=in.boolean();value.retiring=in.boolean();pixels(value.request,value.image);
+        if(in.boolean()){
+            value.animation_name=in.string(255);value.animation_group=in.string(64);
+            if(value.animation_name.empty() || value.animation_name.find_first_of("/\\")!=std::string::npos || value.animation_name.find('\0')!=std::string::npos)throw Error("Invalid saved bitmap animation name");
+            for(unsigned char ch:value.animation_group)if(!((ch>='a' && ch<='z') || (ch>='A' && ch<='Z') || (ch>='0' && ch<='9') || ch=='_' || ch=='-'))throw Error("Invalid saved bitmap animation group");
+            if(!animation_loader_)throw Unsupported("Missing saved bitmap animation loader");value.animation=animation_loader_(value.animation_name,value.animation_group);if(!value.animation || value.animation->textures().size()>8)throw Error("Invalid saved bitmap animation definition");
+            value.player.emplace(value.animation);value.player->restore(in.blob(4096));const auto textures=in.u32();if(textures!=value.animation->textures().size())throw Error("Saved bitmap texture count changed");value.texture_requests.resize(textures);value.textures.resize(textures);
+            for(unsigned n=0;n<textures;++n){pixels(value.texture_requests[n],value.textures[n]);if(!value.texture_requests[n] && !value.textures[n])throw Error("Missing saved bitmap animation texture");}
+            if(value.request || value.image)throw Error("Saved bitmap has both static and animated images");
+            if(!value.loading()){for(const auto& frame:value.animation->frames())for(const auto& piece:frame.pieces){const auto& texture=value.textures.at(piece.texture);if(unsigned(piece.source_x)+unsigned(piece.width)>texture->width || unsigned(piece.source_y)+unsigned(piece.height)>texture->height)throw Error("Saved bitmap crop exceeds its texture");}value.animation_validated=true;}
+        }
+        if((!value.allocated && (value.image || value.request || value.animation || value.retiring)) || (value.allocated && !value.image && !value.request && !value.animation))throw Error("Inconsistent saved bitmap allocation");return value;
+    };
+    std::array<BitmapSlot,32> next;for(unsigned n=0;n<next.size();++n){next[n]=slot();if(next[n].allocated && next[n].order_index!=std::int32_t(n))throw Error("Misordered saved bitmap slot");}
+    std::vector<BitmapSlot> retired;retired.reserve(32);for(unsigned n=0;n<count;++n)retired.push_back(slot());in.finish();slots_=std::move(next);retired_=std::move(retired);sprites_.clear();
 }
 }
