@@ -1,5 +1,6 @@
 #pragma once
 #include "image_store.hpp"
+#include "image_reference.hpp"
 #include <map>
 
 namespace wa2::resource {
@@ -20,6 +21,9 @@ public:
     const Archive& required(std::string_view group);
     const Archive* optional(std::string_view group,bool introductory=false);
     std::shared_ptr<image::ImageRequest> image(std::string_view group,std::string_view name,std::int32_t chroma=256,std::string_view colour_map={});
+    std::shared_ptr<image::ImageRequest> image(const image::Reference&);
+    image::Reference reference(const std::shared_ptr<image::ImageRequest>&)const;
+    image::Reference reference(const std::shared_ptr<const image::Raster>&)const;
     std::shared_ptr<Source> stream(std::string_view group,std::string_view name);
     std::vector<std::uint8_t> data(std::string_view group,std::string_view name);
     std::shared_ptr<Source> movie(std::string_view filename);

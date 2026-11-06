@@ -174,7 +174,7 @@ def main():
                 if not world_state['passed'] or world_state['cases']<35 or world_state['guards']<1 or world_state['devices_opened'] or world_state['game_launched'] or world_state['screen_access']:raise ValueError('Native world state checks failed')
                 run([directory/'wa2_native_image_style_tests.exe',directory/'native-image-styles.json'],console,90)
                 image_styles=json.loads((directory/'native-image-styles.json').read_text())
-                if not image_styles['passed'] or image_styles['cases']<17 or image_styles['guards']<11 or image_styles['devices_opened'] or image_styles['game_launched'] or image_styles['screen_access']:raise ValueError('Native image style checks failed')
+                if not image_styles['passed'] or image_styles['cases']<23 or image_styles['guards']<23 or image_styles['devices_opened'] or image_styles['game_launched'] or image_styles['screen_access']:raise ValueError('Native image style checks failed')
                 run([directory/'wa2_native_caption_state_tests.exe',directory/'native-caption-state.json'],console,90)
                 caption_state=json.loads((directory/'native-caption-state.json').read_text())
                 if not caption_state['passed'] or caption_state['cases']<60 or caption_state['guards']<4 or caption_state['embedded_tracks']!=46 or not caption_state['synthetic_audio_only'] or caption_state['devices_opened'] or caption_state['game_launched'] or caption_state['screen_access']:raise ValueError('Native caption state checks failed')

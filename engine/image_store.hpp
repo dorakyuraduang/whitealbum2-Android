@@ -20,10 +20,13 @@ class ImageStore {
     struct Impl;
     std::unique_ptr<Impl> impl_;
 public:
+    struct Record {std::string member;ImageStyle style;};
     explicit ImageStore(resource::Archive archive,std::function<void()> initialize_worker={});
     ~ImageStore();
     ImageStore(const ImageStore&)=delete;
     ImageStore& operator=(const ImageStore&)=delete;
     std::shared_ptr<ImageRequest> request(std::string_view name,ImageStyle style={});
+    std::optional<Record> describe(const std::shared_ptr<ImageRequest>&)const;
+    std::optional<Record> describe(const std::shared_ptr<const Raster>&)const;
 };
 }

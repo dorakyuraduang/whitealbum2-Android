@@ -14,6 +14,7 @@ struct ImageRequest::State {
     std::string error;
     std::size_t member{};
     ImageStyle style;
+    std::shared_ptr<const void> owner;
 };
 ImageRequest::ImageRequest(std::shared_ptr<State> state):state_(std::move(state)){}
 std::shared_ptr<const Raster> ImageRequest::get()const{
@@ -21,6 +22,7 @@ std::shared_ptr<const Raster> ImageRequest::get()const{
 }
 struct ImageStore::Impl {
     resource::Archive archive;
+    std::shared_ptr<const void> identity{std::make_shared<int>(0)};
     std::mutex mutex;
     std::condition_variable wake;
     std::deque<std::shared_ptr<ImageRequest::State>> pending;
@@ -70,7 +72,7 @@ std::shared_ptr<ImageRequest> ImageStore::request(std::string_view name,ImageSty
     std::lock_guard lock(self.mutex);
     const Impl::Key key{index,style.chroma,style.colours};
     if(const auto found=self.cache.find(key);found!=self.cache.end())if(auto request=found->second.lock())return request;
-    auto state=std::make_shared<ImageRequest::State>();state->member=index;state->style=std::move(style);
+    auto state=std::make_shared<ImageRequest::State>();state->member=index;state->style=std::move(style);state->owner=self.identity;
     if(const auto found=self.decoded.find(key);found!=self.decoded.end())state->image=found->second.lock();
     if(!state->image && self.pending.size()>=8)throw Error("native image loading queue is full");
     auto request=std::shared_ptr<ImageRequest>(new ImageRequest(state));
@@ -79,5 +81,14 @@ std::shared_ptr<ImageRequest> ImageStore::request(std::string_view name,ImageSty
     self.cache[key]=request;
     if(!state->image){self.pending.push_back(std::move(state));self.wake.notify_one();}
     return request;
+}
+std::optional<ImageStore::Record> ImageStore::describe(const std::shared_ptr<ImageRequest>& request)const{
+    if(!request || request->state_->owner!=impl_->identity)return {};
+    const auto& state=*request->state_;return Record{impl_->archive.members()[state.member].name,state.style};
+}
+std::optional<ImageStore::Record> ImageStore::describe(const std::shared_ptr<const Raster>& raster)const{
+    if(!raster)return {};auto& self=*impl_;std::lock_guard lock(self.mutex);
+    for(const auto& [key,value]:self.decoded)if(value.lock()==raster)return Record{self.archive.members()[std::get<0>(key)].name,{std::get<1>(key),std::get<2>(key)}};
+    return {};
 }
 }

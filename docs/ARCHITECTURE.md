@@ -256,6 +256,16 @@ bounded targets and caches are reused. Owned-memory pixel checks cover fade,
 mask and zoom while an outer transform is active; no hardware context is used.
 Fully opaque world passes also use a copy instead of an additional alpha blend.
 
+Native image references identify the exact external root/IC/patch PAK bank,
+member filename and load-time chroma/AMP settings. Both pending requests and
+live decoded images can be described; checkpoint data contains only these
+identifiers and the small colour tables, never image pixels. Reload validates
+bank/member names and recreates an asynchronous request through the catalogue.
+Ownership tokens reject requests from other stores. Synthetic checks cover
+fresh-catalogue reload, IC routing, styled pixel preservation and invalid paths.
+These references are a prerequisite for full scene snapshots, not an integrated
+manual-save implementation.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

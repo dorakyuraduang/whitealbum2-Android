@@ -56,6 +56,20 @@ std::shared_ptr<image::ImageRequest> Catalog::image(std::string_view group,std::
     return selected.bank->images->request(selected.bank->archive->members()[selected.member].name,std::move(style));
 }
 std::shared_ptr<Source> Catalog::stream(std::string_view group,std::string_view name){const auto selected=find(group,name);return selected.bank->archive->open_member(selected.member);}
+std::shared_ptr<image::ImageRequest> Catalog::image(const image::Reference& reference){
+    image::validate_reference(reference);auto& selected=bank(reference.archive);
+    if(!selected.archive)throw NotFound("Saved image archive is missing: "+reference.archive);
+    if(!selected.images)selected.images=std::make_unique<image::ImageStore>(*selected.archive);
+    return selected.images->request(reference.member,reference.style);
+}
+image::Reference Catalog::reference(const std::shared_ptr<image::ImageRequest>& request)const{
+    for(const auto& [path,bank]:banks_)if(bank.images)if(auto record=bank.images->describe(request))return {path,std::move(record->member),std::move(record->style)};
+    throw Error("Image request does not belong to this native resource catalogue");
+}
+image::Reference Catalog::reference(const std::shared_ptr<const image::Raster>& raster)const{
+    for(const auto& [path,bank]:banks_)if(bank.images)if(auto record=bank.images->describe(raster))return {path,std::move(record->member),std::move(record->style)};
+    throw Error("Image does not belong to this native resource catalogue");
+}
 std::vector<std::uint8_t> Catalog::data(std::string_view group,std::string_view name){const auto selected=find(group,name);return selected.bank->archive->load(selected.member);}
 std::shared_ptr<Source> Catalog::movie(std::string_view name){
     filename(name);std::string folded(name);for(auto& ch:folded)if(ch>='A' && ch<='Z')ch+=32;

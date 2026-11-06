@@ -56,6 +56,19 @@ int main(int argc,char** argv){try{
     const auto map_reads=map_source->reads.load();CHECK(resources.image("bak","fixture.tga",0,"tone.amp")==effect && map_source->reads==map_reads && map_opens==1);++cases;
     const auto image_reads=image_source->reads.load();normal.reset();CHECK(resources.image("bak","fixture.tga")->get()==normal_pixels && image_source->reads==image_reads);++cases;
     rejects([&]{resources.image("bak","fixture.tga",-1);});++guards;
+    const auto grey_ref=resources.reference(grey);CHECK(grey_ref.archive=="bak.pak" && grey_ref.member=="fixture.tga" && grey_ref.style.chroma==0 && !grey_ref.style.colours);++cases;
+    const auto normal_ref=resources.reference(normal_pixels);CHECK(normal_ref.style.chroma==256 && await(resources.image(normal_ref))==normal_pixels);++cases;
+    const auto effect_ref=resources.reference(effect);const auto saved_reference=i::checkpoint_reference(effect_ref);const auto restored_ref=i::restore_reference(saved_reference);
+    CHECK(restored_ref.style.chroma==0 && restored_ref.style.colours && restored_ref.style.colours->channels==effect_ref.style.colours->channels && i::checkpoint_reference(restored_ref)==saved_reference && saved_reference.size()<1024);++cases;
+    r::Catalog fresh([&](auto path)->std::shared_ptr<r::Source>{return path=="bak.pak"?image_source:nullptr;});CHECK(await(fresh.image(restored_ref))->rgba==await(effect)->rgba);++cases;
+    r::Catalog ic([&](auto path)->std::shared_ptr<r::Source>{return path=="IC/bak.pak"?image_source:nullptr;});auto introductory=ic.image("bak","fixture.tga");const auto ic_ref=ic.reference(introductory);
+    CHECK(ic_ref.archive=="IC/bak.pak" && await(ic.image(i::restore_reference(i::checkpoint_reference(ic_ref))))->rgba==normal_pixels->rgba);++cases;
+    auto malformed=saved_reference;malformed.back()^=1;rejects([&]{i::restore_reference(malformed);});++guards;
+    for(const auto* path:{"../bak.pak","IC/../bak.pak","C:/bak.pak","IC/bak/extra.pak","BAK.pak"}){auto invalid=grey_ref;invalid.archive=path;rejects([&]{i::checkpoint_reference(invalid);});++guards;}
+    {auto invalid=grey_ref;invalid.member="../fixture.tga";rejects([&]{resources.image(invalid);});++guards;invalid=grey_ref;invalid.style.chroma=257;rejects([&]{i::checkpoint_reference(invalid);});++guards;}
+    {auto absent=grey_ref;absent.archive="missing.pak";rejects([&]{resources.image(absent);});++guards;}
+    {i::ImageStore foreign(r::Archive::open(image_source));auto other=foreign.request("fixture.tga");rejects([&]{resources.reference(other);});rejects([&]{resources.reference(await(other));});guards+=2;++cases;}
+    rejects([&]{resources.reference(std::shared_ptr<const i::Raster>{});});++guards;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-image-styles.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"synthetic_only\":true,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native image chroma, AMP effects and styled request caching.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
