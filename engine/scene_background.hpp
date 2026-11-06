@@ -4,6 +4,9 @@
 #include "scene_camera.hpp"
 #include "scene_geometry.hpp"
 
+namespace wa2::resource {class Catalog;}
+namespace wa2::image {struct Reference;}
+
 namespace wa2::script {
 struct BackgroundLayer {
     std::shared_ptr<const image::Raster> image;
@@ -31,6 +34,7 @@ struct BackgroundFrame {
 class SceneBackground {
 public:
     using Loader=std::function<std::shared_ptr<image::ImageRequest>(std::string_view)>;
+    using Resolve=std::function<std::shared_ptr<const image::Raster>(const image::Reference&)>;
     explicit SceneBackground(Loader loader,std::function<void(bool)> changing={},Loader masks={},Loader events={});
     std::optional<CommandResult> dispatch(Command& command,std::int32_t time_mode);
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
@@ -39,6 +43,10 @@ public:
     bool loading()const noexcept{return loading_;}
     bool picture()const noexcept{return picture_;}
     const SceneCamera& camera()const noexcept{return camera_;}
+    std::vector<std::uint8_t> checkpoint(const resource::Catalog&)const;
+    // A restore worker resolves immutable pixels; no GPU/window operation is
+    // performed here. Failed parsing/resolution leaves this controller intact.
+    void restore(std::span<const std::uint8_t>,resource::Catalog&,const Resolve&);
 private:
     Loader loader_;
     Loader mask_loader_;

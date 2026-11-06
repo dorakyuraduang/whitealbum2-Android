@@ -32,6 +32,12 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_dialogue_state(wa2::script
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_backlog_state(wa2::script::SceneBacklog* backlog,const std::uint8_t* data,std::size_t size){
     if(data)backlog->restore({data,size});return backlog->checkpoint().size();
 }
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_background_state(wa2::script::SceneBackground* background,wa2::resource::Catalog* resources,const wa2::script::SceneBackground::Resolve* resolve,const std::uint8_t* data,std::size_t size){
+    if(data)background->restore({data,size},*resources,*resolve);return background->checkpoint(*resources).size();
+}
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_colour_state(wa2::script::SceneColour* colour,const std::uint8_t* data,std::size_t size){
+    if(data)colour->restore({data,size});return colour->checkpoint().size();
+}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_image_state(wa2::resource::Catalog* resources,const std::uint8_t* data,std::size_t size){
     auto reference=wa2::image::restore_reference({data,size});auto request=resources->image(reference);return wa2::image::checkpoint_reference(resources->reference(request)).size();
 }

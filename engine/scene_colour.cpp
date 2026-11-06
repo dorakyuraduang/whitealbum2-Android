@@ -1,4 +1,5 @@
 #include "scene_colour.hpp"
+#include "checkpoint_codec.hpp"
 #include <algorithm>
 
 namespace wa2::script {
@@ -25,5 +26,15 @@ void SceneColour::update(const std::function<std::int32_t(std::int32_t)>& adjust
         if(returning_){returning_=false;duration_=second_duration_;target_={128,128,128};}
         else active_=false;
     }
+}
+std::vector<std::uint8_t> SceneColour::checkpoint()const{
+    checkpoint::Writer out;for(const auto& channels:{current_,from_,target_})for(auto value:channels)out.i32(value);
+    out.i32(duration_);out.i32(second_duration_);out.i32(elapsed_);out.boolean(active_);out.boolean(returning_);return out.seal("LSCO");
+}
+void SceneColour::restore(std::span<const std::uint8_t> bytes){
+    auto in=checkpoint::Reader::open("LSCO",bytes);SceneColour next;
+    for(auto* channels:{&next.current_,&next.from_,&next.target_})for(auto& value:*channels){value=in.i32();if(value<0 || value>255)throw Error("Invalid saved scene colour");}
+    next.duration_=in.i32();next.second_duration_=in.i32();next.elapsed_=in.i32();next.active_=in.boolean();next.returning_=in.boolean();in.finish();
+    if(next.elapsed_<0 || (next.returning_ && !next.active_))throw Error("Invalid saved scene colour fade");*this=next;
 }
 }

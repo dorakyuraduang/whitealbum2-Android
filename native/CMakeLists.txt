@@ -74,6 +74,8 @@ add_executable(wa2_native_frame_batch_tests "${WA2_ROOT}/tests/native_frame_batc
 target_link_libraries(wa2_native_frame_batch_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_backlog_state_tests "${WA2_ROOT}/tests/native_backlog_state.cpp")
 target_link_libraries(wa2_native_backlog_state_tests PRIVATE wa2_script)
+add_executable(wa2_native_background_state_tests "${WA2_ROOT}/tests/native_background_state.cpp")
+target_link_libraries(wa2_native_background_state_tests PRIVATE wa2_script)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -125,6 +127,7 @@ if(NOT ANDROID)
     add_test(NAME native_font_coverage COMMAND wa2_native_font_coverage_tests "${CMAKE_BINARY_DIR}/native-font-coverage.json")
     add_test(NAME native_frame_batch COMMAND wa2_native_frame_batch_tests "${CMAKE_BINARY_DIR}/native-frame-batch.json")
     add_test(NAME native_backlog_state COMMAND wa2_native_backlog_state_tests "${CMAKE_BINARY_DIR}/native-backlog-state.json")
+    add_test(NAME native_background_state COMMAND wa2_native_background_state_tests "${CMAKE_BINARY_DIR}/native-background-state.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

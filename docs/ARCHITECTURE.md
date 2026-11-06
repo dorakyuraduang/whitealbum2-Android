@@ -312,6 +312,16 @@ before replacing live state. Synthetic checks cover capacity, order, metadata
 while skipping, and corruption recovery. Backlog presentation/audio replay,
 source UI edge cases and whole-scene save integration remain incomplete.
 
+Background checkpoints now retain both world layers, pending/reused image
+references, masks, camera tween state and every transition counter/parameter.
+A restore worker supplies immutable catalogue-owned pixels; unknown/mismatched
+resources and dimensions fail before controller replacement. Native colour
+fade/flash counters are checkpointed separately. Synthetic continuation checks
+cover all supported zoom/push transitions, flipped/inverted masks, camera pan,
+reuse during loading and skip completion. Restore does not replay background
+change callbacks or dump texture pixels. Full scene/save-menu integration and
+actual presentation after restore remain pending.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

@@ -13,5 +13,7 @@ public:
     void update(const std::function<std::int32_t(std::int32_t)>& adjust={});
     bool busy()const noexcept{return active_;}
     std::array<std::int32_t,3> channels()const noexcept{return current_;}
+    std::vector<std::uint8_t> checkpoint()const;
+    void restore(std::span<const std::uint8_t>);
 };
 }

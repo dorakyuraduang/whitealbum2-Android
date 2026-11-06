@@ -1,5 +1,8 @@
 #include "scene_background.hpp"
+#include "resource_catalog.hpp"
+#include "checkpoint_codec.hpp"
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdio>
 
@@ -131,5 +134,44 @@ BackgroundFrame SceneBackground::frame()const{
         }
     }
     return result;
+}
+std::vector<std::uint8_t> SceneBackground::checkpoint(const resource::Catalog& resources)const{
+    checkpoint::Writer out;out.u32(std::uint32_t(current_));for(auto value:{elapsed_,duration_,effective_duration_,effect_,mask_mode_,x_,y_})out.i32(value);
+    const auto real=[&](float value){out.u32(std::bit_cast<std::uint32_t>(value));};
+    real(width_);real(height_);real(angle_);for(auto value:{extended_,loading_,active_,picture_})out.boolean(value);out.blob(camera_.checkpoint());
+    const auto image=[&](const auto& value){out.blob(image::checkpoint_reference(resources.reference(value)));};
+    for(const auto& layer:layers_){out.boolean(bool(layer));if(!layer)continue;image(layer->image);
+        for(auto v:{layer->x,layer->y,layer->width,layer->height,layer->angle,layer->pivot_x,layer->pivot_y,layer->source_x,layer->source_y,layer->source_width,layer->source_height,layer->scale_x,layer->scale_y})real(v);
+        out.u32(layer->opacity);for(auto v:layer->colour)out.i32(v);}
+    out.boolean(bool(request_));if(request_)image(request_);out.boolean(bool(ready_image_));if(ready_image_)image(ready_image_);
+    out.boolean(bool(mask_request_));if(mask_request_)image(mask_request_);out.boolean(bool(mask_));if(mask_){image(mask_->image);real(mask_->bias);real(mask_->gain);out.boolean(mask_->flip_x);out.boolean(mask_->flip_y);out.boolean(mask_->invert);}
+    return out.seal("LSBG");
+}
+void SceneBackground::restore(std::span<const std::uint8_t> bytes,resource::Catalog& resources,const Resolve& resolve){
+    if(!resolve)throw Error("Missing saved background image resolver");auto in=checkpoint::Reader::open("LSBG",bytes);SceneBackground next(loader_,changing_,mask_loader_,event_loader_);
+    next.current_=in.u32();next.elapsed_=in.i32();next.duration_=in.i32();next.effective_duration_=in.i32();next.effect_=in.i32();next.mask_mode_=in.i32();next.x_=in.i32();next.y_=in.i32();
+    const auto real=[&]{const auto value=std::bit_cast<float>(in.u32());if(!std::isfinite(value) || std::abs(value)>1.e9f)throw Error("Invalid saved background coordinate");return value;};
+    next.width_=real();next.height_=real();next.angle_=real();next.extended_=in.boolean();next.loading_=in.boolean();next.active_=in.boolean();next.picture_=in.boolean();next.camera_.restore(in.blob(65536));
+    const auto reference=[&]{return image::restore_reference(in.blob(2048));};
+    std::array<std::optional<image::Reference>,2> layer_refs;
+    for(unsigned n=0;n<2;++n){if(!in.boolean())continue;layer_refs[n]=reference();auto& layer=next.layers_[n].emplace();
+        layer.x=real();layer.y=real();layer.width=real();layer.height=real();layer.angle=real();layer.pivot_x=real();layer.pivot_y=real();layer.source_x=real();layer.source_y=real();layer.source_width=real();layer.source_height=real();layer.scale_x=real();layer.scale_y=real();
+        const auto alpha=in.u32();if(alpha>255 || layer.width<=0 || layer.height<=0 || layer.source_width<0 || layer.source_height<0 || layer.scale_x<0 || layer.scale_y<0)throw Error("Invalid saved background layer");layer.opacity=std::uint8_t(alpha);
+        for(auto& c:layer.colour){c=in.i32();if(c<0 || c>255)throw Error("Invalid saved background colour");}}
+    std::optional<image::Reference> request,ready,mask_request,mask;
+    if(in.boolean())request=reference();if(in.boolean())ready=reference();if(in.boolean())mask_request=reference();if(in.boolean()){mask=reference();auto& m=next.mask_.emplace();m.bias=real();m.gain=real();m.flip_x=in.boolean();m.flip_y=in.boolean();m.invert=in.boolean();if(m.gain<=0 || m.gain>32)throw Error("Invalid saved background mask gain");}
+    in.finish();const auto effect=next.effect_;const bool masked=effect>=128 && (effect&~0x19ff)==0;
+    if(next.current_>1 || next.elapsed_<0 || next.duration_<1 || next.effective_duration_<0 || next.width_<=0 || next.height_<=0 || next.width_>10000 || next.height_>10000 ||
+       (effect!=0 && effect!=1 && !(effect>=11 && effect<=14) && !(effect>=16 && effect<=19) && !masked) || (masked && (next.mask_mode_<0 || next.mask_mode_>3)) ||
+       (next.loading_ && (!next.active_ || bool(request)==bool(ready) || next.layers_[next.current_])) ||
+       (!next.loading_ && (request || ready || mask_request)) || (next.active_ && !next.loading_ && (!next.layers_[next.current_] || next.effective_duration_<=0 || next.elapsed_>=next.effective_duration_)) ||
+       (mask && (!masked || next.loading_ || !next.active_)))throw Error("Invalid saved background transition state");
+    const auto load=[&](const image::Reference& ref){auto raster=resolve(ref);if(!raster || !raster->width || !raster->height || raster->width>65535 || raster->height>65535 || std::uint64_t(raster->width)*raster->height*4!=raster->rgba.size())throw Error("Saved background image resolver returned invalid pixels");
+        if(image::checkpoint_reference(resources.reference(raster))!=image::checkpoint_reference(ref))throw Error("Saved background image resolver returned a different resource");return raster;};
+    for(unsigned n=0;n<2;++n)if(layer_refs[n]){auto raster=load(*layer_refs[n]);auto& layer=*next.layers_[n];if(layer.width!=float(raster->width) || layer.height!=float(raster->height))throw Error("Saved background image dimensions changed");layer.image=std::move(raster);}
+    if(ready)next.ready_image_=load(*ready);if(mask)next.mask_->image=load(*mask);
+    if(request)next.request_=resources.image(*request);if(mask_request)next.mask_request_=resources.image(*mask_request);
+    layers_=std::move(next.layers_);camera_=std::move(next.camera_);current_=next.current_;elapsed_=next.elapsed_;duration_=next.duration_;effective_duration_=next.effective_duration_;effect_=next.effect_;mask_mode_=next.mask_mode_;x_=next.x_;y_=next.y_;width_=next.width_;height_=next.height_;angle_=next.angle_;extended_=next.extended_;loading_=next.loading_;active_=next.active_;picture_=next.picture_;
+    request_=std::move(next.request_);ready_image_=std::move(next.ready_image_);mask_request_=std::move(next.mask_request_);mask_=std::move(next.mask_);
 }
 }
