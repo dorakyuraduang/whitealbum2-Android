@@ -1,4 +1,44 @@
-# Shared static recompilation
+# Shared native migration and retained AOT release
+
+On 2026-11-06 the user changed the target to a complete native engine
+reimplementation. Windows and Android continue to share game logic, resources
+stay external, and the existing executable-analysis/UI restrictions remain.
+The final native application must not link generated game functions, source
+CPU state, checked source-address memory, or the Windows compatibility runtime.
+The current released APK still uses AOT; a linkable component is not a full port.
+
+`native/CMakeLists.txt` is an independent build root for the common native scene,
+script engine, resource/media components and native progress adapter. It never
+includes `hosts/`, `recompiled/`, `generated/` or `port/`. Its link-check library
+forces all existing native scene dependencies to resolve on Windows x64 and
+Android ARM64. It has no launchable application and is never loaded by tests.
+The verification checks actual compile commands, Ninja link dependency closure
+and native symbols; the game does not fall back to AOT when a command is missing.
+
+The first new replacement is system progress. `engine/progress.*` owns ordinary
+save-format data, with explicit little-endian flag serialization and MSB-first
+reading bits. `engine/scene_progress.*` handles LSCR commands 198/199/201/202
+(GetGameFlag, SetGameFlag, V_Flag, H_Flag). Flag 99 writes become zero as in the
+cached original setter; gallery writes use group*10+difference and truncate to a
+byte. Invalid indices/lengths fail before mutation. Existing unknown fields are
+round-tripped, and the full-content test profile uses the shared unlock list.
+
+An injected Storage adapter separates persistence from game state. The ordinary
+file adapter opens only Sys.sav in a host-supplied private directory. It preserves
+manual saves/settings and writes only dirty original-format blocks (4 KiB for
+system flags). Failed blocks remain dirty for retry. Whole-file/multi-block
+atomicity and a complete scene-save snapshot are not claimed. A scene without
+progress storage fails explicitly if it encounters a progress command.
+
+The native story engine remains incomplete: the full title/selection/option UI,
+choice/backlog flow, scene snapshots and restore, lifecycle integration and
+unsupported render/animation/weather modes still need native implementations
+or integration. Reading-history APIs exist but are not yet connected to every
+dialogue transition. No whole-game or device/performance claim follows from
+these component checks. Existing generated C++/CFG is a development reference,
+never a native-runtime dependency.
+
+## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.
 It is not a complete high-level source rewrite. Existing cached instruction C++
@@ -22,7 +62,9 @@ raise an explicit unsupported error.
 | `platform/` | File, clock, window, input, device audio and presentation adapters |
 | `hosts/` | Entry points using the same shared runtime |
 | `android/app/` | Launcher, folder authorization and optional frame HUD |
-| `game/`, `engine/script_*` | Earlier incomplete story experiments; not the production shared game entry |
+| `native/`, `game/`, `engine/script_*` | Independent incomplete native migration core; not yet the released game entry |
+| `engine/progress*`, `engine/scene_progress*` | Native system progress and script command handling |
+| `platform/progress_storage*` | Native private-save filesystem adapter |
 
 The admitted set currently contains 1,750 entries, 1,424 owning bodies and
 122,950 instruction locations. There are 181 deferred entries and 13 remaining

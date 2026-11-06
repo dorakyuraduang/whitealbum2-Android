@@ -7,6 +7,7 @@
 #include "scene_colour.hpp"
 #include "scene_characters.hpp"
 #include "scene_controls.hpp"
+#include "scene_progress.hpp"
 #include "scene_dialogue.hpp"
 #include "scene_music.hpp"
 #include "scene_effects.hpp"
@@ -17,7 +18,7 @@
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};};
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
-// The desktop memory check and Android app use this same native scene host.
+// Shared native migration core; not yet the released app's game entry.
 // It contains ordinary game state and the original LSCR language, no CPU state,
 // original machine-code image, Windows imports, or instruction dispatcher.
 class Scene {
@@ -32,6 +33,7 @@ class Scene {
     Statistics statistics_;
     bool background_changing_{},window_visible_{true};
     script::SceneControls controls_;
+    script::SceneProgress progress_;
     script::SceneMusic music_;
     script::SceneEffects effects_;
     script::SceneVoices voices_;
@@ -49,7 +51,7 @@ class Scene {
     script::CommandResult command(script::Command& command);
     bool skipping()const noexcept{return input_.skip;}
 public:
-    explicit Scene(resource::BankOpener opener,std::uint32_t seed=1);
+    explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={});
     void start(std::string_view scene="1001",std::int32_t label=0);
     script::RunState update(std::int64_t monotonic_us,Input input={});
     void pause(bool paused,std::int64_t monotonic_us){movies_.pause(paused,monotonic_us);}

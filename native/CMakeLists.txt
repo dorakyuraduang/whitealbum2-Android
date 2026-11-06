@@ -1,0 +1,40 @@
+cmake_minimum_required(VERSION 3.20)
+project(WA2NativeCore LANGUAGES C CXX)
+get_filename_component(WA2_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+file(READ "${WA2_ROOT}/config/porting_contract.json" WA2_CONTRACT)
+string(JSON WA2_NATIVE_TARGET GET "${WA2_CONTRACT}" migration target)
+if(NOT WA2_NATIVE_TARGET STREQUAL "shared-native-engine")
+    message(FATAL_ERROR "The native migration target must be explicitly selected in the project contract")
+endif()
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+find_package(Threads REQUIRED)
+add_subdirectory("${WA2_ROOT}/engine" engine EXCLUDE_FROM_ALL)
+target_link_libraries(wa2_engine PUBLIC Threads::Threads)
+include("${WA2_ROOT}/engine/movie.cmake")
+add_subdirectory("${WA2_ROOT}/game" game EXCLUDE_FROM_ALL)
+add_library(wa2_native_progress_storage STATIC "${WA2_ROOT}/platform/progress_storage.cpp")
+target_link_libraries(wa2_native_progress_storage PUBLIC wa2_progress)
+target_include_directories(wa2_native_progress_storage PUBLIC "${WA2_ROOT}/platform")
+
+# Link the complete existing native scene to catch unresolved dependencies on
+# either host. This is a link-check library, not a launchable game or APK.
+add_library(wa2_native_link_check SHARED "${WA2_ROOT}/tests/native_core_link.cpp")
+target_link_libraries(wa2_native_link_check PRIVATE wa2_game_scene wa2_native_progress_storage)
+if(ANDROID)
+    # The existing ARM64 codec assembly binds its internal tables locally,
+    # using the same static-codec visibility contract as the retained host.
+    target_link_options(wa2_native_link_check PRIVATE "-Wl,--no-undefined" "-Wl,-z,max-page-size=16384"
+        "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
+endif()
+add_executable(wa2_native_progress_tests "${WA2_ROOT}/tests/native_progress.cpp")
+target_link_libraries(wa2_native_progress_tests PRIVATE wa2_script wa2_native_progress_storage)
+# Do not register any real-resource story runner or device/render test here.
+if(NOT ANDROID)
+    enable_testing()
+    add_test(NAME native_progress COMMAND wa2_native_progress_tests "${CMAKE_BINARY_DIR}/native-progress.json")
+endif()
+
+# No path through this target includes hosts/, recompiled/, generated/ or port/.
+# The verification script also audits compiled source lists and linked symbols.

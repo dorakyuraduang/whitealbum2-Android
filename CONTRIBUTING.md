@@ -3,12 +3,13 @@
 Read [AGENTS.md](AGENTS.md), [the porting contract](config/porting_contract.json)
 and [the architecture](docs/ARCHITECTURE.md) before changing code.
 
-- Compile the same game logic and generated static function sources on every
-  platform. Keep window, input, storage, device audio and presentation adapters
-  outside game logic.
-- Do not introduce an instruction decoder, interpreter fallback, JIT or a second
-  Android story implementation. Unknown targets and unsupported effects must
-  remain explicit.
+- The migration target is one native engine for all platforms. Compile the
+  same game logic on Windows and Android; keep OS and device adapters outside
+  game logic. The retained AOT release must still share its generated sources.
+- Native migration targets must not link recompiled functions, guest CPU state,
+  guest memory, machine-instruction interpreters or JITs. The original LSCR game
+  script language is handled by the common native engine. Unknown commands and
+  unsupported effects remain explicit; never add a second Android game engine.
 - Use existing generated C++/CFG and authorized cached inputs. Opening, hashing,
   decoding, disassembling or running the original executable is outside the
   current development contract.

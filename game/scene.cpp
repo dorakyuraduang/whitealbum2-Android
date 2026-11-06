@@ -7,10 +7,11 @@
 #include <iomanip>
 
 namespace wa2::game {
-Scene::Scene(resource::BankOpener opener,std::uint32_t seed)
+Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<progress::Store> progress)
     :resources_(std::move(opener)),mixer_(std::make_shared<audio::Mixer>()),fonts_(resources_.required("fon")),
     library_(resources_.required("ck-gal")),session_(library_),random_(seed),
     controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();}),
+    progress_(std::move(progress)),
     music_([this](auto id,bool loop){return music(id,loop);}),
     effects_([this](auto id,bool loop){return sound(id,loop);},[this]{return skipping();},[this](auto id,bool loop,bool paused){return sound(id,loop,paused);}),
     voices_([this](const auto& line){return speech(line);},[this]{
@@ -62,6 +63,7 @@ script::CommandResult Scene::command(script::Command& call){
     statistics_.command=call.index;
     const auto invoke=[&]()->script::CommandResult{
     if(auto value=controls_.dispatch(call))return *value;
+    if(auto value=progress_.dispatch(call))return *value;
     if(auto value=music_.dispatch(call))return *value;
     if(auto value=effects_.dispatch(call))return *value;
     if(auto value=voices_.dispatch(call))return *value;

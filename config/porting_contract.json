@@ -1,6 +1,7 @@
 {
   "schema": "wa2.porting-contract.v1",
   "shared_game_sources": ["game", "engine", "recompiled", "generated/shared-aot"],
+  "native_game_sources": ["game", "engine"],
   "platform_adapters": ["platform", "android/native", "android/app"],
   "rules": {
     "one_game_implementation_for_all_platforms": true,
@@ -19,6 +20,13 @@
     "maximum_build_jobs": 1
   },
   "migration": {
+    "target": "shared-native-engine",
+    "target_changed_on": "2026-11-06",
+    "native_game_logic_shared_by_all_platforms": true,
+    "native_target_recompiled_game_link_forbidden": true,
+    "native_target_guest_cpu_and_memory_forbidden": true,
+    "current_release_backend": "shared-aot",
+    "native_engine_is_complete": false,
     "legacy_windows_backend": "port",
     "legacy_windows_backend_is_cross_platform": false,
     "shared_aot_is_complete": false,

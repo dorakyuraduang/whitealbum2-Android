@@ -1,5 +1,28 @@
 # Building and verification
 
+## Independent native migration core
+
+The user selected a shared native engine target on 2026-11-06. Run
+`python scripts/verify_native_core.py` to build the existing native scene and
+the new system-progress module for Windows x64 and Android ARM64. The script
+uses the local Zig, CMake/Ninja, NDK r27 and previously built common media-codec
+libraries. It does not generate or link any game AOT source or open the source
+EXE. `--zig-cache /path/to/cache` may reuse an existing compiler cache.
+
+The build stays hidden, below normal priority, with one job and one CPU in
+this local verifier. It compares actual common source lists and checks the
+Ninja link closure plus native-library symbols for AOT/guest-runtime imports.
+The linked scene probe is never executed. Only `wa2_native_progress_tests` runs,
+with constructed LSCR, randomized format data and fresh synthetic save files.
+Its fixtures cover signed flag values, reserved flag 99, both gallery banks,
+reading-bit order/bounds, command dispatch, persistent restart, narrow block
+writes, I/O-failure retries, malformed formats and hard-link refusal.
+
+Results are written to `logs/native-core-verification.json`. These are component
+and link checks, not gameplay verification. They produce no APK and do not
+replace the current 0.2.46 delivery. The instructions below describe the retained
+AOT build, which still requires its private cached analysis inputs.
+
 ## Public source boundary
 
 This repository publishes authored runtime, adapters, native components,

@@ -1,6 +1,8 @@
-# WHITE ALBUM2 静态重编译版（开发中）
+# WHITE ALBUM2 共享引擎移植（开发中）
 
-面向 Windows x64 与 Android ARM64 的共享静态重编译开发项目。两平台编译同一套游戏静态函数和原生子系统，只在窗口、输入、设备、文件访问和呈现处保留平台适配。
+面向 Windows x64 与 Android ARM64 的共享引擎项目。2026-11-06 起，开发目标改为完整的原生 C++ 兼容引擎：两平台共用游戏逻辑，最终应用不依赖重编译函数、原程序寄存器或虚拟内存运行时。原版 PAK 继续外置直接读取。
+
+**纯原生版本尚未完成。** 当前交付的 `0.2.46-shared-aot` 仍使用原有混合核心；新增原生核心已接入进度与脚本标志模块，用于后续迁移，不作为完整游戏包交付。
 
 ## 版本与分支
 
@@ -8,10 +10,10 @@
 
 | 版本 | 分支 | 实现路线 |
 | --- | --- | --- |
-| **共享静态重编译版（WA2 Shared Recomp）** | [main（默认）](https://github.com/dorakyuraduang/wa2-godot/tree/main) | C++ 静态函数重编译与原生子系统替换；Windows x64、Android ARM64 编译同一套游戏逻辑和静态函数源码。 |
+| **共享 C++ 引擎（原生迁移中）** | [main（默认）](https://github.com/dorakyuraduang/wa2-godot/tree/main) | 新增独立原生核心；现有 shared-aot 版本保留作过渡与对照，两平台共用游戏逻辑。 |
 | **Godot 移植版** | [godot](https://github.com/dorakyuraduang/wa2-godot/tree/godot) | 此前的 Godot 引擎移植工程，保留原有代码、文档、许可证和提交历史。 |
 
-以下说明针对 `main` 的静态重编译版。Godot 版的安装、构建和许可范围请查看 [godot 分支 README](https://github.com/dorakyuraduang/wa2-godot/blob/godot/README.md)；两条实现的许可证各自适用。
+以下版本说明针对 `main` 当前已交付的静态重编译版本；原生迁移进度见下文。Godot 版的安装、构建和许可范围请查看 [godot 分支 README](https://github.com/dorakyuraduang/wa2-godot/blob/godot/README.md)；两条实现的许可证各自适用。
 
 安装包也请按实现类型区分：已有的 `v0.3b`、`v0.2.9` 等历史 Releases 属于 Godot 版；本分支使用 `shared-aot` 版本标识，当前为 `0.2.46-shared-aot`。两条路线的版本号分别维护。
 
@@ -20,6 +22,10 @@
 **公开源代码不包含原版 EXE、PAK、生成的游戏函数、初始化 RAM 或私有分析缓存。全游戏构建还需要自行提供有权使用的既有缓存输入；全新公开克隆不能独立构建完整游戏。** MIT 只覆盖本项目新编写的代码和文档，第三方代码与游戏衍生输入各有许可边界，见 [NOTICE](NOTICE.md)。
 
 ## 当前版本
+
+原生迁移首批代码在 `native/`、`engine/progress*`、`engine/scene_progress*` 和 `platform/progress_storage*`：普通 C++ 状态读写原格式 Sys.sav，接通剧情的 GetGameFlag、SetGameFlag、V_Flag、H_Flag，保留第 99 号系统标志的归零规则，以及既读位、两组 CG 和全内容测试解锁。写入只更新变动的数据块；一次普通标志写入为 4 KiB，不重写整份 2.5 MB 存档。
+
+`scripts/verify_native_core.py` 独立编译并链接 Windows x64 / Android ARM64 的同一原生剧情核心，检查编译清单、链接依赖及符号中没有 AOT、原程序 CPU 或虚拟内存组件。测试仅执行合成脚本与合成存档；不会启动游戏。本批没有替换 APK，也没有宣称标题、选项、完整存读档、所有特效或全剧情已原生化。见 [原生核心与现有版本的边界](docs/ARCHITECTURE.md)。
 
 `0.2.46-shared-aot`（开发版本）。Windows 与 Android 使用相同的核心源码。
 
@@ -78,4 +84,4 @@ APK 和 EXE 通过本地构建生成，不作为公共源码的一部分。静�
 
 ## License / English summary
 
-An incomplete shared static-recompilation port with native subsystem replacements. Windows x64 and Android ARM64 compile one common game source set; platform-specific game implementations, runtime instruction decoding and JIT are forbidden. Original game files, derived game sources and private cached build inputs are not distributed here. New project code is MIT; upstream components keep their licenses. This project is unofficial and does not grant rights to the original game.
+The migration target is a shared native engine reimplementation. The existing 0.2.46 release remains an incomplete static-recompilation/native-subsystem hybrid while the independent native core is developed. Windows x64 and Android ARM64 share game logic; platform-specific game implementations, runtime machine-instruction decoding and JIT are forbidden. Original game files, derived game functions and private cached inputs are not distributed here. New project code is MIT; upstream components keep their licenses. This project is unofficial and does not grant rights to the original game.
