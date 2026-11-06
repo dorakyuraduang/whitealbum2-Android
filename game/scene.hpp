@@ -8,6 +8,7 @@
 #include "scene_characters.hpp"
 #include "scene_controls.hpp"
 #include "scene_progress.hpp"
+#include "scene_choices.hpp"
 #include "scene_dialogue.hpp"
 #include "scene_music.hpp"
 #include "scene_effects.hpp"
@@ -16,7 +17,7 @@
 #include "scene_weather.hpp"
 
 namespace wa2::game {
-struct Input {bool advance{},skip{},toggle_window{};};
+struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};};
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
 // Shared native migration core; not yet the released app's game entry.
 // It contains ordinary game state and the original LSCR language, no CPU state,
@@ -34,6 +35,7 @@ class Scene {
     bool background_changing_{},window_visible_{true};
     script::SceneControls controls_;
     script::SceneProgress progress_;
+    script::SceneChoices choices_;
     script::SceneMusic music_;
     script::SceneEffects effects_;
     script::SceneVoices voices_;
@@ -49,7 +51,7 @@ class Scene {
     std::unique_ptr<audio::Voice> music(std::int32_t id,bool loop);
     std::unique_ptr<audio::Voice> speech(const script::SpokenLine& line);
     script::CommandResult command(script::Command& command);
-    bool skipping()const noexcept{return input_.skip;}
+    bool skipping()const noexcept{return input_.skip && !choices_.active();}
 public:
     explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={});
     void start(std::string_view scene="1001",std::int32_t label=0);
@@ -65,5 +67,6 @@ public:
     bool movie_active()const{return movies_.active();}
     const Statistics& statistics()const noexcept{return statistics_;}
     const script::SceneDialogue& dialogue_state()const noexcept{return dialogue_;}
+    const script::SceneChoices& choices()const noexcept{return choices_;}
 };
 }

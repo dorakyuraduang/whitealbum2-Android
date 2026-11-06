@@ -161,7 +161,39 @@ Program Program::parse(std::string name,std::vector<std::uint8_t> binary,std::sp
     }
     program.strings_=split(text,",",true,true);
     if(program.strings_.size()>4196)throw Error("too many LSCR text entries");
-    program.binary_=std::move(binary);return program;
+    program.binary_=std::move(binary);
+    std::size_t at=12+count*8;
+    const auto take=[&](std::size_t words){
+        if(words>(program.binary_.size()-at)/4)throw Error("truncated LSCR instruction");at+=words*4;
+    };
+    while(at<program.binary_.size()){
+        program.boundaries_.push_back(std::uint32_t(at));const auto kind=u32(program.binary_,at);at+=4;
+        if(kind==1 || kind==2 || kind==3 || kind==4 || kind==6){
+            if(kind==4)program.commands_.push_back({std::uint32_t(at-4),u32(program.binary_,at)});
+            take(1);
+        }
+        else if(kind==5)take(2);
+        else if(kind==0){
+            const auto operation=u32(program.binary_,at);take(1);
+            switch(operation){
+            case 2:take(2);break;case 3:case 6:case 12:take(1);break;case 5:take(4);break;
+            case 7:{const auto cases=u32(program.binary_,at);if(cases>64)throw Error("too many LSCR switch cases");take(2+std::size_t(cases)*2);break;}
+            default:if(operation>16)throw Error("unknown LSCR flow operation "+std::to_string(operation));break;
+            }
+        }else throw Error("unknown LSCR instruction "+std::to_string(kind));
+    }
+    for(const auto& label:program.labels_)if(!program.instruction_offset(label.offset))throw Error("LSCR label is not an instruction boundary");
+    // File-content identity, including text boundaries. Not an authenticity or
+    // security signature; it prevents loading state against a different script.
+    auto identity=std::uint64_t(14695981039346656037ull);
+    const auto mix=[&](std::span<const std::uint8_t> data){for(auto b:data){identity^=b;identity*=1099511628211ull;}};
+    const auto part=[&](std::span<const std::uint8_t> data){const auto n=std::uint64_t(data.size());for(unsigned i=0;i<8;++i){const auto b=std::uint8_t(n>>(i*8));mix({&b,1});}mix(data);};
+    part({reinterpret_cast<const std::uint8_t*>(program.name_.data()),program.name_.size()});part(program.binary_);
+    for(const auto& string:program.strings_)part({reinterpret_cast<const std::uint8_t*>(string.data()),string.size()});
+    program.fingerprint_=identity;return program;
+}
+bool Program::instruction_offset(std::uint32_t offset,bool end)const noexcept{
+    return (end && offset==binary_.size()) || std::binary_search(boundaries_.begin(),boundaries_.end(),offset);
 }
 std::uint32_t Program::label(std::int32_t id) const {
     // Retain physical order and the first matching label, as the game does.
@@ -362,8 +394,10 @@ void Runtime::close_flows() {
         flows_[flow_depth_--]=Flow{};
 }
 RunState Runtime::advance(const Host& host,std::uint32_t maximum_operations) {
+    if(advancing_)throw Error("recursive native script update");
     if(!running_)return RunState::stopped;
     if(!maximum_operations)throw Error("zero LSCR operation slice");
+    struct Scope{bool& flag;~Scope(){flag=false;}} scope{advancing_};advancing_=true;
     for(std::uint32_t n=0;n<maximum_operations;++n){
         bool yield=false;
         if(pending_)yield=command(host);

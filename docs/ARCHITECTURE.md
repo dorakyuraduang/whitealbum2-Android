@@ -30,8 +30,21 @@ system flags). Failed blocks remain dirty for retry. Whole-file/multi-block
 atomicity and a complete scene-save snapshot are not claimed. A scene without
 progress storage fails explicitly if it encounters a progress command.
 
+The LSCR runtime/session now has bounded versioned checkpoints for globals,
+locals, value/flow stacks, nested scene calls and suspended commands. Restore
+checks resource content identity, catalogue signatures and instruction
+boundaries before committing any state. These script checkpoints do not yet
+include a complete rendered scene or audio transport snapshot.
+
+Selection commands 208/209 now retain original insertion ordinals, conditional
+hidden/disabled entries, eight-entry limits, and persistent choice-history
+bits. Pending choices and completed results can be checkpointed. The common
+scene accepts typed selection input; native selection presentation is pending.
+Static resource checks parsed all 187 local scripts and their 1157 labels and
+299575 command sites without executing them or inspecting their rendered output.
+
 The native story engine remains incomplete: the full title/selection/option UI,
-choice/backlog flow, scene snapshots and restore, lifecycle integration and
+backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations
 or integration. Reading-history APIs exist but are not yet connected to every
 dialogue transition. No whole-game or device/performance claim follows from

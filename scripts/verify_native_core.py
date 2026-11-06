@@ -21,6 +21,7 @@ def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--zig-cache',type=Path,default=ROOT/'build/zig-cache')
+    parser.add_argument('--resource-root',type=Path,help='Optionally parse external ck-gal.pak script records; never execute them')
     args=parser.parse_args()
     if os.name!='nt':raise SystemExit('This local verifier requires the existing Windows Zig/Android NDK tools')
     kernel=ctypes.WinDLL('kernel32',use_last_error=True);kernel.GetCurrentProcess.restype=ctypes.c_void_p
@@ -39,7 +40,7 @@ def main():
     for name,path in [('TEMP',build/'temp'),('TMP',build/'temp'),('ZIG_GLOBAL_CACHE_DIR',args.zig_cache.resolve()),('ZIG_LOCAL_CACHE_DIR',build/'zig-local')]:
         path.mkdir(parents=True,exist_ok=True);env[name]=str(path)
     inputs=[ROOT/'config/porting_contract.json',Path(__file__),ROOT/'native/CMakeLists.txt',ROOT/'game/CMakeLists.txt',
-        ROOT/'tests/native_progress.cpp',ROOT/'tests/native_core_link.cpp',ROOT/'platform/progress_storage.cpp',ROOT/'platform/progress_storage.hpp',
+        ROOT/'tests/native_progress.cpp',ROOT/'tests/native_script_state.cpp',ROOT/'tests/native_script_catalogue.cpp',ROOT/'tests/native_core_link.cpp',ROOT/'platform/progress_storage.cpp',ROOT/'platform/progress_storage.hpp',ROOT/'platform/file_io.cpp',ROOT/'platform/file_io.hpp',
         ROOT/'scripts/zig-toolchain.cmake']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
@@ -66,11 +67,12 @@ def main():
             else:configure+=['-DCMAKE_TOOLCHAIN_FILE='+str(ndk/'build/cmake/android.toolchain.cmake'),'-DANDROID_ABI=arm64-v8a','-DANDROID_PLATFORM=android-26','-DANDROID_STL=c++_shared']
             print('Configuring and building '+host+' native core; one hidden low-priority job.',flush=True)
             run(configure,console)
-            targets=['wa2_native_link_check']+(['wa2_native_progress_tests'] if host=='windows' else [])
+            targets=['wa2_native_link_check']+(['wa2_native_progress_tests','wa2_native_script_state_tests'] if host=='windows' else [])
+            if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             run([cmake,'--build',directory,'--target',*targets,'--parallel','1'],console,2400)
             commands=json.loads((directory/'compile_commands.json').read_text())
             names={Path(item['file']).resolve().relative_to(ROOT).as_posix() for item in commands}
-            allowed=('engine/','game/','platform/progress_storage.cpp','tests/native_core_link.cpp','tests/native_progress.cpp','tests/pcm_audio.cpp')
+            allowed=('engine/','game/','platform/progress_storage.cpp','platform/file_io.cpp','tests/native_core_link.cpp','tests/native_progress.cpp','tests/native_script_state.cpp','tests/native_script_catalogue.cpp','tests/pcm_audio.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -123,11 +125,22 @@ def main():
                     checks['script_calls']!=5 or checks['io_cases']!=7 or checks['guard_cases']!=25 or checks['flag_write_bytes']!=4096 or
                     checks['serialized_bytes']!=2528384 or not checks['failed_writes_retryable'] or checks['original_resources_opened'] or checks['game_launched']):
                     raise ValueError('Incomplete native progress checks: '+str(checks))
+                run([directory/'wa2_native_script_state_tests.exe',directory/'native-script-state.json'],console,90)
+                script_state=json.loads((directory/'native-script-state.json').read_text())
+                if (not script_state['passed'] or script_state['cases']<7 or script_state['guards']<14 or script_state['resumed_callbacks']!=3 or
+                    not all(script_state[key] for key in ('nested_call_restore','pending_command_restore','exact_float_bits','choice_original_ordinals','failed_restore_transactional','synthetic_only')) or
+                    script_state['game_launched'] or script_state['screen_access']):
+                    raise ValueError('Incomplete native script-state checks: '+str(script_state))
+                catalogue=None
+                if args.resource_root:
+                    run([directory/'wa2_native_script_catalogue_tests.exe',args.resource_root.resolve(),directory/'native-script-catalogue.json'],console,90)
+                    catalogue=json.loads((directory/'native-script-catalogue.json').read_text())
+                    if not catalogue['passed'] or catalogue['script_executed'] or catalogue['game_launched']:raise ValueError('Invalid static resource script audit')
     if sources['windows']!=sources['android']:raise ValueError('Native game sources differ between host platforms')
     for name,sha in bindings.items():
         if digest(ROOT/name)!=sha:raise ValueError('Native verification source changed: '+name)
     report=dict(schema='wa2.native-core.v1',source_sha256=bindings,codec_archives_sha256=codec_bindings,
-        native_compiled_sources=sources['windows'],same_native_game_sources=True,artifacts=artifacts,progress=checks,
+        native_compiled_sources=sources['windows'],same_native_game_sources=True,artifacts=artifacts,progress=checks,script_state=script_state,resource_script_catalogue=catalogue,
         recompiled_game_linked=False,guest_cpu_and_memory_linked=False,source_executable_opened=False,screen_access=False,
         game_launched=False,emulator_launched=False,android_device_verified=False,complete_gameplay_verified=False,
         native_engine_is_complete=False,apk_created=False,current_release_replaced=False,maximum_build_jobs=1,passed=True)

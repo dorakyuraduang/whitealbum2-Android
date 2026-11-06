@@ -11,7 +11,8 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     :resources_(std::move(opener)),mixer_(std::make_shared<audio::Mixer>()),fonts_(resources_.required("fon")),
     library_(resources_.required("ck-gal")),session_(library_),random_(seed),
     controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();}),
-    progress_(std::move(progress)),
+    progress_(progress),
+    choices_(std::move(progress),[this]()->std::string_view{return session_.active()?session_.active()->program().name():statistics_.scene;}),
     music_([this](auto id,bool loop){return music(id,loop);}),
     effects_([this](auto id,bool loop){return sound(id,loop);},[this]{return skipping();},[this](auto id,bool loop,bool paused){return sound(id,loop,paused);}),
     voices_([this](const auto& line){return speech(line);},[this]{
@@ -58,12 +59,13 @@ std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
     }
     throw resource::Error("missing original speech "+std::string(name.data()));
 }
-void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);statistics_.scene=scene;}
+void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);choices_.clear();statistics_.scene=scene;}
 script::CommandResult Scene::command(script::Command& call){
     statistics_.command=call.index;
     const auto invoke=[&]()->script::CommandResult{
     if(auto value=controls_.dispatch(call))return *value;
     if(auto value=progress_.dispatch(call))return *value;
+    if(auto value=choices_.dispatch(call))return *value;
     if(auto value=music_.dispatch(call))return *value;
     if(auto value=effects_.dispatch(call))return *value;
     if(auto value=voices_.dispatch(call))return *value;
@@ -87,6 +89,7 @@ script::CommandResult Scene::command(script::Command& call){
     }
 }
 script::RunState Scene::update(std::int64_t monotonic_us,Input input){
+    if(input.choice>=0)choices_.choose(std::uint32_t(input.choice));
     input_=input;milliseconds_=std::uint32_t(std::uint64_t(monotonic_us)/1000);++statistics_.ticks;
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}
     if(input_.advance){window_visible_=true;dialogue_.visible(true);dialogue_.advance();}

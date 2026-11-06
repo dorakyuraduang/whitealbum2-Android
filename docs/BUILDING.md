@@ -23,6 +23,13 @@ and link checks, not gameplay verification. They produce no APK and do not
 replace the current 0.2.46 delivery. The instructions below describe the retained
 AOT build, which still requires its private cached analysis inputs.
 
+Native script state checks additionally cover exact float payloads, nested call
+resumption, local/global values, pending host-command continuations, transactional
+restore failures and conditionally visible selections. `--resource-root res`
+optionally parses the external ck-gal.pak scripts to validate every instruction
+and label boundary and catalogue command reference. This static resource audit
+does not execute script commands or create a game scene/window/device.
+
 ## Public source boundary
 
 This repository publishes authored runtime, adapters, native components,

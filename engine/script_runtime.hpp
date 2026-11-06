@@ -42,6 +42,8 @@ public:
     std::span<const Variable> variables() const noexcept {return variables_;}
     const Value& get(std::uint32_t index) const;
     void set(std::uint32_t index,const Value& value);
+    std::vector<std::uint8_t> checkpoint() const;
+    void restore(std::span<const std::uint8_t> checkpoint);
 private:
     std::vector<Variable> variables_;
 };
@@ -63,6 +65,7 @@ private:
 class Program {
 public:
     struct Label {std::int32_t id{};std::uint32_t offset{};};
+    struct CommandSite {std::uint32_t offset{},index{};};
     static Program parse(std::string name,std::vector<std::uint8_t> binary,
                          std::span<const std::uint8_t> text);
     const std::string& name() const noexcept {return name_;}
@@ -72,12 +75,18 @@ public:
     std::uint32_t label(std::int32_t id) const;
     std::uint32_t word(std::uint32_t offset) const;
     std::size_t size() const noexcept {return binary_.size();}
+    std::uint64_t fingerprint() const noexcept {return fingerprint_;}
+    bool instruction_offset(std::uint32_t offset,bool end=false) const noexcept;
+    std::span<const CommandSite> commands()const noexcept{return commands_;}
 private:
     std::string name_;
     std::uint32_t version_{};
     std::vector<std::uint8_t> binary_;
     std::vector<Label> labels_;
     std::vector<std::string> strings_;
+    std::vector<std::uint32_t> boundaries_;
+    std::uint64_t fingerprint_{};
+    std::vector<CommandSite> commands_;
 };
 class Library {
 public:
@@ -114,6 +123,8 @@ public:
     bool running() const noexcept {return running_;}
     const Program& program() const noexcept {return *program_;}
     std::uint64_t operations() const noexcept {return operations_;}
+    std::vector<std::uint8_t> checkpoint() const;
+    void restore(std::span<const std::uint8_t> checkpoint);
 private:
     struct Slot {
         std::uint32_t kind{};
@@ -143,6 +154,7 @@ private:
     std::int32_t caller_{};
     bool running_{};
     std::uint64_t operations_{};
+    bool advancing_{};
     std::uint32_t read();
     void jump(std::uint32_t offset);
     void push(Slot value);

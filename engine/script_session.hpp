@@ -13,6 +13,8 @@ public:
     RunState advance(const Host& host,std::uint32_t maximum_operations=4096);
     std::size_t scene_depth() const noexcept {return scenes_.size();}
     const Runtime* active() const noexcept {return scenes_.empty()?nullptr:scenes_.back().runtime.get();}
+    std::vector<std::uint8_t> checkpoint() const;
+    void restore(std::span<const std::uint8_t> checkpoint);
 private:
     struct Scene {std::shared_ptr<const Program> program;std::unique_ptr<Runtime> runtime;};
     struct Request {std::string name;std::int32_t label{};};

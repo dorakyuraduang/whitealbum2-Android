@@ -30,10 +30,16 @@ if(ANDROID)
 endif()
 add_executable(wa2_native_progress_tests "${WA2_ROOT}/tests/native_progress.cpp")
 target_link_libraries(wa2_native_progress_tests PRIVATE wa2_script wa2_native_progress_storage)
+add_executable(wa2_native_script_state_tests "${WA2_ROOT}/tests/native_script_state.cpp")
+target_link_libraries(wa2_native_script_state_tests PRIVATE wa2_script)
+add_executable(wa2_native_script_catalogue_tests "${WA2_ROOT}/tests/native_script_catalogue.cpp" "${WA2_ROOT}/platform/file_io.cpp")
+target_include_directories(wa2_native_script_catalogue_tests PRIVATE "${WA2_ROOT}/platform")
+target_link_libraries(wa2_native_script_catalogue_tests PRIVATE wa2_script)
 # Do not register any real-resource story runner or device/render test here.
 if(NOT ANDROID)
     enable_testing()
     add_test(NAME native_progress COMMAND wa2_native_progress_tests "${CMAKE_BINARY_DIR}/native-progress.json")
+    add_test(NAME native_script_state COMMAND wa2_native_script_state_tests "${CMAKE_BINARY_DIR}/native-script-state.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.
