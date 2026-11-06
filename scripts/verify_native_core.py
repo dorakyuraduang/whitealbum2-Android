@@ -141,7 +141,7 @@ def main():
                 if not control_state['passed'] or control_state['cases']<280 or control_state['game_launched']:raise ValueError('Native control-state checks failed')
                 run([directory/'wa2_native_camera_state_tests.exe',directory/'native-camera-state.json'],console,90)
                 camera_state=json.loads((directory/'native-camera-state.json').read_text())
-                if not camera_state['passed'] or camera_state['cases']<18 or camera_state['guards']<6 or camera_state['game_launched'] or camera_state['screen_access']:raise ValueError('Native camera/background checks failed')
+                if not camera_state['passed'] or camera_state['cases']<30 or camera_state['guards']<6 or camera_state['game_launched'] or camera_state['screen_access']:raise ValueError('Native camera/background checks failed')
                 run([directory/'wa2_native_voice_state_tests.exe',directory/'native-voice-state.json'],console,90)
                 voice_state=json.loads((directory/'native-voice-state.json').read_text())
                 if not voice_state['passed'] or voice_state['cases']<17 or voice_state['maximum_voice_slots']!=4 or voice_state['audio_devices_opened'] or voice_state['screen_access']:raise ValueError('Native speech state checks failed')

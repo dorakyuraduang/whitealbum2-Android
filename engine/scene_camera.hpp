@@ -3,6 +3,7 @@
 
 namespace wa2::script {
 struct CameraPose {float x{},y{},scale_x{1},scale_y{1},angle{},pivot_x{640},pivot_y{360};};
+struct CameraRetain {bool x{},y{},scale_x{},scale_y{},angle{};};
 class SceneCamera {
     struct Tween {
         std::array<float,2> from{},target{},current{};
@@ -18,6 +19,7 @@ class SceneCamera {
     static void start(Tween&,std::array<float,2> current,std::array<float,2> target,std::int32_t ticks,std::int32_t mode);
 public:
     void bind(unsigned bank,std::uint32_t width,std::uint32_t height,CameraPose pose);
+    void replace(unsigned bank,std::uint32_t width,std::uint32_t height,CameraPose pose,CameraRetain retain);
     const CameraPose& pose(unsigned bank)const;
     bool busy()const noexcept;
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});

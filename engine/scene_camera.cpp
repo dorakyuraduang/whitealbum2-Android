@@ -23,6 +23,31 @@ void SceneCamera::bind(unsigned bank,std::uint32_t width,std::uint32_t height,Ca
     coordinate(pose.x);coordinate(pose.y);coordinate(pose.angle);coordinate(pose.pivot_x);coordinate(pose.pivot_y);scale(pose.scale_x);scale(pose.scale_y);
     banks_[bank]=Bank{};banks_[bank].pose=pose;banks_[bank].width=width;banks_[bank].height=height;
 }
+void SceneCamera::replace(unsigned index,std::uint32_t width,std::uint32_t height,CameraPose pose,CameraRetain retain){
+    if(index>=banks_.size())throw Error("Native camera bank out of range");
+    const auto own=banks_[index],previous=banks_[index^1];Tween pan,zoom=own.zoom,rotation=own.rotation;
+    if(retain.x)pose.x=std::trunc(previous.pose.x);if(retain.y)pose.y=std::trunc(previous.pose.y);
+    if(retain.scale_x)pose.scale_x=previous.pose.scale_x;if(retain.scale_y)pose.scale_y=previous.pose.scale_y;
+    pose.pivot_x=retain.scale_x?own.pose.pivot_x:640;pose.pivot_y=retain.scale_y?own.pose.pivot_y:360;
+    if(retain.angle)pose.angle=previous.rotation.active?previous.rotation.from[0]:previous.pose.angle;
+    const auto clock=[](Tween& to,const Tween& from){to.duration=from.duration;to.easing=from.easing;to.elapsed=from.elapsed;to.active=from.active;};
+    const std::array<bool,2> keep_pan{retain.x,retain.y},keep_zoom{retain.scale_x,retain.scale_y};
+    const std::array<float,2> position{pose.x,pose.y},scale_values{pose.scale_x,pose.scale_y};
+    for(unsigned axis=0;axis<2;++axis){
+        pan.from[axis]=pan.target[axis]=pan.current[axis]=position[axis];
+        if(keep_pan[axis] && previous.pan.active){pan.from[axis]=previous.pan.from[axis];pan.target[axis]=previous.pan.target[axis];clock(pan,previous.pan);}
+        else if(!keep_pan[axis])pan.active=false;
+        zoom.from[axis]=zoom.target[axis]=zoom.current[axis]=scale_values[axis];
+        if(keep_zoom[axis] && previous.zoom.active){zoom.from[axis]=previous.zoom.from[axis];zoom.target[axis]=previous.zoom.target[axis];clock(zoom,previous.zoom);}
+        else if(!keep_zoom[axis])zoom.active=false;
+    }
+    // Cached setters share one activity flag for each pair of axes. Their
+    // X-then-Y order matters when only one component uses the retain sentinel.
+    // Retained scale/angle axes keep the receiving bank's pivot/old wait clock
+    // when there is no active donor; all corresponding endpoints are replaced.
+    rotation.from=rotation.target=rotation.current={pose.angle,0};if(!retain.angle)rotation.active=false;
+    bind(index,width,height,pose);banks_[index].pan=pan;banks_[index].zoom=zoom;banks_[index].rotation=rotation;
+}
 const CameraPose& SceneCamera::pose(unsigned bank)const{if(bank>=banks_.size())throw Error("Native camera bank out of range");return banks_[bank].pose;}
 bool SceneCamera::busy()const noexcept{for(const auto& bank:banks_)if(bank.pan.active || bank.zoom.active || bank.rotation.active)return true;return false;}
 void SceneCamera::update(const std::function<std::int32_t(std::int32_t)>& duration){

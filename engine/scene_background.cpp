@@ -78,7 +78,7 @@ void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& ad
         pose.scale_x=width_==10000?previous.scale_x:extended_?width_:width_/1280.f;
         pose.scale_y=height_==10000?previous.scale_y:extended_?height_:height_/720.f;
         pose.angle=angle_==10000?previous.angle:angle_;
-        camera_.bind(unsigned(current_),raster->width,raster->height,pose);
+        camera_.replace(unsigned(current_),raster->width,raster->height,pose,{x_==10000,y_==10000,width_==10000,height_==10000,angle_==10000});
         const auto x=float((1280-std::int64_t(raster->width))/2),y=float((720-std::int64_t(raster->height))/2);
         layers_[current_]=BackgroundLayer{std::move(raster),x,y,width,height,0};
         request_.reset();ready_image_.reset();loading_=false;

@@ -56,6 +56,25 @@ int main(int argc,char** argv){try{
     camera.update([](auto){return 0;});CHECK(!camera.busy() && camera.pose(0).x==100);++cases;
     for(int preset:{-1,-2}){camera.bind(0,1280,720,{});invoke(camera,210,{s::Value(30),s::Value(0),s::Value(preset),s::Value(0),s::Value(0)});
         for(int n=0;n<(preset==-1?15:30)-1;++n)camera.update();CHECK(camera.busy());camera.update();CHECK(!camera.busy());++cases;}
+    camera.bind(0,1280,720,{});camera.bind(1,1280,720,{});
+    invoke(camera,210,{s::Value(101),s::Value(201),s::Value(8),s::Value(0),s::Value(0)});
+    invoke(camera,211,{s::Value(3.f),s::Value(5.f),s::Value(8),s::Value(0),s::Value(100),s::Value(200),s::Value(0)});
+    invoke(camera,212,{s::Value(90.f),s::Value(8),s::Value(0),s::Value(100),s::Value(200),s::Value(0)});camera.update();camera.update();
+    camera.replace(1,1280,720,{}, {true,true,true,true,true});
+    CHECK(camera.pose(1).x==25 && camera.pose(1).y==50 && camera.pose(1).scale_x==1.5f && camera.pose(1).scale_y==2 && camera.pose(1).angle==0 && camera.pose(1).pivot_x==640);++cases;
+    camera.update();CHECK(camera.pose(1).x==37.875f && camera.pose(1).y==75.375f && camera.pose(1).scale_x==1.75f && camera.pose(1).scale_y==2.5f && camera.pose(1).angle==0);++cases;
+    const auto inherited=camera.checkpoint();restored.restore(inherited);for(int n=0;n<8;++n){camera.update();restored.update();CHECK(camera.checkpoint()==restored.checkpoint());}CHECK(!camera.busy());++cases;
+    for(bool x_retained:{false,true}){camera.bind(0,1280,720,{});camera.bind(1,1280,720,{});
+        invoke(camera,210,{s::Value(101),s::Value(201),s::Value(8),s::Value(0),s::Value(0)});camera.update();camera.update();
+        camera.replace(1,1280,720,{123,77}, {x_retained,!x_retained,false,false,false});camera.update();
+        CHECK(camera.pose(1).x==(x_retained?25:123) && camera.pose(1).y==(x_retained?77:75.375f));++cases;}
+    camera.bind(0,1280,720,{});camera.bind(1,1280,720,{});invoke(camera,211,{s::Value(3.f),s::Value(5.f),s::Value(8),s::Value(0),s::Value(100),s::Value(200),s::Value(0)});camera.update();camera.update();
+    camera.replace(1,1280,720,{0,0,1,4}, {false,false,true,false,false});camera.update();CHECK(camera.pose(1).scale_x==1.5f && camera.pose(1).scale_y==4);++cases;
+    camera.bind(0,1280,720,{});camera.bind(1,1280,720,{});invoke(camera,211,{s::Value(3.f),s::Value(5.f),s::Value(8),s::Value(0),s::Value(100),s::Value(200),s::Value(0)},1);camera.update();
+    camera.replace(1,1280,720,{}, {false,false,true,true,false});CHECK(camera.busy() && camera.pose(1).scale_x==1 && camera.pose(1).pivot_x==100);
+    for(int n=0;n<6;++n){camera.update();CHECK(camera.busy() && camera.pose(1).scale_x==1);}camera.update();CHECK(!camera.busy());++cases;
+    camera.bind(0,1280,720,{0,0,1,1,30});camera.bind(1,1280,720,{});invoke(camera,212,{s::Value(180.f),s::Value(4),s::Value(0),s::Value(640),s::Value(360),s::Value(0)},1);camera.update();
+    camera.replace(1,1280,720,{}, {false,false,false,false,true});CHECK(camera.pose(1).angle==30 && camera.busy());camera.update();CHECK(camera.pose(1).angle==30);camera.update();camera.update();CHECK(!camera.busy());++cases;
     i::ImageStore images(fixture());auto request=images.request("B000000.tga");std::shared_ptr<const i::Raster> raster;
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
     while(!(raster=request->get()) && std::chrono::steady_clock::now()<deadline)std::this_thread::sleep_for(std::chrono::milliseconds(1));CHECK(raster);
@@ -80,7 +99,10 @@ int main(int argc,char** argv){try{
     frame=backgrounds.frame();CHECK(frame.current->source_x==668 && frame.current->source_y==379 && frame.current->x==638);++cases;
     const auto reused=backgrounds.frame().current->image;const auto requests_before=loads;basic[1]=s::Value(-2);call={146,basic};
     CHECK(!backgrounds.dispatch(call,0)->complete);backgrounds.update();CHECK(backgrounds.dispatch(call,0)->complete && backgrounds.frame().current->image==reused && loads==requests_before);++cases;
-    ext[1]=s::Value(0);ext[4]=s::Value(2);ext[9]=s::Value(0.f);call={225,ext};CHECK(!backgrounds.dispatch(call,0)->complete);backgrounds.update();CHECK(backgrounds.dispatch(call,0)->complete);++cases;
+    ext[1]=s::Value(0);ext[4]=s::Value(2);ext[5]=s::Value(0);ext[6]=s::Value(0);ext[9]=s::Value(0.f);call={225,ext};CHECK(!backgrounds.dispatch(call,0)->complete);backgrounds.update();CHECK(backgrounds.dispatch(call,0)->complete);++cases;
+    pan={s::Value(100),s::Value(0),s::Value(8),s::Value(0),s::Value(0)};call={210,pan};backgrounds.dispatch(call,0);backgrounds.update();
+    ext[5]=s::Value(10000);ext[6]=s::Value(10000);call={225,ext};backgrounds.dispatch(call,0);backgrounds.update();CHECK(backgrounds.frame().current->source_x==663);
+    backgrounds.update();CHECK(backgrounds.frame().current->source_x==675.5f);++cases;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-camera-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"synthetic_only\":true,\"screen_access\":false,\"game_launched\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native camera interpolation, state restore and background parameter conventions.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

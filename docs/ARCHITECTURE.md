@@ -71,6 +71,11 @@ edges need no D3D9 half-pixel subtraction. Native textures omit unused source
 allocation padding; edge-filter parity still needs presentation verification.
 Constructed geometry checks and both compilation targets cover these changes
 without opening a renderer or launching the game.
+Retained background transforms also preserve the appropriate native animation
+clocks. A retained pan samples integer source coordinates before continuing the
+donor's curve; mixed X/Y parameters follow the original shared activity-flag
+order. Retained scale/angle pivots and inactive-donor wait clocks stay with the
+receiving bank. These cases are covered by continuation/checkpoint fixtures.
 
 The native speech controller owns the original four bounded channels and handles
 VXV gain fades separately from VS fades that stop and lock a channel. Fades
