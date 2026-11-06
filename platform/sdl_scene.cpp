@@ -51,6 +51,7 @@ void SdlScene::sprites_pass(std::span<const image::Sprite> items,const image::Sc
     flush();
 }
 void SdlScene::background(const script::BackgroundFrame& frame,std::span<const image::Sprite> environment){
+    prepare_worlds(frame,environment);
     if(frame.transform.identity()){background_contents(frame,environment);return;}
     if(!world_target_)world_target_=canvas_.target(1280,720);
     canvas_.render_to(world_target_,[&]{background_contents(frame,environment);});
@@ -59,15 +60,13 @@ void SdlScene::background(const script::BackgroundFrame& frame,std::span<const i
 }
 void SdlScene::draw_target(const std::shared_ptr<CanvasTexture>& target,const image::SceneTransform& transform,std::uint8_t opacity){
     if(!opacity)return;const auto quad=image::scene_quad({0,0,1280,720,0,0,1280,720,0,0,0,1,1,0,transform},1280,720);
-    if(quad){std::array<CanvasVertex,6> vertices;for(unsigned n=0;n<vertices.size();++n){const auto& v=(*quad)[n];vertices[n]={v.x,v.y,v.u,v.v,{255,255,255,opacity}};}canvas_.triangles(target,vertices);}
+    if(quad){std::array<CanvasVertex,6> vertices;for(unsigned n=0;n<vertices.size();++n){const auto& v=(*quad)[n];vertices[n]={v.x,v.y,v.u,v.v,{255,255,255,opacity}};}canvas_.triangles(target,vertices,opacity==255?CanvasBlend::copy:CanvasBlend::alpha);}
 }
-void SdlScene::background_contents(const script::BackgroundFrame& frame,std::span<const image::Sprite> environment){
+void SdlScene::prepare_worlds(const script::BackgroundFrame& frame,std::span<const image::Sprite> environment){
     const bool composite=frame.current && (frame.mask || frame.transition || (frame.previous && frame.current->opacity<255));
     if(!composite){mask_source_.reset();previous_source_.reset();}
     std::erase_if(uploads_,[](const auto& item){return item.image.expired();});
-    canvas_.clip({});canvas_.clear({0,0,0,255});
-    if(!frame.current){if(frame.previous)draw(*frame.previous);sprites_pass(environment,{},true);return;}
-    if(!composite){draw(*frame.current);sprites_pass(environment,{},false);return;}
+    if(!composite)return;
     // Both bounded world targets include their own characters/particles. A
     // preserved character therefore participates in both sides of a fade.
     // Constant empty environments reuse their image upload and target; live
@@ -81,6 +80,14 @@ void SdlScene::background_contents(const script::BackgroundFrame& frame,std::spa
             if(dynamic)cache.reset();else cache=std::move(layer);}
     };
     render_world(true);render_world(false);
+}
+void SdlScene::background_contents(const script::BackgroundFrame& frame,std::span<const image::Sprite> environment){
+    const bool composite=frame.current && (frame.mask || frame.transition || (frame.previous && frame.current->opacity<255));
+    canvas_.clip({});canvas_.clear({0,0,0,255});
+    if(!frame.current){if(frame.previous)draw(*frame.previous);sprites_pass(environment,{},true);return;}
+    if(!composite){draw(*frame.current);sprites_pass(environment,{},false);return;}
+    // World passes are already prepared before the optional outer shake pass.
+    // Compositing here never recursively enters another render target.
     const auto transition=frame.transition.value_or(script::BackgroundFrame::Transition{{},{{},frame.current->opacity}});
     draw_target(previous_target_,transition.previous.transform,transition.previous.opacity);
     if(frame.mask){const auto& mask=*frame.mask;if(!mask.image)throw std::runtime_error("Missing native background mask image");

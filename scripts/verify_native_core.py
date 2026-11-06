@@ -202,7 +202,7 @@ def main():
                 if args.sdl_archive:
                     run([directory/'wa2_native_scene_composition_tests.exe',directory/'native-scene-composition.json'],console,90)
                     composition_state=json.loads((directory/'native-scene-composition.json').read_text())
-                    if not composition_state['passed'] or composition_state['cases']<20 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
+                    if not composition_state['passed'] or composition_state['cases']<23 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
                     composition_graph=output([ninja,'-C',directory,'-t','graph','wa2_native_scene_composition_tests.exe']).replace('\\','/').lower()
                     if any(token in composition_graph for token in forbidden):raise ValueError('AOT dependency in owned-memory composition test')
                     composition_artifact=dict(sha256=digest(directory/'wa2_native_scene_composition_tests.exe'),

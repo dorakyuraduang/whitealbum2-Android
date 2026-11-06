@@ -22,6 +22,7 @@ class SdlScene {
     void draw_target(const std::shared_ptr<CanvasTexture>&,const image::SceneTransform&,std::uint8_t opacity);
     void sprites_pass(std::span<const image::Sprite>,const image::SceneTransform&,std::optional<bool> previous);
     void background_contents(const script::BackgroundFrame&,std::span<const image::Sprite> environment);
+    void prepare_worlds(const script::BackgroundFrame&,std::span<const image::Sprite> environment);
 public:
     explicit SdlScene(SdlCanvas& canvas):canvas_(canvas){}
     void background(const script::BackgroundFrame& frame,std::span<const image::Sprite> environment={});

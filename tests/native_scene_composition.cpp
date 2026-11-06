@@ -39,6 +39,9 @@ int main(int argc,char** argv){try{
         CHECK(colour[1]==255 && pixel(surface.get(),20,18)[2]==255 && pixel(surface.get(),3,3)[0]==255);++cases;
         frame.transition->current.transform.scale=1.75f;render(false);CHECK(pixel(surface.get(),3,3)[2]==255);++cases;
         frame.transition->current.transform={};frame.transition->current.opacity=128;render(false);CHECK(close(pixel(surface.get(),32,18)[0],127) && close(pixel(surface.get(),32,18)[2],128));++cases;
+        frame.transform.x=160;colour=render();CHECK(colour[1]==255 && pixel(surface.get(),2,2)[0]==0 && pixel(surface.get(),2,2)[2]==0 && close(pixel(surface.get(),12,2)[2],128));++cases;
+        frame.mask=s::BackgroundFrame::Mask{mask,0,1};colour=render();CHECK(close(colour[1],255) && close(pixel(surface.get(),12,2)[0],127) && close(pixel(surface.get(),12,2)[2],128));++cases;
+        frame.mask.reset();frame.transform={0,0,1.25f,0};colour=render();CHECK(colour[1]==255 && close(pixel(surface.get(),2,2)[2],128));frame.transform={};++cases;
         frame.mask.reset();frame.transition.reset();frame.previous.reset();frame.current->opacity=255;colour=render(false);CHECK(colour[0]==0 && colour[1]==0 && colour[2]==255);++cases;
         const auto steady_draws=canvas->statistics().draws;render(false);CHECK(canvas->statistics().draws-steady_draws==1);++cases;
         item.image=green;item.blend=i::SpriteBlend::multiply;item.alpha=0;item.world=i::SpriteWorld::current;colour=render();CHECK(colour[0]==0 && colour[1]==0 && colour[2]==0 && pixel(surface.get(),2,2)[2]==255);++cases;

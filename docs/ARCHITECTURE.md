@@ -249,6 +249,13 @@ with no pending request. Synthetic checks cover metadata layouts and empty-text
 dialogue continuation with fake UI atlases; restored glyph pixel output and
 whole-scene save/load integration remain unverified/incomplete.
 
+The scene compositor now prepares previous/current world targets before entering
+the optional outer shake target. A background fade or mask combined with shake
+therefore no longer requests a nested render target from the canvas. The same
+bounded targets and caches are reused. Owned-memory pixel checks cover fade,
+mask and zoom while an outer transform is active; no hardware context is used.
+Fully opaque world passes also use a copy instead of an additional alpha blend.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through
