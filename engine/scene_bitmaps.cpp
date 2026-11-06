@@ -4,7 +4,7 @@
 #include <cmath>
 
 namespace wa2::script {
-SceneBitmaps::SceneBitmaps(Loader loader):loader_(std::move(loader)){if(!loader_)throw Error("missing native bitmap loader");sprites_.reserve(slots_.size());}
+SceneBitmaps::SceneBitmaps(Loader loader,AnimationLoader animations):loader_(std::move(loader)),animation_loader_(std::move(animations)){if(!loader_)throw Error("missing native bitmap loader");sprites_.reserve(slots_.size());}
 BitmapSlot& SceneBitmaps::checked(std::int32_t index){if(index<0 || std::size_t(index)>=slots_.size())throw Error("native bitmap index out of range");return slots_[std::size_t(index)];}
 const BitmapSlot& SceneBitmaps::slot(std::int32_t index)const{return const_cast<SceneBitmaps*>(this)->checked(index);}
 void SceneBitmaps::clear(){slots_={};sprites_.clear();}
@@ -26,8 +26,22 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
         }
         return CommandResult{!item.request,!item.image,Value{}};
     }
-    case 177:case 178:case 182:return std::nullopt; // Animation/text-image loaders have their own native boundaries.
-    case 179:count(1);return done(!checked(value(0)).request);
+    case 177:{
+        count(7);auto& item=checked(value(0));
+        if(!command.continuation){
+            if(!animation_loader_)throw Unsupported("Missing native bitmap animation loader");
+            if(!command.arguments[3].text().empty() || value(4)!=256)throw Unsupported("Native animated bitmap palette conversion");
+            if(value(2)<0 || value(2)>255 || (value(6)!=0 && value(6)!=1))throw Unsupported("Native animated bitmap drawing layer");
+            auto data=animation_loader_(command.arguments[1].text(),command.arguments[5].text());if(!data)throw Error("Native animation loader returned no definition");
+            if(data->textures().size()>8)throw Unsupported("Native animated bitmap has more than eight concurrent textures");
+            BitmapSlot next;next.animation=std::move(data);next.player.emplace(next.animation);next.width=1280;next.height=720;next.layer=value(2);next.independent=value(6)!=0;next.allocated=true;
+            for(const auto& name:next.animation->textures()){auto request=loader_(name,command.arguments[5].text(),1);if(!request)throw Error("Native animation texture loader returned no request");next.texture_requests.push_back(std::move(request));}
+            next.textures.resize(next.texture_requests.size());item=std::move(next);command.continuation=1;
+        }
+        return CommandResult{!item.loading(),item.loading(),Value{}};
+    }
+    case 178:case 182:return std::nullopt; // Text-image loaders retain their own explicit boundary.
+    case 179:count(1);return done(!checked(value(0)).loading());
     case 180:count(1);checked(value(0))={};return done();
     case 181:count(1);return done(!checked(value(0)).allocated);
     case 183:count(2);checked(value(0)).visible=value(1)!=0;return done();
@@ -40,9 +54,9 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
     case 186:count(2);if((value(1)&~3)!=0)throw Unsupported("native bitmap reverse flags");checked(value(0)).flip=std::uint32_t(value(1));return done();
     case 187:{count(4);auto& item=checked(value(0));for(std::size_t n=0;n<3;++n){if(value(n+1)>128)throw Unsupported("native bitmap additive brightness");item.colour[n]=std::max(0,value(n+1));}return done();}
     case 188:{count(3);auto& item=checked(value(0));item.x=short_value(1);item.y=short_value(2);return done();}
-    case 189:{count(7);auto& item=checked(value(0));item.x=short_value(1);item.y=short_value(2);item.source_x=short_value(3);item.source_y=short_value(4);
+    case 189:{count(7);auto& item=checked(value(0));if(item.animation)throw Unsupported("Native animated bitmap destination rectangles are not implemented");item.x=short_value(1);item.y=short_value(2);item.source_x=short_value(3);item.source_y=short_value(4);
         item.width=item.source_width=short_value(5);item.height=item.source_height=short_value(6);return done();}
-    case 190:{count(5);auto& item=checked(value(0));item.x=short_value(1);item.y=short_value(2);item.width=short_value(3);item.height=short_value(4);return done();}
+    case 190:{count(5);auto& item=checked(value(0));if(item.animation)throw Unsupported("Native animated bitmap destination rectangles are not implemented");item.x=short_value(1);item.y=short_value(2);item.width=short_value(3);item.height=short_value(4);return done();}
     case 191:{count(4);auto& item=checked(value(0));const auto scale=command.arguments[3].real();if(!std::isfinite(scale) || scale<0 || scale>100)throw Unsupported("native bitmap zoom");
         item.pivot_x=short_value(1);item.pivot_y=short_value(2);item.scale=scale;return done();}
     case 192:{count(4);auto& item=checked(value(0));item.pivot_x=short_value(1);item.pivot_y=short_value(2);item.angle=float(double(value(3))*360/4096);return done();}
@@ -52,6 +66,12 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
 void SceneBitmaps::update(const std::function<std::int32_t(std::int32_t)>& adjust){
     for(auto& item:slots_){
         if(item.request){auto image=item.request->get();if(image){item.image=std::move(image);item.request.reset();item.width=item.source_width=float(item.image->width);item.height=item.source_height=float(item.image->height);}}
+        for(std::size_t n=0;n<item.texture_requests.size();++n)if(item.texture_requests[n])if(auto texture=item.texture_requests[n]->get()){item.textures[n]=std::move(texture);item.texture_requests[n].reset();}
+        if(item.player && !item.loading()){
+            if(!item.animation_validated){for(const auto& frame:item.animation->frames())for(const auto& piece:frame.pieces){const auto& texture=item.textures.at(piece.texture);
+                    if(unsigned(piece.source_x)+unsigned(piece.width)>texture->width || unsigned(piece.source_y)+unsigned(piece.height)>texture->height)throw Error("Animated bitmap crop exceeds its texture");}item.animation_validated=true;}
+            item.player->tick();
+        }
         if(item.duration){const auto duration=adjust?adjust(item.duration):item.duration;
             if(duration<=0 || item.elapsed>=duration){item.alpha=item.target;item.duration=0;}
             else{item.alpha=std::int32_t((std::int64_t(duration-item.elapsed)*item.from+std::int64_t(item.elapsed)*item.target)/duration);++item.elapsed;}}
@@ -60,8 +80,18 @@ void SceneBitmaps::update(const std::function<std::int32_t(std::int32_t)>& adjus
 std::span<const image::Sprite> SceneBitmaps::sprites(std::int32_t first_layer,std::int32_t last_layer,int independent){
     sprites_.clear();std::array<std::size_t,32> order{};for(std::size_t n=0;n<order.size();++n)order[n]=n;
     std::sort(order.begin(),order.end(),[&](auto a,auto b){return slots_[a].layer==slots_[b].layer?a<b:slots_[a].layer<slots_[b].layer;});
-    for(auto index:order){const auto& item=slots_[index];if(!item.allocated || !item.visible || !item.image || !item.alpha || item.layer<first_layer || item.layer>last_layer ||
+    for(auto index:order){const auto& item=slots_[index];if(!item.allocated || !item.visible || (!item.image && !item.animation) || !item.alpha || item.layer<first_layer || item.layer>last_layer ||
         (independent!=-1 && item.independent!=bool(independent)))continue;
+        if(item.animation){
+            if(item.loading() || !item.player || !item.player->frame())continue;
+            for(const auto& piece:item.animation->frames()[*item.player->frame()].pieces){if(piece.empty())continue;
+                const auto x=item.pivot_x+(item.x+piece.x-item.pivot_x)*item.scale,y=item.pivot_y+(item.y+piece.y-item.pivot_y)*item.scale;
+                sprites_.push_back({item.textures.at(piece.texture),x,y,piece.width*item.scale,piece.height*item.scale,float(piece.source_x),float(piece.source_y),float(piece.width),float(piece.height),
+                    std::uint8_t(std::clamp(item.colour[0]*2,0,255)),std::uint8_t(std::clamp(item.colour[1]*2,0,255)),std::uint8_t(std::clamp(item.colour[2]*2,0,255)),
+                    std::uint8_t(item.alpha),item.angle,item.pivot_x,item.pivot_y,item.flip,item.blend==3?image::SpriteBlend::add:image::SpriteBlend::alpha});
+                sprites_.back().layer=item.layer+(item.independent?0x1035:0);sprites_.back().order=0x11+std::int32_t(index);
+            }continue;
+        }
         const auto x=item.pivot_x+(item.x-item.pivot_x)*item.scale,y=item.pivot_y+(item.y-item.pivot_y)*item.scale;
         sprites_.push_back({item.image,x,y,item.width*item.scale,item.height*item.scale,item.source_x,item.source_y,item.source_width,item.source_height,
             std::uint8_t(std::clamp(item.colour[0]*2,0,255)),std::uint8_t(std::clamp(item.colour[1]*2,0,255)),std::uint8_t(std::clamp(item.colour[2]*2,0,255)),

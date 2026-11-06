@@ -91,8 +91,11 @@ player supports nested repetition, finite/continuous passes, rational clock
 rates, empty frames and bounded playback checkpoints. Unimplemented transforms,
 blend overrides and events fail explicitly. Static checks parse the eight local
 animation definitions and their texture headers; only synthetic sequences run.
-LoadBmpAnime, rain and other scene consumers still need integration with this
-player; this component does not make those commands complete yet.
+LoadBmpAnime now owns native players/textures inside the common bitmap slots,
+with asynchronous texture readiness, source-bound checks, placement, uniform
+zoom, alpha/additive fades and independent-layer lifetime. Arbitrary destination
+rectangle edits on animated slots still fail explicitly. Rain and the remaining
+animation consumers still need integration; complete playback is not verified.
 
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
