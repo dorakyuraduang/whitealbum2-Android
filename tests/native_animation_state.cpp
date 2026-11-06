@@ -54,6 +54,7 @@ int main(int argc,char** argv){try{
     std::array<s::Value,7> load{s::Value(0),s::Value(std::string("animation.ani")),s::Value(14),s::Value(std::string()),s::Value(256),s::Value(std::string("grp")),s::Value(1)};s::Command call{177,load};
     CHECK(!bitmaps.dispatch(call)->complete);bitmaps.update();CHECK(bitmaps.dispatch(call)->complete && bitmaps.sprites().size()==1 && bitmaps.sprites()[0].layer==0x1043);++cases;
     std::array<s::Value,3> move{s::Value(0),s::Value(639),s::Value(359)};call={188,move};bitmaps.dispatch(call);
+    CHECK(bitmaps.slot(0).pivot_x==639 && bitmaps.slot(0).pivot_y==359);++cases;
     std::array<s::Value,4> zoom{s::Value(0),s::Value(640),s::Value(360),s::Value(8.f)};call={191,zoom};bitmaps.dispatch(call);
     CHECK(bitmaps.sprites()[0].x==568 && bitmaps.sprites()[0].y==288 && bitmaps.sprites()[0].width==128);++cases;
     bitmaps.update();CHECK(bitmaps.sprites()[0].source_x==0);bitmaps.update();CHECK(bitmaps.sprites()[0].source_x==16);++cases;

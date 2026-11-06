@@ -16,7 +16,7 @@ void approach(float& value,std::int32_t target){
     if(value>target)value=std::max(value-1,float(target));
 }
 }
-SceneWeather::SceneWeather(Loader loader,Random random):loader_(std::move(loader)),random_(std::move(random)){
+SceneWeather::SceneWeather(Loader loader,Random random,AnimationLoader animations):loader_(std::move(loader)),random_(std::move(random)),animation_loader_(std::move(animations)){
     if(!loader_ || !random_)throw Error("missing native weather loader or random source");sprites_.reserve(400);
 }
 std::uint32_t SceneWeather::random(){const auto value=random_();if(value>32767)throw Error("native game random value out of range");return value;}
@@ -63,12 +63,25 @@ void SceneWeather::begin(Command& command){
     if(command.arguments.size()!=(extended?7u:6u))throw Error("invalid native SetWeather parameters");
     const auto code=command.arguments[0].integer(),mode=code&255;
     const auto amplitude=extended?command.arguments[6].integer():0;
-    if((mode!=3 && mode!=4 && mode!=6) || (code&~0xfff)!=0)throw Unsupported("unimplemented native weather type "+std::to_string(code));
+    if((mode!=0 && mode!=3 && mode!=4 && mode!=6) || (code&~0xfff)!=0)throw Unsupported("unimplemented native weather type "+std::to_string(code));
     if((code&0x800)!=0)throw Unsupported("unimplemented native weather alternate-atlas flag");
     const auto priority=command.arguments[4].integer(),scope=command.arguments[5].integer();
     if(priority<0 || priority>2 || scope<0 || scope>2)throw Unsupported("unimplemented native weather layer");
+    if(mode==0){
+        if(!animation_loader_)throw Unsupported("Missing native rain animation loader");
+        auto definition=animation_loader_("\x89\x4a" "640x360.ani");if(!definition)throw Error("Native rain loader returned no animation");
+        if(definition->textures().size()>8)throw Unsupported("Native rain has more than eight concurrent textures");
+        std::vector<std::shared_ptr<image::ImageRequest>> requests;
+        for(const auto& name:definition->textures()){auto request=loader_(name);if(!request)throw Error("Native rain loader returned no texture request");requests.push_back(std::move(request));}
+        stop(true);particles_={};sprites_.clear();extent_=0;frame_=0;stopping_=false;type_=0;priority_=priority;scope_=scope;
+        request_.reset();image_.reset();animation_=std::move(definition);animation_player_.emplace(animation_);animation_requests_=std::move(requests);
+        animation_textures_.assign(animation_requests_.size(),{});animation_validated_=false;enabled_=true;return;
+    }
     auto request=loader_("weather.tga");if(!request)throw Error("native weather loader returned no request");
     stop(true);particles_={};extent_=0;frame_=0;stopping_=false;
+    // Replacing even an independent rain effect releases its old animation
+    // definition/requests. Independence preserves background transitions only.
+    animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();animation_validated_=false;
     type_=mode;flags_=code&0xe00;prefill_=(code&0x100)!=0;priority_=priority;scope_=scope;
     target_x_=command.arguments[1].integer();target_y_=command.arguments[2].integer();
     density_=density(command.arguments[3].integer());speed_x_=float(target_x_);speed_y_=float(target_y_);
@@ -77,7 +90,7 @@ void SceneWeather::begin(Command& command){
 void SceneWeather::stop(bool immediately){
     if(!immediately){density_=0;stopping_=true;return;}
     if(scope_==2){scope_=0;return;}
-    particles_={};sprites_.clear();request_.reset();image_.reset();extent_=0;frame_=0;enabled_=false;stopping_=false;
+    particles_={};sprites_.clear();request_.reset();image_.reset();animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();animation_validated_=false;extent_=0;frame_=0;enabled_=false;stopping_=false;
 }
 bool SceneWeather::stopped(){
     if(!stopping_)return false;
@@ -108,6 +121,20 @@ std::optional<CommandResult> SceneWeather::dispatch(Command& command){
 }
 void SceneWeather::update(){
     if(!enabled_)return;
+    if(type_==0){
+        for(std::size_t n=0;n<animation_requests_.size();++n)if(animation_requests_[n])if(auto image=animation_requests_[n]->get()){animation_textures_[n]=std::move(image);animation_requests_[n].reset();}
+        if(loading())return;
+        if(!animation_player_ || !animation_)throw Error("Missing native rain playback state");
+        if(!animation_validated_){for(const auto& frame:animation_->frames())for(const auto& piece:frame.pieces){const auto& texture=animation_textures_.at(piece.texture);
+                if(unsigned(piece.source_x)+unsigned(piece.width)>texture->width || unsigned(piece.source_y)+unsigned(piece.height)>texture->height)throw Error("Rain frame crop exceeds its texture");}animation_validated_=true;}
+        animation_player_->tick();sprites_.clear();if(auto selected=animation_player_->frame())for(const auto& piece:animation_->frames()[*selected].pieces){if(piece.empty())continue;
+            // Cached SetWeather's rain instance: centre/pivot (640,360), scale
+            // 2, foreground priority 0x1043. INAS crop offsets include trimming.
+            sprites_.push_back({animation_textures_.at(piece.texture),640.f+piece.x*2.f,360.f+piece.y*2.f,piece.width*2.f,piece.height*2.f,
+                float(piece.source_x),float(piece.source_y),float(piece.width),float(piece.height)});
+            sprites_.back().layer=0x1043;sprites_.back().order=0x51;
+        }return;
+    }
     if(request_){auto image=request_->get();if(!image)return;
         if(image->width<32 || image->height<64)throw Error("native weather atlas is too small");
         image_=std::move(image);request_.reset();}

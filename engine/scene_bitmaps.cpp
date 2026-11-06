@@ -53,10 +53,10 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
     }
     case 186:count(2);if((value(1)&~3)!=0)throw Unsupported("native bitmap reverse flags");checked(value(0)).flip=std::uint32_t(value(1));return done();
     case 187:{count(4);auto& item=checked(value(0));for(std::size_t n=0;n<3;++n){if(value(n+1)>128)throw Unsupported("native bitmap additive brightness");item.colour[n]=std::max(0,value(n+1));}return done();}
-    case 188:{count(3);auto& item=checked(value(0));item.x=short_value(1);item.y=short_value(2);return done();}
+    case 188:{count(3);auto& item=checked(value(0));item.pivot_x=item.x=short_value(1);item.pivot_y=item.y=short_value(2);return done();}
     case 189:{count(7);auto& item=checked(value(0));if(item.animation)throw Unsupported("Native animated bitmap destination rectangles are not implemented");item.x=short_value(1);item.y=short_value(2);item.source_x=short_value(3);item.source_y=short_value(4);
-        item.width=item.source_width=short_value(5);item.height=item.source_height=short_value(6);return done();}
-    case 190:{count(5);auto& item=checked(value(0));if(item.animation)throw Unsupported("Native animated bitmap destination rectangles are not implemented");item.x=short_value(1);item.y=short_value(2);item.width=short_value(3);item.height=short_value(4);return done();}
+        item.pivot_x=item.x;item.pivot_y=item.y;item.width=item.source_width=short_value(5);item.height=item.source_height=short_value(6);return done();}
+    case 190:{count(5);auto& item=checked(value(0));if(item.animation)throw Unsupported("Native animated bitmap destination rectangles are not implemented");item.pivot_x=item.x=short_value(1);item.pivot_y=item.y=short_value(2);item.width=short_value(3);item.height=short_value(4);return done();}
     case 191:{count(4);auto& item=checked(value(0));const auto scale=command.arguments[3].real();if(!std::isfinite(scale) || scale<0 || scale>100)throw Unsupported("native bitmap zoom");
         item.pivot_x=short_value(1);item.pivot_y=short_value(2);item.scale=scale;return done();}
     case 192:{count(4);auto& item=checked(value(0));item.pivot_x=short_value(1);item.pivot_y=short_value(2);item.angle=float(double(value(3))*360/4096);return done();}

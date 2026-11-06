@@ -22,7 +22,7 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
         std::int32_t chapter{};const auto& name=session_.active()?session_.active()->program().name():statistics_.scene;const auto value=std::from_chars(name.data(),name.data()+name.size(),chapter);
         if(value.ec!=std::errc{} || value.ptr!=name.data()+name.size())throw script::Error("scene has no numeric voice chapter");return chapter;
     },[this]{return dialogue_.speaker();},[this]{return controls_.modes().voice_offset;},[this]{return skipping();},[this]{return input_.advance;}),
-    weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();}),
+    weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto name){return image::Animation::parse(resources_.data("grp",name));}),
     backgrounds_([this](auto name){return resources_.image("bak",name);},[this](bool keep_characters){background_changing_=true;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
         [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name);}),
     bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);},[this](auto name,auto group){return image::Animation::parse(resources_.data(group,name));}),
@@ -120,7 +120,7 @@ script::BackgroundFrame Scene::background()const{
 }
 std::span<const image::Sprite> Scene::environment(){
     environment_.clear();const auto add=[this](auto items){environment_.insert(environment_.end(),items.begin(),items.end());};
-    if(weather_.scope()==0)add(weather_.sprites());add(bitmaps_.sprites(0,255,0));add(characters_.sprites());
+    for(const auto& item:weather_.sprites())if(item.layer<0x1000)environment_.push_back(item);add(bitmaps_.sprites(0,255,0));add(characters_.sprites());
     std::sort(environment_.begin(),environment_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});
     const auto colour=colour_.channels();for(auto& item:environment_){item.red=std::uint8_t(unsigned(item.red)*unsigned(std::min(colour[0]*2,255))/255);
         item.green=std::uint8_t(unsigned(item.green)*unsigned(std::min(colour[1]*2,255))/255);item.blue=std::uint8_t(unsigned(item.blue)*unsigned(std::min(colour[2]*2,255))/255);}
@@ -128,7 +128,7 @@ std::span<const image::Sprite> Scene::environment(){
 }
 std::span<const image::Sprite> Scene::foreground(){
     foreground_.clear();const auto add=[this](auto items){foreground_.insert(foreground_.end(),items.begin(),items.end());};
-    if(weather_.scope()!=0)add(weather_.sprites());add(bitmaps_.sprites(0,255,1));
+    for(const auto& item:weather_.sprites())if(item.layer>=0x1000)foreground_.push_back(item);add(bitmaps_.sprites(0,255,1));
     std::sort(foreground_.begin(),foreground_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return foreground_;
 }
 }

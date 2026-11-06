@@ -75,7 +75,7 @@ SetWeather2/ChangeWeather2 now drive native type-6 particle growth and sway.
 Snow density-selection flags 0x200/0x400 retain the cached RNG call sequence,
 including overwritten values. Live particle count is tracked separately from
 fixed slot indices, so density reductions cannot strand later active slots.
-Types 0/1/2/5 and the alternate snow atlas remain explicit unsupported cases.
+Types 1/2/5 and the alternate snow atlas remain explicit unsupported cases.
 
 The native Calendar command computes date/weekday state, retains the 2010..2013
 holiday facts and selects the original three calendar image atlases. Its shared
@@ -94,8 +94,11 @@ animation definitions and their texture headers; only synthetic sequences run.
 LoadBmpAnime now owns native players/textures inside the common bitmap slots,
 with asynchronous texture readiness, source-bound checks, placement, uniform
 zoom, alpha/additive fades and independent-layer lifetime. Arbitrary destination
-rectangle edits on animated slots still fail explicitly. Rain and the remaining
-animation consumers still need integration; complete playback is not verified.
+rectangle edits on animated slots still fail explicitly. Rain now uses the same
+player, original trimmed frame offsets, a scale of two about the screen centre
+and a foreground layer independent of its scope flag. Bitmap moves update the
+source's automatic pivot before subsequent scale/rotation commands. Complete
+scene playback and device presentation are not verified.
 
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
