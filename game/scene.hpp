@@ -21,6 +21,7 @@
 #include "scene_weather.hpp"
 #include "scene_shake.hpp"
 #include "scene_captions.hpp"
+#include "system_sounds.hpp"
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;};
@@ -31,6 +32,7 @@ struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t comma
 class Scene {
     resource::Catalog resources_;
     std::shared_ptr<audio::Mixer> mixer_;
+    audio::SystemSounds system_sounds_;
     text::FontBook fonts_;
     script::Library library_;
     script::Session session_;
@@ -61,6 +63,7 @@ class Scene {
     script::SceneMovie movies_;
     std::vector<image::Sprite> environment_,foreground_;
     std::unique_ptr<audio::Voice> sound(std::int32_t id,bool loop,bool paused=false);
+    audio::SoundResource sound_resource(std::int32_t id);
     std::unique_ptr<audio::Voice> music(std::int32_t id,bool loop);
     std::unique_ptr<audio::Voice> speech(const script::SpokenLine& line);
     script::CommandResult command(script::Command& command);

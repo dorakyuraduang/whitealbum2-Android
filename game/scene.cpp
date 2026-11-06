@@ -8,13 +8,13 @@
 
 namespace wa2::game {
 Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<progress::Store> progress)
-    :resources_(std::move(opener)),mixer_(std::make_shared<audio::Mixer>()),fonts_(resources_.required("fon")),
+    :resources_(std::move(opener)),mixer_(std::make_shared<audio::Mixer>()),system_sounds_(*mixer_,[this](auto id){return sound_resource(id);}),fonts_(resources_.required("fon")),
     library_(resources_.required("ck-gal")),session_(library_),random_(seed),progress_store_(std::move(progress)),reading_(progress_store_),builtins_(random_),
     controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();},[this]{return reading_.status(replay_mode_);}),
     progress_(progress_store_),
     choices_(progress_store_,[this]()->std::string_view{return session_.active()?session_.active()->program().name():statistics_.scene;}),
     selection_([this](auto name){return resources_.image("grp",name);},[this](auto raw){text::TextStyle style;style.rows=1;style.columns=34;style.line_gap=0;style.shadow={33,46,56};return fonts_.prepare(text::layout(raw,style));},
-        [this](auto sound){effects_.once(sound==script::SelectionSound::focus?9211:sound==script::SelectionSound::accept?9212:9214,255);}),
+        [this](auto sound){system_sounds_.play(sound==script::SelectionSound::focus?audio::SystemCue::focus:sound==script::SelectionSound::accept?audio::SystemCue::accept:audio::SystemCue::reject);}),
     calendar_([this](auto name){return resources_.image("grp",name);},[this]{for(const auto& variable:library_.globals().variables())if(variable.name=="FLG_00")return variable.value.integer();throw script::Error("Missing calendar theme global FLG_00");}),
     music_([this](auto id,bool loop){return music(id,loop);},[this](auto id){
         if(!progress_store_)throw script::Error("Missing native music progress storage");progress_store_->state().set_flag(std::uint32_t(100+id),1);progress_store_->flush();}),
@@ -37,15 +37,21 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     movies_([this](auto name,auto){auto player=std::make_unique<movie::Player>(resources_.movie(name),mixer_);player->gain(1);return player;},{},0,[this](auto id){
         if(!progress_store_)throw script::Error("Missing native movie progress storage");progress_store_->state().set_flag(std::uint32_t(id),1);progress_store_->flush();}){
     environment_.reserve(432);foreground_.reserve(432);
+    system_sounds_.prepare();
 }
 std::unique_ptr<audio::Voice> Scene::sound(std::int32_t id,bool loop,bool paused){
+    auto resource=sound_resource(id);
+    if(resource.ogg)return audio::play_ogg(*mixer_,{resource.source,loop?resource.source:nullptr},{},paused);
+    return audio::play_wave(*mixer_,std::move(resource.source),loop,{},paused);
+}
+audio::SoundResource Scene::sound_resource(std::int32_t id){
     std::array<char,32> name{};
     // Existing 0x4058f0 tries root Ogg, root WAV, then IC Ogg/IC WAV.
     for(bool introductory:{false,true})if(const auto* bank=resources_.optional("se",introductory)){
         std::snprintf(name.data(),name.size(),"SE_%04d.ogg",int(id));auto index=bank->find_first(name.data());
-        if(index!=resource::Archive::missing){auto source=bank->open_member(index);return audio::play_ogg(*mixer_,{source,loop?source:nullptr},{},paused);}
+        if(index!=resource::Archive::missing)return {bank->open_member(index),true};
         std::snprintf(name.data(),name.size(),"SE_%04d.wav",int(id));index=bank->find_first(name.data());
-        if(index!=resource::Archive::missing)return audio::play_wave(*mixer_,bank->open_member(index),loop,{},paused);
+        if(index!=resource::Archive::missing)return {bank->open_member(index),false};
     }
     throw resource::Error("missing original sound effect "+std::to_string(id));
 }
@@ -108,7 +114,7 @@ script::CommandResult Scene::command(script::Command& call){
 }
 script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     if(title_requested_)return script::RunState::stopped;
-    selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))effects_.once(9214,255);else choices_.choose(std::uint32_t(input.choice));}
+    selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))system_sounds_.play(audio::SystemCue::reject);else choices_.choose(std::uint32_t(input.choice));}
     else if(auto selected=selection_.input(input.selection))choices_.choose(*selected);
     input_=input;milliseconds_=std::uint32_t(std::uint64_t(monotonic_us)/1000);++statistics_.ticks;
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}

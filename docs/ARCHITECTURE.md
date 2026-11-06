@@ -188,6 +188,15 @@ confirmation and rejection use system effects 9211/9212/9214. Their typed events
 and blocked selections are checked without opening an audio device. Actual
 rendering and sound synchronization remain unverified.
 
+Native system sounds preload the five original focus/accept/cancel/reject/message
+clips into independent, bounded PCM buffers. Selection feedback restarts its
+own cue buffer rather than reading a PAK, starting a decoder thread, or taking
+one of the eight story one-shot channels. Root Ogg/WAV and IC Ogg/WAV retain
+the existing lookup precedence. Master/system sliders and mute apply to this
+bank independently; failed preparation publishes no partial bank. Synthetic
+PCM checks cover restart, overlap, silence, volume and failed-load recovery
+without an audio device. Original cue playback is not device-verified.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through
