@@ -34,7 +34,8 @@ The LSCR runtime/session now has bounded versioned checkpoints for globals,
 locals, value/flow stacks, nested scene calls and suspended commands. Restore
 checks resource content identity, catalogue signatures and instruction
 boundaries before committing any state. These script checkpoints do not yet
-include a complete rendered scene or audio transport snapshot.
+include rendered scene/audio state by themselves; the aggregate described
+below binds them to the native controllers.
 
 Selection commands 208/209 now retain original insertion ordinals, conditional
 hidden/disabled entries, eight-entry limits, and persistent choice-history
@@ -88,7 +89,8 @@ NovelMode/NB/NBR use the same native dialogue/font system as ordinary dialogue:
 40 columns by 15 rows at (75,26), a configurable full-screen black backing,
 separate text visibility and the original fade-counter order. A bounded novel
 checkpoint preserves suspended backing fades. ADV message-window animation is
-kept separate. Device presentation and full scene snapshots remain pending.
+kept separate. Device presentation and application save-menu integration remain
+pending; aggregate snapshots now include the native dialogue/novel state.
 
 SetWeather2/ChangeWeather2 now drive native type-6 particle growth and sway.
 Snow density-selection flags 0x200/0x400 retain the cached RNG call sequence,
@@ -367,6 +369,29 @@ leave the old logical controller state intact and stop partial new transports.
 No decoder/PCM queue is serialized. Tests use fake voices only; this does not
 prove device playback or complete-scene load integration.
 
+The common scene now binds 17 subsystem checkpoints into one bounded versioned
+save envelope. It retains script/global/call stacks, reading position, control
+timers, choices and selection focus/fade, calendar, shared RNG, shake/weather,
+background/camera, bitmaps, characters, colour, dialogue/novel, backlog and
+audio resume specifications. Every envelope is checked before opening any
+resource. Restore builds a fresh owner with callbacks bound to its final
+address and an unattached mixer; the application can retain its old scene
+until all validation and resource preparation succeeds. Held/latched skip is
+cleared. The saved logical clock is rebased to the current monotonic clock,
+so elapsed waits do not include time outside the saved scene. Window/calendar
+assets are prepared without ticking counters or materializing glyphs.
+
+Selection restore preserves visible insertion ordinals, focus, opacity, asset
+references and readiness. It checks the exact saved choice list. Choice-history
+progress remains persistent: if a choice was selected after this save, restore
+can load its newly required history marker without rolling those bits back.
+Save during a movie transport is an explicit unsupported boundary; no decoder
+is serialized. This is a new native format, not original manual-save import.
+Finite synthetic scripts and in-memory PAKs check scene continuation, dialogue
+pages, choices, independent clocks and failed-load isolation. No original
+story, game window, rendering device or original save is used. Application
+file/save-menu integration and whole-game compatibility remain unverified.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through
@@ -376,7 +401,7 @@ both profiles. A software reference still checks owned-memory pixel equations.
 No actual GL context, window or hardware rendering is exercised by these checks.
 
 The native story engine remains incomplete: the full title/option UI,
-backlog integration, full scene snapshots and restore, lifecycle integration and
+backlog presentation, application save/load and lifecycle integration, and
 unsupported render/animation/weather modes still need native implementations
 or integration. Reading-history APIs exist but are not yet connected to every
 dialogue transition. No whole-game or device/performance claim follows from

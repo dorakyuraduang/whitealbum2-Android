@@ -49,6 +49,7 @@ def main():
     inputs += [ROOT/'tests/native_bitmap_state.cpp']
     inputs += [ROOT/'tests/native_weather_checkpoint.cpp']
     inputs += [ROOT/'tests/native_audio_checkpoint.cpp']
+    inputs += [ROOT/'tests/native_saved_scene.cpp',ROOT/'tests/native_scene_checkpoint.cpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
     bindings={p.relative_to(ROOT).as_posix():digest(p) for p in inputs}
@@ -81,6 +82,7 @@ def main():
             if host=='windows':targets+=['wa2_native_bitmap_state_tests']
             if host=='windows':targets+=['wa2_native_weather_checkpoint_tests']
             if host=='windows':targets+=['wa2_native_audio_checkpoint_tests']
+            if host=='windows':targets+=['wa2_native_saved_scene_tests','wa2_native_scene_checkpoint_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -92,6 +94,7 @@ def main():
             allowed+=('tests/native_bitmap_state.cpp',)
             allowed+=('tests/native_weather_checkpoint.cpp',)
             allowed+=('tests/native_audio_checkpoint.cpp',)
+            allowed+=('tests/native_saved_scene.cpp','tests/native_scene_checkpoint.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -189,13 +192,13 @@ def main():
                 if not caption_state['passed'] or caption_state['cases']<60 or caption_state['guards']<4 or caption_state['embedded_tracks']!=46 or not caption_state['synthetic_audio_only'] or caption_state['devices_opened'] or caption_state['game_launched'] or caption_state['screen_access']:raise ValueError('Native caption state checks failed')
                 run([directory/'wa2_native_selection_state_tests.exe',directory/'native-selection-state.json'],console,90)
                 selection_state=json.loads((directory/'native-selection-state.json').read_text())
-                if not selection_state['passed'] or selection_state['cases']<17 or selection_state['guards']<5 or not selection_state['font_preparation_stubbed'] or selection_state['devices_opened'] or selection_state['game_launched'] or selection_state['screen_access']:raise ValueError('Native selection state checks failed')
+                if not selection_state['passed'] or selection_state['cases']<24 or selection_state['guards']<15 or not selection_state['font_preparation_stubbed'] or selection_state['devices_opened'] or selection_state['game_launched'] or selection_state['screen_access']:raise ValueError('Native selection state checks failed')
                 run([directory/'wa2_native_system_sound_tests.exe',directory/'native-system-sounds.json'],console,90)
                 system_sound_state=json.loads((directory/'native-system-sounds.json').read_text())
                 if not system_sound_state['passed'] or system_sound_state['cases']<15 or system_sound_state['guards']<12 or system_sound_state['cue_buffers']!=5 or system_sound_state['playback_resource_reads'] or not system_sound_state['synthetic_pcm_only'] or system_sound_state['devices_opened'] or system_sound_state['game_launched'] or system_sound_state['screen_access']:raise ValueError('Native system sound checks failed')
                 run([directory/'wa2_native_lifecycle_state_tests.exe',directory/'native-lifecycle-state.json'],console,90)
                 lifecycle_state=json.loads((directory/'native-lifecycle-state.json').read_text())
-                if not lifecycle_state['passed'] or lifecycle_state['cases']<17 or lifecycle_state['guards']<3 or lifecycle_state['suspended_pcm_consumption'] or not lifecycle_state['synthetic_pcm_only'] or lifecycle_state['devices_opened'] or lifecycle_state['game_launched'] or lifecycle_state['screen_access']:raise ValueError('Native lifecycle state checks failed')
+                if not lifecycle_state['passed'] or lifecycle_state['cases']<20 or lifecycle_state['guards']<6 or lifecycle_state['suspended_pcm_consumption'] or not lifecycle_state['synthetic_pcm_only'] or lifecycle_state['devices_opened'] or lifecycle_state['game_launched'] or lifecycle_state['screen_access']:raise ValueError('Native lifecycle state checks failed')
                 run([directory/'wa2_native_stream_voice_tests.exe',directory/'native-stream-voice.json'],console,90)
                 stream_voice_state=json.loads((directory/'native-stream-voice.json').read_text())
                 if not stream_voice_state['passed'] or stream_voice_state['cases']<13 or stream_voice_state['guards']<1 or stream_voice_state['caller_source_accesses'] or not stream_voice_state['synthetic_pcm_only'] or stream_voice_state['devices_opened'] or stream_voice_state['game_launched'] or stream_voice_state['screen_access']:raise ValueError('Native asynchronous voice checks failed')
@@ -229,6 +232,12 @@ def main():
                 run([directory/'wa2_native_audio_checkpoint_tests.exe',directory/'native-audio-checkpoint.json'],console,90)
                 audio_checkpoint=json.loads((directory/'native-audio-checkpoint.json').read_text())
                 if not audio_checkpoint['passed'] or audio_checkpoint['cases']<18 or audio_checkpoint['guards']<16 or audio_checkpoint['restore_history_events'] or not audio_checkpoint['looping_audio_restarted'] or not audio_checkpoint['one_shots_not_replayed'] or not audio_checkpoint['fake_voices_only'] or audio_checkpoint['devices_opened'] or audio_checkpoint['game_launched'] or audio_checkpoint['screen_access']:raise ValueError('Native audio checkpoint checks failed')
+                run([directory/'wa2_native_saved_scene_tests.exe',directory/'native-saved-scene.json'],console,90)
+                saved_scene=json.loads((directory/'native-saved-scene.json').read_text())
+                if not saved_scene['passed'] or saved_scene['cases']<20 or saved_scene['guards']<35 or saved_scene['subsystem_envelopes']!=17 or not saved_scene['envelope_checks_only'] or saved_scene['scene_instances_created'] or saved_scene['original_resources_opened'] or saved_scene['devices_opened'] or saved_scene['game_launched'] or saved_scene['screen_access']:raise ValueError('Native scene save envelope checks failed')
+                run([directory/'wa2_native_scene_checkpoint_tests.exe',directory/'native-scene-checkpoint.json'],console,90)
+                scene_checkpoint=json.loads((directory/'native-scene-checkpoint.json').read_text())
+                if not scene_checkpoint['passed'] or scene_checkpoint['cases']<7 or scene_checkpoint['guards']<7 or not scene_checkpoint['synthetic_script_only'] or not scene_checkpoint['independent_logical_clocks'] or not scene_checkpoint['old_scene_preserved_on_failure'] or scene_checkpoint['font_glyph_pixels_decoded'] or scene_checkpoint['original_resources_opened'] or scene_checkpoint['devices_opened'] or scene_checkpoint['game_launched'] or scene_checkpoint['screen_access']:raise ValueError('Synthetic native scene restore checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -270,6 +279,8 @@ def main():
     report['bitmap_state']=bitmap_state
     report['weather_checkpoint']=weather_checkpoint
     report['audio_checkpoint']=audio_checkpoint
+    report['saved_scene']=saved_scene
+    report['scene_checkpoint']=scene_checkpoint
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

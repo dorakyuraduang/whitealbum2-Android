@@ -102,6 +102,9 @@ public:
     void skip_read_only(bool value){skip_read_only_=value;}
     void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
     void flush_progress(){reading_.finish();}
+    std::vector<std::uint8_t> checkpoint()const;
+    using SavedImageResolver=std::function<image::Resolve(resource::Catalog&)>;
+    static std::unique_ptr<Scene> restore(resource::BankOpener,std::shared_ptr<progress::Store>,std::span<const std::uint8_t>,std::int64_t monotonic_us,const SavedImageResolver&);
 private:
     bool can_accelerate()const;
 };

@@ -1,5 +1,6 @@
 #include "scene_calendar.hpp"
 #include "checkpoint_codec.hpp"
+#include "resource_catalog.hpp"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -35,6 +36,9 @@ bool SceneCalendar::ready(){
     bool ready=true;for(unsigned n=0;n<images_.size();++n)if(!images_[n]){images_[n]=requests_[n]->get();if(images_[n])requests_[n].reset();else ready=false;}
     if(ready && (images_[0]->width<1280 || images_[0]->height<720 || images_[1]->width<472 || images_[1]->height<48 || images_[2]->width<std::uint32_t((date_.weekday+1)*104) || images_[2]->height<32))
         throw Error("Native calendar atlas dimensions are too small");return ready;
+}
+void SceneCalendar::prepare_restored_assets(resource::Catalog& resources,const image::Resolve& resolve){
+    if(!active_)return;for(unsigned n=0;n<requests_.size();++n)if(requests_[n]){images_[n]=image::resolve_reference(resources.reference(requests_[n]),resources,resolve);requests_[n].reset();}if(!ready())throw Error("Restored calendar assets remain incomplete");
 }
 std::optional<CommandResult> SceneCalendar::dispatch(Command& call){
     if(call.index!=203)return {};

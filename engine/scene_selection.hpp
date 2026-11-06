@@ -2,6 +2,7 @@
 #include "scene_choices.hpp"
 #include "image_store.hpp"
 #include "text_layout.hpp"
+#include "image_reference.hpp"
 
 namespace wa2::script {
 struct SelectionSettings {
@@ -31,6 +32,8 @@ public:
     bool ready()const noexcept{return active_ && ready_;}
     bool loading()const noexcept{return active_ && (!images_[0] || (needs_marker_ && !images_[1]));}
     std::uint8_t opacity()const noexcept{return opacity_;}
+    std::vector<std::uint8_t> checkpoint(const SceneChoices&,const resource::Catalog&)const;
+    void restore(std::span<const std::uint8_t>,const SceneChoices&,resource::Catalog&,const image::Resolve&);
 private:
     Loader loader_;Text text_;Sound sound_;
     SelectionSettings settings_;

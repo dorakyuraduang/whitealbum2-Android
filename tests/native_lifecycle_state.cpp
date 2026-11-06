@@ -20,6 +20,10 @@ int main(int argc,char** argv){try{
     {g::Timeline early;CHECK(early.pause(true,0));CHECK(early.sample(10000000)==0 && early.pause(false,11000000));CHECK(early.sample(11001000)==1000 && early.milliseconds()==1);++cases;}
     {g::Timeline wrap;const auto start=std::int64_t(std::numeric_limits<std::uint32_t>::max()-5)*1000;wrap.sample(start);wrap.sample(start+40000);CHECK(wrap.milliseconds()==34);++cases;}
     {g::Timeline end;end.sample(std::numeric_limits<std::int64_t>::max()-10);CHECK(end.sample(std::numeric_limits<std::int64_t>::max())==std::numeric_limits<std::int64_t>::max());++cases;}
+    {g::Timeline loaded;loaded.rebase(5000000,9000000000);CHECK(loaded.sample(9000001000)==5001000 && loaded.milliseconds()==5001 && !loaded.paused());++cases;
+        rejects([&]{loaded.rebase(-1,0);});rejects([&]{loaded.rebase(0,-1);});guards+=2;CHECK(loaded.microseconds()==5001000);}
+    {g::Timeline loaded;loaded.rebase((std::int64_t(std::numeric_limits<std::uint32_t>::max())+4)*1000,0);CHECK(loaded.sample(1000)>0 && loaded.milliseconds()==4);++cases;}
+    {g::Timeline loaded;loaded.rebase(std::numeric_limits<std::int64_t>::max()-1,0);rejects([&]{loaded.sample(2);});++guards;CHECK(loaded.microseconds()==std::numeric_limits<std::int64_t>::max()-1 && loaded.sample(1)==std::numeric_limits<std::int64_t>::max());++cases;}
     {g::Timeline clock;clock.sample(1000000);s::SceneControls controls([&]{return clock.milliseconds();});s::Command reset{195,{}};controls.dispatch(reset);
         std::array<s::Value,1> args{s::Value(1000)};s::Command wait{196,args};clock.sample(1250000);CHECK(!controls.dispatch(wait)->complete);
         clock.pause(true,1500000);clock.sample(100000000);CHECK(!controls.dispatch(wait)->complete);clock.pause(false,100000000);

@@ -1,5 +1,6 @@
 #include "scene_dialogue.hpp"
 #include "checkpoint_codec.hpp"
+#include "resource_catalog.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <limits>
@@ -29,6 +30,10 @@ void SceneDialogue::load_assets(){
     }
     assets_ready_=true;
     for(std::size_t i=0;i<images_.size();++i)if(!images_[i]){images_[i]=requests_[i]->get();if(images_[i])requests_[i].reset();else assets_ready_=false;}
+}
+void SceneDialogue::prepare_restored_assets(resource::Catalog& resources,const image::Resolve& resolve){
+    if(phase_==DialoguePhase::closed)return;load_assets();
+    for(unsigned n=0;n<requests_.size();++n)if(requests_[n]){images_[n]=image::resolve_reference(resources.reference(requests_[n]),resources,resolve);requests_[n].reset();}assets_ready_=true;
 }
 void SceneDialogue::open(){
     load_assets();visible_=true;

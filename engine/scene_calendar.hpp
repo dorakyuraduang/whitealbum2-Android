@@ -2,6 +2,7 @@
 #include "script_runtime.hpp"
 #include "image_store.hpp"
 #include "scene_sprite.hpp"
+#include "image_reference.hpp"
 
 namespace wa2::script {
 struct CalendarDate {
@@ -20,6 +21,7 @@ public:
     std::span<const image::Sprite> sprites();
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t>);
+    void prepare_restored_assets(resource::Catalog&,const image::Resolve&);
     static CalendarDate date(std::int32_t year,std::int32_t month,std::int32_t day,std::int32_t weekday=-1);
 private:
     Loader loader_;

@@ -12,5 +12,6 @@ public:
     bool paused()const noexcept{return paused_;}
     std::int64_t microseconds()const noexcept{return logical_;}
     std::uint32_t milliseconds()const noexcept{return std::uint32_t(std::uint64_t(logical_)/1000);}
+    void rebase(std::int64_t logical_us,std::int64_t monotonic_us);
 };
 }

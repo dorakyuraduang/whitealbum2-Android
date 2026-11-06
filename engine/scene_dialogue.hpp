@@ -3,6 +3,7 @@
 #include "text_layout.hpp"
 #include "image_store.hpp"
 #include "scene_novel.hpp"
+#include "image_reference.hpp"
 
 namespace wa2::script {
 enum class DialoguePhase {closed,opening,typing,waiting,complete,closing};
@@ -34,6 +35,7 @@ public:
     std::span<const image::Sprite> sprites();
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t>);
+    void prepare_restored_assets(resource::Catalog&,const image::Resolve&);
 private:
     text::FontBook& fonts_;
     Loader loader_;

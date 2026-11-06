@@ -123,6 +123,7 @@ public:
     bool running() const noexcept {return running_;}
     const Program& program() const noexcept {return *program_;}
     std::uint64_t operations() const noexcept {return operations_;}
+    std::optional<std::uint32_t> pending_command()const noexcept{return pending_?std::optional(pending_->index):std::nullopt;}
     std::vector<std::uint8_t> checkpoint() const;
     void restore(std::span<const std::uint8_t> checkpoint);
 private:
