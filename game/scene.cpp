@@ -109,7 +109,7 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     movies_.update(monotonic_us);music_.update(duration);effects_.update(duration);voices_.update(duration);weather_.update();
     backgrounds_.update(duration);colour_.update(duration);bitmaps_.update(duration);characters_.update(duration);dialogue_.update(skipping());
     calendar_.update([this](auto frames){return skipping()?frames/3:frames;});
-    if(background_changing_ && !backgrounds_.busy()){weather_.stop(true);bitmaps_.clear_retired();characters_.clear_retired();background_changing_=false;}
+    if(background_changing_ && !backgrounds_.busy()){weather_.background_finished(backgrounds_.picture());bitmaps_.clear_retired();characters_.clear_retired();background_changing_=false;}
     const auto state=session_.advance([this](auto& call){return command(call);});
     if(session_.active())statistics_.scene=session_.active()->program().name();
     statistics_.voices=voices_.played();

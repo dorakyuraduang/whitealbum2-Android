@@ -50,6 +50,8 @@ int main(int argc,char** argv){try{
     snow[0]=s::Value(0x101);snow[2]=s::Value(10);snow[5]=s::Value(0);random_calls=0;call={173,snow};weather.dispatch(call);weather.update();CHECK(weather.type()==1 && weather.extent()==8 && random_calls==32);++cases;
     const auto petal=weather.sprites()[0];CHECK(petal.x==8 && petal.y==8 && petal.width==128 && petal.source_x==0 && petal.layer==10);++cases;
     for(auto value:{1u,2u}){random_value=value;call={173,snow};weather.dispatch(call);weather.update();CHECK(weather.particles()[0].kind==(value==1?2:1) && weather.sprites()[0].width==(value==1?16:32));++cases;}
+    weather.background_finished(true);CHECK(weather.active() && weather.scope()==0);weather.background_finished(false);CHECK(!weather.active());++cases;
+    for(int scope:{1,2}){snow[5]=s::Value(scope);call={173,snow};weather.dispatch(call);weather.update();weather.background_finished(false);CHECK(weather.active() && weather.scope()==scope && !weather.sprites().empty());++cases;}
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-weather-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"implemented_types\":[0,1,3,4,6],\"synthetic_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native weather population, growth and original RNG consumption.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

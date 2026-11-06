@@ -21,6 +21,9 @@ public:
     std::optional<CommandResult> dispatch(Command& command);
     void update();
     void stop(bool immediately);
+    // Cached background completion clears only weather attached to an ordinary
+    // background bank. CG scenes and independent foreground scopes retain it.
+    void background_finished(bool picture){if(!picture && scope_==0)stop(true);}
     std::span<const image::Sprite> sprites()const noexcept{return sprites_;}
     std::span<const WeatherParticle,400> particles()const noexcept{return particles_;}
     std::int32_t type()const noexcept{return type_;}

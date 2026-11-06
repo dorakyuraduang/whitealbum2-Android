@@ -105,6 +105,8 @@ player, original trimmed frame offsets, a scale of two about the screen centre
 and a foreground layer independent of its scope flag. Bitmap moves update the
 source's automatic pivot before subsequent scale/rotation commands. Complete
 scene playback and device presentation are not verified.
+Background completion clears weather only for a normal background in scope 0;
+CG transitions and foreground scopes retain their weather, including scope 2.
 
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
