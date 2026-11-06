@@ -20,6 +20,7 @@ void SceneShake::validate(std::int32_t mode,std::int32_t amplitude,std::int32_t 
 std::uint32_t SceneShake::random(){const auto value=random_();if(value>32767)throw Error("Native shake random value out of range");return value;}
 void SceneShake::stop()noexcept{active_=false;elapsed_=0;world_={};dialogue_={};}
 std::optional<CommandResult> SceneShake::dispatch(Command& call){
+    if(call.index==151){if(!call.arguments.empty())throw Error("Invalid native StopShake parameters");stop();return CommandResult{true,false,Value{}};}
     if(call.index!=150 && call.index!=231)return {};
     if(call.arguments.size()!=(call.index==150?5u:6u))throw Error("Invalid native shake parameters");
     const auto v=[&](unsigned n){return call.arguments[n].integer();};

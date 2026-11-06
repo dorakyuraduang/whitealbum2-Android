@@ -231,6 +231,13 @@ startup cancellation, looping, initial silence and asynchronous provider/codec
 errors. Archive lookup/member opening still occurs at the scene resource
 boundary; this change does not claim to remove all synchronous resource I/O.
 
+EndMessage is now bound to the native shake controller: a live nonzero-duration
+shake stops and restores world/dialogue transforms, while a duration-zero
+continuous shake remains active. StopShake always resets both scopes. The
+EndMessage argument remains ignored as in the cached wrapper. A missing binding
+is an explicit error instead of a silent callback omission. Synthetic checks
+dispatch the actual dialogue command, including both reserved finite durations.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

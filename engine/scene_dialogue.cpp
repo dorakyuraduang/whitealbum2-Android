@@ -112,9 +112,9 @@ std::optional<CommandResult> SceneDialogue::dispatch(Command& command){
         }
         return CommandResult{command.index==133 || complete(),command.index!=133,Value(1)};
     case 134:count(0);return CommandResult{complete(),true,Value(1)};
-    // Existing 0x454cb0 -> 0x40e7a0 conditionally resets the scene camera;
-    // its generic argument is ignored. It does not replay/stop dialogue audio.
-    case 132:count(1);if(end_message_)end_message_();return CommandResult{true,false,Value(1)};
+    // Existing 0x454cb0 -> 0x40e7a0 stops a live nonzero-duration shake.
+    // Its argument is ignored; continuous shakes remain active.
+    case 132:count(1);if(!end_message_)throw Unsupported("Missing native EndMessage shake binding");end_message_();return CommandResult{true,false,Value(1)};
     case 143:
         count(2);
         if(command.arguments[1].integer()!=0)throw Unsupported("native dialogue window close effect "+std::to_string(command.arguments[1].integer()));

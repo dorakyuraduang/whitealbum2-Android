@@ -33,7 +33,7 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);},[this](auto name,auto group){return image::Animation::parse(resources_.data(group,name));}),
     characters_([this](auto name){return resources_.image("char",name,controls_.modes().character_chroma,controls_.modes().character_effect);}),
     dialogue_(fonts_,[this](auto name){return resources_.image("grp",name);},[this](auto line){
-        reading_.seen(session_.active()?session_.active()->program().name():statistics_.scene,line);controls_.reset_message_timer();++statistics_.messages;}),
+        reading_.seen(session_.active()?session_.active()->program().name():statistics_.scene,line);controls_.reset_message_timer();++statistics_.messages;},[this]{shake_.end_message();}),
     movies_([this](auto name,auto){auto player=std::make_unique<movie::Player>(resources_.movie(name),mixer_);player->gain(1);return player;},{},0,[this](auto id){
         if(!progress_store_)throw script::Error("Missing native movie progress storage");progress_store_->state().set_flag(std::uint32_t(id),1);progress_store_->flush();}){
     environment_.reserve(432);foreground_.reserve(432);

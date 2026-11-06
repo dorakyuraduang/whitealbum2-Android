@@ -18,6 +18,7 @@ public:
     std::optional<CommandResult> dispatch(Command&);
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     void stop()noexcept;
+    void end_message()noexcept{if(active_ && duration_!=0)stop();}
     bool active()const noexcept{return active_;}
     const image::SceneTransform& world()const noexcept{return world_;}
     const image::SceneTransform& dialogue()const noexcept{return dialogue_;}

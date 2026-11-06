@@ -168,7 +168,7 @@ def main():
                 if not geometry_state['passed'] or geometry_state['cases']<30 or geometry_state['guards']<7 or geometry_state['devices_opened'] or geometry_state['game_launched'] or geometry_state['screen_access']:raise ValueError('Native scene geometry checks failed')
                 run([directory/'wa2_native_shake_state_tests.exe',directory/'native-shake-state.json'],console,90)
                 shake_state=json.loads((directory/'native-shake-state.json').read_text())
-                if not shake_state['passed'] or shake_state['cases']<35 or shake_state['guards']<8 or shake_state['game_launched'] or shake_state['screen_access']:raise ValueError('Native shake checks failed')
+                if not shake_state['passed'] or shake_state['cases']<43 or shake_state['guards']<10 or shake_state['game_launched'] or shake_state['screen_access']:raise ValueError('Native shake checks failed')
                 run([directory/'wa2_native_world_state_tests.exe',directory/'native-world-state.json'],console,90)
                 world_state=json.loads((directory/'native-world-state.json').read_text())
                 if not world_state['passed'] or world_state['cases']<35 or world_state['guards']<1 or world_state['devices_opened'] or world_state['game_launched'] or world_state['screen_access']:raise ValueError('Native world state checks failed')

@@ -1,11 +1,17 @@
 #include "scene_shake.hpp"
+#include "scene_dialogue.hpp"
 #include "native_random.hpp"
 #include <fstream>
 #include <iostream>
+#include <cstring>
 
 namespace s=wa2::script;namespace i=wa2::image;
 #define CHECK(x) do{if(!(x))throw std::runtime_error(std::string("check failed: ")+#x);}while(false)
 template<class F>void rejects(F&& f){bool caught=false;try{f();}catch(const std::exception&){caught=true;}CHECK(caught);}
+struct EmptyPak:wa2::resource::Source {
+    std::uint64_t size()const override{return 16;}
+    void read_at(std::uint64_t at,std::span<std::uint8_t> out)override{constexpr std::array<std::uint8_t,16> bytes{'K','C','A','P'};CHECK(at<=bytes.size() && out.size()<=bytes.size()-at);std::copy_n(bytes.data()+at,out.size(),out.data());}
+};
 s::CommandResult invoke(s::SceneShake& shake,unsigned id,std::initializer_list<s::Value> args){std::vector<s::Value> values(args);s::Command call{id,values};return *shake.dispatch(call);}
 int main(int argc,char** argv){try{
     CHECK(argc==2);unsigned cases{},guards{};wa2::Random random;s::SceneShake shake([&]{return random.next();});
@@ -58,6 +64,16 @@ int main(int argc,char** argv){try{
     const auto a_saved=a_shake.checkpoint();wa2::Random b(a.state());s::SceneShake b_shake([&]{return b.next();});b_shake.restore(a_saved);
     for(int tick=0;tick<300;++tick){a_shake.update();b_shake.update();CHECK(a.state()==b.state() && a_shake.checkpoint()==b_shake.checkpoint());}++cases;
     b_shake.stop();s::SceneShake stopped([&]{return 0;});stopped.restore(b_shake.checkpoint());CHECK(!stopped.active());++cases;
+    wa2::text::FontBook fonts(wa2::resource::Archive::open(std::make_shared<EmptyPak>()));
+    const auto no_images=[](auto)->std::shared_ptr<i::ImageRequest>{throw std::runtime_error("EndMessage must not request images");};
+    s::SceneDialogue dialogue(fonts,no_images,{},[&]{shake.end_message();});
+    std::array<s::Value,1> ignored{s::Value(123)};s::Command end{132,ignored};
+    for(auto duration:{60,-1,-2}){invoke(shake,150,{s::Value(513),s::Value(32),s::Value(duration),s::Value(2),s::Value(120)});shake.update();CHECK(shake.active() && !shake.world().identity());
+        const auto reply=dialogue.dispatch(end);CHECK(reply && reply->complete && !reply->yield_frame && reply->value->integer()==1 && !shake.active() && shake.world().identity() && shake.dialogue().identity());++cases;}
+    invoke(shake,150,{s::Value(513),s::Value(32),s::Value(0),s::Value(2),s::Value(120)});shake.update();const auto continuous=shake.checkpoint();dialogue.dispatch(end);CHECK(shake.active() && shake.checkpoint()==continuous);++cases;
+    CHECK(invoke(shake,151,{}).complete && !shake.active() && shake.world().identity() && shake.dialogue().identity());dialogue.dispatch(end);CHECK(!shake.active());++cases;
+    rejects([&]{s::SceneDialogue unbound(fonts,no_images);unbound.dispatch(end);});++guards;
+    rejects([&]{invoke(shake,151,{s::Value(1)});});++guards;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-shake-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"synthetic_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native shake modes, scopes, RNG order and checkpoints.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
