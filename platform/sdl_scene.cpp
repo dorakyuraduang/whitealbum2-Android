@@ -26,7 +26,7 @@ void SdlScene::draw(const script::BackgroundLayer& layer){
         auto additive=vertices;for(auto& vertex:additive)vertex.colour=light;canvas_.triangles({},additive,CanvasBlend::add);
     }
 }
-void SdlScene::sprites(std::span<const image::Sprite> items){
+void SdlScene::sprites(std::span<const image::Sprite> items,const image::SceneTransform& transform){
     if(items.size()>65536)throw std::runtime_error("native sprite batch exceeds limit");
     std::erase_if(uploads_,[](const auto& item){return item.image.expired();});
     auto& vertices=sprite_vertices_;vertices.clear();std::shared_ptr<const image::Raster> source;auto blend=image::SpriteBlend::alpha;
@@ -35,7 +35,7 @@ void SdlScene::sprites(std::span<const image::Sprite> items){
     for(const auto& item:items){
         if(!item.image || !item.alpha)continue;
         const auto quad=image::scene_quad({item.x,item.y,item.width,item.height,item.source_x,item.source_y,item.source_width,item.source_height,
-            item.angle,item.pivot_x,item.pivot_y,1,1,item.flip},item.image->width,item.image->height);if(!quad)continue;
+            item.angle,item.pivot_x,item.pivot_y,1,1,item.flip,transform},item.image->width,item.image->height);if(!quad)continue;
         if(source!=item.image || blend!=item.blend){flush();source=item.image;blend=item.blend;}
         const CanvasColour colour{item.red,item.green,item.blue,item.alpha};
         for(const auto& v:*quad)vertices.push_back({v.x,v.y,v.u,v.v,colour});
@@ -43,6 +43,14 @@ void SdlScene::sprites(std::span<const image::Sprite> items){
     flush();
 }
 void SdlScene::background(const script::BackgroundFrame& frame,std::span<const image::Sprite> environment){
+    if(frame.transform.identity()){background_contents(frame,environment);return;}
+    if(!world_target_)world_target_=canvas_.target(1280,720);
+    canvas_.render_to(world_target_,[&]{background_contents(frame,environment);});
+    canvas_.clip({});canvas_.clear({0,0,0,255});
+    const auto quad=image::scene_quad({0,0,1280,720,0,0,1280,720,0,0,0,1,1,0,frame.transform},1280,720);
+    if(quad){std::array<CanvasVertex,6> vertices;for(unsigned n=0;n<vertices.size();++n){const auto& v=(*quad)[n];vertices[n]={v.x,v.y,v.u,v.v,{255,255,255,255}};}canvas_.triangles(world_target_,vertices);}
+}
+void SdlScene::background_contents(const script::BackgroundFrame& frame,std::span<const image::Sprite> environment){
     // Retain one fixed-size render target across transitions, but release the
     // source image immediately so fast-forward cannot keep old scenes alive.
     if(!frame.mask)mask_source_.reset();

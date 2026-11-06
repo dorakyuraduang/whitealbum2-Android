@@ -118,6 +118,19 @@ scene playback and device presentation are not verified.
 Background completion clears weather only for a normal background in scope 0;
 CG transitions and foreground scopes retain their weather, including scope 2.
 
+SetShake/SetShake2 now use a native frame-counted state machine for sine,
+square, alternating random, turn, rotation-sine and periodic zoom modes
+(0/1/2/9/12/13/15). Direction signs, integer envelope truncation, source counter
+order, finite/reserved/continuous durations and both command wait policies
+are retained. Random direction selection shares the engine RNG and preserves
+its two-frame phase across new effects. Other effect codes fail explicitly.
+Background-only, dialogue-only and combined scopes have separate typed
+transforms. Presentation composites the world into one bounded reusable target
+when needed; hosts pass `Scene::dialogue_transform()` to dialogue sprite draws.
+The shake checkpoint contains its parameters, counter and scopes; the common
+RNG state remains the enclosing scene's responsibility. Constructed state and
+vertex checks do not verify whole-scene rendering or device performance.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations

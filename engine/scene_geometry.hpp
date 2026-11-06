@@ -5,11 +5,17 @@
 
 namespace wa2::image {
 struct QuadVertex {float x{},y{},u{},v{};};
+struct SceneTransform {
+    float x{},y{},scale{1},angle{};
+    bool identity()const noexcept{return x==0 && y==0 && scale==1 && angle==0;}
+    bool operator==(const SceneTransform&)const=default;
+};
 struct QuadGeometry {
     float x{},y{},width{},height{};
     float source_x{},source_y{},source_width{},source_height{};
     float angle{},pivot_x{},pivot_y{},scale_x{1},scale_y{1};
     std::uint32_t flip{};
+    SceneTransform outer;
 };
 // Available pixels are clipped in source space before transforming the quad.
 // Native textures have no allocation padding. Position/UV clipping therefore

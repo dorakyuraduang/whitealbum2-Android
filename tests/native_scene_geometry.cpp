@@ -40,6 +40,9 @@ int main(int argc,char** argv){try{
     q={0,0,64,64,-16,0,64,64,90,0,0,2,3,1};v=i::scene_quad(q,64,64);
     CHECK(v && near((*v)[0].x,0) && near((*v)[0].y,48) && near((*v)[2].x,128) && near((*v)[2].y,192));++cases;
     q={0,0,64,64,0,0,64,64};for(unsigned axis=0;axis<3;++axis){auto zero=q;if(axis==0)zero.width=0;else if(axis==1)zero.source_height=0;else zero.scale_x=0;CHECK(!i::scene_quad(zero,64,64));++cases;}
+    q={640,360,10,20,0,0,64,64};q.outer={10,-20,2,90};v=i::scene_quad(q,64,64);CHECK(v && near((*v)[0].x,600) && near((*v)[0].y,340) && near((*v)[2].x,640) && near((*v)[2].y,320));++cases;
+    q.outer={10,-20,1,0};v=i::scene_quad(q,64,64);CHECK(v && (*v)[0].x==650 && (*v)[0].y==340);++cases;
+    q.outer.scale=0;CHECK(!i::scene_quad(q,64,64));++cases;q.outer={};
     for(auto bad:std::array<i::QuadGeometry,5>{{{0,0,-1,64,0,0,64,64},{0,0,64,64,0,0,-1,64},
         {0,0,64,64,0,0,64,64,0,0,0,-1,1},{0,0,64,64,0,0,64,64,0,0,0,1,1,4},
         {std::numeric_limits<float>::quiet_NaN(),0,64,64,0,0,64,64}}}){rejects([&]{i::scene_quad(bad,64,64);});++guards;}

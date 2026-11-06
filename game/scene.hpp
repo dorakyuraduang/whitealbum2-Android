@@ -18,6 +18,7 @@
 #include "scene_voices.hpp"
 #include "scene_movie.hpp"
 #include "scene_weather.hpp"
+#include "scene_shake.hpp"
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};};
@@ -47,6 +48,7 @@ class Scene {
     script::SceneEffects effects_;
     script::SceneVoices voices_;
     script::SceneWeather weather_;
+    script::SceneShake shake_;
     script::SceneBackground backgrounds_;
     script::SceneBitmaps bitmaps_;
     script::SceneCharacters characters_;
@@ -70,6 +72,7 @@ public:
     std::span<const image::Sprite> environment();
     std::span<const image::Sprite> foreground();
     std::span<const image::Sprite> dialogue(){return dialogue_.sprites();}
+    const image::SceneTransform& dialogue_transform()const noexcept{return shake_.dialogue();}
     std::optional<movie::VideoFrame> movie()const{return movies_.frame();}
     bool movie_active()const{return movies_.active();}
     const Statistics& statistics()const noexcept{return statistics_;}

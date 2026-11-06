@@ -23,6 +23,7 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
         if(value.ec!=std::errc{} || value.ptr!=name.data()+name.size())throw script::Error("scene has no numeric voice chapter");return chapter;
     },[this]{return dialogue_.speaker();},[this]{return controls_.modes().voice_offset;},[this]{return skipping();},[this]{return input_.advance;}),
     weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto name){return image::Animation::parse(resources_.data("grp",name));}),
+    shake_([this]{return random_.next();}),
     backgrounds_([this](auto name){return resources_.image("bak",name);},[this](bool keep_characters){background_changing_=true;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
         [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name);}),
     bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);},[this](auto name,auto group){return image::Animation::parse(resources_.data(group,name));}),
@@ -80,6 +81,7 @@ script::CommandResult Scene::command(script::Command& call){
     if(auto value=effects_.dispatch(call))return *value;
     if(auto value=voices_.dispatch(call))return *value;
     if(auto value=weather_.dispatch(call))return *value;
+    if(auto value=shake_.dispatch(call))return *value;
     if(auto value=dialogue_.dispatch(call))return *value;
     if(auto value=colour_.dispatch(call))return *value;
     if(auto value=bitmaps_.dispatch(call))return *value;
@@ -106,7 +108,7 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     if(input_.advance){window_visible_=true;dialogue_.visible(true);dialogue_.advance();}
     if(dialogue_.phase()==script::DialoguePhase::waiting && controls_.automatic_advance())dialogue_.advance();
     const auto duration=[this](std::int32_t frames){return skipping()?0:frames==-1?15:frames==-2?30:frames;};
-    movies_.update(monotonic_us);music_.update(duration);effects_.update(duration);voices_.update(duration);weather_.update();
+    movies_.update(monotonic_us);music_.update(duration);effects_.update(duration);voices_.update(duration);weather_.update();shake_.update(duration);
     backgrounds_.update(duration);colour_.update(duration);bitmaps_.update(duration);characters_.update(duration);dialogue_.update(skipping());
     calendar_.update([this](auto frames){return skipping()?frames/3:frames;});
     if(background_changing_ && !backgrounds_.busy()){weather_.background_finished(backgrounds_.picture());bitmaps_.clear_retired();characters_.clear_retired();background_changing_=false;}
@@ -116,7 +118,7 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     controls_.take_draw_request();return title_requested_?script::RunState::stopped:state;
 }
 script::BackgroundFrame Scene::background()const{
-    auto frame=backgrounds_.frame();const auto channels=colour_.channels();if(frame.previous)frame.previous->colour=channels;if(frame.current)frame.current->colour=channels;return frame;
+    auto frame=backgrounds_.frame();frame.transform=shake_.world();const auto channels=colour_.channels();if(frame.previous)frame.previous->colour=channels;if(frame.current)frame.current->colour=channels;return frame;
 }
 std::span<const image::Sprite> Scene::environment(){
     environment_.clear();const auto add=[this](auto items){environment_.insert(environment_.end(),items.begin(),items.end());};

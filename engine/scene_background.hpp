@@ -2,6 +2,7 @@
 #include "script_runtime.hpp"
 #include "image_store.hpp"
 #include "scene_camera.hpp"
+#include "scene_geometry.hpp"
 
 namespace wa2::script {
 struct BackgroundLayer {
@@ -20,6 +21,7 @@ struct BackgroundFrame {
         bool flip_x{},flip_y{},invert{};
     };
     std::optional<Mask> mask;
+    image::SceneTransform transform;
 };
 // Original B/BW image selection, placement, dissolves and PAK mask transitions.
 class SceneBackground {
