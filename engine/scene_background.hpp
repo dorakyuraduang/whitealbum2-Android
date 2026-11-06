@@ -1,6 +1,7 @@
 #pragma once
 #include "script_runtime.hpp"
 #include "image_store.hpp"
+#include "scene_camera.hpp"
 
 namespace wa2::script {
 struct BackgroundLayer {
@@ -8,6 +9,7 @@ struct BackgroundLayer {
     float x{},y{},width{},height{};
     std::uint8_t opacity{255};
     std::array<std::int32_t,3> colour{128,128,128};
+    float angle{},pivot_x{640},pivot_y{360};
 };
 struct BackgroundFrame {
     std::optional<BackgroundLayer> previous,current;
@@ -28,6 +30,7 @@ public:
     BackgroundFrame frame()const;
     bool busy()const noexcept{return loading_ || active_;}
     bool picture()const noexcept{return picture_;}
+    const SceneCamera& camera()const noexcept{return camera_;}
 private:
     Loader loader_;
     Loader mask_loader_;
@@ -38,8 +41,10 @@ private:
     std::optional<BackgroundFrame::Mask> mask_;
     std::array<std::optional<BackgroundLayer>,2> layers_;
     std::size_t current_{};
+    SceneCamera camera_;
     std::int32_t elapsed_{},duration_{1},effect_{1},mask_mode_{},x_{},y_{};
-    float width_{1280},height_{720};
+    float width_{1280},height_{720},angle_{};
+    bool extended_{};
     bool loading_{},active_{},picture_{};
     void begin(Command& command,std::int32_t time_mode);
 };

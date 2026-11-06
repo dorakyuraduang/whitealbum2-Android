@@ -12,8 +12,9 @@ EXE. `--zig-cache /path/to/cache` may reuse an existing compiler cache.
 The build stays hidden, below normal priority, with one job and one CPU in
 this local verifier. It compares actual common source lists and checks the
 Ninja link closure plus native-library symbols for AOT/guest-runtime imports.
-The linked scene probe is never executed. Only `wa2_native_progress_tests` runs,
-with constructed LSCR, randomized format data and fresh synthetic save files.
+The linked scene probe is never executed. Synthetic native progress, script,
+control and camera tests run with constructed LSCR, randomized format data,
+small in-memory KCAP images and fresh synthetic save files.
 Its fixtures cover signed flag values, reserved flag 99, both gallery banks,
 reading-bit order/bounds, command dispatch, persistent restart, narrow block
 writes, I/O-failure retries, malformed formats and hard-link refusal.
@@ -29,6 +30,12 @@ restore failures and conditionally visible selections. `--resource-root res`
 optionally parses the external ck-gal.pak scripts to validate every instruction
 and label boundary and catalogue command reference. This static resource audit
 does not execute script commands or create a game scene/window/device.
+
+Camera/background checks cover interrupted pans, easing, both camera banks,
+timed pauses, skip completion, checkpoint continuation, pixel/scale command
+conventions, preserved transforms and BC character retention. The shared SDL
+scene adapter also compiles on both toolchains without being executed or linked
+to a device backend by this component verifier.
 
 ## Public source boundary
 

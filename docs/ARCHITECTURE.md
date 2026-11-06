@@ -51,6 +51,14 @@ GoTitle produces an explicit scene completion request. Music and completed/stopp
 movies update their ordinary persistent unlock flags. These are core behaviors;
 they do not implement the remaining title/options/replay presentation by themselves.
 
+Native backgrounds now accept both pixel-sized B/BC/V/H and scaled B2/BC2/V2/H2
+parameters, retained-transform sentinels and optional nonblocking transitions.
+BC variants preserve character layers. A shared two-bank camera handles pan,
+zoom, rotation, easing, timed pauses and WSZ completion, with bounded native
+checkpoints. The SDL presentation adapter applies the resulting rotation and
+invalidates masked-transition caches when the pose changes. Both toolchains
+compile this adapter; these checks do not exercise a rendering device.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations

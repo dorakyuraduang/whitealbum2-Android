@@ -14,8 +14,11 @@ void SdlScene::draw(const script::BackgroundLayer& layer){
     const auto x=layer.x,y=layer.y,right=x+layer.width,bottom=y+layer.height;
     const CanvasColour colour{std::uint8_t(std::clamp(layer.colour[0]*2,0,255)),std::uint8_t(std::clamp(layer.colour[1]*2,0,255)),
         std::uint8_t(std::clamp(layer.colour[2]*2,0,255)),layer.opacity};
-    const std::array<CanvasVertex,6> vertices{{{x,y,0,0,colour},{right,y,1,0,colour},{right,bottom,1,1,colour},
+    std::array<CanvasVertex,6> vertices{{{x,y,0,0,colour},{right,y,1,0,colour},{right,bottom,1,1,colour},
         {x,y,0,0,colour},{right,bottom,1,1,colour},{x,bottom,0,1,colour}}};
+    if(layer.angle){const auto radians=double(layer.angle)*.01745329238474369;const auto c=float(std::cos(radians)),s=float(std::sin(radians));
+        for(auto& vertex:vertices){const auto px=vertex.x-layer.pivot_x,py=vertex.y-layer.pivot_y;
+            vertex.x=layer.pivot_x+px*c-py*s;vertex.y=layer.pivot_y+px*s+py*c;}}
     canvas_.triangles(texture(layer.image),vertices);
     if(std::any_of(layer.colour.begin(),layer.colour.end(),[](auto channel){return channel>128;})){
         const CanvasColour light{std::uint8_t(std::clamp(layer.colour[0]*2-256,0,255)),std::uint8_t(std::clamp(layer.colour[1]*2-256,0,255)),
@@ -59,7 +62,8 @@ void SdlScene::background(const script::BackgroundFrame& frame,std::span<const i
         const auto& layer=*frame.current;const auto& mask=*frame.mask;
         if(!mask.image || !layer.image)throw std::runtime_error("missing native background mask image");
         if(!mask_source_ || mask_source_->image!=layer.image || mask_source_->x!=layer.x || mask_source_->y!=layer.y ||
-            mask_source_->width!=layer.width || mask_source_->height!=layer.height || mask_source_->colour!=layer.colour){
+            mask_source_->width!=layer.width || mask_source_->height!=layer.height || mask_source_->colour!=layer.colour ||
+            mask_source_->angle!=layer.angle || mask_source_->pivot_x!=layer.pivot_x || mask_source_->pivot_y!=layer.pivot_y){
             mask_source_=layer;if(!mask_target_)mask_target_=canvas_.target(1280,720);
             canvas_.render_to(mask_target_,[&]{canvas_.clear({0,0,0,255});auto opaque=layer;opaque.opacity=255;draw(opaque);});
         }

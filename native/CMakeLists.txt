@@ -34,6 +34,13 @@ add_executable(wa2_native_script_state_tests "${WA2_ROOT}/tests/native_script_st
 target_link_libraries(wa2_native_script_state_tests PRIVATE wa2_script)
 add_executable(wa2_native_control_state_tests "${WA2_ROOT}/tests/native_control_state.cpp")
 target_link_libraries(wa2_native_control_state_tests PRIVATE wa2_script)
+add_executable(wa2_native_camera_state_tests "${WA2_ROOT}/tests/native_camera_state.cpp")
+target_link_libraries(wa2_native_camera_state_tests PRIVATE wa2_script)
+# Compile the shared presentation adapter on both toolchains without opening
+# an SDL device. Linking/render-driver validation is a separate boundary.
+add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp")
+target_include_directories(wa2_native_presentation_check PRIVATE "${WA2_ROOT}/platform")
+target_link_libraries(wa2_native_presentation_check PRIVATE wa2_script)
 add_executable(wa2_native_script_catalogue_tests "${WA2_ROOT}/tests/native_script_catalogue.cpp" "${WA2_ROOT}/platform/file_io.cpp")
 target_include_directories(wa2_native_script_catalogue_tests PRIVATE "${WA2_ROOT}/platform")
 target_link_libraries(wa2_native_script_catalogue_tests PRIVATE wa2_script)
@@ -43,6 +50,7 @@ if(NOT ANDROID)
     add_test(NAME native_progress COMMAND wa2_native_progress_tests "${CMAKE_BINARY_DIR}/native-progress.json")
     add_test(NAME native_script_state COMMAND wa2_native_script_state_tests "${CMAKE_BINARY_DIR}/native-script-state.json")
     add_test(NAME native_control_state COMMAND wa2_native_control_state_tests "${CMAKE_BINARY_DIR}/native-control-state.json")
+    add_test(NAME native_camera_state COMMAND wa2_native_camera_state_tests "${CMAKE_BINARY_DIR}/native-camera-state.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

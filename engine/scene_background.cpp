@@ -9,23 +9,26 @@ SceneBackground::SceneBackground(Loader loader,std::function<void(bool)> changin
     if(!loader_)throw Error("missing native background loader");
 }
 void SceneBackground::begin(Command& command,std::int32_t time_mode){
-    if(command.arguments.size()!=9)throw Error("invalid native background parameters");
+    const bool extended=command.index>=225;
+    if(command.arguments.size()!=(extended?11u:9u))throw Error("invalid native background parameters");
     const auto integer=[&](std::size_t n){return command.arguments[n].integer();};
     const auto effect=integer(0),number=integer(1),variant=integer(2);
     const auto width=command.arguments[7].real(),height=command.arguments[8].real();
+    const auto angle=extended?command.arguments[9].real():0.f;
+    if(extended)command.arguments[10].integer();
     const bool masked=effect>=128 && (effect&~0x19ff)==0;
     if(effect!=-1 && effect!=0 && effect!=1 && !masked)throw Unsupported("unimplemented native background effect "+std::to_string(effect));
-    const bool event=command.index==148 || command.index==149;
+    const bool event=command.index==148 || command.index==149 || command.index==227 || command.index==228;
     if(number<0 || number>(event?99999:9999) || variant<0 || variant>9 || time_mode<0 || time_mode>9)
         throw Unsupported("unimplemented native background image selector");
     if((!masked && integer(4)!=0) || (masked && (integer(4)<0 || integer(4)>3)) ||
-       integer(5)==10000 || integer(6)==10000 || !std::isfinite(width) || !std::isfinite(height) ||
-       width<=0 || height<=0 || width>=10000 || height>=10000)
+       !std::isfinite(width) || !std::isfinite(height) || width<=0 || height<=0 || width>10000 || height>10000 ||
+       !std::isfinite(angle) || std::abs(angle)>1.e9f)
         throw Unsupported("unimplemented native background transform");
     std::array<char,32> name{};
     // 0x455050/0x4551b0 choose *10 for this game's GameTitle. The *100
     // compatibility branch in the shared engine belongs to a different title.
-    if(event)std::snprintf(name.data(),name.size(),"%c%06d.tga",command.index==148?'v':'h',int(number*10+variant));
+    if(event)std::snprintf(name.data(),name.size(),"%c%06d.tga",command.index==148 || command.index==227?'v':'h',int(number*10+variant));
     else std::snprintf(name.data(),name.size(),"B%04d%d%d.tga",int(number),int(variant),int(time_mode));
     if(event && !event_loader_)throw Unsupported("missing native event-image loader");
     auto request=(event?event_loader_:loader_)(name.data());if(!request)throw Error("native background loader returned no image request");
@@ -35,19 +38,22 @@ void SceneBackground::begin(Command& command,std::int32_t time_mode){
         std::snprintf(name.data(),name.size(),"f0%03d.bmp",int(effect&0x7f));
         mask_request=mask_loader_(name.data());if(!mask_request)throw Error("native background mask loader returned no request");
     }
-    if(changing_)changing_(command.index==147);
+    if(changing_)changing_(command.index==147 || command.index==226);
     picture_=event;
     request_=std::move(request);current_^=1;layers_[current_].reset();
     mask_request_=std::move(mask_request);mask_.reset();mask_mode_=integer(4);
     effect_=effect==-1?1:effect;elapsed_=0;duration_=effect==-1?1:std::max(1,integer(3));
-    x_=integer(5);y_=integer(6);width_=width;height_=height;loading_=true;active_=true;
+    x_=integer(5);y_=integer(6);width_=width;height_=height;angle_=angle;extended_=extended;loading_=true;active_=true;
 }
 std::optional<CommandResult> SceneBackground::dispatch(Command& command,std::int32_t time_mode){
-    if(command.index<146 || command.index>149)return std::nullopt;
+    if(command.index>=210 && command.index<=214){if(loading_)return CommandResult{false,true,{}};return camera_.dispatch(command,unsigned(current_));}
+    if((command.index<146 || command.index>149) && (command.index<225 || command.index>228))return std::nullopt;
     if(!command.continuation){begin(command,time_mode);command.continuation=1;}
+    if(command.index>=225 && command.arguments[10].integer()==0)return CommandResult{!loading_,loading_,Value{}};
     return CommandResult{!busy(),true,Value{}};
 }
 void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& adjust){
+    camera_.update(adjust);
     const auto duration=adjust?adjust(duration_):duration_;
     // A skip can shorten an in-flight transition. Drop a queued mask request
     // before waiting for it; the new background image itself is still needed.
@@ -60,9 +66,14 @@ void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& ad
         const auto width=float(raster->width),height=float(raster->height);
         // The original scales about the 1280x720 screen centre, with image
         // placement initially centred and the script offset applied to it.
-        const float sx=width_/1280.f,sy=height_/720.f;
-        layers_[current_]=BackgroundLayer{std::move(raster),640+((1280-width)/2+x_-640)*sx,
-            360+((720-height)/2+y_-360)*sy,width*sx,height*sy,0};
+        const auto previous=camera_.pose(unsigned(current_^1));
+        CameraPose pose;pose.x=x_==10000?previous.x:float((1280-std::int64_t(raster->width))/2+x_);
+        pose.y=y_==10000?previous.y:float((720-std::int64_t(raster->height))/2+y_);
+        pose.scale_x=width_==10000?previous.scale_x:extended_?width_:width_/1280.f;
+        pose.scale_y=height_==10000?previous.scale_y:extended_?height_:height_/720.f;
+        pose.angle=angle_==10000?previous.angle:angle_;
+        camera_.bind(unsigned(current_),raster->width,raster->height,pose);
+        layers_[current_]=BackgroundLayer{std::move(raster),0,0,width,height,0};
         request_.reset();loading_=false;
     }
     if(!active_)return;
@@ -80,6 +91,10 @@ void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& ad
     layers_[current_]->opacity=std::uint8_t(std::clamp(std::int64_t(elapsed_)*255/duration,std::int64_t(0),std::int64_t(255)));
 }
 BackgroundFrame SceneBackground::frame()const{
-    return {layers_[current_^1],layers_[current_],loading_?std::nullopt:mask_};
+    auto previous=layers_[current_^1],current=layers_[current_];
+    const auto transform=[&](std::optional<BackgroundLayer>& layer,unsigned index){if(!layer)return;const auto& pose=camera_.pose(index);
+        layer->x=pose.pivot_x+(pose.x-pose.pivot_x)*pose.scale_x;layer->y=pose.pivot_y+(pose.y-pose.pivot_y)*pose.scale_y;
+        layer->width*=pose.scale_x;layer->height*=pose.scale_y;layer->angle=pose.angle;layer->pivot_x=pose.pivot_x;layer->pivot_y=pose.pivot_y;};
+    transform(previous,unsigned(current_^1));transform(current,unsigned(current_));return {std::move(previous),std::move(current),loading_?std::nullopt:mask_};
 }
 }

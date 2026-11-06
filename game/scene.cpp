@@ -22,7 +22,7 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
         if(value.ec!=std::errc{} || value.ptr!=name.data()+name.size())throw script::Error("scene has no numeric voice chapter");return chapter;
     },[this]{return dialogue_.speaker();},[this]{return controls_.modes().voice_offset;},[this]{return skipping();},[this]{return input_.advance;}),
     weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();}),
-    backgrounds_([this](auto name){return resources_.image("bak",name);},[this](bool){background_changing_=true;bitmaps_.retire_background();characters_.retire_background();},
+    backgrounds_([this](auto name){return resources_.image("bak",name);},[this](bool keep_characters){background_changing_=true;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
         [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name);}),
     bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);}),
     characters_([this](auto name){return resources_.image("char",name);}),
