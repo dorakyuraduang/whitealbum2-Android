@@ -212,6 +212,16 @@ their existing pause notifications; resuming excludes time spent suspended.
 Constructed clocks, native timer commands and PCM buffers check this policy.
 Platform lifecycle delivery and actual device audio remain unverified.
 
+Bitmap draw modes 4 and 6, present in the statically inspected story scripts,
+now retain their source RGB equations: source times source alpha plus destination
+times inverse source colour, and destination times source colour. The GL/GLES
+adapter uses a custom blend state for mode 4 and MOD for mode 6, preserving the
+opaque world's coverage. Both ordinary and INAS bitmaps retain these modes at
+zero alpha; alpha/additive zero-alpha sprites remain culled. Synthetic state
+checks cover all four supported bitmap modes and the owned-memory renderer
+checks multiplication. SDL's software renderer cannot exercise the custom mode
+4 blend; actual GL/GLES pixel output is not yet device-verified.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

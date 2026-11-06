@@ -5,6 +5,10 @@
 #include <stdexcept>
 
 namespace wa2::platform {
+namespace {
+CanvasBlend canvas_blend(image::SpriteBlend blend){switch(blend){case image::SpriteBlend::alpha:return CanvasBlend::alpha;case image::SpriteBlend::add:return CanvasBlend::add;
+    case image::SpriteBlend::screen:return CanvasBlend::screen;case image::SpriteBlend::multiply:return CanvasBlend::modulate;}throw std::runtime_error("Unknown native sprite blend");}
+}
 std::shared_ptr<CanvasTexture> SdlScene::texture(const std::shared_ptr<const image::Raster>& image){
     auto found=std::find_if(uploads_.begin(),uploads_.end(),[&](const auto& item){return item.image.lock()==image;});
     if(found==uploads_.end()){uploads_.push_back({image,canvas_.upload(*image)});found=uploads_.end()-1;}
@@ -34,10 +38,10 @@ void SdlScene::sprites_pass(std::span<const image::Sprite> items,const image::Sc
     std::erase_if(uploads_,[](const auto& item){return item.image.expired();});
     auto& vertices=sprite_vertices_;vertices.clear();std::shared_ptr<const image::Raster> source;auto blend=image::SpriteBlend::alpha;
     if(vertices.capacity()<items.size()*6)vertices.reserve(items.size()*6);
-    const auto flush=[&]{if(!vertices.empty()){canvas_.triangles(texture(source),vertices,blend==image::SpriteBlend::add?CanvasBlend::add:CanvasBlend::alpha);vertices.clear();}};
+    const auto flush=[&]{if(!vertices.empty()){canvas_.triangles(texture(source),vertices,canvas_blend(blend));vertices.clear();}};
     for(const auto& item:items){
         if(previous && !image::in_world(item.world,*previous))continue;
-        if(!item.image || !item.alpha)continue;
+        if(!item.image || !image::contributes(item.blend,item.alpha))continue;
         const auto quad=image::scene_quad({item.x,item.y,item.width,item.height,item.source_x,item.source_y,item.source_width,item.source_height,
             item.angle,item.pivot_x,item.pivot_y,1,1,item.flip,transform},item.image->width,item.image->height);if(!quad)continue;
         if(source!=item.image || blend!=item.blend){flush();source=item.image;blend=item.blend;}
@@ -71,7 +75,7 @@ void SdlScene::background_contents(const script::BackgroundFrame& frame,std::spa
     const auto render_world=[&](bool previous){
         auto& target=previous?previous_target_:mask_target_;auto& cache=previous?previous_source_:mask_source_;
         auto layer=previous?frame.previous:frame.current;if(layer)layer->opacity=255;
-        const bool dynamic=std::any_of(environment.begin(),environment.end(),[&](const auto& item){return item.image && item.alpha && image::in_world(item.world,previous);});
+        const bool dynamic=std::any_of(environment.begin(),environment.end(),[&](const auto& item){return item.image && image::contributes(item.blend,item.alpha) && image::in_world(item.world,previous);});
         if(!target)target=canvas_.target(1280,720);
         if(dynamic || !layer || !cache || *cache!=*layer){canvas_.render_to(target,[&]{canvas_.clip({});canvas_.clear({0,0,0,255});if(layer)draw(*layer);sprites_pass(environment,{},previous);});
             if(dynamic)cache.reset();else cache=std::move(layer);}

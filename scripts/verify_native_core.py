@@ -162,7 +162,7 @@ def main():
                 if not calendar_state['passed'] or calendar_state['cases']<11 or calendar_state['guards']<5 or calendar_state['normal_ticks']!=182 or calendar_state['skip_ticks']!=62 or calendar_state['game_launched'] or calendar_state['screen_access']:raise ValueError('Native calendar state checks failed')
                 run([directory/'wa2_native_animation_state_tests.exe',directory/'native-animation-state.json'],console,90)
                 animation_state=json.loads((directory/'native-animation-state.json').read_text())
-                if not animation_state['passed'] or animation_state['cases']<8 or animation_state['guards']<15 or animation_state['game_launched'] or animation_state['screen_access']:raise ValueError('Native animation state checks failed')
+                if not animation_state['passed'] or animation_state['cases']<19 or animation_state['guards']<19 or animation_state['game_launched'] or animation_state['screen_access']:raise ValueError('Native animation state checks failed')
                 run([directory/'wa2_native_scene_geometry_tests.exe',directory/'native-scene-geometry.json'],console,90)
                 geometry_state=json.loads((directory/'native-scene-geometry.json').read_text())
                 if not geometry_state['passed'] or geometry_state['cases']<30 or geometry_state['guards']<7 or geometry_state['devices_opened'] or geometry_state['game_launched'] or geometry_state['screen_access']:raise ValueError('Native scene geometry checks failed')
@@ -171,7 +171,7 @@ def main():
                 if not shake_state['passed'] or shake_state['cases']<35 or shake_state['guards']<8 or shake_state['game_launched'] or shake_state['screen_access']:raise ValueError('Native shake checks failed')
                 run([directory/'wa2_native_world_state_tests.exe',directory/'native-world-state.json'],console,90)
                 world_state=json.loads((directory/'native-world-state.json').read_text())
-                if not world_state['passed'] or world_state['cases']<32 or world_state['guards']<1 or world_state['devices_opened'] or world_state['game_launched'] or world_state['screen_access']:raise ValueError('Native world state checks failed')
+                if not world_state['passed'] or world_state['cases']<35 or world_state['guards']<1 or world_state['devices_opened'] or world_state['game_launched'] or world_state['screen_access']:raise ValueError('Native world state checks failed')
                 run([directory/'wa2_native_image_style_tests.exe',directory/'native-image-styles.json'],console,90)
                 image_styles=json.loads((directory/'native-image-styles.json').read_text())
                 if not image_styles['passed'] or image_styles['cases']<17 or image_styles['guards']<11 or image_styles['devices_opened'] or image_styles['game_launched'] or image_styles['screen_access']:raise ValueError('Native image style checks failed')
@@ -196,7 +196,7 @@ def main():
                 if args.sdl_archive:
                     run([directory/'wa2_native_scene_composition_tests.exe',directory/'native-scene-composition.json'],console,90)
                     composition_state=json.loads((directory/'native-scene-composition.json').read_text())
-                    if not composition_state['passed'] or composition_state['cases']<17 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
+                    if not composition_state['passed'] or composition_state['cases']<20 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
                     composition_graph=output([ninja,'-C',directory,'-t','graph','wa2_native_scene_composition_tests.exe']).replace('\\','/').lower()
                     if any(token in composition_graph for token in forbidden):raise ValueError('AOT dependency in owned-memory composition test')
                     composition_artifact=dict(sha256=digest(directory/'wa2_native_scene_composition_tests.exe'),

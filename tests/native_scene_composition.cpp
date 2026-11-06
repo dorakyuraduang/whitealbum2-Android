@@ -41,6 +41,9 @@ int main(int argc,char** argv){try{
         frame.transition->current.transform={};frame.transition->current.opacity=128;render(false);CHECK(close(pixel(surface.get(),32,18)[0],127) && close(pixel(surface.get(),32,18)[2],128));++cases;
         frame.mask.reset();frame.transition.reset();frame.previous.reset();frame.current->opacity=255;colour=render(false);CHECK(colour[0]==0 && colour[1]==0 && colour[2]==255);++cases;
         const auto steady_draws=canvas->statistics().draws;render(false);CHECK(canvas->statistics().draws-steady_draws==1);++cases;
+        item.image=green;item.blend=i::SpriteBlend::multiply;item.alpha=0;item.world=i::SpriteWorld::current;colour=render();CHECK(colour[0]==0 && colour[1]==0 && colour[2]==0 && pixel(surface.get(),2,2)[2]==255);++cases;
+        item.blend=i::SpriteBlend::alpha;colour=render();CHECK(colour[2]==255);++cases;
+        item.alpha=255;item.red=item.green=item.blue=128;item.blend=i::SpriteBlend::multiply;frame.current->image=green;colour=render();CHECK(colour[0]==0 && close(colour[1],128) && colour[2]==0);++cases;
         frame.current.reset();red.reset();blue.reset();green.reset();mask.reset();item={};render(false);CHECK(scene.texture_count()==0);++cases;
         scene.reset_textures();
         CHECK((SDL_WasInit(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_EVENTS)&(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_EVENTS))==0);++cases;

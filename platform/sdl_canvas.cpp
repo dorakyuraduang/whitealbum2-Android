@@ -16,7 +16,11 @@ namespace {
 [[noreturn]] void fail(const char* operation){throw std::runtime_error(std::string(operation)+": "+SDL_GetError());}
 SDL_BlendMode blend_mode(CanvasBlend blend){
     switch(blend){case CanvasBlend::copy:return SDL_BLENDMODE_NONE;case CanvasBlend::alpha:return SDL_BLENDMODE_BLEND;
-    case CanvasBlend::add:return SDL_BLENDMODE_ADD;case CanvasBlend::modulate:return SDL_BLENDMODE_MOD;}
+    case CanvasBlend::add:return SDL_BLENDMODE_ADD;case CanvasBlend::modulate:return SDL_BLENDMODE_MOD;
+    // Original mode 4 RGB: source*sourceAlpha + destination*(1-source).
+    // World targets are opaque. Preserve their coverage, as MOD also does.
+    case CanvasBlend::screen:return SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_SRC_ALPHA,SDL_BLENDFACTOR_ONE_MINUS_SRC_COLOR,SDL_BLENDOPERATION_ADD,
+        SDL_BLENDFACTOR_ZERO,SDL_BLENDFACTOR_ONE,SDL_BLENDOPERATION_ADD);}
     throw std::runtime_error("invalid native canvas blend mode");
 }
 }

@@ -14,7 +14,7 @@ namespace wa2::platform {
 struct CanvasColour {std::uint8_t r{255},g{255},b{255},a{255};};
 struct CanvasVertex {float x{},y{},u{},v{};CanvasColour colour;};
 struct CanvasRect {int x{},y{},width{},height{};};
-enum class CanvasBlend {copy,alpha,add,modulate};
+enum class CanvasBlend {copy,alpha,add,modulate,screen};
 enum class CanvasFilter {nearest,linear};
 class CanvasTexture {
     struct Impl;

@@ -4,6 +4,10 @@
 #include <cmath>
 
 namespace wa2::script {
+namespace {
+image::SpriteBlend sprite_blend(std::int32_t mode){switch(mode){case 1:return image::SpriteBlend::alpha;case 3:return image::SpriteBlend::add;
+    case 4:return image::SpriteBlend::screen;case 6:return image::SpriteBlend::multiply;default:throw Unsupported("native bitmap blend mode "+std::to_string(mode));}}
+}
 SceneBitmaps::SceneBitmaps(Loader loader,AnimationLoader animations):loader_(std::move(loader)),animation_loader_(std::move(animations)){if(!loader_)throw Error("missing native bitmap loader");sprites_.reserve(slots_.size()*2);retired_.reserve(slots_.size());}
 BitmapSlot& SceneBitmaps::checked(std::int32_t index){if(index<0 || std::size_t(index)>=slots_.size())throw Error("native bitmap index out of range");return slots_[std::size_t(index)];}
 const BitmapSlot& SceneBitmaps::slot(std::int32_t index)const{return const_cast<SceneBitmaps*>(this)->checked(index);}
@@ -48,7 +52,7 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
     case 183:count(2);checked(value(0)).visible=value(1)!=0;return done();
     case 184:count(2);if(value(1)<0 || value(1)>255)throw Unsupported("native bitmap drawing layer");checked(value(0)).layer=value(1);return done();
     case 185:{
-        count(4);if(value(1)!=1 && value(1)!=3)throw Unsupported("native bitmap blend mode "+std::to_string(value(1)));
+        count(4);sprite_blend(value(1));
         auto& item=checked(value(0));item.blend=value(1);item.duration=std::max(0,int(short_value(3)));item.from=item.alpha;item.target=std::clamp(value(2),0,255);item.elapsed=0;
         if(!item.duration)item.alpha=item.target;return done();
     }
@@ -81,7 +85,7 @@ void SceneBitmaps::update(const std::function<std::int32_t(std::int32_t)>& adjus
 std::span<const image::Sprite> SceneBitmaps::sprites(std::int32_t first_layer,std::int32_t last_layer,int independent){
     sprites_.clear();const auto append_bank=[&](const auto& bank){std::array<std::size_t,32> order{};for(std::size_t n=0;n<bank.size();++n)order[n]=n;
     std::sort(order.begin(),order.begin()+bank.size(),[&](auto a,auto b){return bank[a].layer==bank[b].layer?a<b:bank[a].layer<bank[b].layer;});
-    for(std::size_t n=0;n<bank.size();++n){const auto index=order[n];const auto& item=bank[index];if(!item.allocated || !item.visible || (!item.image && !item.animation) || !item.alpha || item.layer<first_layer || item.layer>last_layer ||
+    for(std::size_t n=0;n<bank.size();++n){const auto index=order[n];const auto& item=bank[index];if(!item.allocated || !item.visible || (!item.image && !item.animation) || !image::contributes(sprite_blend(item.blend),std::uint8_t(item.alpha)) || item.layer<first_layer || item.layer>last_layer ||
         (independent!=-1 && item.independent!=bool(independent)))continue;
         if(item.animation){
             if(item.loading() || !item.player || !item.player->frame())continue;
@@ -89,7 +93,7 @@ std::span<const image::Sprite> SceneBitmaps::sprites(std::int32_t first_layer,st
                 const auto x=item.pivot_x+(item.x+piece.x-item.pivot_x)*item.scale,y=item.pivot_y+(item.y+piece.y-item.pivot_y)*item.scale;
                 sprites_.push_back({item.textures.at(piece.texture),x,y,piece.width*item.scale,piece.height*item.scale,float(piece.source_x),float(piece.source_y),float(piece.width),float(piece.height),
                     std::uint8_t(std::clamp(item.colour[0]*2,0,255)),std::uint8_t(std::clamp(item.colour[1]*2,0,255)),std::uint8_t(std::clamp(item.colour[2]*2,0,255)),
-                    std::uint8_t(item.alpha),item.angle,item.pivot_x,item.pivot_y,item.flip,item.blend==3?image::SpriteBlend::add:image::SpriteBlend::alpha});
+                    std::uint8_t(item.alpha),item.angle,item.pivot_x,item.pivot_y,item.flip,sprite_blend(item.blend)});
                 sprites_.back().layer=item.layer+(item.independent?0x1035:0);sprites_.back().order=0x11+item.order_index;
                 sprites_.back().world=item.retiring?image::SpriteWorld::previous:image::SpriteWorld::current;
             }continue;
@@ -97,7 +101,7 @@ std::span<const image::Sprite> SceneBitmaps::sprites(std::int32_t first_layer,st
         const auto x=item.pivot_x+(item.x-item.pivot_x)*item.scale,y=item.pivot_y+(item.y-item.pivot_y)*item.scale;
         sprites_.push_back({item.image,x,y,item.width*item.scale,item.height*item.scale,item.source_x,item.source_y,item.source_width,item.source_height,
             std::uint8_t(std::clamp(item.colour[0]*2,0,255)),std::uint8_t(std::clamp(item.colour[1]*2,0,255)),std::uint8_t(std::clamp(item.colour[2]*2,0,255)),
-            std::uint8_t(item.alpha),item.angle,item.pivot_x,item.pivot_y,item.flip,item.blend==3?image::SpriteBlend::add:image::SpriteBlend::alpha});
+            std::uint8_t(item.alpha),item.angle,item.pivot_x,item.pivot_y,item.flip,sprite_blend(item.blend)});
         sprites_.back().layer=item.layer+(item.independent?0x1035:0);sprites_.back().order=0x11+item.order_index;
         sprites_.back().world=item.retiring?image::SpriteWorld::previous:image::SpriteWorld::current;
     }};append_bank(retired_);append_bank(slots_);

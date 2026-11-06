@@ -47,6 +47,8 @@ int main(int argc,char** argv){try{
     layers=bitmaps.sprites();CHECK(layers.size()==2 && layers[0].world==i::SpriteWorld::previous && layers[1].world==i::SpriteWorld::current && layers[0].order==0x18 && layers[1].order==0x18);++cases;
     bitmaps.clear_retired();CHECK(bitmaps.slot(7).allocated && bitmaps.sprites().size()==1);++cases;
     load(true);bitmaps.update();bitmaps.retire_background();bitmaps.clear_retired();CHECK(bitmaps.slot(7).allocated && bitmaps.sprites()[0].layer==0x1043);++cases;
+    for(auto mode:{4,6}){invoke(bitmaps,185,{s::Value(7),s::Value(mode),s::Value(0),s::Value(0)});CHECK(bitmaps.sprites().size()==1 && bitmaps.sprites()[0].alpha==0 && bitmaps.sprites()[0].blend==(mode==4?i::SpriteBlend::screen:i::SpriteBlend::multiply));++cases;}
+    invoke(bitmaps,185,{s::Value(7),s::Value(3),s::Value(0),s::Value(0)});CHECK(bitmaps.sprites().empty());++cases;
     bitmaps.clear();CHECK(bitmaps.sprites().empty());++cases;
     unsigned requests{};s::SceneBackground backgrounds([&](auto){++requests;return request;});
     std::array<s::Value,9> args{s::Value(1),s::Value(0),s::Value(0),s::Value(1),s::Value(0),s::Value(0),s::Value(0),s::Value(1280.f),s::Value(720.f)};
