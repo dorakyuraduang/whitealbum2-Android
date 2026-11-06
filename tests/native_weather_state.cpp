@@ -19,13 +19,13 @@ std::shared_ptr<const i::Animation> animation(){
     put(b,100,1);put(b,104,1);put(b,108,1);put(b,112,1);constexpr char name[]="weather.tga";b.insert(b.end(),name,name+sizeof(name));return i::Animation::parse(b);
 }
 int main(int argc,char** argv){try{
-    CHECK(argc==2);unsigned cases{},guards{},random_calls{};
-    auto source=std::make_shared<Bytes>();auto& bytes=source->bytes;bytes.resize(60+18+32*64*3);std::memcpy(bytes.data(),"KCAP",4);put(bytes,12,1);
-    std::memcpy(bytes.data()+20,"weather.tga",11);put(bytes,52,60);put(bytes,56,std::uint32_t(bytes.size()-60));bytes[62]=2;bytes[72]=32;bytes[74]=64;bytes[76]=24;bytes[77]=32;
+    CHECK(argc==2);unsigned cases{},guards{},random_calls{};std::uint32_t random_value{};
+    auto source=std::make_shared<Bytes>();auto& bytes=source->bytes;bytes.resize(60+18+1536*256*3);std::memcpy(bytes.data(),"KCAP",4);put(bytes,12,1);
+    std::memcpy(bytes.data()+20,"weather.tga",11);put(bytes,52,60);put(bytes,56,std::uint32_t(bytes.size()-60));bytes[62]=2;bytes[72]=0;bytes[73]=6;bytes[74]=0;bytes[75]=1;bytes[76]=24;bytes[77]=32;
     i::ImageStore images(r::Archive::open(source));auto request=images.request("weather.tga");std::shared_ptr<const i::Raster> image;const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(3);
     while(!(image=request->get()) && std::chrono::steady_clock::now()<end)std::this_thread::sleep_for(std::chrono::milliseconds(1));CHECK(image);
     std::weak_ptr<const i::Animation> last_animation;
-    s::SceneWeather weather([&](auto name){CHECK(name=="weather.tga");return request;},[&]{++random_calls;return 0;},[&](auto name){CHECK(name==std::string_view("\x89\x4a" "640x360.ani"));auto data=animation();last_animation=data;return data;});
+    s::SceneWeather weather([&](auto name){CHECK(name=="weather.tga" || name=="sakura1_2.tga" || name=="sakura2.tga" || name=="sakura3.tga");return request;},[&]{++random_calls;return random_value;},[&](auto name){CHECK(name==std::string_view("\x89\x4a" "640x360.ani"));auto data=animation();last_animation=data;return data;});
     std::array<s::Value,7> args{s::Value(262),s::Value(3),s::Value(7),s::Value(100),s::Value(2),s::Value(1),s::Value(5)};s::Command call{229,args};
     CHECK(!weather.dispatch(call)->complete);weather.update();CHECK(weather.dispatch(call)->complete && weather.type()==6 && weather.extent()==80);++cases;
     const auto& first=weather.particles()[0];CHECK(first.phase==1 && first.kind==0 && std::abs(first.velocity-.0007f)<.000001f && std::abs(first.growth-1.0007f)<.000001f);++cases;
@@ -47,6 +47,9 @@ int main(int argc,char** argv){try{
     for(int n=0;n<5;++n)weather.update();CHECK(weather.sprites()[0].x==608);call={175,{}};CHECK(weather.dispatch(call)->complete && !weather.active());++cases;
     CHECK(last_animation.expired());snow[5]=s::Value(2);call={173,snow};weather.dispatch(call);weather.update();CHECK(!last_animation.expired());
     snow[0]=s::Value(0x103);call={173,snow};weather.dispatch(call);weather.update();CHECK(last_animation.expired() && weather.type()==3);++cases;
-    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-weather-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"implemented_types\":[0,3,4,6],\"synthetic_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
+    snow[0]=s::Value(0x101);snow[2]=s::Value(10);snow[5]=s::Value(0);random_calls=0;call={173,snow};weather.dispatch(call);weather.update();CHECK(weather.type()==1 && weather.extent()==8 && random_calls==32);++cases;
+    const auto petal=weather.sprites()[0];CHECK(petal.x==8 && petal.y==8 && petal.width==128 && petal.source_x==0 && petal.layer==10);++cases;
+    for(auto value:{1u,2u}){random_value=value;call={173,snow};weather.dispatch(call);weather.update();CHECK(weather.particles()[0].kind==(value==1?2:1) && weather.sprites()[0].width==(value==1?16:32));++cases;}
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-weather-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"implemented_types\":[0,1,3,4,6],\"synthetic_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native weather population, growth and original RNG consumption.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

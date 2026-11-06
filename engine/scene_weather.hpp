@@ -28,7 +28,7 @@ public:
     std::int32_t priority()const noexcept{return priority_;}
     std::size_t extent()const noexcept{return extent_;}
     bool active()const noexcept{return enabled_;}
-    bool loading()const noexcept{if(request_)return true;for(const auto& request:animation_requests_)if(request)return true;return false;}
+    bool loading()const noexcept{if(request_)return true;for(const auto& request:animation_requests_)if(request)return true;for(const auto& request:sakura_requests_)if(request)return true;return false;}
 private:
     Loader loader_;
     Random random_;
@@ -38,6 +38,8 @@ private:
     std::vector<std::shared_ptr<image::ImageRequest>> animation_requests_;
     std::vector<std::shared_ptr<const image::Raster>> animation_textures_;
     bool animation_validated_{};
+    std::array<std::shared_ptr<image::ImageRequest>,3> sakura_requests_;
+    std::array<std::shared_ptr<const image::Raster>,3> sakura_images_;
     std::shared_ptr<image::ImageRequest> request_;
     std::shared_ptr<const image::Raster> image_;
     std::array<WeatherParticle,400> particles_{};

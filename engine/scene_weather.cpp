@@ -22,6 +22,15 @@ SceneWeather::SceneWeather(Loader loader,Random random,AnimationLoader animation
 std::uint32_t SceneWeather::random(){const auto value=random_();if(value>32767)throw Error("native game random value out of range");return value;}
 void SceneWeather::create(std::size_t index,bool filled,bool opposite){
     auto& p=particles_.at(index);p={};p.active=true;
+    if(type_==1){
+        const auto kind=[&]{p.kind=random()%20==0?0:std::int16_t(random()%2+1);};
+        // Prefilled and newly spawned petals consume RNG in different orders.
+        if(filled){kind();p.angle=float(random()%1280);p.radius=float(random()%720);}
+        else{p.angle=float(random()%1280);p.radius=float(-40-int(random()%100));kind();}
+        if(!p.kind)p.rotation=p.scale=8;
+        else{const auto span=(3-p.kind)*100;p.rotation=float((double(random()%span)/100.0+1.0)*.5);p.scale=float((double(random()%span)/100.0+1.0)*.5);}
+        p.phase=std::int16_t(random()%256);return;
+    }
     if(type_==3){
         // Existing 0x407190, including RNG calls whose first speed values are
         // overwritten: later particles must consume the same random sequence.
@@ -63,7 +72,7 @@ void SceneWeather::begin(Command& command){
     if(command.arguments.size()!=(extended?7u:6u))throw Error("invalid native SetWeather parameters");
     const auto code=command.arguments[0].integer(),mode=code&255;
     const auto amplitude=extended?command.arguments[6].integer():0;
-    if((mode!=0 && mode!=3 && mode!=4 && mode!=6) || (code&~0xfff)!=0)throw Unsupported("unimplemented native weather type "+std::to_string(code));
+    if((mode!=0 && mode!=1 && mode!=3 && mode!=4 && mode!=6) || (code&~0xfff)!=0)throw Unsupported("unimplemented native weather type "+std::to_string(code));
     if((code&0x800)!=0)throw Unsupported("unimplemented native weather alternate-atlas flag");
     const auto priority=command.arguments[4].integer(),scope=command.arguments[5].integer();
     if(priority<0 || priority>2 || scope<0 || scope>2)throw Unsupported("unimplemented native weather layer");
@@ -75,13 +84,18 @@ void SceneWeather::begin(Command& command){
         for(const auto& name:definition->textures()){auto request=loader_(name);if(!request)throw Error("Native rain loader returned no texture request");requests.push_back(std::move(request));}
         stop(true);particles_={};sprites_.clear();extent_=0;frame_=0;stopping_=false;type_=0;priority_=priority;scope_=scope;
         request_.reset();image_.reset();animation_=std::move(definition);animation_player_.emplace(animation_);animation_requests_=std::move(requests);
+        sakura_requests_={};sakura_images_={};
         animation_textures_.assign(animation_requests_.size(),{});animation_validated_=false;enabled_=true;return;
     }
-    auto request=loader_("weather.tga");if(!request)throw Error("native weather loader returned no request");
+    std::array<std::shared_ptr<image::ImageRequest>,3> sakura;
+    std::shared_ptr<image::ImageRequest> request;
+    if(mode==1){constexpr std::string_view names[]{"sakura1_2.tga","sakura2.tga","sakura3.tga"};for(unsigned n=0;n<sakura.size();++n){sakura[n]=loader_(names[n]);if(!sakura[n])throw Error("Native sakura loader returned no texture request");}}
+    else{request=loader_("weather.tga");if(!request)throw Error("native weather loader returned no request");}
     stop(true);particles_={};extent_=0;frame_=0;stopping_=false;
     // Replacing even an independent rain effect releases its old animation
     // definition/requests. Independence preserves background transitions only.
     animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();animation_validated_=false;
+    sakura_requests_=std::move(sakura);sakura_images_={};
     type_=mode;flags_=code&0xe00;prefill_=(code&0x100)!=0;priority_=priority;scope_=scope;
     target_x_=command.arguments[1].integer();target_y_=command.arguments[2].integer();
     density_=density(command.arguments[3].integer());speed_x_=float(target_x_);speed_y_=float(target_y_);
@@ -90,7 +104,7 @@ void SceneWeather::begin(Command& command){
 void SceneWeather::stop(bool immediately){
     if(!immediately){density_=0;stopping_=true;return;}
     if(scope_==2){scope_=0;return;}
-    particles_={};sprites_.clear();request_.reset();image_.reset();animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();animation_validated_=false;extent_=0;frame_=0;enabled_=false;stopping_=false;
+    particles_={};sprites_.clear();request_.reset();image_.reset();animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();sakura_requests_={};sakura_images_={};animation_validated_=false;extent_=0;frame_=0;enabled_=false;stopping_=false;
 }
 bool SceneWeather::stopped(){
     if(!stopping_)return false;
@@ -135,6 +149,11 @@ void SceneWeather::update(){
             sprites_.back().layer=0x1043;sprites_.back().order=0x51;
         }return;
     }
+    if(type_==1){
+        for(unsigned n=0;n<sakura_requests_.size();++n)if(sakura_requests_[n])if(auto image=sakura_requests_[n]->get()){sakura_images_[n]=std::move(image);sakura_requests_[n].reset();}
+        if(loading())return;
+        if(!animation_validated_){constexpr unsigned cell[]{128,32,16};for(unsigned n=0;n<3;++n)if(!sakura_images_[n] || sakura_images_[n]->width<12*cell[n] || sakura_images_[n]->height<2*cell[n])throw Error("Native sakura atlas dimensions are too small");animation_validated_=true;}
+    }
     if(request_){auto image=request_->get();if(!image)return;
         if(image->width<32 || image->height<64)throw Error("native weather atlas is too small");
         image_=std::move(image);request_.reset();}
@@ -150,6 +169,20 @@ void SceneWeather::update(){
     // Active count and slot index are different after density decreases. Walk
     // fixed live slots so a retiring low slot cannot strand a higher particle.
     for(std::size_t n=0;n<particles_.size();++n){auto& p=particles_[n];if(!p.active)continue;
+        if(type_==1){
+            p.angle=float(double(p.angle)+double(weather_curve[(unsigned(p.phase)+64)&255])*p.rotation*(1.0/4096.0)+double(p.rotation)*speed_x_/10.0);
+            p.radius=float(double(p.radius)+double(p.scale)*speed_y_/10.0);
+            const auto retire=[&]{if(n<std::size_t(density_))return false;p.active=false;--extent_;return true;};
+            if(p.radius>=720){if(retire())continue;p.radius-=752;}
+            if(p.angle>=1280){if(retire())continue;p.angle-=1312;}
+            if(p.angle< -32){if(retire())continue;p.angle+=1312;}
+            constexpr unsigned cell[]{128,32,16},divisor[]{4,3,2},period[]{768,2304,768};const auto kind=unsigned(p.kind),frame=unsigned(p.phase)/divisor[kind]%24;
+            const auto size=float(cell[kind]);sprites_.push_back({sakura_images_[kind],float(integer(p.angle)),float(integer(p.radius)),size,size,float(frame%12*cell[kind]),float(frame/12*cell[kind]),size,size});
+            sprites_.back().layer=scope_?0x1043:kind==2?1:10;sprites_.back().order=0x99+std::int32_t(n);
+            // The curve and flipbook share this period. Keeping their joint
+            // phase bounded preserves every sample without signed overflow.
+            p.phase=std::int16_t((unsigned(p.phase)+1)%period[kind]);continue;
+        }
         if(type_==3){
             const auto wave=weather_curve[(unsigned(p.phase)+64)&255];
             const auto sway=float((double(speed_y_)*wave*p.rotation*(1.0/4096.0))/40.0);

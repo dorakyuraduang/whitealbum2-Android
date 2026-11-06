@@ -39,6 +39,8 @@ int main(int argc,char** argv){try{
         if(header.width<width || header.height<height)throw std::runtime_error("Original calendar atlas crop exceeds image dimensions: "+std::string(names[n]));++calendar_atlases;
     }
     unsigned animations{},animation_frames{};
+    for(unsigned n=0;n<3;++n){constexpr std::string_view names[]{"sakura1_2.tga","sakura2.tga","sakura3.tga"};constexpr unsigned cell[]{128,32,16};
+        const auto header=wa2::image::inspect_game_tga(resources.data("grp",names[n]));if(header.width<12*cell[n] || header.height<2*cell[n])throw std::runtime_error("Original sakura atlas crop exceeds image dimensions");}
     for(bool introductory:{false,true})if(const auto* bank=resources.optional("grp",introductory))for(const auto& member:bank->members())if(member.name.ends_with(".ani")){
         const auto data=wa2::image::Animation::parse(bank->load(bank->find_first(member.name)));++animations;animation_frames+=unsigned(data->frames().size());
         std::vector<wa2::image::TgaLayout> headers;for(const auto& texture:data->textures())headers.push_back(wa2::image::inspect_game_tga(resources.data("grp",texture)));

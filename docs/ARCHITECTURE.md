@@ -75,7 +75,10 @@ SetWeather2/ChangeWeather2 now drive native type-6 particle growth and sway.
 Snow density-selection flags 0x200/0x400 retain the cached RNG call sequence,
 including overwritten values. Live particle count is tracked separately from
 fixed slot indices, so density reductions cannot strand later active slots.
-Types 1/2/5 and the alternate snow atlas remain explicit unsupported cases.
+Native type-1 sakura uses three original flipbook atlases, distinct prefilled/
+new-particle RNG order, original wrapping ranges and per-size animation timing.
+Its curve/atlas phase is bounded by their joint period to avoid signed overflow.
+Types 2/5 and the alternate snow atlas remain explicit unsupported cases.
 
 The native Calendar command computes date/weekday state, retains the 2010..2013
 holiday facts and selects the original three calendar image atlases. Its shared
