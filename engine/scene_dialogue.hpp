@@ -2,12 +2,14 @@
 #include "script_runtime.hpp"
 #include "text_layout.hpp"
 #include "image_store.hpp"
+#include "scene_novel.hpp"
 
 namespace wa2::script {
 enum class DialoguePhase {closed,opening,typing,waiting,complete,closing};
 struct DialogueSettings {
     int skin{},window_alpha{207},picture_alpha{134},button_alpha{134},text_step{10},open_ticks{10};
     bool window{true};
+    int novel_alpha{};
 };
 class SceneDialogue {
 public:
@@ -28,6 +30,7 @@ public:
     bool ready()const noexcept{return assets_ready_;}
     bool complete()const noexcept{return phase_==DialoguePhase::complete;}
     const text::PreparedText& text()const noexcept{return body_;}
+    const SceneNovel& novel()const noexcept{return novel_;}
     std::span<const image::Sprite> sprites();
 private:
     text::FontBook& fonts_;
@@ -35,6 +38,8 @@ private:
     std::function<void(std::int32_t)> seen_;
     std::function<void()> end_message_;
     DialogueSettings settings_;
+    SceneNovel novel_;
+    std::shared_ptr<const image::Raster> black_;
     std::array<std::shared_ptr<image::ImageRequest>,4> requests_;
     std::array<std::shared_ptr<const image::Raster>,4> images_;
     text::PreparedText body_,name_text_,old_name_text_;

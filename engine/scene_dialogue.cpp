@@ -7,13 +7,16 @@ namespace wa2::script {
 SceneDialogue::SceneDialogue(text::FontBook& fonts,Loader loader,std::function<void(std::int32_t)> seen,std::function<void()> end_message)
     :fonts_(fonts),loader_(std::move(loader)),seen_(std::move(seen)),end_message_(std::move(end_message)){
     if(!loader_)throw Error("missing native dialogue image loader");sprites_.reserve(512);
+    black_=std::make_shared<image::Raster>(image::Raster{1,1,{0,0,0,255}});
 }
 void SceneDialogue::settings(DialogueSettings value){
     if(value.skin<0 || value.skin>9 || value.window_alpha<0 || value.window_alpha>255 || value.picture_alpha<0 || value.picture_alpha>255 ||
-       value.button_alpha<0 || value.button_alpha>255 || value.text_step<0 || value.text_step>1000 || value.open_ticks<0 || value.open_ticks>300)
+       value.button_alpha<0 || value.button_alpha>255 || value.text_step<0 || value.text_step>1000 || value.open_ticks<0 || value.open_ticks>300 ||
+       value.novel_alpha<0 || value.novel_alpha>255)
         throw Error("invalid native dialogue settings");
     if(assets_started_ && value.skin!=settings_.skin){requests_={};images_={};assets_started_=assets_ready_=false;}
     settings_=value;
+    novel_.alpha(value.novel_alpha);
 }
 void SceneDialogue::load_assets(){
     if(!assets_started_){
@@ -42,6 +45,7 @@ void SceneDialogue::message(std::string_view value,std::int32_t id,bool replace)
     const bool append=!replace && !raw_.empty();const auto previous_pages=body_.metrics().pages.size();
     if(append)raw_+="\\k";else raw_.clear();
     raw_+=value;text::TextStyle style;style.colour=text::speaker_colour(text::speaker_style(speaker_,name_));
+    if(novel_.enabled()){style.columns=40;style.rows=15;}
     body_=fonts_.prepare(text::layout(raw_,style));
     page_=append?previous_pages:0;
     // Previous portions of an appended message are already displayed. Explicit
@@ -56,6 +60,7 @@ std::uint32_t SceneDialogue::duration()const {
 }
 void SceneDialogue::update(bool fast_forward){
     fast_=fast_forward;
+    novel_.update([&](auto ticks){return fast_forward?0:ticks==-1?15:ticks==-2?30:ticks;});
     if(assets_started_ && !assets_ready_)load_assets();
     if(!assets_ready_ || phase_==DialoguePhase::closed)return;
     if(phase_==DialoguePhase::closing){
@@ -82,6 +87,7 @@ void SceneDialogue::advance(){
     }
 }
 std::optional<CommandResult> SceneDialogue::dispatch(Command& command){
+    if(auto result=novel_.dispatch(command))return result;
     const auto count=[&](std::size_t n){if(command.arguments.size()!=n)throw Error("invalid native dialogue parameters");};
     switch(command.index){
     case 142:{
@@ -120,26 +126,31 @@ std::optional<CommandResult> SceneDialogue::dispatch(Command& command){
     }
 }
 std::span<const image::Sprite> SceneDialogue::sprites(){
-    sprites_.clear();if(!visible_ || !assets_ready_ || phase_==DialoguePhase::closed)return sprites_;
+    sprites_.clear();if(!visible_)return sprites_;
+    if(novel_.enabled() && novel_.opacity())sprites_.push_back({black_,0,0,1280,720,0,0,1,1,255,255,255,novel_.opacity()});
+    if(!assets_ready_ || phase_==DialoguePhase::closed)return sprites_;
     const auto add=[&](std::size_t image,float x,float y,float width,float height,float sx,float sy,float sw,float sh,std::uint8_t alpha=255){
         if(!alpha)return;const auto& source=images_[image];if(!source)throw Error("native dialogue image unavailable");
         sprites_.push_back({source,x,y,width,height,sx,sy,sw,sh,255,255,255,alpha});
     };
     const auto alpha=phase_==DialoguePhase::opening && settings_.open_ticks?std::uint8_t(std::min(255u,open_elapsed_*255/std::uint32_t(settings_.open_ticks))):
         phase_==DialoguePhase::closing && close_ticks_?std::uint8_t(255-std::min(255u,open_elapsed_*255/close_ticks_)):std::uint8_t(255);
-    if(settings_.window){add(0,16,496,1248,208,0,0,1248,208,transparent_?0:std::uint8_t((picture_?settings_.picture_alpha:settings_.window_alpha)*alpha/255));
+    if(settings_.window && !novel_.enabled()){add(0,16,496,1248,208,0,0,1248,208,transparent_?0:std::uint8_t((picture_?settings_.picture_alpha:settings_.window_alpha)*alpha/255));
         add(1,16,496,1248,208,0,0,1248,208,alpha);}
     static constexpr std::array<int,9> button_x{808,848,928,968,1008,1048,1088,1128,1168};
     for(std::size_t i=0;i<button_x.size();++i)add(2,float(button_x[i]),680,40,40,float(i*40),0,40,40,std::uint8_t(settings_.button_alpha*alpha/255));
     add(3,0,672,1280,48,208,104,120,48,alpha);
-    if(has_text_){
-        for(std::size_t prior=0;prior<page_;++prior)body_.append(sprites_,std::uint32_t(prior),std::numeric_limits<std::uint32_t>::max()/32,274,536,alpha);
-        body_.append(sprites_,std::uint32_t(page_),budget_,274,536,alpha);
+    if(has_text_ && (!novel_.enabled() || novel_.text_visible())){
+        const float x=novel_.enabled()?75.f:274.f,y=novel_.enabled()?26.f:536.f;
+        for(std::size_t prior=0;prior<page_;++prior)body_.append(sprites_,std::uint32_t(prior),std::numeric_limits<std::uint32_t>::max()/32,x,y,alpha);
+        body_.append(sprites_,std::uint32_t(page_),budget_,x,y,alpha);
     }
     const auto name_alpha=std::uint8_t(name_elapsed_*255/10);
     const auto offset=float(10-name_elapsed_)*float(10-name_elapsed_)*.32f;
-    if(!name_.empty())name_text_.append(sprites_,0,100000,274-offset,508,std::uint8_t(name_alpha*alpha/255));
-    if(name_elapsed_<10)old_name_text_.append(sprites_,0,100000,274+32-offset,508,std::uint8_t((255-name_alpha)*alpha/255));
+    if(!novel_.enabled()){
+        if(!name_.empty())name_text_.append(sprites_,0,100000,274-offset,508,std::uint8_t(name_alpha*alpha/255));
+        if(name_elapsed_<10)old_name_text_.append(sprites_,0,100000,274+32-offset,508,std::uint8_t((255-name_alpha)*alpha/255));
+    }
     return sprites_;
 }
 }

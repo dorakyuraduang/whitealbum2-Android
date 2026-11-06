@@ -38,6 +38,8 @@ add_executable(wa2_native_camera_state_tests "${WA2_ROOT}/tests/native_camera_st
 target_link_libraries(wa2_native_camera_state_tests PRIVATE wa2_script)
 add_executable(wa2_native_voice_state_tests "${WA2_ROOT}/tests/native_voices.cpp")
 target_link_libraries(wa2_native_voice_state_tests PRIVATE wa2_script)
+add_executable(wa2_native_novel_state_tests "${WA2_ROOT}/tests/native_novel_state.cpp")
+target_link_libraries(wa2_native_novel_state_tests PRIVATE wa2_script)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp")

@@ -65,6 +65,12 @@ retain the source counter order, reserved duration presets and volume mixing.
 EroMode state is checkpointed and supplied to the configurable speech policy.
 Synthetic voices validate these transitions without opening an audio device.
 
+NovelMode/NB/NBR use the same native dialogue/font system as ordinary dialogue:
+40 columns by 15 rows at (75,26), a configurable full-screen black backing,
+separate text visibility and the original fade-counter order. A bounded novel
+checkpoint preserves suspended backing fades. ADV message-window animation is
+kept separate. Device presentation and full scene snapshots remain pending.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations
