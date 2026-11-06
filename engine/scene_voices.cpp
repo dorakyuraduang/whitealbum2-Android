@@ -29,7 +29,7 @@ void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t ch
     if(skip_ && skip_() && loop==0){stop(item);return;}
     if(mute_adult_ && adult_mode_ && speaker==0){stop(item);return;}
     stop(item);auto voice=factory_(line_info);if(!voice)throw Error("native voice loader returned no voice");
-    item.volume=item.from=item.target=item.remembered=std::clamp(volume,0,255);item.voice=std::move(voice);apply(item);++played_;
+    item.volume=item.from=item.target=item.remembered=std::clamp(volume,0,255);item.line=line_info;item.voice=std::move(voice);apply(item);++played_;
     if(events_.started)events_.started(std::uint32_t(channel),line_info,*item.voice);
 }
 void SceneVoices::update(const std::function<std::int32_t(std::int32_t)>& adjust){

@@ -25,6 +25,8 @@ public:
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     std::optional<CommandResult> dispatch(Command&);
     const EffectSlot& slot(std::int32_t channel)const;
+    std::vector<std::uint8_t> checkpoint()const;
+    void restore(std::span<const std::uint8_t>);
 private:
     Factory factory_;
     PreparedFactory prepared_factory_;

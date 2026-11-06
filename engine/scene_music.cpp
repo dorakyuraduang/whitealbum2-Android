@@ -28,7 +28,7 @@ void SceneMusic::play(std::int32_t song,std::int32_t fade,std::int32_t mode,std:
     if(!force && song==song_){volume(value,fade);return;}
     auto voice=factory_(song,mode==0);if(!voice)throw Error("native music loader returned no voice");
     const auto next=current_^1;auto& slot=slots_[next];if(slot.voice)slot.voice->stop();
-    slot=MusicSlot{};slot.song=song;slot.phase=MusicPhase::fade_in;
+    slot=MusicSlot{};slot.song=song;slot.phase=MusicPhase::fade_in;slot.loop=mode==0;
     slot.duration=std::max(1,fade==-2?0:fade);slot.target=std::clamp(value,0,255);
     slot.volume=slot.from=(fade<1)?slot.target:0;slot.voice=std::move(voice);apply(slot);
     fade_out(slots_[current_],fade==-2?15:fade);current_=next;song_=song;

@@ -19,8 +19,10 @@ public:
     std::uint64_t played()const noexcept{return played_;}
     void settings(std::int32_t master,std::int32_t speech,bool mute_adult=false);
     void adult_mode(bool value)noexcept{adult_mode_=value;}
+    std::vector<std::uint8_t> checkpoint()const;
+    void restore(std::span<const std::uint8_t>);
 private:
-    struct Slot {std::unique_ptr<audio::Voice> voice;std::int32_t volume{},from{},target{},remembered{},duration{},elapsed{};bool fading{},stopping{};};
+    struct Slot {std::unique_ptr<audio::Voice> voice;SpokenLine line;std::int32_t volume{},from{},target{},remembered{},duration{},elapsed{};bool fading{},stopping{};};
     std::array<Slot,4> slots_;
     Factory factory_;
     std::function<std::int32_t()> chapter_,speaker_,offset_;

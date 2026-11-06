@@ -45,7 +45,7 @@ void SceneEffects::play(std::int32_t channel,std::int32_t sound,std::int32_t fad
     if(mode==1){
         if(!prepared_factory_)throw Unsupported("native sound-effect factory has no prepared transport");
         auto voice=prepared_factory_(sound,loop!=0,true);if(!voice)throw Error("native prepared effect loader returned no voice");
-        halt(value);value.voice=std::move(voice);value.sound=sound;value.loop=loop!=0;value.prepared=true;return;
+        halt(value);value.voice=std::move(voice);value.sound=sound;value.loop=loop!=0;value.target=std::clamp(volume,0,255);value.prepared=true;return;
     }
     auto voice=factory_(sound,loop!=0);if(!voice)throw Error("native effect loader returned no voice");
     halt(value);value.sound=sound;value.duration=fade;value.loop=loop!=0;

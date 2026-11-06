@@ -48,6 +48,7 @@ def main():
     inputs += [ROOT/'tests/native_system_sounds.cpp',ROOT/'tests/native_lifecycle_state.cpp',ROOT/'tests/native_stream_voice.cpp',ROOT/'tests/native_dialogue_state.cpp',ROOT/'tests/native_sprite_atlas.cpp',ROOT/'tests/native_font_coverage.cpp',ROOT/'tests/native_frame_batch.cpp',ROOT/'tests/native_backlog_state.cpp',ROOT/'tests/native_background_state.cpp',ROOT/'tests/native_character_state.cpp']
     inputs += [ROOT/'tests/native_bitmap_state.cpp']
     inputs += [ROOT/'tests/native_weather_checkpoint.cpp']
+    inputs += [ROOT/'tests/native_audio_checkpoint.cpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
     bindings={p.relative_to(ROOT).as_posix():digest(p) for p in inputs}
@@ -79,6 +80,7 @@ def main():
             if host=='windows':targets+=['wa2_native_system_sound_tests','wa2_native_lifecycle_state_tests','wa2_native_stream_voice_tests','wa2_native_dialogue_state_tests','wa2_native_sprite_atlas_tests','wa2_native_font_coverage_tests','wa2_native_frame_batch_tests','wa2_native_backlog_state_tests','wa2_native_background_state_tests','wa2_native_character_state_tests']
             if host=='windows':targets+=['wa2_native_bitmap_state_tests']
             if host=='windows':targets+=['wa2_native_weather_checkpoint_tests']
+            if host=='windows':targets+=['wa2_native_audio_checkpoint_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -89,6 +91,7 @@ def main():
             allowed+=('tests/native_system_sounds.cpp','tests/native_lifecycle_state.cpp','tests/native_stream_voice.cpp','tests/native_dialogue_state.cpp','tests/native_sprite_atlas.cpp','tests/native_font_coverage.cpp','tests/native_frame_batch.cpp','tests/native_backlog_state.cpp','tests/native_background_state.cpp','tests/native_character_state.cpp')
             allowed+=('tests/native_bitmap_state.cpp',)
             allowed+=('tests/native_weather_checkpoint.cpp',)
+            allowed+=('tests/native_audio_checkpoint.cpp',)
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -223,6 +226,9 @@ def main():
                 run([directory/'wa2_native_weather_checkpoint_tests.exe',directory/'native-weather-checkpoint.json'],console,90)
                 weather_checkpoint=json.loads((directory/'native-weather-checkpoint.json').read_text())
                 if not weather_checkpoint['passed'] or weather_checkpoint['cases']<16 or weather_checkpoint['guards']<13 or weather_checkpoint['restore_random_calls'] or not weather_checkpoint['same_frame_geometry'] or not weather_checkpoint['atlas_regenerated'] or not weather_checkpoint['synthetic_only'] or weather_checkpoint['devices_opened'] or weather_checkpoint['game_launched'] or weather_checkpoint['screen_access']:raise ValueError('Native weather checkpoint checks failed')
+                run([directory/'wa2_native_audio_checkpoint_tests.exe',directory/'native-audio-checkpoint.json'],console,90)
+                audio_checkpoint=json.loads((directory/'native-audio-checkpoint.json').read_text())
+                if not audio_checkpoint['passed'] or audio_checkpoint['cases']<18 or audio_checkpoint['guards']<16 or audio_checkpoint['restore_history_events'] or not audio_checkpoint['looping_audio_restarted'] or not audio_checkpoint['one_shots_not_replayed'] or not audio_checkpoint['fake_voices_only'] or audio_checkpoint['devices_opened'] or audio_checkpoint['game_launched'] or audio_checkpoint['screen_access']:raise ValueError('Native audio checkpoint checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -263,6 +269,7 @@ def main():
     report['character_state']=character_state
     report['bitmap_state']=bitmap_state
     report['weather_checkpoint']=weather_checkpoint
+    report['audio_checkpoint']=audio_checkpoint
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

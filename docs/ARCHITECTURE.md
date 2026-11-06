@@ -354,6 +354,19 @@ resources/geometry/populations leave the live controller unchanged. Replacing
 a scope-2 effect now clears stale sprites while its new textures load. Finite
 synthetic continuations cover all implemented weather types and pending loads.
 
+Native audio saves follow the cached original collector/load path
+`0x423650`/`0x423ea0`: music and looping SE/voices restart from their resources;
+ordinary dialogue speech and one-shot sounds do not resume. Music retains its
+requested song, loop mode and target volume. Looping SE retain channel, sound
+and target gain and use the original -2/30-tick resume fade, after preparing all
+new channels silently. Looping speech retains canonical speaker/chapter/line
+and the source fade's starting gain; restore does not apply the current chapter
+offset a second time or issue backlog/history events. Current mixer settings
+and adult-voice muting remain in force. Parsing and factory/preparation failures
+leave the old logical controller state intact and stop partial new transports.
+No decoder/PCM queue is serialized. Tests use fake voices only; this does not
+prove device playback or complete-scene load integration.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

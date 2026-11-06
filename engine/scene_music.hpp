@@ -7,6 +7,7 @@ enum class MusicPhase { idle=0,playing=1,fade_in=3,fade_out=4,volume=5 };
 struct MusicSlot {
     std::int32_t song{-1},elapsed{},duration{1},volume{},from{},target{};
     MusicPhase phase{MusicPhase::idle};
+    bool loop{true};
     std::unique_ptr<audio::Voice> voice;
 };
 // Music updates use the game's logic ticks. A platform may render more often
@@ -26,6 +27,8 @@ public:
     std::int32_t song()const noexcept{return song_;}
     const MusicSlot& current()const noexcept{return slots_[current_];}
     const std::array<MusicSlot,2>& slots()const noexcept{return slots_;}
+    std::vector<std::uint8_t> checkpoint()const;
+    void restore(std::span<const std::uint8_t>);
 private:
     Factory factory_;
     std::function<void(std::int32_t)> seen_;

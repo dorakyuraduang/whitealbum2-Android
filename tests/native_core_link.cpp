@@ -47,6 +47,9 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_bitmap_state(wa2::script::
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_weather_state(wa2::script::SceneWeather* weather,wa2::resource::Catalog* resources,const wa2::image::Resolve* resolve,const std::uint8_t* data,std::size_t size){
     if(data)weather->restore({data,size},*resources,*resolve);return weather->checkpoint(*resources).size();
 }
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_audio_state(wa2::script::SceneMusic* music,wa2::script::SceneEffects* effects,wa2::script::SceneVoices* voices,const std::vector<std::uint8_t>* data){
+    if(data){music->restore(data[0]);effects->restore(data[1]);voices->restore(data[2]);}return music->checkpoint().size()+effects->checkpoint().size()+voices->checkpoint().size();
+}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_image_state(wa2::resource::Catalog* resources,const std::uint8_t* data,std::size_t size){
     auto reference=wa2::image::restore_reference({data,size});auto request=resources->image(reference);return wa2::image::checkpoint_reference(resources->reference(request)).size();
 }
