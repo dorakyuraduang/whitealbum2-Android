@@ -392,6 +392,19 @@ pages, choices, independent clocks and failed-load isolation. No original
 story, game window, rendering device or original save is used. Application
 file/save-menu integration and whole-game compatibility remain unverified.
 
+The native save-slot repository now validates snapshot envelopes before writes
+and after reads. Its file adapter keeps `native-saves/slot-NNN.wa2sav` beneath a
+host-supplied private directory, apart from original manual saves and Sys.sav.
+Writes use an exclusively created temporary, flush its contents, then replace
+the named native slot atomically (with directory flushing on Android/POSIX).
+Slot enumeration sorts numeric IDs and reports damaged entries individually;
+one damaged slot does not hide healthy saves. A damaged ordinary native slot
+can be overwritten, while links/directories are rejected. The Windows adapter
+uses wide paths, and the same save model/file adapter compile for Android.
+Tests use memory storage and newly created synthetic directories, preserve
+sentinel original-format filenames, and check bounded slots, failed writes,
+hard links and malformed data. The application save menu is still pending.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

@@ -50,6 +50,7 @@ def main():
     inputs += [ROOT/'tests/native_weather_checkpoint.cpp']
     inputs += [ROOT/'tests/native_audio_checkpoint.cpp']
     inputs += [ROOT/'tests/native_saved_scene.cpp',ROOT/'tests/native_scene_checkpoint.cpp']
+    inputs += [ROOT/'tests/native_save_slots.cpp',ROOT/'platform/save_storage.cpp',ROOT/'platform/save_storage.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
     bindings={p.relative_to(ROOT).as_posix():digest(p) for p in inputs}
@@ -83,6 +84,7 @@ def main():
             if host=='windows':targets+=['wa2_native_weather_checkpoint_tests']
             if host=='windows':targets+=['wa2_native_audio_checkpoint_tests']
             if host=='windows':targets+=['wa2_native_saved_scene_tests','wa2_native_scene_checkpoint_tests']
+            if host=='windows':targets+=['wa2_native_save_slot_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -95,6 +97,7 @@ def main():
             allowed+=('tests/native_weather_checkpoint.cpp',)
             allowed+=('tests/native_audio_checkpoint.cpp',)
             allowed+=('tests/native_saved_scene.cpp','tests/native_scene_checkpoint.cpp')
+            allowed+=('tests/native_save_slots.cpp','platform/save_storage.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -111,7 +114,7 @@ def main():
                 if relative not in graph:continue
                 if not obj.is_file():raise ValueError('Missing compiled native object: '+str(obj))
                 name=Path(item['file']).resolve().relative_to(ROOT).as_posix()
-                if name.startswith(('engine/','game/','platform/progress_storage.cpp')):linked_sources.append(name)
+                if name.startswith(('engine/','game/','platform/progress_storage.cpp','platform/save_storage.cpp')):linked_sources.append(name)
             sources[host]=sorted(set(linked_sources))
             if not {'game/scene.cpp','engine/scene_progress.cpp','engine/progress.cpp','engine/script_runtime.cpp','platform/progress_storage.cpp'}.issubset(sources[host]):
                 raise ValueError('Native source/link inventory is incomplete')
@@ -238,6 +241,9 @@ def main():
                 run([directory/'wa2_native_scene_checkpoint_tests.exe',directory/'native-scene-checkpoint.json'],console,90)
                 scene_checkpoint=json.loads((directory/'native-scene-checkpoint.json').read_text())
                 if not scene_checkpoint['passed'] or scene_checkpoint['cases']<7 or scene_checkpoint['guards']<7 or not scene_checkpoint['synthetic_script_only'] or not scene_checkpoint['independent_logical_clocks'] or not scene_checkpoint['old_scene_preserved_on_failure'] or scene_checkpoint['font_glyph_pixels_decoded'] or scene_checkpoint['original_resources_opened'] or scene_checkpoint['devices_opened'] or scene_checkpoint['game_launched'] or scene_checkpoint['screen_access']:raise ValueError('Synthetic native scene restore checks failed')
+                run([directory/'wa2_native_save_slot_tests.exe',directory/'native-save-slots.json'],console,90)
+                save_slots=json.loads((directory/'native-save-slots.json').read_text())
+                if not save_slots['passed'] or save_slots['cases']<10 or save_slots['guards']<19 or save_slots['slot_capacity']!=1000 or not save_slots['synthetic_files_only'] or save_slots['original_saves_opened'] or save_slots['game_launched'] or save_slots['screen_access']:raise ValueError('Native save slot checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -281,6 +287,7 @@ def main():
     report['audio_checkpoint']=audio_checkpoint
     report['saved_scene']=saved_scene
     report['scene_checkpoint']=scene_checkpoint
+    report['save_slots']=save_slots
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

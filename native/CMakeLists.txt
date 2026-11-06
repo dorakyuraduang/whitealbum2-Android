@@ -17,11 +17,14 @@ add_subdirectory("${WA2_ROOT}/game" game EXCLUDE_FROM_ALL)
 add_library(wa2_native_progress_storage STATIC "${WA2_ROOT}/platform/progress_storage.cpp")
 target_link_libraries(wa2_native_progress_storage PUBLIC wa2_progress)
 target_include_directories(wa2_native_progress_storage PUBLIC "${WA2_ROOT}/platform")
+add_library(wa2_native_save_storage STATIC "${WA2_ROOT}/platform/save_storage.cpp")
+target_link_libraries(wa2_native_save_storage PUBLIC wa2_game_scene)
+target_include_directories(wa2_native_save_storage PUBLIC "${WA2_ROOT}/platform")
 
 # Link the complete existing native scene to catch unresolved dependencies on
 # either host. This is a link-check library, not a launchable game or APK.
 add_library(wa2_native_link_check SHARED "${WA2_ROOT}/tests/native_core_link.cpp")
-target_link_libraries(wa2_native_link_check PRIVATE wa2_game_scene wa2_native_progress_storage)
+target_link_libraries(wa2_native_link_check PRIVATE wa2_game_scene wa2_native_progress_storage wa2_native_save_storage)
 if(ANDROID)
     # The existing ARM64 codec assembly binds its internal tables locally,
     # using the same static-codec visibility contract as the retained host.
@@ -88,6 +91,8 @@ add_executable(wa2_native_saved_scene_tests "${WA2_ROOT}/tests/native_saved_scen
 target_link_libraries(wa2_native_saved_scene_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_scene_checkpoint_tests "${WA2_ROOT}/tests/native_scene_checkpoint.cpp")
 target_link_libraries(wa2_native_scene_checkpoint_tests PRIVATE wa2_game_scene)
+add_executable(wa2_native_save_slot_tests "${WA2_ROOT}/tests/native_save_slots.cpp")
+target_link_libraries(wa2_native_save_slot_tests PRIVATE wa2_native_save_storage)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -146,6 +151,7 @@ if(NOT ANDROID)
     add_test(NAME native_audio_checkpoint COMMAND wa2_native_audio_checkpoint_tests "${CMAKE_BINARY_DIR}/native-audio-checkpoint.json")
     add_test(NAME native_saved_scene COMMAND wa2_native_saved_scene_tests "${CMAKE_BINARY_DIR}/native-saved-scene.json")
     add_test(NAME native_scene_checkpoint COMMAND wa2_native_scene_checkpoint_tests "${CMAKE_BINARY_DIR}/native-scene-checkpoint.json")
+    add_test(NAME native_save_slots COMMAND wa2_native_save_slot_tests "${CMAKE_BINARY_DIR}/native-save-slots.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

@@ -3,6 +3,7 @@
 // synthetic progress test. They are not the released application's ABI.
 #include "scene.hpp"
 #include "progress_storage.hpp"
+#include "save_storage.hpp"
 #include "sprite_animation.hpp"
 #include "scene_geometry.hpp"
 #if defined(_WIN32)
@@ -25,6 +26,7 @@ extern "C" WA2_LINK_CHECK void wa2_native_link_start(void* pointer){static_cast<
 extern "C" WA2_LINK_CHECK std::uint32_t wa2_native_link_frame(void* pointer,std::int64_t now){return static_cast<wa2::game::Scene*>(pointer)->advance_frame(now,{},[now]{return now;}).ticks;}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_save_scene(void* pointer){return static_cast<wa2::game::Scene*>(pointer)->checkpoint().size();}
 extern "C" WA2_LINK_CHECK void* wa2_native_link_restore_scene(wa2::resource::BankOpener* opener,std::shared_ptr<wa2::progress::Store>* progress,const std::uint8_t* data,std::size_t size,std::int64_t now,const wa2::game::Scene::SavedImageResolver* resolve){return wa2::game::Scene::restore(*opener,*progress,{data,size},now,*resolve).release();}
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_save_slot(void* pointer,const std::filesystem::path* directory,unsigned slot){wa2::game::SaveSlots saves(wa2::platform::save_storage(*directory));saves.write(slot,static_cast<wa2::game::Scene*>(pointer)->checkpoint());return saves.read(slot)->size()+saves.list().size();}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_script_state(wa2::script::Session* session,const std::uint8_t* data,std::size_t size){
     if(data)session->restore({data,size});return session->checkpoint().size();
 }
