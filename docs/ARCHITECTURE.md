@@ -301,6 +301,17 @@ constant/broken budget clock cannot create an unbounded loop. Fake-step/clock
 tests cover this scheduling policy without instantiating a scene or measuring
 FPS. The released AOT application does not use this native entry yet.
 
+The shared native scene now records a bounded newest-first dialogue/choice
+backlog, retaining the source's 255-entry/ten-voice limits without shifting
+every stored text/voice table for each message. Typed voice metadata is emitted
+before skip/mute playback suppression, so skipped speech remains identifiable.
+LogOut suppresses voice attachment; ordinary text/name/novel-mode records remain.
+Raw text is bounded by the native language's 4095-byte limit, names by 63 bytes.
+Checkpoints retain ordered entries and the pending voice descriptor and validate
+before replacing live state. Synthetic checks cover capacity, order, metadata
+while skipping, and corruption recovery. Backlog presentation/audio replay,
+source UI edge cases and whole-scene save integration remain incomplete.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

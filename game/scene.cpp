@@ -25,7 +25,8 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
         std::int32_t chapter{};const auto& name=session_.active()?session_.active()->program().name():statistics_.scene;const auto value=std::from_chars(name.data(),name.data()+name.size(),chapter);
         if(value.ec!=std::errc{} || value.ptr!=name.data()+name.size())throw script::Error("scene has no numeric voice chapter");return chapter;
     },[this]{return dialogue_.speaker();},[this]{return controls_.modes().voice_offset;},[this]{return skipping();},[this]{return input_.advance;},
-        {[this](auto slot,const auto& line,const auto& voice){captions_.queue((std::uint32_t(line.chapter)<<16)|std::uint32_t(line.line),subtitles::Kind::voice,slot,voice);},[this](auto slot){captions_.stop(subtitles::Kind::voice,slot);}}),
+        {[this](auto slot,const auto& line,const auto& voice){captions_.queue((std::uint32_t(line.chapter)<<16)|std::uint32_t(line.line),subtitles::Kind::voice,slot,voice);},[this](auto slot){captions_.stop(subtitles::Kind::voice,slot);},
+            [this](auto,const auto& line,auto volume){backlog_.note_voice({line.speaker,line.chapter,line.line,volume});}}),
     weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto name){return image::Animation::parse(resources_.data("grp",name));}),
     shake_([this]{return random_.next();}),
     backgrounds_([this](auto name){return resources_.image("bak",name,controls_.modes().background_chroma,controls_.modes().background_effect);},[this](bool keep_characters){bitmaps_.clear_retired();characters_.clear_retired();background_changing_=true;preserve_characters_=keep_characters;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
@@ -74,7 +75,7 @@ std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
     }
     throw resource::Error("missing original speech "+std::string(name.data()));
 }
-void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);reading_.enter(scene);choices_.clear();title_requested_=false;statistics_.scene=scene;}
+void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);reading_.enter(scene);choices_.clear();backlog_.clear();title_requested_=false;statistics_.scene=scene;}
 script::CommandResult Scene::command(script::Command& call){
     statistics_.command=call.index;
     const auto invoke=[&]()->script::CommandResult{
@@ -94,7 +95,8 @@ script::CommandResult Scene::command(script::Command& call){
     if(auto value=voices_.dispatch(call))return *value;
     if(auto value=weather_.dispatch(call))return *value;
     if(auto value=shake_.dispatch(call))return *value;
-    if(auto value=dialogue_.dispatch(call))return *value;
+    {const bool message=!call.continuation && (call.index==130 || call.index==131 || call.index==133);
+        if(auto value=dialogue_.dispatch(call)){if(message)backlog_.message(session_.active()?session_.active()->program().name():statistics_.scene,call.arguments[1].integer(),call.arguments[0].text(),dialogue_.name(),dialogue_.speaker(),dialogue_.novel().enabled(),controls_.modes().log_output==0);return *value;}}
     if(auto value=colour_.dispatch(call))return *value;
     if(auto value=bitmaps_.dispatch(call))return *value;
     if(auto value=characters_.dispatch(call))return *value;
@@ -116,8 +118,9 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     timeline_.sample(monotonic_us);
     if(title_requested_)return script::RunState::stopped;
     if(timeline_.paused())return script::RunState::yielded;
-    selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))system_sounds_.play(audio::SystemCue::reject);else choices_.choose(std::uint32_t(input.choice));}
-    else if(auto selected=selection_.input(input.selection))choices_.choose(*selected);
+    if(dialogue_.speaker()==-1)backlog_.clear_voice();
+    selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))system_sounds_.play(audio::SystemCue::reject);else choose(std::uint32_t(input.choice));}
+    else if(auto selected=selection_.input(input.selection))choose(*selected);
     input_=input;milliseconds_=timeline_.milliseconds();++statistics_.ticks;
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}
     if(input_.advance){window_visible_=true;dialogue_.visible(true);dialogue_.advance();}
@@ -137,6 +140,10 @@ void Scene::pause(bool value,std::int64_t monotonic_us){
     if(value)mixer_->pause(true);
     movies_.pause(value,monotonic_us);captions_.pause(value,std::uint64_t(monotonic_us)/1000);
     if(!value)mixer_->pause(false);
+}
+void Scene::choose(std::uint32_t ordinal){
+    if(ordinal>=choices_.items().size())throw script::Error("Native choice ordinal is out of range");const auto text=choices_.items()[ordinal].text;
+    choices_.choose(ordinal);backlog_.message(session_.active()?session_.active()->program().name():statistics_.scene,-1,text,{},dialogue_.speaker(),dialogue_.novel().enabled(),controls_.modes().log_output==0,true);
 }
 bool Scene::can_accelerate()const{
     if(timeline_.paused() || title_requested_ || !skipping() || choices_.active() || movies_.active() || calendar_.busy())return false;

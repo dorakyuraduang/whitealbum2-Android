@@ -24,6 +24,7 @@
 #include "system_sounds.hpp"
 #include "timeline.hpp"
 #include "frame_batch.hpp"
+#include "scene_backlog.hpp"
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;
@@ -55,6 +56,7 @@ class Scene {
     script::SceneSelection selection_;
     script::SceneCalendar calendar_;
     script::SceneCaptions captions_;
+    script::SceneBacklog backlog_;
     script::SceneMusic music_;
     script::SceneEffects effects_;
     script::SceneVoices voices_;
@@ -72,6 +74,7 @@ class Scene {
     std::unique_ptr<audio::Voice> music(std::int32_t id,bool loop);
     std::unique_ptr<audio::Voice> speech(const script::SpokenLine& line);
     script::CommandResult command(script::Command& command);
+    void choose(std::uint32_t ordinal);
     bool skipping()const{return (input_.skip || controls_.modes().latched_skip) && !controls_.modes().demo_mode && !choices_.active() && (!skip_read_only_ || reading_.status(replay_mode_)!=0);}
 public:
     explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={});
@@ -91,6 +94,7 @@ public:
     const Statistics& statistics()const noexcept{return statistics_;}
     const script::SceneDialogue& dialogue_state()const noexcept{return dialogue_;}
     const script::SceneChoices& choices()const noexcept{return choices_;}
+    const script::SceneBacklog& backlog()const noexcept{return backlog_;}
     std::span<const image::Sprite> selection(){return selection_.sprites();}
     std::span<const image::Sprite> calendar(){return calendar_.sprites();}
     std::span<const image::Sprite> captions(){return captions_.sprites();}

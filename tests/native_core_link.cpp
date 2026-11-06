@@ -29,6 +29,9 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_script_state(wa2::script::
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_dialogue_state(wa2::script::SceneDialogue* dialogue,const std::uint8_t* data,std::size_t size){
     if(data)dialogue->restore({data,size});return dialogue->checkpoint().size();
 }
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_backlog_state(wa2::script::SceneBacklog* backlog,const std::uint8_t* data,std::size_t size){
+    if(data)backlog->restore({data,size});return backlog->checkpoint().size();
+}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_image_state(wa2::resource::Catalog* resources,const std::uint8_t* data,std::size_t size){
     auto reference=wa2::image::restore_reference({data,size});auto request=resources->image(reference);return wa2::image::checkpoint_reference(resources->reference(request)).size();
 }

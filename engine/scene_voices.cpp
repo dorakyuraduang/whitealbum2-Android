@@ -21,13 +21,14 @@ void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t ch
     auto& item=checked(channel);if(speaker==-1)speaker=speaker_();if(chapter==-1)chapter=chapter_();
     const auto adjusted=std::int64_t(line)+(offset_?offset_():0);
     if(chapter<0 || chapter>9999 || speaker<0 || speaker>99 || adjusted<0 || adjusted>9999)throw Error("native voice identity out of range");
+    const SpokenLine line_info{speaker,chapter,std::int32_t(adjusted),loop!=0};if(events_.issued)events_.issued(std::uint32_t(channel),line_info,std::clamp(volume,0,255));
     // 0x461400 passes (mode == 0) as the repeat count. Both -1 and 1
     // therefore select continuous playback; scripts use -1 for ambient voice.
     // The original skips ordinary speech while fast-forward is held. A looped
     // /forced line remains audible, with the original four bounded channels.
     if(skip_ && skip_() && loop==0){stop(item);return;}
     if(mute_adult_ && adult_mode_ && speaker==0){stop(item);return;}
-    stop(item);const SpokenLine line_info{speaker,chapter,std::int32_t(adjusted),loop!=0};auto voice=factory_(line_info);if(!voice)throw Error("native voice loader returned no voice");
+    stop(item);auto voice=factory_(line_info);if(!voice)throw Error("native voice loader returned no voice");
     item.volume=item.from=item.target=item.remembered=std::clamp(volume,0,255);item.voice=std::move(voice);apply(item);++played_;
     if(events_.started)events_.started(std::uint32_t(channel),line_info,*item.voice);
 }

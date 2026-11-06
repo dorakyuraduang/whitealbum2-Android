@@ -7,7 +7,8 @@ struct SpokenLine {std::int32_t speaker{},chapter{},line{};bool loop{};};
 class SceneVoices {
 public:
     using Factory=std::function<std::unique_ptr<audio::Voice>(const SpokenLine&)>;
-    struct Events {std::function<void(std::uint32_t,const SpokenLine&,const audio::Voice&)> started;std::function<void(std::uint32_t)> stopped;};
+    struct Events {std::function<void(std::uint32_t,const SpokenLine&,const audio::Voice&)> started;std::function<void(std::uint32_t)> stopped;
+        std::function<void(std::uint32_t,const SpokenLine&,std::int32_t)> issued;};
     explicit SceneVoices(Factory factory,std::function<std::int32_t()> chapter,std::function<std::int32_t()> speaker,
                          std::function<std::int32_t()> offset={},std::function<bool()> skip={},std::function<bool()> advance={},Events events={});
     ~SceneVoices();

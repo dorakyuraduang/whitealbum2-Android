@@ -16,16 +16,18 @@ public:
     void stop()override{state_->done=true;}
 };
 int main(int argc,char** argv){try{
-    CHECK(argc==2);std::vector<std::shared_ptr<State>> created;bool skip{},advance{};unsigned cases=0;
+    CHECK(argc==2);std::vector<std::shared_ptr<State>> created;bool skip{},advance{};unsigned cases=0,issued{};s::SpokenLine issued_line;std::int32_t issued_volume{};
     s::SceneVoices voices([&](const auto& line){auto state=std::make_shared<State>();state->line=line;created.push_back(state);return std::make_unique<Voice>(state);},
-        []{return 1002;},[]{return 10;},[]{return 3;},[&]{return skip;},[&]{return advance;});
+        []{return 1002;},[]{return 10;},[]{return 3;},[&]{return skip;},[&]{return advance;},
+        {{},{},[&](auto,const auto& line,auto volume){++issued;issued_line=line;issued_volume=volume;}});
     std::array<s::Value,5> args{s::Value(-1),s::Value(256),s::Value(0),s::Value(0),s::Value(100)};s::Command call{138,args};voices.dispatch(call);
     CHECK(voices.active()==1 && created.back()->line.speaker==10 && created.back()->line.chapter==1002 && created.back()->line.line==103 && !created.back()->line.loop && created.back()->gain==255);++cases;
+    CHECK(issued==1 && issued_line.speaker==10 && issued_line.chapter==1002 && issued_line.line==103 && issued_volume==255);++cases;
     voices.dispatch(call);CHECK(created.front()->done && voices.active()==1 && voices.played()==2);++cases;
     std::array<s::Value,2> wait{s::Value(0),s::Value(1)};call={140,wait};CHECK(!voices.dispatch(call)->complete);advance=true;CHECK(voices.dispatch(call)->complete);advance=false;++cases;
     std::array<s::Value,2> stop{s::Value(4),s::Value(0)};call={141,stop};voices.dispatch(call);voices.update();CHECK(created.back()->gain==255 && !created.back()->done);voices.update();CHECK(created.back()->gain==191);++cases;
     for(unsigned n=0;n<3;++n)voices.update();CHECK(created.back()->done && !voices.active());++cases;
-    skip=true;call={138,args};voices.dispatch(call);CHECK(created.size()==2 && !voices.active());++cases;
+    skip=true;const auto issued_before=issued;call={138,args};voices.dispatch(call);CHECK(created.size()==2 && !voices.active() && issued==issued_before+1 && issued_line.line==103);++cases;
     std::array<s::Value,6> forced{s::Value(2),s::Value(2003),s::Value(1),s::Value(128),s::Value(51),s::Value(1)};call={139,forced};voices.dispatch(call);
     CHECK(voices.active()==1 && created.back()->line.chapter==2003 && created.back()->line.speaker==2 && created.back()->line.line==54 && created.back()->line.loop);++cases;
     created.back()->done=true;voices.update();CHECK(!voices.active());++cases;
