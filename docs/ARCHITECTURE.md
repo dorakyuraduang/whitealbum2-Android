@@ -343,6 +343,17 @@ Failed restore leaves existing logical slots intact. Synthetic checks cover
 static/animated loads, fades and transforms, independent/retired layers and
 changed definitions. These remain component checks, not whole-game saves.
 
+Weather checkpoints preserve all 400 particle slots, population, flags, spawn
+clock, target/current motion, loading references and rain INAS playback. The
+last drawn sprite geometry is retained separately: several source effects draw
+before incrementing phase/growth, so advancing again at load would change that
+frame. Restored sakura atlases are regenerated from their three external source
+images; RGBA texture data is not serialized. Restore consumes no random values;
+the enclosing scene must restore its single shared RNG state as well. Invalid
+resources/geometry/populations leave the live controller unchanged. Replacing
+a scope-2 effect now clears stale sprites while its new textures load. Finite
+synthetic continuations cover all implemented weather types and pending loads.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

@@ -5,6 +5,7 @@
 #include "scene_sprite.hpp"
 #include "sprite_animation.hpp"
 #include "sprite_atlas.hpp"
+#include "image_reference.hpp"
 
 namespace wa2::script {
 struct WeatherParticle {
@@ -33,6 +34,8 @@ public:
     std::size_t extent()const noexcept{return extent_;}
     bool active()const noexcept{return enabled_;}
     bool loading()const noexcept{if(request_)return true;for(const auto& request:animation_requests_)if(request)return true;for(const auto& request:sakura_requests_)if(request)return true;return false;}
+    std::vector<std::uint8_t> checkpoint(const resource::Catalog&)const;
+    void restore(std::span<const std::uint8_t>,resource::Catalog&,const image::Resolve&);
 private:
     Loader loader_;
     Random random_;

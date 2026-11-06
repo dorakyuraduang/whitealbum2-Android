@@ -47,6 +47,7 @@ def main():
         ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/native_voices.cpp',ROOT/'tests/native_novel_state.cpp',ROOT/'tests/native_weather_state.cpp',ROOT/'tests/native_calendar_state.cpp',ROOT/'tests/native_animation_state.cpp',ROOT/'tests/native_scene_geometry.cpp',ROOT/'tests/native_shake_state.cpp',ROOT/'tests/native_world_state.cpp',ROOT/'tests/native_scene_composition.cpp',ROOT/'tests/native_image_styles.cpp',ROOT/'tests/native_caption_state.cpp',ROOT/'tests/native_selection_state.cpp',ROOT/'tests/native_mask_sources.cpp',ROOT/'platform/sdl_canvas.cpp',ROOT/'platform/sdl_canvas.cmake',ROOT/'platform/sdl_mask.cpp',ROOT/'platform/sdl_mask.hpp',ROOT/'platform/mask_shaders.cpp',ROOT/'platform/mask_shaders.hpp']
     inputs += [ROOT/'tests/native_system_sounds.cpp',ROOT/'tests/native_lifecycle_state.cpp',ROOT/'tests/native_stream_voice.cpp',ROOT/'tests/native_dialogue_state.cpp',ROOT/'tests/native_sprite_atlas.cpp',ROOT/'tests/native_font_coverage.cpp',ROOT/'tests/native_frame_batch.cpp',ROOT/'tests/native_backlog_state.cpp',ROOT/'tests/native_background_state.cpp',ROOT/'tests/native_character_state.cpp']
     inputs += [ROOT/'tests/native_bitmap_state.cpp']
+    inputs += [ROOT/'tests/native_weather_checkpoint.cpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
     bindings={p.relative_to(ROOT).as_posix():digest(p) for p in inputs}
@@ -77,6 +78,7 @@ def main():
             targets=['wa2_native_link_check','wa2_native_presentation_check']+(['wa2_native_progress_tests','wa2_native_script_state_tests','wa2_native_control_state_tests','wa2_native_camera_state_tests','wa2_native_voice_state_tests','wa2_native_novel_state_tests','wa2_native_weather_state_tests','wa2_native_calendar_state_tests','wa2_native_animation_state_tests','wa2_native_scene_geometry_tests','wa2_native_shake_state_tests','wa2_native_world_state_tests','wa2_native_image_style_tests','wa2_native_caption_state_tests','wa2_native_selection_state_tests'] if host=='windows' else [])
             if host=='windows':targets+=['wa2_native_system_sound_tests','wa2_native_lifecycle_state_tests','wa2_native_stream_voice_tests','wa2_native_dialogue_state_tests','wa2_native_sprite_atlas_tests','wa2_native_font_coverage_tests','wa2_native_frame_batch_tests','wa2_native_backlog_state_tests','wa2_native_background_state_tests','wa2_native_character_state_tests']
             if host=='windows':targets+=['wa2_native_bitmap_state_tests']
+            if host=='windows':targets+=['wa2_native_weather_checkpoint_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -86,6 +88,7 @@ def main():
             allowed=('engine/','game/','platform/progress_storage.cpp','platform/file_io.cpp','platform/sdl_scene.cpp','platform/sdl_canvas.cpp','platform/sdl_mask.cpp','platform/mask_shaders.cpp','tests/native_core_link.cpp','tests/native_progress.cpp','tests/native_script_state.cpp','tests/native_control_state.cpp','tests/native_camera_state.cpp','tests/native_script_catalogue.cpp','tests/native_voices.cpp','tests/native_novel_state.cpp','tests/native_weather_state.cpp','tests/native_calendar_state.cpp','tests/native_animation_state.cpp','tests/native_scene_geometry.cpp','tests/native_shake_state.cpp','tests/native_world_state.cpp','tests/native_scene_composition.cpp','tests/native_image_styles.cpp','tests/native_caption_state.cpp','tests/native_selection_state.cpp','tests/native_mask_sources.cpp','tests/pcm_audio.cpp')
             allowed+=('tests/native_system_sounds.cpp','tests/native_lifecycle_state.cpp','tests/native_stream_voice.cpp','tests/native_dialogue_state.cpp','tests/native_sprite_atlas.cpp','tests/native_font_coverage.cpp','tests/native_frame_batch.cpp','tests/native_backlog_state.cpp','tests/native_background_state.cpp','tests/native_character_state.cpp')
             allowed+=('tests/native_bitmap_state.cpp',)
+            allowed+=('tests/native_weather_checkpoint.cpp',)
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -217,6 +220,9 @@ def main():
                 run([directory/'wa2_native_bitmap_state_tests.exe',directory/'native-bitmap-state.json'],console,90)
                 bitmap_state=json.loads((directory/'native-bitmap-state.json').read_text())
                 if not bitmap_state['passed'] or bitmap_state['cases']<15 or bitmap_state['guards']<14 or not bitmap_state['animation_progress_restored'] or not bitmap_state['pending_styles_preserved'] or not bitmap_state['retired_layers_restored'] or not bitmap_state['synthetic_only'] or bitmap_state['devices_opened'] or bitmap_state['game_launched'] or bitmap_state['screen_access']:raise ValueError('Native bitmap state checks failed')
+                run([directory/'wa2_native_weather_checkpoint_tests.exe',directory/'native-weather-checkpoint.json'],console,90)
+                weather_checkpoint=json.loads((directory/'native-weather-checkpoint.json').read_text())
+                if not weather_checkpoint['passed'] or weather_checkpoint['cases']<16 or weather_checkpoint['guards']<13 or weather_checkpoint['restore_random_calls'] or not weather_checkpoint['same_frame_geometry'] or not weather_checkpoint['atlas_regenerated'] or not weather_checkpoint['synthetic_only'] or weather_checkpoint['devices_opened'] or weather_checkpoint['game_launched'] or weather_checkpoint['screen_access']:raise ValueError('Native weather checkpoint checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -256,6 +262,7 @@ def main():
     report['background_state']=background_state
     report['character_state']=character_state
     report['bitmap_state']=bitmap_state
+    report['weather_checkpoint']=weather_checkpoint
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

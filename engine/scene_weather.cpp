@@ -91,7 +91,7 @@ void SceneWeather::begin(Command& command){
     std::shared_ptr<image::ImageRequest> request;
     if(mode==1){constexpr std::string_view names[]{"sakura1_2.tga","sakura2.tga","sakura3.tga"};for(unsigned n=0;n<sakura.size();++n){sakura[n]=loader_(names[n]);if(!sakura[n])throw Error("Native sakura loader returned no texture request");}}
     else{request=loader_("weather.tga");if(!request)throw Error("native weather loader returned no request");}
-    stop(true);particles_={};extent_=0;frame_=0;stopping_=false;
+    stop(true);particles_={};sprites_.clear();extent_=0;frame_=0;stopping_=false;
     // Replacing even an independent rain effect releases its old animation
     // definition/requests. Independence preserves background transitions only.
     animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();animation_validated_=false;

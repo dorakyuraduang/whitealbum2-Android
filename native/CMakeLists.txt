@@ -80,6 +80,8 @@ add_executable(wa2_native_character_state_tests "${WA2_ROOT}/tests/native_charac
 target_link_libraries(wa2_native_character_state_tests PRIVATE wa2_script)
 add_executable(wa2_native_bitmap_state_tests "${WA2_ROOT}/tests/native_bitmap_state.cpp")
 target_link_libraries(wa2_native_bitmap_state_tests PRIVATE wa2_script)
+add_executable(wa2_native_weather_checkpoint_tests "${WA2_ROOT}/tests/native_weather_checkpoint.cpp")
+target_link_libraries(wa2_native_weather_checkpoint_tests PRIVATE wa2_script)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -134,6 +136,7 @@ if(NOT ANDROID)
     add_test(NAME native_background_state COMMAND wa2_native_background_state_tests "${CMAKE_BINARY_DIR}/native-background-state.json")
     add_test(NAME native_character_state COMMAND wa2_native_character_state_tests "${CMAKE_BINARY_DIR}/native-character-state.json")
     add_test(NAME native_bitmap_state COMMAND wa2_native_bitmap_state_tests "${CMAKE_BINARY_DIR}/native-bitmap-state.json")
+    add_test(NAME native_weather_checkpoint COMMAND wa2_native_weather_checkpoint_tests "${CMAKE_BINARY_DIR}/native-weather-checkpoint.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.
