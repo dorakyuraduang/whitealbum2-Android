@@ -9,11 +9,12 @@
 namespace wa2::game {
 Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<progress::Store> progress)
     :resources_(std::move(opener)),mixer_(std::make_shared<audio::Mixer>()),fonts_(resources_.required("fon")),
-    library_(resources_.required("ck-gal")),session_(library_),random_(seed),
-    controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();}),
-    progress_(progress),
-    choices_(std::move(progress),[this]()->std::string_view{return session_.active()?session_.active()->program().name():statistics_.scene;}),
-    music_([this](auto id,bool loop){return music(id,loop);}),
+    library_(resources_.required("ck-gal")),session_(library_),random_(seed),progress_store_(std::move(progress)),reading_(progress_store_),builtins_(random_),
+    controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();},[this]{return reading_.status(replay_mode_);}),
+    progress_(progress_store_),
+    choices_(progress_store_,[this]()->std::string_view{return session_.active()?session_.active()->program().name():statistics_.scene;}),
+    music_([this](auto id,bool loop){return music(id,loop);},[this](auto id){
+        if(!progress_store_)throw script::Error("Missing native music progress storage");progress_store_->state().set_flag(std::uint32_t(100+id),1);progress_store_->flush();}),
     effects_([this](auto id,bool loop){return sound(id,loop);},[this]{return skipping();},[this](auto id,bool loop,bool paused){return sound(id,loop,paused);}),
     voices_([this](const auto& line){return speech(line);},[this]{
         if(controls_.modes().voice_chapter!=-1)return controls_.modes().voice_chapter;
@@ -25,8 +26,10 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
         [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name);}),
     bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);}),
     characters_([this](auto name){return resources_.image("char",name);}),
-    dialogue_(fonts_,[this](auto name){return resources_.image("grp",name);},[this](auto){++statistics_.messages;}),
-    movies_([this](auto name,auto){auto player=std::make_unique<movie::Player>(resources_.movie(name),mixer_);player->gain(1);return player;}){
+    dialogue_(fonts_,[this](auto name){return resources_.image("grp",name);},[this](auto line){
+        reading_.seen(session_.active()?session_.active()->program().name():statistics_.scene,line);controls_.reset_message_timer();++statistics_.messages;}),
+    movies_([this](auto name,auto){auto player=std::make_unique<movie::Player>(resources_.movie(name),mixer_);player->gain(1);return player;},{},0,[this](auto id){
+        if(!progress_store_)throw script::Error("Missing native movie progress storage");progress_store_->state().set_flag(std::uint32_t(id),1);progress_store_->flush();}){
     environment_.reserve(432);foreground_.reserve(432);
 }
 std::unique_ptr<audio::Voice> Scene::sound(std::int32_t id,bool loop,bool paused){
@@ -59,10 +62,15 @@ std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
     }
     throw resource::Error("missing original speech "+std::string(name.data()));
 }
-void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);choices_.clear();statistics_.scene=scene;}
+void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);reading_.enter(scene);choices_.clear();title_requested_=false;statistics_.scene=scene;}
 script::CommandResult Scene::command(script::Command& call){
     statistics_.command=call.index;
     const auto invoke=[&]()->script::CommandResult{
+    if(call.index==197){if(!call.arguments.empty())throw script::Error("Invalid GoTitle parameters");reading_.finish();title_requested_=true;return {true,true,{}};}
+    if(call.index==237){if(!call.arguments.empty())throw script::Error("Invalid IfSkip parameters");reading_.force(2);return {true,false,{}};}
+    if(call.index==238){if(!call.arguments.empty())throw script::Error("Invalid GetSkip2 parameters");const bool active=controls_.modes().demo_mode?(input_.skip || controls_.modes().latched_skip) && reading_.status(replay_mode_)!=0:skipping();return {true,false,script::Value(std::int32_t(active))};}
+    if(call.index==222){if(!call.arguments.empty())throw script::Error("Invalid GetReplayMode parameters");return {true,false,script::Value(std::int32_t(replay_mode_))};}
+    if(auto value=builtins_.dispatch(call))return *value;
     if(auto value=controls_.dispatch(call))return *value;
     if(auto value=progress_.dispatch(call))return *value;
     if(auto value=choices_.dispatch(call))return *value;
@@ -89,10 +97,12 @@ script::CommandResult Scene::command(script::Command& call){
     }
 }
 script::RunState Scene::update(std::int64_t monotonic_us,Input input){
+    if(title_requested_)return script::RunState::stopped;
     if(input.choice>=0)choices_.choose(std::uint32_t(input.choice));
     input_=input;milliseconds_=std::uint32_t(std::uint64_t(monotonic_us)/1000);++statistics_.ticks;
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}
     if(input_.advance){window_visible_=true;dialogue_.visible(true);dialogue_.advance();}
+    if(dialogue_.phase()==script::DialoguePhase::waiting && controls_.automatic_advance())dialogue_.advance();
     const auto duration=[this](std::int32_t frames){return skipping()?0:frames==-1?15:frames==-2?30:frames;};
     movies_.update(monotonic_us);music_.update(duration);effects_.update(duration);voices_.update(duration);weather_.update();
     backgrounds_.update(duration);colour_.update(duration);bitmaps_.update(duration);characters_.update(duration);dialogue_.update(skipping());
@@ -100,7 +110,7 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     const auto state=session_.advance([this](auto& call){return command(call);});
     if(session_.active())statistics_.scene=session_.active()->program().name();
     statistics_.voices=voices_.played();
-    controls_.take_draw_request();return state;
+    controls_.take_draw_request();return title_requested_?script::RunState::stopped:state;
 }
 script::BackgroundFrame Scene::background()const{
     auto frame=backgrounds_.frame();const auto channels=colour_.channels();if(frame.previous)frame.previous->colour=channels;if(frame.current)frame.current->colour=channels;return frame;

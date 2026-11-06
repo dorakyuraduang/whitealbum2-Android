@@ -43,6 +43,14 @@ scene accepts typed selection input; native selection presentation is pending.
 Static resource checks parsed all 187 local scripts and their 1157 labels and
 299575 command sites without executing them or inspecting their rendered output.
 
+The common scene now records dialogue reads using the cached 185-name persisted
+row order, marks chapter-boundary sentinels, and uses next-line read status for
+skip policy. Native rand/math builtins share the engine RNG; waiting and auto/demo
+state can be checkpointed, including four-argument Wait2's read-gated interrupt.
+GoTitle produces an explicit scene completion request. Music and completed/stopped
+movies update their ordinary persistent unlock flags. These are core behaviors;
+they do not implement the remaining title/options/replay presentation by themselves.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations

@@ -1,10 +1,11 @@
 #include "scene_movie.hpp"
 
 namespace wa2::script{
-SceneMovie::SceneMovie(Factory factory,std::function<void()> before_play,unsigned file_suffix)
-    :factory_(std::move(factory)),before_play_(std::move(before_play)),suffix_(file_suffix){
+SceneMovie::SceneMovie(Factory factory,std::function<void()> before_play,unsigned file_suffix,std::function<void(std::int32_t)> seen)
+    :factory_(std::move(factory)),before_play_(std::move(before_play)),suffix_(file_suffix),seen_(std::move(seen)){
     if(!factory_ || suffix_>2)throw Error("invalid native movie factory or file suffix");
 }
+void SceneMovie::record_seen(){if(!recorded_ && record_>=200 && seen_){seen_(record_);recorded_=true;}}
 std::optional<CommandResult> SceneMovie::dispatch(Command& command){
     if(command.index!=193)return {};
     if(command.arguments.size()!=2)throw Error("invalid SetMovie parameter count");
@@ -13,13 +14,14 @@ std::optional<CommandResult> SceneMovie::dispatch(Command& command){
         if(stem.empty() || stem.size()>120)throw Error("invalid native movie filename");
         for(const auto c:stem)if(!((c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c<='9') || c=='_' || c=='-'))
             throw Error("invalid native movie filename");
-        if(playback_)playback_->stop();playback_.reset();
+        const auto record=command.arguments[1].integer();if(record>=1024)throw Error("Movie progress flag out of range");
+        stop();playback_.reset();record_=record;recorded_=false;
         if(before_play_)before_play_();
         playback_=factory_(stem+char('0'+suffix_)+".pak",command.arguments[1].integer());
         if(!playback_)throw Error("native movie factory returned no playback");command.continuation=1;
     }
     if(!playback_)throw Error("SetMovie resumed without a player");
-    const bool done=playback_->finished();if(done)playback_.reset();
+    const bool done=playback_->finished();if(done){record_seen();playback_.reset();}
     return CommandResult{done,true,Value{}};
 }
 }

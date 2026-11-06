@@ -9,6 +9,8 @@
 #include "scene_controls.hpp"
 #include "scene_progress.hpp"
 #include "scene_choices.hpp"
+#include "scene_read_history.hpp"
+#include "scene_builtins.hpp"
 #include "scene_dialogue.hpp"
 #include "scene_music.hpp"
 #include "scene_effects.hpp"
@@ -29,10 +31,13 @@ class Scene {
     script::Library library_;
     script::Session session_;
     wa2::Random random_;
+    std::shared_ptr<progress::Store> progress_store_;
+    script::SceneReadHistory reading_;
+    script::SceneBuiltins builtins_;
     std::uint32_t milliseconds_{};
     Input input_;
     Statistics statistics_;
-    bool background_changing_{},window_visible_{true};
+    bool background_changing_{},window_visible_{true},title_requested_{},skip_read_only_{true},replay_mode_{};
     script::SceneControls controls_;
     script::SceneProgress progress_;
     script::SceneChoices choices_;
@@ -51,7 +56,7 @@ class Scene {
     std::unique_ptr<audio::Voice> music(std::int32_t id,bool loop);
     std::unique_ptr<audio::Voice> speech(const script::SpokenLine& line);
     script::CommandResult command(script::Command& command);
-    bool skipping()const noexcept{return input_.skip && !choices_.active();}
+    bool skipping()const{return (input_.skip || controls_.modes().latched_skip) && !controls_.modes().demo_mode && !choices_.active() && (!skip_read_only_ || reading_.status(replay_mode_)!=0);}
 public:
     explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={});
     void start(std::string_view scene="1001",std::int32_t label=0);
@@ -68,5 +73,9 @@ public:
     const Statistics& statistics()const noexcept{return statistics_;}
     const script::SceneDialogue& dialogue_state()const noexcept{return dialogue_;}
     const script::SceneChoices& choices()const noexcept{return choices_;}
+    bool title_requested()const noexcept{return title_requested_;}
+    void skip_read_only(bool value){skip_read_only_=value;}
+    void replay_mode(bool value){replay_mode_=value;}
+    void flush_progress(){reading_.finish();}
 };
 }
