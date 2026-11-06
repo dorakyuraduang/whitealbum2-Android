@@ -113,6 +113,7 @@ std::shared_ptr<Buffer> Mixer::duplicate(const std::shared_ptr<Buffer>& source){
 void Mixer::render(std::span<float> output,unsigned rate){
     if(!rate || output.size()%2)throw std::invalid_argument("Invalid stereo output dimensions");
     std::fill(output.begin(),output.end(),0.f);std::lock_guard lock(mutex_);
+    if(paused_)return;
     for(auto it=buffers_.begin();it!=buffers_.end();)if(auto buffer=it->lock()){buffer->mix(output,rate);++it;}else it=buffers_.erase(it);
     for(auto it=streams_.begin();it!=streams_.end();)if(auto stream=it->lock()){stream->mix(output,rate);++it;}else it=streams_.erase(it);
     for(auto& sample:output)sample=std::clamp(sample,-1.f,1.f);
@@ -122,4 +123,6 @@ std::shared_ptr<PcmStream> Mixer::create_stream(unsigned rate,unsigned channels,
     std::erase_if(streams_,[](const auto& value){return value.expired();});streams_.push_back(stream);return stream;
 }
 std::size_t Mixer::live_buffers() const {std::lock_guard lock(mutex_);return std::count_if(buffers_.begin(),buffers_.end(),[](const auto& b){return !b.expired();});}
+void Mixer::pause(bool value){std::lock_guard lock(mutex_);paused_=value;}
+bool Mixer::paused()const{std::lock_guard lock(mutex_);return paused_;}
 }

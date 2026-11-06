@@ -68,11 +68,16 @@ class Mixer {
     mutable std::mutex mutex_;
     std::vector<std::weak_ptr<Buffer>> buffers_;
     std::vector<std::weak_ptr<PcmStream>> streams_;
+    bool paused_{};
 public:
     std::shared_ptr<Buffer> create(Format,std::uint32_t bytes);
     std::shared_ptr<Buffer> duplicate(const std::shared_ptr<Buffer>&);
     std::shared_ptr<PcmStream> create_stream(unsigned rate,unsigned channels,std::size_t capacity_frames=16384);
     void render(std::span<float> interleaved_stereo,unsigned rate);
+    // A suspended app still services device callbacks with silence, without
+    // consuming any PCM cursor or generating stream underruns/notifications.
+    void pause(bool value);
+    bool paused()const;
     std::size_t live_buffers() const;
 };
 }

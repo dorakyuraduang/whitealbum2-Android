@@ -113,10 +113,12 @@ script::CommandResult Scene::command(script::Command& call){
     }
 }
 script::RunState Scene::update(std::int64_t monotonic_us,Input input){
+    timeline_.sample(monotonic_us);
     if(title_requested_)return script::RunState::stopped;
+    if(timeline_.paused())return script::RunState::yielded;
     selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))system_sounds_.play(audio::SystemCue::reject);else choices_.choose(std::uint32_t(input.choice));}
     else if(auto selected=selection_.input(input.selection))choices_.choose(*selected);
-    input_=input;milliseconds_=std::uint32_t(std::uint64_t(monotonic_us)/1000);++statistics_.ticks;
+    input_=input;milliseconds_=timeline_.milliseconds();++statistics_.ticks;
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}
     if(input_.advance){window_visible_=true;dialogue_.visible(true);dialogue_.advance();}
     if(dialogue_.phase()==script::DialoguePhase::waiting && controls_.automatic_advance())dialogue_.advance();
@@ -129,6 +131,12 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     if(session_.active())statistics_.scene=session_.active()->program().name();
     statistics_.voices=voices_.played();
     controls_.take_draw_request();return title_requested_?script::RunState::stopped:state;
+}
+void Scene::pause(bool value,std::int64_t monotonic_us){
+    if(!timeline_.pause(value,monotonic_us))return;
+    if(value)mixer_->pause(true);
+    movies_.pause(value,monotonic_us);captions_.pause(value,std::uint64_t(monotonic_us)/1000);
+    if(!value)mixer_->pause(false);
 }
 script::BackgroundFrame Scene::background()const{
     auto frame=backgrounds_.frame();frame.transform=shake_.world();const auto channels=colour_.channels();if(frame.previous)frame.previous->colour=channels;if(frame.current)frame.current->colour=channels;return frame;

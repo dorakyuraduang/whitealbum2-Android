@@ -204,6 +204,14 @@ distance and alpha counters. Constructed cached-state samples cover the curves
 and four directions; zero-duration/skip completion releases the old world.
 Other unknown effect codes retain explicit unsupported errors.
 
+Native scene suspension now freezes one shared monotonic gameplay timeline,
+including millisecond script timers and frame-counted scene updates. The mixer
+services callbacks with silence while leaving buffered and streamed PCM cursors,
+notifications and underrun counters untouched. Movies/captions also receive
+their existing pause notifications; resuming excludes time spent suspended.
+Constructed clocks, native timer commands and PCM buffers check this policy.
+Platform lifecycle delivery and actual device audio remain unverified.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

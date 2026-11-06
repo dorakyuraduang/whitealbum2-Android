@@ -22,6 +22,7 @@
 #include "scene_shake.hpp"
 #include "scene_captions.hpp"
 #include "system_sounds.hpp"
+#include "timeline.hpp"
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;};
@@ -41,6 +42,7 @@ class Scene {
     script::SceneReadHistory reading_;
     script::SceneBuiltins builtins_;
     std::uint32_t milliseconds_{};
+    Timeline timeline_;
     Input input_;
     Statistics statistics_;
     bool background_changing_{},preserve_characters_{},window_visible_{true},title_requested_{},skip_read_only_{true},replay_mode_{};
@@ -72,7 +74,7 @@ public:
     explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={});
     void start(std::string_view scene="1001",std::int32_t label=0);
     script::RunState update(std::int64_t monotonic_us,Input input={});
-    void pause(bool paused,std::int64_t monotonic_us){movies_.pause(paused,monotonic_us);captions_.pause(paused,std::uint64_t(monotonic_us)/1000);}
+    void pause(bool paused,std::int64_t monotonic_us);
     void stop_movie(){movies_.stop();}
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
     script::BackgroundFrame background()const;
