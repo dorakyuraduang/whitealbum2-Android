@@ -13,6 +13,8 @@ class Catalog {
     std::map<std::string,Bank,std::less<>> banks_;
     std::map<std::string,std::shared_ptr<Source>,std::less<>> movies_;
     std::map<std::pair<std::string,std::string>,std::weak_ptr<const image::ColourMap>> colours_;
+    std::vector<std::weak_ptr<const image::ColourMap>> restored_colours_;
+    std::shared_ptr<const image::ColourMap> intern_colour(std::shared_ptr<const image::ColourMap>);
     Bank& bank(std::string_view path);
     struct Found {Bank* bank;std::size_t member;};
     Found find(std::string_view group,std::string_view name);

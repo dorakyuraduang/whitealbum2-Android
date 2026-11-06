@@ -322,6 +322,18 @@ reuse during loading and skip completion. Restore does not replay background
 change callbacks or dump texture pixels. Full scene/save-menu integration and
 actual presentation after restore remain pending.
 
+Character checkpoints now retain all eight active slots and bounded retired
+copies, previous/current poses and external image references, pending loads,
+style generations, drawing order, removal flags and transition progress.
+Immutable image records verify catalogue identity and original dimensions.
+Restore does not call character-set/resource-selection callbacks; saved styles
+remain independent of current settings while loading. Equal restored AMP tables
+are interned with existing named tables, so a restored image can reuse its
+existing decode/texture identity rather than creating pointer-key duplicates.
+Synthetic checks cover supported transitions, pending styles, replacement,
+retired worlds, removal and failed restore. Whole-scene and device validation
+remain separate.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

@@ -1,5 +1,6 @@
 #include "image_reference.hpp"
 #include "checkpoint_codec.hpp"
+#include "resource_catalog.hpp"
 #include <algorithm>
 
 namespace wa2::image {
@@ -21,5 +22,17 @@ Reference restore_reference(std::span<const std::uint8_t> bytes){
     auto in=checkpoint::Reader::open("LSIM",bytes);Reference value;value.archive=in.string(71);value.member=in.string(255);value.style.chroma=in.i32();
     if(in.boolean()){auto map=std::make_shared<ColourMap>();for(auto& channel:map->channels){const auto bytes=in.raw(channel.size());std::copy(bytes.begin(),bytes.end(),channel.begin());}value.style.colours=std::move(map);}
     in.finish();validate_reference(value);return value;
+}
+std::shared_ptr<const Raster> resolve_reference(const Reference& reference,const resource::Catalog& resources,const Resolve& resolve){
+    validate_reference(reference);if(!resolve)throw Error("Missing saved image resolver");auto raster=resolve(reference);
+    if(!raster || !raster->width || !raster->height || raster->width>65535 || raster->height>65535 || std::uint64_t(raster->width)*raster->height*4!=raster->rgba.size())throw Error("Saved image resolver returned invalid pixels");
+    if(checkpoint_reference(resources.reference(raster))!=checkpoint_reference(reference))throw Error("Saved image resolver returned a different resource");return raster;
+}
+std::vector<std::uint8_t> checkpoint_image(const resource::Catalog& resources,const std::shared_ptr<const Raster>& raster){
+    if(!raster || !raster->width || !raster->height)throw Error("Missing saved image pixels");checkpoint::Writer out;out.u32(raster->width);out.u32(raster->height);out.blob(checkpoint_reference(resources.reference(raster)));return out.seal("LSRA");
+}
+std::shared_ptr<const Raster> restore_image(std::span<const std::uint8_t> bytes,const resource::Catalog& resources,const Resolve& resolve){
+    auto in=checkpoint::Reader::open("LSRA",bytes);const auto width=in.u32(),height=in.u32();if(!width || !height || width>65535 || height>65535)throw Error("Invalid saved image dimensions");
+    auto reference=restore_reference(in.blob(2048));in.finish();auto raster=resolve_reference(reference,resources,resolve);if(raster->width!=width || raster->height!=height)throw Error("Saved image dimensions changed");return raster;
 }
 }

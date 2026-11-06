@@ -166,8 +166,7 @@ void SceneBackground::restore(std::span<const std::uint8_t> bytes,resource::Cata
        (next.loading_ && (!next.active_ || bool(request)==bool(ready) || next.layers_[next.current_])) ||
        (!next.loading_ && (request || ready || mask_request)) || (next.active_ && !next.loading_ && (!next.layers_[next.current_] || next.effective_duration_<=0 || next.elapsed_>=next.effective_duration_)) ||
        (mask && (!masked || next.loading_ || !next.active_)))throw Error("Invalid saved background transition state");
-    const auto load=[&](const image::Reference& ref){auto raster=resolve(ref);if(!raster || !raster->width || !raster->height || raster->width>65535 || raster->height>65535 || std::uint64_t(raster->width)*raster->height*4!=raster->rgba.size())throw Error("Saved background image resolver returned invalid pixels");
-        if(image::checkpoint_reference(resources.reference(raster))!=image::checkpoint_reference(ref))throw Error("Saved background image resolver returned a different resource");return raster;};
+    const auto load=[&](const image::Reference& ref){return image::resolve_reference(ref,resources,resolve);};
     for(unsigned n=0;n<2;++n)if(layer_refs[n]){auto raster=load(*layer_refs[n]);auto& layer=*next.layers_[n];if(layer.width!=float(raster->width) || layer.height!=float(raster->height))throw Error("Saved background image dimensions changed");layer.image=std::move(raster);}
     if(ready)next.ready_image_=load(*ready);if(mask)next.mask_->image=load(*mask);
     if(request)next.request_=resources.image(*request);if(mask_request)next.mask_request_=resources.image(*mask_request);

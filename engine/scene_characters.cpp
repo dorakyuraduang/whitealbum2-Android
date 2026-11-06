@@ -1,4 +1,6 @@
 #include "scene_characters.hpp"
+#include "resource_catalog.hpp"
+#include "checkpoint_codec.hpp"
 #include <algorithm>
 #include <bit>
 #include <cmath>
@@ -106,5 +108,26 @@ std::span<const image::Sprite> SceneCharacters::sprites(){
         };
         if(item.changing && replacement)append(item.previous,true);append(item.current,false);
     }};append_bank(retired_);append_bank(slots_);return sprites_;
+}
+std::vector<std::uint8_t> SceneCharacters::checkpoint(const resource::Catalog& resources)const{
+    checkpoint::Writer out;out.u64(style_generation_);out.u32(std::uint32_t(retired_.size()));
+    const auto pose=[&](const Pose& value){out.i32(value.number);out.i32(value.layer);out.i32(value.alpha);out.i32(value.brightness);out.u32(std::bit_cast<std::uint32_t>(value.position));out.u64(value.style_generation);out.boolean(bool(value.image));if(value.image)out.blob(image::checkpoint_image(resources,value.image));};
+    const auto slot=[&](const Slot& value){for(auto v:{value.id,value.effect,value.duration,value.elapsed,value.order_index})out.i32(v);out.u32(std::bit_cast<std::uint32_t>(value.progress));out.boolean(value.changing);out.boolean(value.removing);out.boolean(value.retiring);pose(value.current);pose(value.previous);out.boolean(bool(value.request));if(value.request)out.blob(image::checkpoint_reference(resources.reference(value.request)));};
+    for(const auto& item:slots_)slot(item);for(const auto& item:retired_)slot(item);return out.seal("LSAC");
+}
+void SceneCharacters::restore(std::span<const std::uint8_t> bytes,resource::Catalog& resources,const image::Resolve& resolve){
+    if(!resolve)throw Error("Missing saved character image resolver");auto in=checkpoint::Reader::open("LSAC",bytes);const auto generation=in.u64();const auto retired_count=in.u32();if(retired_count>8)throw Error("Saved retired character count exceeds eight");
+    const auto pose=[&]{Pose value;value.number=in.i32();value.layer=in.i32();value.alpha=in.i32();value.brightness=in.i32();value.position=std::bit_cast<float>(in.u32());value.style_generation=in.u64();
+        if(value.number<0 || value.number>999999 || value.layer<0 || value.layer>255 || value.alpha<0 || value.alpha>255 || value.brightness<0 || value.brightness>128 || !std::isfinite(value.position) || std::abs(value.position)>1.e9f || value.style_generation>generation)throw Error("Invalid saved character pose");
+        if(in.boolean())value.image=image::restore_image(in.blob(4096),resources,resolve);return value;};
+    const auto slot=[&]{Slot value;value.id=in.i32();value.effect=in.i32();value.duration=in.i32();value.elapsed=in.i32();value.order_index=in.i32();value.progress=std::bit_cast<float>(in.u32());value.changing=in.boolean();value.removing=in.boolean();value.retiring=in.boolean();
+        if(value.id< -1 || (value.id>=0 && std::size_t(value.id)>=character_prefixes.size()) || value.effect<0 || !effect_supported(value.effect) || value.duration<-32768 || value.duration>32767 || value.elapsed<0 || value.order_index<0 || value.order_index>7 || !std::isfinite(value.progress) || value.progress<0 || value.progress>1)throw Error("Invalid saved character transition");
+        value.current=pose();value.previous=pose();std::optional<image::Reference> request;if(in.boolean())request=image::restore_reference(in.blob(2048));
+        if((value.id==-1 && (value.current.image || value.previous.image || request || value.changing || value.removing || value.retiring)) || (request && (value.current.image || !value.changing)) || (value.removing && !value.changing) || (value.id!=-1 && !value.current.image && !request && !value.removing))throw Error("Inconsistent saved character slot");
+        if(request)value.request=resources.image(*request);return value;};
+    std::array<Slot,8> next;std::array<bool,character_prefixes.size()> seen{};
+    for(unsigned n=0;n<next.size();++n){next[n]=slot();if(next[n].id>=0){if(seen[std::size_t(next[n].id)] || next[n].order_index!=std::int32_t(n))throw Error("Duplicate/misordered saved character slot");seen[std::size_t(next[n].id)]=true;}}
+    std::vector<Slot> retired;retired.reserve(8);for(unsigned n=0;n<retired_count;++n)retired.push_back(slot());in.finish();
+    slots_=std::move(next);retired_=std::move(retired);style_generation_=generation;sprites_.clear();
 }
 }

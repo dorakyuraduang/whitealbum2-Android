@@ -19,6 +19,13 @@ void filename(std::string_view name){
 }
 }
 Catalog::Catalog(BankOpener opener):opener_(std::move(opener)){if(!opener_)throw Error("missing native resource bank opener");}
+std::shared_ptr<const image::ColourMap> Catalog::intern_colour(std::shared_ptr<const image::ColourMap> value){
+    if(!value)return {};
+    for(const auto& [name,weak]:colours_)if(auto existing=weak.lock())if(existing->channels==value->channels)return existing;
+    std::erase_if(restored_colours_,[](const auto& weak){return weak.expired();});
+    for(const auto& weak:restored_colours_)if(auto existing=weak.lock())if(existing->channels==value->channels)return existing;
+    restored_colours_.push_back(value);return value;
+}
 Catalog::Bank& Catalog::bank(std::string_view path){
     if(auto found=banks_.find(path);found!=banks_.end())return found->second;
     Bank entry;if(auto source=opener_(path))entry.archive=Archive::open(std::move(source));
@@ -49,7 +56,7 @@ std::shared_ptr<image::ImageRequest> Catalog::image(std::string_view group,std::
         // independently of whether the image itself belongs to bak or char.
         const auto key=std::pair{std::string("grp"),std::move(folded)};
         if(const auto found=colours_.find(key);found!=colours_.end())style.colours=found->second.lock();
-        if(!style.colours){const auto selected=find("grp",colour_map);style.colours=std::make_shared<const image::ColourMap>(image::parse_colour_map(selected.bank->archive->load(selected.member,1280)));
+        if(!style.colours){const auto selected=find("grp",colour_map);style.colours=intern_colour(std::make_shared<const image::ColourMap>(image::parse_colour_map(selected.bank->archive->load(selected.member,1280))));
             std::erase_if(colours_,[](const auto& item){return item.second.expired();});colours_[key]=style.colours;}
     }
     auto selected=find(group,name);if(!selected.bank->images)selected.bank->images=std::make_unique<image::ImageStore>(*selected.bank->archive);
@@ -60,7 +67,7 @@ std::shared_ptr<image::ImageRequest> Catalog::image(const image::Reference& refe
     image::validate_reference(reference);auto& selected=bank(reference.archive);
     if(!selected.archive)throw NotFound("Saved image archive is missing: "+reference.archive);
     if(!selected.images)selected.images=std::make_unique<image::ImageStore>(*selected.archive);
-    return selected.images->request(reference.member,reference.style);
+    auto style=reference.style;style.colours=intern_colour(std::move(style.colours));return selected.images->request(reference.member,std::move(style));
 }
 image::Reference Catalog::reference(const std::shared_ptr<image::ImageRequest>& request)const{
     for(const auto& [path,bank]:banks_)if(bank.images)if(auto record=bank.images->describe(request))return {path,std::move(record->member),std::move(record->style)};

@@ -2,6 +2,7 @@
 #include "script_runtime.hpp"
 #include "image_store.hpp"
 #include "scene_sprite.hpp"
+#include "image_reference.hpp"
 
 namespace wa2::script {
 // Eight typed character slots replace 0x4160e0/0x402610 and their CPU state.
@@ -19,6 +20,8 @@ public:
     void clear_retired();
     void invalidate_image_style(){if(style_generation_==std::uint64_t(-1))throw Error("Native character style generation exhausted");++style_generation_;}
     std::size_t count()const noexcept;
+    std::vector<std::uint8_t> checkpoint(const resource::Catalog&)const;
+    void restore(std::span<const std::uint8_t>,resource::Catalog&,const image::Resolve&);
 private:
     struct Pose {
         std::shared_ptr<const image::Raster> image;

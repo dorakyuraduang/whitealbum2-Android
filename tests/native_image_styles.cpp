@@ -1,5 +1,6 @@
 #include "image_colours.hpp"
 #include "resource_catalog.hpp"
+#include "checkpoint_codec.hpp"
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -60,6 +61,9 @@ int main(int argc,char** argv){try{
     const auto normal_ref=resources.reference(normal_pixels);CHECK(normal_ref.style.chroma==256 && await(resources.image(normal_ref))==normal_pixels);++cases;
     const auto effect_ref=resources.reference(effect);const auto saved_reference=i::checkpoint_reference(effect_ref);const auto restored_ref=i::restore_reference(saved_reference);
     CHECK(restored_ref.style.chroma==0 && restored_ref.style.colours && restored_ref.style.colours->channels==effect_ref.style.colours->channels && i::checkpoint_reference(restored_ref)==saved_reference && saved_reference.size()<1024);++cases;
+    CHECK(resources.image(restored_ref)==effect);++cases;
+    {r::Catalog snapshot_first([&](auto path)->std::shared_ptr<r::Source>{return path=="bak.pak"?image_source:path=="grp.pak"?map_source:nullptr;});auto restored_request=snapshot_first.image(restored_ref);await(restored_request);
+        const auto before=image_source->reads.load();CHECK(snapshot_first.image("bak","fixture.tga",0,"tone.amp")==restored_request && image_source->reads==before);++cases;}
     r::Catalog fresh([&](auto path)->std::shared_ptr<r::Source>{return path=="bak.pak"?image_source:nullptr;});CHECK(await(fresh.image(restored_ref))->rgba==await(effect)->rgba);++cases;
     r::Catalog ic([&](auto path)->std::shared_ptr<r::Source>{return path=="IC/bak.pak"?image_source:nullptr;});auto introductory=ic.image("bak","fixture.tga");const auto ic_ref=ic.reference(introductory);
     CHECK(ic_ref.archive=="IC/bak.pak" && await(ic.image(i::restore_reference(i::checkpoint_reference(ic_ref))))->rgba==normal_pixels->rgba);++cases;
@@ -69,6 +73,12 @@ int main(int argc,char** argv){try{
     {auto absent=grey_ref;absent.archive="missing.pak";rejects([&]{resources.image(absent);});++guards;}
     {i::ImageStore foreign(r::Archive::open(image_source));auto other=foreign.request("fixture.tga");rejects([&]{resources.reference(other);});rejects([&]{resources.reference(await(other));});guards+=2;++cases;}
     rejects([&]{resources.reference(std::shared_ptr<const i::Raster>{});});++guards;
+    const auto image_state=i::checkpoint_image(resources,normal_pixels);const i::Resolve resolve=[&](const auto& ref){return await(resources.image(ref));};
+    CHECK(i::restore_image(image_state,resources,resolve)==normal_pixels);++cases;
+    CHECK(i::restore_image(image_state,fresh,[&](const auto& ref){return await(fresh.image(ref));})->rgba==normal_pixels->rgba);++cases;
+    for(auto width:{0u,3u}){auto changed=image_state;put(changed,12,width);put(changed,changed.size()-4,wa2::checkpoint::crc(std::span(changed).first(changed.size()-4)));rejects([&]{i::restore_image(changed,resources,resolve);});++guards;}
+    rejects([&]{i::restore_image(image_state,resources,{});});++guards;
+    rejects([&]{i::resolve_reference(normal_ref,resources,[&](const auto&){return await(effect);});});++guards;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-image-styles.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"synthetic_only\":true,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native image chroma, AMP effects and styled request caching.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
