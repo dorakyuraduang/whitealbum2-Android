@@ -28,13 +28,19 @@ template<class Reader>class StreamVoice final : public Voice {
 public:
     StreamVoice(Mixer& mixer,OggPlaylist playlist,std::function<void()> initialize,bool paused){
         if(!playlist.first)throw resource::Error("missing audio playlist resource");
-        auto reader=std::make_unique<Reader>(playlist.first);
-        const auto format=reader->format();
-        auto pcm=mixer.create_stream(format.rate,format.channels);pcm->gain(0);state_->pcm=pcm;state_->paused=paused;
-        worker_=std::thread([state=state_,pcm,reader=std::move(reader),repeat_source=std::move(playlist.repeat),format,
+        state_->paused=paused;
+        worker_=std::thread([state=state_,&mixer,source=std::move(playlist.first),repeat_source=std::move(playlist.repeat),
                              initialize=std::move(initialize)]()mutable{
+            std::shared_ptr<PcmStream> pcm;
             try{
                 if(initialize)initialize();
+                if(state->stop.load(std::memory_order_acquire))return;
+                auto reader=std::make_unique<Reader>(std::move(source));const auto format=reader->format();
+                pcm=mixer.create_stream(format.rate,format.channels);
+                {std::lock_guard lock(state->mutex);
+                    if(state->stop.load(std::memory_order_acquire)){pcm->stop();return;}
+                    pcm->gain(state->volume/255.f);state->pcm=pcm;
+                }
                 std::array<std::uint8_t,8192> output{};
                 std::size_t begin=0,end=0,decoded=0;bool repeat=false,done=false;
                 while(!state->stop.load(std::memory_order_acquire)){
@@ -62,16 +68,17 @@ public:
                 }
             }catch(const std::exception& error){
                 if(!state->stop.load(std::memory_order_acquire)){std::lock_guard lock(state->mutex);state->error=error.what();}
-                pcm->stop();
+                if(pcm)pcm->stop();
             }catch(...){
                 if(!state->stop.load(std::memory_order_acquire)){std::lock_guard lock(state->mutex);state->error="native streamed audio playback failed";}
-                pcm->stop();
+                if(pcm)pcm->stop();
             }
         });
     }
     ~StreamVoice()override{stop();}
     bool ready()const override{return state_->ready.load(std::memory_order_acquire);}
     bool finished()const override{
+        if(state_->stop.load(std::memory_order_acquire))return true;
         std::lock_guard lock(state_->mutex);return state_->pcm?state_->pcm->status().finished:!state_->error.empty();
     }
     std::string failure()const override{std::lock_guard lock(state_->mutex);return state_->error;}
@@ -80,7 +87,7 @@ public:
     }
     void pause(bool value)override{
         std::lock_guard lock(state_->mutex);state_->paused=value;
-        if(value)state_->pcm->pause();else if(state_->ready.load(std::memory_order_acquire))state_->pcm->play();
+        if(state_->pcm){if(value)state_->pcm->pause();else if(state_->ready.load(std::memory_order_acquire))state_->pcm->play();}
     }
     void stop()override{
         state_->stop.store(true,std::memory_order_release);state_->changed.notify_all();std::shared_ptr<PcmStream> pcm;

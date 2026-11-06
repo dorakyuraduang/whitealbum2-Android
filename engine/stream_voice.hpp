@@ -19,9 +19,10 @@ struct OggPlaylist {
     std::shared_ptr<resource::Source> first;
     std::shared_ptr<resource::Source> repeat;
 };
-// One bounded PCM queue and one producer per live voice. Only the 58-byte format
-// header is read during creation; packet decoding and subsequent disk reads
-// stay on the producer, never the audio callback or game update.
+// One bounded PCM queue and one producer per live voice. Format/header reads,
+// decoder creation and packet reads stay on the producer, never the audio
+// callback or game update. Decoder/I/O errors are reported through failure().
+// The supplied mixer must outlive the voice; stop/destruction joins its worker.
 // New voices start muted; their owner sets gain before making them audible.
 std::unique_ptr<Voice> play_ogg(Mixer& mixer,OggPlaylist playlist,
     std::function<void()> initialize_worker={},bool paused=false);

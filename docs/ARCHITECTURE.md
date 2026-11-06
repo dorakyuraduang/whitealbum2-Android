@@ -222,6 +222,15 @@ checks cover all four supported bitmap modes and the owned-memory renderer
 checks multiplication. SDL's software renderer cannot exercise the custom mode
 4 blend; actual GL/GLES pixel output is not yet device-verified.
 
+Streamed native audio now constructs its WAV/Ogg reader and bounded PCM queue
+on the producer thread as well. No audio source size/header read occurs in the
+voice factory on the gameplay thread; settings applied before initialization
+are retained when PCM becomes available. Ready/failure remain explicit, and
+stop joins the worker. Synthetic provider tests check pending pause/gain,
+startup cancellation, looping, initial silence and asynchronous provider/codec
+errors. Archive lookup/member opening still occurs at the scene resource
+boundary; this change does not claim to remove all synchronous resource I/O.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through
