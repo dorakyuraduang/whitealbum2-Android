@@ -68,6 +68,8 @@ add_executable(wa2_native_dialogue_state_tests "${WA2_ROOT}/tests/native_dialogu
 target_link_libraries(wa2_native_dialogue_state_tests PRIVATE wa2_script)
 add_executable(wa2_native_sprite_atlas_tests "${WA2_ROOT}/tests/native_sprite_atlas.cpp")
 target_link_libraries(wa2_native_sprite_atlas_tests PRIVATE wa2_engine)
+add_executable(wa2_native_font_coverage_tests "${WA2_ROOT}/tests/native_font_coverage.cpp")
+target_link_libraries(wa2_native_font_coverage_tests PRIVATE wa2_engine)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -116,6 +118,7 @@ if(NOT ANDROID)
     add_test(NAME native_stream_voice COMMAND wa2_native_stream_voice_tests "${CMAKE_BINARY_DIR}/native-stream-voice.json")
     add_test(NAME native_dialogue_state COMMAND wa2_native_dialogue_state_tests "${CMAKE_BINARY_DIR}/native-dialogue-state.json")
     add_test(NAME native_sprite_atlas COMMAND wa2_native_sprite_atlas_tests "${CMAKE_BINARY_DIR}/native-sprite-atlas.json")
+    add_test(NAME native_font_coverage COMMAND wa2_native_font_coverage_tests "${CMAKE_BINARY_DIR}/native-font-coverage.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

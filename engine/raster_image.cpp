@@ -65,6 +65,21 @@ Raster decode_game_tga(std::span<const std::uint8_t> source){
     const auto layout=inspect_game_tga(source);return decode(source,layout,{0,0,layout.width,layout.height});
 }
 Raster decode_game_tga_region(std::span<const std::uint8_t> source,Region region){return decode(source,inspect_game_tga(source),region);}
+void copy_game_font_coverage(std::span<const std::uint8_t> source,const TgaLayout& layout,Region glyph,Raster& destination,std::uint32_t dx,std::uint32_t dy){
+    if(layout.bits!=8 || !layout.width || !layout.height || layout.width>65535 || layout.height>65535 || layout.palette_entries>256 ||
+       glyph.x>layout.width || glyph.y>layout.height || glyph.width>layout.width-glyph.x || glyph.height>layout.height-glyph.y)
+        throw Error("Invalid indexed font coverage region");
+    if(!destination.width || !destination.height || destination.width>65535 || destination.height>65535 ||
+       std::uint64_t(destination.width)*destination.height*4!=destination.rgba.size() || dx>destination.width || dy>destination.height ||
+       glyph.width>destination.width-dx || glyph.height>destination.height-dy)throw Error("Invalid font coverage destination");
+    range(source,layout.data_offset,std::size_t(layout.width)*layout.height);
+    for(std::uint32_t y=0;y<glyph.height;++y){const auto sy=layout.top_origin?glyph.y+y:layout.height-1-glyph.y-y;
+        const auto* row=source.data()+layout.data_offset+std::size_t(sy)*layout.width+glyph.x;
+        auto* output=destination.rgba.data()+((std::size_t(dy+y)*destination.width)+dx)*4;
+        for(std::uint32_t x=0;x<glyph.width;++x,output+=4){const auto index=row[x];if(index>=layout.palette_entries)throw Error("Game font palette index out of range");
+            output[0]=output[1]=output[2]=255;output[3]=layout.palette[index][2];}
+    }
+}
 Raster decode_game_bmp(std::span<const std::uint8_t> source){
     range(source,0,54);
     const auto word=[&](std::size_t at){range(source,at,4);return std::uint32_t(source[at])|

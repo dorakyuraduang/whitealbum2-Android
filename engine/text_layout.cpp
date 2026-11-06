@@ -161,14 +161,8 @@ PreparedText FontBook::prepare(Layout layout){
     for(const auto& [key,slot]:slots)for(unsigned layer=0;layer<2;++layer){
         const auto index=unsigned(key.second?2:0)+layer;const auto& source=atlas(index);const auto pitch=key.second?24u:40u;
         const auto box=glyph_box(key.first,true,pitch,0,pitch);
-        const auto decoded=image::decode_game_tga_region(source.source,{box.x,box.y,pitch,pitch});
         const auto tile=slot*2+layer,ox=tile%columns*cell,oy=tile/columns*cell;
-        for(unsigned y=0;y<pitch;++y)for(unsigned x=0;x<pitch;++x){
-            const auto from=(std::size_t(y)*pitch+x)*4,to=((std::size_t(oy+y)*pixels->width)+ox+x)*4;
-            // D3D A8 font uploads select palette blue as coverage. The original
-            // font palette is grayscale; its reserved alpha bytes are ignored.
-            pixels->rgba[to]=pixels->rgba[to+1]=pixels->rgba[to+2]=255;pixels->rgba[to+3]=decoded.rgba[from+2];
-        }
+        image::copy_game_font_coverage(source.source,source.layout,{box.x,box.y,pitch,pitch},*pixels,ox,oy);
     }
     result.image_=std::move(pixels);return result;
 }

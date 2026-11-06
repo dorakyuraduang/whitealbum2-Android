@@ -284,6 +284,13 @@ now resume nonempty dialogue without reading a font atlas and check that a
 failed first materialization does not change its checkpoint. Actual restored
 font pixels still require presentation validation.
 
+Visible glyphs now copy palette-blue coverage directly from the cached indexed
+font source into their final white-RGB/coverage-alpha tiles. The former temporary
+RGBA region allocation and second pixel copy for every glyph/shadow are gone.
+Source origin, palette bounds and destination bounds remain checked. Synthetic
+24/32-bit palettes in both TGA row orientations compare byte-for-byte with
+the previous region-decoder blue values, including reserved alpha bytes.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through
