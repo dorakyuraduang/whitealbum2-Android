@@ -266,6 +266,15 @@ fresh-catalogue reload, IC routing, styled pixel preservation and invalid paths.
 These references are a prerequisite for full scene snapshots, not an integrated
 manual-save implementation.
 
+Native sakura particles now optionally share one load-time atlas for all three
+original textures. Replicated one-pixel gutters retain clamped linear sampling;
+particle order, simulation, source pixels, colours and layering stay intact.
+Packing is bounded to 2048 per side and retains the original multi-texture path
+if it cannot fit. Duplicate texture handles alias without copying. The atlas
+is transient and is never added to an APK/resource package. Owned-memory checks
+preserve sampled colours and reduce six alternating-texture draws to one;
+this finite submission check is not a game FPS or device performance test.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

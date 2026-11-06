@@ -84,7 +84,7 @@ void SceneWeather::begin(Command& command){
         for(const auto& name:definition->textures()){auto request=loader_(name);if(!request)throw Error("Native rain loader returned no texture request");requests.push_back(std::move(request));}
         stop(true);particles_={};sprites_.clear();extent_=0;frame_=0;stopping_=false;type_=0;priority_=priority;scope_=scope;
         request_.reset();image_.reset();animation_=std::move(definition);animation_player_.emplace(animation_);animation_requests_=std::move(requests);
-        sakura_requests_={};sakura_images_={};
+        sakura_requests_={};sakura_images_={};sakura_atlas_.reset();
         animation_textures_.assign(animation_requests_.size(),{});animation_validated_=false;enabled_=true;return;
     }
     std::array<std::shared_ptr<image::ImageRequest>,3> sakura;
@@ -95,7 +95,7 @@ void SceneWeather::begin(Command& command){
     // Replacing even an independent rain effect releases its old animation
     // definition/requests. Independence preserves background transitions only.
     animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();animation_validated_=false;
-    sakura_requests_=std::move(sakura);sakura_images_={};
+    sakura_requests_=std::move(sakura);sakura_images_={};sakura_atlas_.reset();
     type_=mode;flags_=code&0xe00;prefill_=(code&0x100)!=0;priority_=priority;scope_=scope;
     target_x_=command.arguments[1].integer();target_y_=command.arguments[2].integer();
     density_=density(command.arguments[3].integer());speed_x_=float(target_x_);speed_y_=float(target_y_);
@@ -104,7 +104,7 @@ void SceneWeather::begin(Command& command){
 void SceneWeather::stop(bool immediately){
     if(!immediately){density_=0;stopping_=true;return;}
     if(scope_==2){scope_=0;return;}
-    particles_={};sprites_.clear();request_.reset();image_.reset();animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();sakura_requests_={};sakura_images_={};animation_validated_=false;extent_=0;frame_=0;enabled_=false;stopping_=false;
+    particles_={};sprites_.clear();request_.reset();image_.reset();animation_player_.reset();animation_.reset();animation_requests_.clear();animation_textures_.clear();sakura_requests_={};sakura_images_={};sakura_atlas_.reset();animation_validated_=false;extent_=0;frame_=0;enabled_=false;stopping_=false;
 }
 bool SceneWeather::stopped(){
     if(!stopping_)return false;
@@ -152,7 +152,7 @@ void SceneWeather::update(){
     if(type_==1){
         for(unsigned n=0;n<sakura_requests_.size();++n)if(sakura_requests_[n])if(auto image=sakura_requests_[n]->get()){sakura_images_[n]=std::move(image);sakura_requests_[n].reset();}
         if(loading())return;
-        if(!animation_validated_){constexpr unsigned cell[]{128,32,16};for(unsigned n=0;n<3;++n)if(!sakura_images_[n] || sakura_images_[n]->width<12*cell[n] || sakura_images_[n]->height<2*cell[n])throw Error("Native sakura atlas dimensions are too small");animation_validated_=true;}
+        if(!animation_validated_){constexpr unsigned cell[]{128,32,16};for(unsigned n=0;n<3;++n)if(!sakura_images_[n] || sakura_images_[n]->width<12*cell[n] || sakura_images_[n]->height<2*cell[n])throw Error("Native sakura atlas dimensions are too small");sakura_atlas_=image::make_sprite_atlas(sakura_images_);animation_validated_=true;}
     }
     if(request_){auto image=request_->get();if(!image)return;
         if(image->width<32 || image->height<64)throw Error("native weather atlas is too small");
@@ -178,6 +178,7 @@ void SceneWeather::update(){
             if(p.angle< -32){if(retire())continue;p.angle+=1312;}
             constexpr unsigned cell[]{128,32,16},divisor[]{4,3,2},period[]{768,2304,768};const auto kind=unsigned(p.kind),frame=unsigned(p.phase)/divisor[kind]%24;
             const auto size=float(cell[kind]);sprites_.push_back({sakura_images_[kind],float(integer(p.angle)),float(integer(p.radius)),size,size,float(frame%12*cell[kind]),float(frame/12*cell[kind]),size,size});
+            if(sakura_atlas_){auto& sprite=sprites_.back();const auto& region=sakura_atlas_->regions[kind];sprite.image=sakura_atlas_->image;sprite.source_x+=region.x;sprite.source_y+=region.y;}
             sprites_.back().layer=scope_?0x1043:kind==2?1:10;sprites_.back().order=0x99+std::int32_t(n);
             // The curve and flipbook share this period. Keeping their joint
             // phase bounded preserves every sample without signed overflow.

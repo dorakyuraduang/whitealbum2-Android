@@ -4,6 +4,7 @@
 #include "native_random.hpp"
 #include "scene_sprite.hpp"
 #include "sprite_animation.hpp"
+#include "sprite_atlas.hpp"
 
 namespace wa2::script {
 struct WeatherParticle {
@@ -43,6 +44,7 @@ private:
     bool animation_validated_{};
     std::array<std::shared_ptr<image::ImageRequest>,3> sakura_requests_;
     std::array<std::shared_ptr<const image::Raster>,3> sakura_images_;
+    std::optional<image::SpriteAtlas> sakura_atlas_;
     std::shared_ptr<image::ImageRequest> request_;
     std::shared_ptr<const image::Raster> image_;
     std::array<WeatherParticle,400> particles_{};

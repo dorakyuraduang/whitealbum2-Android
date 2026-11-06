@@ -1,5 +1,6 @@
 #define SDL_MAIN_HANDLED
 #include "sdl_scene.hpp"
+#include "sprite_atlas.hpp"
 #include <SDL.h>
 #include <cstring>
 #include <fstream>
@@ -47,6 +48,15 @@ int main(int argc,char** argv){try{
         item.image=green;item.blend=i::SpriteBlend::multiply;item.alpha=0;item.world=i::SpriteWorld::current;colour=render();CHECK(colour[0]==0 && colour[1]==0 && colour[2]==0 && pixel(surface.get(),2,2)[2]==255);++cases;
         item.blend=i::SpriteBlend::alpha;colour=render();CHECK(colour[2]==255);++cases;
         item.alpha=255;item.red=item.green=item.blue=128;item.blend=i::SpriteBlend::multiply;frame.current->image=green;colour=render();CHECK(colour[0]==0 && close(colour[1],128) && colour[2]==0);++cases;
+        {
+            const std::array<std::shared_ptr<const i::Raster>,3> images{red,green,blue};std::array<i::Sprite,6> quads;
+            for(unsigned n=0;n<quads.size();++n)quads[n]={images[n%3],float(n*200),200,200,200,0,0,1,1};
+            canvas->clear({0,0,0,255});const auto before=canvas->statistics().draws;scene.sprites(quads);canvas->present();CHECK(canvas->statistics().draws-before==6);++cases;
+            std::array<std::array<unsigned,4>,6> expected;for(unsigned n=0;n<6;++n)expected[n]=pixel(surface.get(),5+10*n,15);
+            const auto atlas=i::make_sprite_atlas(images,16);CHECK(atlas);for(unsigned n=0;n<6;++n){quads[n].image=atlas->image;quads[n].source_x=float(atlas->regions[n%3].x);quads[n].source_y=float(atlas->regions[n%3].y);}
+            canvas->clear({0,0,0,255});const auto batched=canvas->statistics().draws;scene.sprites(quads);canvas->present();CHECK(canvas->statistics().draws-batched==1);++cases;
+            for(unsigned n=0;n<6;++n)CHECK(pixel(surface.get(),5+10*n,15)==expected[n]);++cases;
+        }
         frame.current.reset();red.reset();blue.reset();green.reset();mask.reset();item={};render(false);CHECK(scene.texture_count()==0);++cases;
         scene.reset_textures();
         CHECK((SDL_WasInit(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_EVENTS)&(SDL_INIT_VIDEO|SDL_INIT_AUDIO|SDL_INIT_EVENTS))==0);++cases;

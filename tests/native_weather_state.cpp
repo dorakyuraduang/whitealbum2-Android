@@ -52,6 +52,21 @@ int main(int argc,char** argv){try{
     for(auto value:{1u,2u}){random_value=value;call={173,snow};weather.dispatch(call);weather.update();CHECK(weather.particles()[0].kind==(value==1?2:1) && weather.sprites()[0].width==(value==1?16:32));++cases;}
     weather.background_finished(true);CHECK(weather.active() && weather.scope()==0);weather.background_finished(false);CHECK(!weather.active());++cases;
     for(int scope:{1,2}){snow[5]=s::Value(scope);call={173,snow};weather.dispatch(call);weather.update();weather.background_finished(false);CHECK(weather.active() && weather.scope()==scope && !weather.sprites().empty());++cases;}
+    {
+        std::array<std::unique_ptr<i::ImageStore>,3> stores;std::array<std::shared_ptr<i::ImageRequest>,3> requests;
+        constexpr unsigned cells[]{128,32,16};
+        for(unsigned n=0;n<3;++n){auto data=std::make_shared<Bytes>();auto& b=data->bytes;const auto width=12*cells[n],height=2*cells[n];b.resize(60+18+width*height*3);
+            std::memcpy(b.data(),"KCAP",4);put(b,12,1);std::memcpy(b.data()+20,"weather.tga",11);put(b,52,60);put(b,56,std::uint32_t(b.size()-60));b[62]=2;b[72]=std::uint8_t(width);b[73]=std::uint8_t(width>>8);b[74]=std::uint8_t(height);b[75]=std::uint8_t(height>>8);b[76]=24;b[77]=32;
+            stores[n]=std::make_unique<i::ImageStore>(r::Archive::open(data));requests[n]=stores[n]->request("weather.tga");}
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+        while(!std::all_of(requests.begin(),requests.end(),[](const auto& request){return bool(request->get());})){CHECK(std::chrono::steady_clock::now()<deadline);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        unsigned value{},draws{};s::SceneWeather packed([&](auto name){return requests[name=="sakura1_2.tga"?0:name=="sakura2.tga"?1:2];},[&]{++draws;return value;});
+        std::array<s::Value,6> parameters{s::Value(0x101),s::Value(10),s::Value(10),s::Value(10),s::Value(0),s::Value(1)};
+        constexpr unsigned source_y[]{1,325,259},sizes[]{128,16,32};
+        for(value=0;value<3;++value){draws=0;s::Command set{173,parameters};packed.dispatch(set);packed.update();const auto sprites=packed.sprites();CHECK(sprites.size()==8 && draws==(value?56:32));
+            const auto& first=sprites.front();CHECK(first.image->width==1538 && first.image->height==358 && first.source_x==1 && first.source_y==source_y[value] && first.width==sizes[value]);
+            for(const auto& sprite:sprites)CHECK(sprite.image==first.image && sprite.layer==0x1043);++cases;}
+    }
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-weather-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"implemented_types\":[0,1,3,4,6],\"synthetic_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native weather population, growth and original RNG consumption.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

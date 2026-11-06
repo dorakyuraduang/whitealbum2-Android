@@ -45,7 +45,7 @@ def main():
     inputs=[ROOT/'config/porting_contract.json',Path(__file__),ROOT/'native/CMakeLists.txt',ROOT/'game/CMakeLists.txt',
         ROOT/'tests/native_progress.cpp',ROOT/'tests/native_script_state.cpp',ROOT/'tests/native_control_state.cpp',ROOT/'tests/native_camera_state.cpp',ROOT/'tests/native_script_catalogue.cpp',ROOT/'tests/native_core_link.cpp',ROOT/'platform/progress_storage.cpp',ROOT/'platform/progress_storage.hpp',ROOT/'platform/file_io.cpp',ROOT/'platform/file_io.hpp',ROOT/'platform/sdl_scene.cpp',ROOT/'platform/sdl_scene.hpp',ROOT/'platform/sdl_canvas.hpp',
         ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/native_voices.cpp',ROOT/'tests/native_novel_state.cpp',ROOT/'tests/native_weather_state.cpp',ROOT/'tests/native_calendar_state.cpp',ROOT/'tests/native_animation_state.cpp',ROOT/'tests/native_scene_geometry.cpp',ROOT/'tests/native_shake_state.cpp',ROOT/'tests/native_world_state.cpp',ROOT/'tests/native_scene_composition.cpp',ROOT/'tests/native_image_styles.cpp',ROOT/'tests/native_caption_state.cpp',ROOT/'tests/native_selection_state.cpp',ROOT/'tests/native_mask_sources.cpp',ROOT/'platform/sdl_canvas.cpp',ROOT/'platform/sdl_canvas.cmake',ROOT/'platform/sdl_mask.cpp',ROOT/'platform/sdl_mask.hpp',ROOT/'platform/mask_shaders.cpp',ROOT/'platform/mask_shaders.hpp']
-    inputs += [ROOT/'tests/native_system_sounds.cpp',ROOT/'tests/native_lifecycle_state.cpp',ROOT/'tests/native_stream_voice.cpp',ROOT/'tests/native_dialogue_state.cpp']
+    inputs += [ROOT/'tests/native_system_sounds.cpp',ROOT/'tests/native_lifecycle_state.cpp',ROOT/'tests/native_stream_voice.cpp',ROOT/'tests/native_dialogue_state.cpp',ROOT/'tests/native_sprite_atlas.cpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
     bindings={p.relative_to(ROOT).as_posix():digest(p) for p in inputs}
@@ -74,7 +74,7 @@ def main():
             print('Configuring and building '+host+' native core; one hidden low-priority job.',flush=True)
             run(configure,console)
             targets=['wa2_native_link_check','wa2_native_presentation_check']+(['wa2_native_progress_tests','wa2_native_script_state_tests','wa2_native_control_state_tests','wa2_native_camera_state_tests','wa2_native_voice_state_tests','wa2_native_novel_state_tests','wa2_native_weather_state_tests','wa2_native_calendar_state_tests','wa2_native_animation_state_tests','wa2_native_scene_geometry_tests','wa2_native_shake_state_tests','wa2_native_world_state_tests','wa2_native_image_style_tests','wa2_native_caption_state_tests','wa2_native_selection_state_tests'] if host=='windows' else [])
-            if host=='windows':targets+=['wa2_native_system_sound_tests','wa2_native_lifecycle_state_tests','wa2_native_stream_voice_tests','wa2_native_dialogue_state_tests']
+            if host=='windows':targets+=['wa2_native_system_sound_tests','wa2_native_lifecycle_state_tests','wa2_native_stream_voice_tests','wa2_native_dialogue_state_tests','wa2_native_sprite_atlas_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -82,7 +82,7 @@ def main():
             commands=json.loads((directory/'compile_commands.json').read_text())
             names={Path(item['file']).resolve().relative_to(ROOT).as_posix() for item in commands}
             allowed=('engine/','game/','platform/progress_storage.cpp','platform/file_io.cpp','platform/sdl_scene.cpp','platform/sdl_canvas.cpp','platform/sdl_mask.cpp','platform/mask_shaders.cpp','tests/native_core_link.cpp','tests/native_progress.cpp','tests/native_script_state.cpp','tests/native_control_state.cpp','tests/native_camera_state.cpp','tests/native_script_catalogue.cpp','tests/native_voices.cpp','tests/native_novel_state.cpp','tests/native_weather_state.cpp','tests/native_calendar_state.cpp','tests/native_animation_state.cpp','tests/native_scene_geometry.cpp','tests/native_shake_state.cpp','tests/native_world_state.cpp','tests/native_scene_composition.cpp','tests/native_image_styles.cpp','tests/native_caption_state.cpp','tests/native_selection_state.cpp','tests/native_mask_sources.cpp','tests/pcm_audio.cpp')
-            allowed+=('tests/native_system_sounds.cpp','tests/native_lifecycle_state.cpp','tests/native_stream_voice.cpp','tests/native_dialogue_state.cpp')
+            allowed+=('tests/native_system_sounds.cpp','tests/native_lifecycle_state.cpp','tests/native_stream_voice.cpp','tests/native_dialogue_state.cpp','tests/native_sprite_atlas.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -156,7 +156,7 @@ def main():
                 if not novel_state['passed'] or novel_state['cases']<10 or novel_state['guards']<5 or novel_state['game_launched'] or novel_state['screen_access']:raise ValueError('Native novel state checks failed')
                 run([directory/'wa2_native_weather_state_tests.exe',directory/'native-weather-state.json'],console,90)
                 weather_state=json.loads((directory/'native-weather-state.json').read_text())
-                if not weather_state['passed'] or weather_state['cases']<11 or weather_state['guards']<3 or weather_state['game_launched'] or weather_state['screen_access']:raise ValueError('Native weather state checks failed')
+                if not weather_state['passed'] or weather_state['cases']<25 or weather_state['guards']<3 or weather_state['game_launched'] or weather_state['screen_access']:raise ValueError('Native weather state checks failed')
                 run([directory/'wa2_native_calendar_state_tests.exe',directory/'native-calendar-state.json'],console,90)
                 calendar_state=json.loads((directory/'native-calendar-state.json').read_text())
                 if not calendar_state['passed'] or calendar_state['cases']<11 or calendar_state['guards']<5 or calendar_state['normal_ticks']!=182 or calendar_state['skip_ticks']!=62 or calendar_state['game_launched'] or calendar_state['screen_access']:raise ValueError('Native calendar state checks failed')
@@ -193,6 +193,9 @@ def main():
                 run([directory/'wa2_native_dialogue_state_tests.exe',directory/'native-dialogue-state.json'],console,90)
                 dialogue_state=json.loads((directory/'native-dialogue-state.json').read_text())
                 if not dialogue_state['passed'] or dialogue_state['cases']<18 or dialogue_state['guards']<12 or dialogue_state['metadata_text_layouts']!=6 or dialogue_state['glyph_pixels_decoded'] or not dialogue_state['synthetic_only'] or dialogue_state['devices_opened'] or dialogue_state['game_launched'] or dialogue_state['screen_access']:raise ValueError('Native dialogue state checks failed')
+                run([directory/'wa2_native_sprite_atlas_tests.exe',directory/'native-sprite-atlas.json'],console,90)
+                sprite_atlas_state=json.loads((directory/'native-sprite-atlas.json').read_text())
+                if not sprite_atlas_state['passed'] or sprite_atlas_state['cases']<9 or sprite_atlas_state['guards']<5 or not sprite_atlas_state['replicated_gutters_verified'] or not sprite_atlas_state['input_pixels_unchanged'] or sprite_atlas_state['devices_opened'] or sprite_atlas_state['game_launched'] or sprite_atlas_state['screen_access']:raise ValueError('Native sprite atlas checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -202,7 +205,7 @@ def main():
                 if args.sdl_archive:
                     run([directory/'wa2_native_scene_composition_tests.exe',directory/'native-scene-composition.json'],console,90)
                     composition_state=json.loads((directory/'native-scene-composition.json').read_text())
-                    if not composition_state['passed'] or composition_state['cases']<23 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
+                    if not composition_state['passed'] or composition_state['cases']<26 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
                     composition_graph=output([ninja,'-C',directory,'-t','graph','wa2_native_scene_composition_tests.exe']).replace('\\','/').lower()
                     if any(token in composition_graph for token in forbidden):raise ValueError('AOT dependency in owned-memory composition test')
                     composition_artifact=dict(sha256=digest(directory/'wa2_native_scene_composition_tests.exe'),
@@ -225,6 +228,7 @@ def main():
     report['lifecycle_state']=lifecycle_state
     report['stream_voice_state']=stream_voice_state
     report['dialogue_state']=dialogue_state
+    report['sprite_atlas_state']=sprite_atlas_state
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 
