@@ -6,6 +6,7 @@ struct SceneModes {
     std::int32_t time{},background_chroma{},character_chroma{},log_output{};
     std::string background_effect,character_effect;
     std::int32_t voice_chapter{-1},voice_offset{};
+    std::int32_t adult_mode{};
     std::int32_t demo_mode{},demo_ticks{},auto_ticks{};
     bool auto_mode{},latched_skip{};
     bool draw_requested{};

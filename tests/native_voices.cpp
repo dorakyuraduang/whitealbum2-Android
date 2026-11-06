@@ -23,13 +23,22 @@ int main(int argc,char** argv){try{
     CHECK(voices.active()==1 && created.back()->line.speaker==10 && created.back()->line.chapter==1002 && created.back()->line.line==103 && !created.back()->line.loop && created.back()->gain==255);++cases;
     voices.dispatch(call);CHECK(created.front()->done && voices.active()==1 && voices.played()==2);++cases;
     std::array<s::Value,2> wait{s::Value(0),s::Value(1)};call={140,wait};CHECK(!voices.dispatch(call)->complete);advance=true;CHECK(voices.dispatch(call)->complete);advance=false;++cases;
-    std::array<s::Value,2> stop{s::Value(4),s::Value(0)};call={141,stop};voices.dispatch(call);voices.update();CHECK(created.back()->gain==191 && !created.back()->done);++cases;
+    std::array<s::Value,2> stop{s::Value(4),s::Value(0)};call={141,stop};voices.dispatch(call);voices.update();CHECK(created.back()->gain==255 && !created.back()->done);voices.update();CHECK(created.back()->gain==191);++cases;
     for(unsigned n=0;n<3;++n)voices.update();CHECK(created.back()->done && !voices.active());++cases;
     skip=true;call={138,args};voices.dispatch(call);CHECK(created.size()==2 && !voices.active());++cases;
     std::array<s::Value,6> forced{s::Value(2),s::Value(2003),s::Value(1),s::Value(128),s::Value(51),s::Value(1)};call={139,forced};voices.dispatch(call);
     CHECK(voices.active()==1 && created.back()->line.chapter==2003 && created.back()->line.speaker==2 && created.back()->line.line==54 && created.back()->line.loop);++cases;
     created.back()->done=true;voices.update();CHECK(!voices.active());++cases;
     forced[2]=s::Value(-1);call={139,forced};voices.dispatch(call);CHECK(created.back()->line.loop);++cases;
-    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-voices.v1\",\"cases\":"<<cases<<",\"maximum_voice_slots\":2,\"screen_access\":false,\"audio_devices_opened\":0,\"cpu_emulator_linked\":false,\"passed\":true}\n";
+    skip=false;forced[5]=s::Value(2);call={139,forced};voices.dispatch(call);auto channel2=created.back();forced[5]=s::Value(3);call={139,forced};voices.dispatch(call);CHECK(voices.active()==3);++cases;
+    std::array<s::Value,3> volume{s::Value(0),s::Value(2),s::Value(2)};call={235,volume};voices.dispatch(call);voices.update();CHECK(channel2->gain==128);voices.update();CHECK(channel2->gain==64);voices.update();CHECK(channel2->gain==0 && !channel2->done);++cases;
+    volume[0]=s::Value(255);volume[1]=s::Value(0);call={235,volume};voices.dispatch(call);voices.update();CHECK(channel2->gain==255);++cases;
+    voices.settings(128,128);CHECK(channel2->gain==63);voices.settings(256,256);CHECK(channel2->gain==255);++cases;
+    stop={s::Value(2),s::Value(2)};call={141,stop};voices.dispatch(call);volume[0]=s::Value(100);call={235,volume};voices.dispatch(call);voices.update();voices.update();voices.update();CHECK(channel2->done);++cases;
+    voices.settings(256,256,true);voices.adult_mode(true);forced[0]=s::Value(0);forced[5]=s::Value(2);const auto count=created.size();call={139,forced};voices.dispatch(call);CHECK(created.size()==count);++cases;
+    forced[0]=s::Value(1);call={139,forced};voices.dispatch(call);CHECK(created.size()==count+1);++cases;
+    auto preset=created.back();stop={s::Value(-1),s::Value(2)};call={141,stop};voices.dispatch(call);for(int n=0;n<15;++n)voices.update();CHECK(!preset->done);voices.update();CHECK(preset->done);++cases;
+    volume[2]=s::Value(4);call={235,volume};bool failed=false;try{voices.dispatch(call);}catch(const std::exception&){failed=true;}CHECK(failed);++cases;
+    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-voices.v1\",\"cases\":"<<cases<<",\"maximum_voice_slots\":4,\"screen_access\":false,\"audio_devices_opened\":0,\"cpu_emulator_linked\":false,\"passed\":true}\n";
     std::cout<<"PASS native speech commands: "<<cases<<" cases.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

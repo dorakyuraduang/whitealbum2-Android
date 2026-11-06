@@ -65,6 +65,8 @@ std::optional<CommandResult> SceneControls::dispatch(Command& command){
     // Existing 0x455db0 sets the redraw flag and returns 1 to yield a frame.
     case 207:count(0);modes_.draw_requested=true;return CommandResult{true,true,Value(1)};
     case 219:count(0);modes_.latched_skip=false;modes_.auto_mode=false;return result();
+    // The cached EroMode wrapper ignores its second generic argument.
+    case 221:count(2);modes_.adult_mode=integer(0);return result();
     default:return std::nullopt;
     }
 }
@@ -80,12 +82,12 @@ std::vector<std::uint8_t> SceneControls::checkpoint()const{
     checkpoint::Writer out;
     for(auto v:{modes_.time,modes_.background_chroma,modes_.character_chroma,modes_.log_output,modes_.voice_chapter,modes_.voice_offset,modes_.demo_mode,modes_.demo_ticks,modes_.auto_ticks})out.i32(v);
     out.string(modes_.background_effect);out.string(modes_.character_effect);out.boolean(modes_.draw_requested);out.boolean(modes_.auto_mode);out.boolean(modes_.latched_skip);
-    out.u32(timer_origin_);out.u32(wait_counter_);out.u32(wait_value_);out.u32(message_elapsed_);return out.seal("LSCT");
+    out.u32(timer_origin_);out.u32(wait_counter_);out.u32(wait_value_);out.u32(message_elapsed_);out.i32(modes_.adult_mode);return out.seal("LSCT");
 }
 void SceneControls::restore(std::span<const std::uint8_t> bytes){
     auto in=checkpoint::Reader::open("LSCT",bytes);SceneModes next;
     next.time=in.i32();next.background_chroma=in.i32();next.character_chroma=in.i32();next.log_output=in.i32();next.voice_chapter=in.i32();next.voice_offset=in.i32();next.demo_mode=in.i32();next.demo_ticks=in.i32();next.auto_ticks=in.i32();
     next.background_effect=in.string(4096);next.character_effect=in.string(4096);next.draw_requested=in.boolean();next.auto_mode=in.boolean();next.latched_skip=in.boolean();
-    const auto timer=in.u32(),counter=in.u32(),wait=in.u32(),elapsed=in.u32();in.finish();modes_=std::move(next);timer_origin_=timer;wait_counter_=counter;wait_value_=wait;message_elapsed_=elapsed;
+    const auto timer=in.u32(),counter=in.u32(),wait=in.u32(),elapsed=in.u32();next.adult_mode=in.i32();in.finish();modes_=std::move(next);timer_origin_=timer;wait_counter_=counter;wait_value_=wait;message_elapsed_=elapsed;
 }
 }

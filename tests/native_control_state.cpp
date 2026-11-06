@@ -63,6 +63,7 @@ int main(int argc,char** argv){try{
     CHECK(!controls.dispatch(wait)->complete && !controls.dispatch(wait)->complete);skip=true;CHECK(controls.dispatch(wait)->complete);skip=click=false;++cases;
     call(136,{1,2});CHECK(controls.modes().demo_mode==1 && !controls.automatic_advance() && !controls.automatic_advance() && controls.automatic_advance());++cases;
     call(136,{0,0});controls.auto_mode(true,1);CHECK(!controls.automatic_advance() && controls.automatic_advance());controls.latched_skip(true);call(219,{});CHECK(!controls.modes().auto_mode && !controls.modes().latched_skip);++cases;
+    call(221,{1,17});CHECK(controls.modes().adult_mode==1);const auto adult=controls.checkpoint();call(221,{0,0});controls.restore(adult);CHECK(controls.modes().adult_mode==1);++cases;
     call(195,{});now=1250;CHECK(call(204,{})->value->integer()==250);const auto timed=controls.checkpoint();call(195,{});controls.restore(timed);CHECK(call(204,{})->value->integer()==250);++cases;
     auto bad=timed;bad.pop_back();const auto original=controls.checkpoint();rejects([&]{controls.restore(bad);});CHECK(controls.checkpoint()==original);++guards;
     Movie* active{};unsigned recorded{};s::SceneMovie movies([&](auto name,auto flag){CHECK(name=="mv000.pak" && flag==202);auto result=std::make_unique<Movie>();active=result.get();return result;},{},0,[&](auto flag){CHECK(flag==202);++recorded;});

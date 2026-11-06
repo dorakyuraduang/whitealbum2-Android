@@ -14,13 +14,18 @@ public:
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     std::size_t active()const noexcept;
     std::uint64_t played()const noexcept{return played_;}
+    void settings(std::int32_t master,std::int32_t speech,bool mute_adult=false);
+    void adult_mode(bool value)noexcept{adult_mode_=value;}
 private:
-    struct Slot {std::unique_ptr<audio::Voice> voice;std::int32_t volume{},from{},duration{},elapsed{};bool fading{};};
-    std::array<Slot,2> slots_;
+    struct Slot {std::unique_ptr<audio::Voice> voice;std::int32_t volume{},from{},target{},remembered{},duration{},elapsed{};bool fading{},stopping{};};
+    std::array<Slot,4> slots_;
     Factory factory_;
     std::function<std::int32_t()> chapter_,speaker_,offset_;
     std::function<bool()> skip_,advance_;
     std::uint64_t played_{};
+    std::int32_t master_{256},speech_{256};
+    bool mute_adult_{},adult_mode_{};
+    void apply(Slot&);
     Slot& checked(std::int32_t index);
     void stop(Slot& item);
     void play(std::int32_t slot,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop);

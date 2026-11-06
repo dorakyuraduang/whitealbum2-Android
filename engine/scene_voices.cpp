@@ -12,6 +12,10 @@ SceneVoices::~SceneVoices(){for(auto& item:slots_)stop(item);}
 SceneVoices::Slot& SceneVoices::checked(std::int32_t index){if(index<0 || std::size_t(index)>=slots_.size())throw Error("native voice channel out of range");return slots_[std::size_t(index)];}
 void SceneVoices::stop(Slot& item){if(item.voice)item.voice->stop();item={};}
 std::size_t SceneVoices::active()const noexcept{std::size_t count=0;for(const auto& item:slots_)count+=bool(item.voice);return count;}
+void SceneVoices::apply(Slot& item){if(item.voice)item.voice->gain(std::uint8_t(std::clamp(std::int64_t(item.volume)*master_*speech_/65536,std::int64_t(0),std::int64_t(255))));}
+void SceneVoices::settings(std::int32_t master,std::int32_t speech,bool mute_adult){
+    master_=std::clamp(master,0,256);speech_=std::clamp(speech,0,256);mute_adult_=mute_adult;for(auto& item:slots_)apply(item);
+}
 void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop){
     auto& item=checked(channel);if(speaker==-1)speaker=speaker_();if(chapter==-1)chapter=chapter_();
     const auto adjusted=std::int64_t(line)+(offset_?offset_():0);
@@ -19,19 +23,21 @@ void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t ch
     // 0x461400 passes (mode == 0) as the repeat count. Both -1 and 1
     // therefore select continuous playback; scripts use -1 for ambient voice.
     // The original skips ordinary speech while fast-forward is held. A looped
-    // /forced line remains audible, with the same bounded two-slot lifetime.
+    // /forced line remains audible, with the original four bounded channels.
     if(skip_ && skip_() && loop==0){stop(item);return;}
+    if(mute_adult_ && adult_mode_ && speaker==0){stop(item);return;}
     stop(item);auto voice=factory_({speaker,chapter,std::int32_t(adjusted),loop!=0});if(!voice)throw Error("native voice loader returned no voice");
-    item.volume=std::clamp(volume,0,255);voice->gain(std::uint8_t(item.volume));item.voice=std::move(voice);++played_;
+    item.volume=item.from=item.target=item.remembered=std::clamp(volume,0,255);item.voice=std::move(voice);apply(item);++played_;
 }
 void SceneVoices::update(const std::function<std::int32_t(std::int32_t)>& adjust){
     for(auto& item:slots_)if(item.voice){
         if(const auto failure=item.voice->failure();!failure.empty())throw Error("speech playback failed: "+failure);
         if(item.voice->finished()){stop(item);continue;}
         if(!item.fading || !item.voice->ready())continue;
-        const auto duration=adjust?adjust(item.duration):item.duration;
-        if(duration<=0 || ++item.elapsed>=duration){stop(item);continue;}
-        item.volume=std::int32_t(std::int64_t(duration-item.elapsed)*item.from/duration);item.voice->gain(std::uint8_t(item.volume));
+        const auto duration=adjust?adjust(item.duration):item.duration==-1?15:item.duration==-2?30:item.duration;
+        if(duration<=0 || item.elapsed>=duration){item.volume=item.target;item.fading=false;if(item.stopping && !item.target){stop(item);continue;}}
+        else{item.volume=std::int32_t((std::int64_t(duration-item.elapsed)*item.from+std::int64_t(item.elapsed)*item.target)/duration);++item.elapsed;}
+        apply(item);
     }
 }
 std::optional<CommandResult> SceneVoices::dispatch(Command& command){
@@ -45,7 +51,13 @@ std::optional<CommandResult> SceneVoices::dispatch(Command& command){
     case 140:{count(2);const auto& item=checked(v(0));const bool interrupted=v(1)!=0 && ((skip_ && skip_()) || (advance_ && advance_()));
         return CommandResult{!item.voice || interrupted,true,Value{}};}
     // VS(fade, channel), matching the actual 0x454e40 stack order.
-    case 141:{count(2);auto& item=checked(v(1));if(item.voice){if(v(0)<=0)stop(item);else{item.from=item.volume;item.duration=v(0);item.elapsed=0;item.fading=true;}}
+    case 141:{count(2);auto& item=checked(v(1));if(item.voice){if(v(0)==0)stop(item);else{item.from=item.volume;item.target=0;item.duration=v(0);item.elapsed=0;item.fading=item.stopping=true;}}
+        return CommandResult{true,false,Value{}};}
+    // Cached 0x456630 reorders VXV(volume, duration, channel) for 0x406160.
+    // A VS fade locks the channel against further volume changes. VXV(0/1)
+    // lowers its gain without stopping playback or losing the remembered gain.
+    case 235:{count(3);auto& item=checked(v(2));if(!item.stopping){item.from=item.volume;item.target=std::clamp(v(0),0,255);
+            if(v(0)>=2)item.remembered=item.target;item.duration=v(1);item.elapsed=0;item.fading=true;}
         return CommandResult{true,false,Value{}};}
     default:return std::nullopt;
     }

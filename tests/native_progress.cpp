@@ -123,8 +123,11 @@ int main(int argc,char** argv){try{
     const auto time=std::filesystem::last_write_time(root/"Sys.sav");retained.flush();CHECK(std::filesystem::last_write_time(root/"Sys.sav")==time);++io_cases;
     const auto previous=file(root/"Sys.sav");rejects([&]{disk->write(p::Block::flags,sentinel);});CHECK(file(root/"Sys.sav")==previous);++guard_cases;
     file(root/"Sys.sav",sentinel);rejects([&]{p::Store bad(disk);});rejects([&]{disk->write(p::Block::flags,state.block(p::Block::flags));});CHECK(file(root/"Sys.sav")==sentinel);guard_cases+=2;
-    CHECK(std::filesystem::remove(root/"Sys.sav"));std::filesystem::create_hard_link(root/"save_Q.sav",root/"Sys.sav");
-    rejects([&]{p::Store bad(disk);});CHECK(file(root/"save_Q.sav")==sentinel);++guard_cases;
+    // Use a fresh name: Windows may keep a just-deleted file pending while an
+    // external indexer releases it. This still exercises a real hard link.
+    const auto linked=root/"linked-save";CHECK(std::filesystem::create_directory(linked));
+    std::filesystem::create_hard_link(root/"save_Q.sav",linked/"Sys.sav");auto link_disk=wa2::platform::progress_storage(linked);
+    rejects([&]{p::Store bad(link_disk);});CHECK(file(root/"save_Q.sav")==sentinel);++guard_cases;
     std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-progress.v1\",\"format_cases\":"<<format_cases<<",\"flag_cases\":"<<flag_cases
         <<",\"gallery_cases\":"<<gallery_cases<<",\"history_cases\":"<<history_cases<<",\"guard_cases\":"<<guard_cases<<",\"script_calls\":"<<script_calls<<",\"io_cases\":"<<io_cases
         <<",\"flag_write_bytes\":4096,\"serialized_bytes\":2528384,\"failed_writes_retryable\":true,\"original_resources_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";

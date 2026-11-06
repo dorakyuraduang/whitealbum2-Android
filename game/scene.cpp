@@ -71,7 +71,7 @@ script::CommandResult Scene::command(script::Command& call){
     if(call.index==238){if(!call.arguments.empty())throw script::Error("Invalid GetSkip2 parameters");const bool active=controls_.modes().demo_mode?(input_.skip || controls_.modes().latched_skip) && reading_.status(replay_mode_)!=0:skipping();return {true,false,script::Value(std::int32_t(active))};}
     if(call.index==222){if(!call.arguments.empty())throw script::Error("Invalid GetReplayMode parameters");return {true,false,script::Value(std::int32_t(replay_mode_))};}
     if(auto value=builtins_.dispatch(call))return *value;
-    if(auto value=controls_.dispatch(call))return *value;
+    if(auto value=controls_.dispatch(call)){voices_.adult_mode(controls_.modes().adult_mode!=0);return *value;}
     if(auto value=progress_.dispatch(call))return *value;
     if(auto value=choices_.dispatch(call))return *value;
     if(auto value=music_.dispatch(call))return *value;

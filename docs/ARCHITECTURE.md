@@ -59,6 +59,12 @@ checkpoints. The SDL presentation adapter applies the resulting rotation and
 invalidates masked-transition caches when the pose changes. Both toolchains
 compile this adapter; these checks do not exercise a rendering device.
 
+The native speech controller owns the original four bounded channels and handles
+VXV gain fades separately from VS fades that stop and lock a channel. Fades
+retain the source counter order, reserved duration presets and volume mixing.
+EroMode state is checkpointed and supplied to the configurable speech policy.
+Synthetic voices validate these transitions without opening an audio device.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations
