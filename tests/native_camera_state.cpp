@@ -75,6 +75,9 @@ int main(int argc,char** argv){try{
     frame=backgrounds.frame();CHECK(requested=="v000000.tga" && backgrounds.picture() && frame.current->angle==45 && frame.current->pivot_x==640);++cases;
     std::array<s::Value,5> pan{s::Value(30),s::Value(20),s::Value(1),s::Value(0),s::Value(0)};call={210,pan};CHECK(backgrounds.dispatch(call,0)->complete);backgrounds.update();
     CHECK(backgrounds.camera().pose(0).x==668 || backgrounds.camera().pose(1).x==668);++cases;
+    const auto reused=backgrounds.frame().current->image;const auto requests_before=loads;basic[1]=s::Value(-2);call={146,basic};
+    CHECK(!backgrounds.dispatch(call,0)->complete);backgrounds.update();CHECK(backgrounds.dispatch(call,0)->complete && backgrounds.frame().current->image==reused && loads==requests_before);++cases;
+    ext[1]=s::Value(0);ext[4]=s::Value(2);ext[9]=s::Value(0.f);call={225,ext};CHECK(!backgrounds.dispatch(call,0)->complete);backgrounds.update();CHECK(backgrounds.dispatch(call,0)->complete);++cases;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-camera-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"synthetic_only\":true,\"screen_access\":false,\"game_launched\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native camera interpolation, state restore and background parameter conventions.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

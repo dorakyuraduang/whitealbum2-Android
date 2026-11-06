@@ -37,6 +37,7 @@ private:
     Loader event_loader_;
     std::function<void(bool)> changing_;
     std::shared_ptr<image::ImageRequest> request_;
+    std::shared_ptr<const image::Raster> ready_image_;
     std::shared_ptr<image::ImageRequest> mask_request_;
     std::optional<BackgroundFrame::Mask> mask_;
     std::array<std::optional<BackgroundLayer>,2> layers_;

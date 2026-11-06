@@ -58,6 +58,9 @@ zoom, rotation, easing, timed pauses and WSZ completion, with bounded native
 checkpoints. The SDL presentation adapter applies the resulting rotation and
 invalidates masked-transition caches when the pose changes. Both toolchains
 compile this adapter; these checks do not exercise a rendering device.
+The background reuse selector -2 shares the prior immutable raster instead of
+forming a resource filename or decoding it again. Mask shader mode arguments
+are consumed only by masked transitions, as in the cached renderer.
 
 The native speech controller owns the original four bounded channels and handles
 VXV gain fades separately from VS fades that stop and lock a channel. Fades

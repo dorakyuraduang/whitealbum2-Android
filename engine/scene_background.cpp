@@ -16,12 +16,15 @@ void SceneBackground::begin(Command& command,std::int32_t time_mode){
     const auto width=command.arguments[7].real(),height=command.arguments[8].real();
     const auto angle=extended?command.arguments[9].real():0.f;
     if(extended)command.arguments[10].integer();
+    const bool reuse=number==-2 && variant==0;
     const bool masked=effect>=128 && (effect&~0x19ff)==0;
     if(effect!=-1 && effect!=0 && effect!=1 && !masked)throw Unsupported("unimplemented native background effect "+std::to_string(effect));
     const bool event=command.index==148 || command.index==149 || command.index==227 || command.index==228;
-    if(number<0 || number>(event?99999:9999) || variant<0 || variant>9 || time_mode<0 || time_mode>9)
+    if((number<0 && !reuse) || number>(event?99999:9999) || variant<0 || variant>9 || time_mode<0 || time_mode>9)
         throw Unsupported("unimplemented native background image selector");
-    if((!masked && integer(4)!=0) || (masked && (integer(4)<0 || integer(4)>3)) ||
+    // The mode selects a masked-transition shader. Plain dissolves retain but
+    // never consume it; B2 scripts also pass mode 2 with the ordinary effect.
+    if((masked && (integer(4)<0 || integer(4)>3)) ||
        !std::isfinite(width) || !std::isfinite(height) || width<=0 || height<=0 || width>10000 || height>10000 ||
        !std::isfinite(angle) || std::abs(angle)>1.e9f)
         throw Unsupported("unimplemented native background transform");
@@ -30,8 +33,10 @@ void SceneBackground::begin(Command& command,std::int32_t time_mode){
     // compatibility branch in the shared engine belongs to a different title.
     if(event)std::snprintf(name.data(),name.size(),"%c%06d.tga",command.index==148 || command.index==227?'v':'h',int(number*10+variant));
     else std::snprintf(name.data(),name.size(),"B%04d%d%d.tga",int(number),int(variant),int(time_mode));
-    if(event && !event_loader_)throw Unsupported("missing native event-image loader");
-    auto request=(event?event_loader_:loader_)(name.data());if(!request)throw Error("native background loader returned no image request");
+    if(!reuse && event && !event_loader_)throw Unsupported("missing native event-image loader");
+    std::shared_ptr<image::ImageRequest> request;std::shared_ptr<const image::Raster> ready;
+    if(reuse){if(!layers_[current_] || !layers_[current_]->image)throw Error("Cannot reuse a native background before its image is ready");ready=layers_[current_]->image;}
+    else{request=(event?event_loader_:loader_)(name.data());if(!request)throw Error("native background loader returned no image request");}
     std::shared_ptr<image::ImageRequest> mask_request;
     if(masked && integer(3)>0){
         if(!mask_loader_)throw Unsupported("missing native background mask loader");
@@ -40,7 +45,7 @@ void SceneBackground::begin(Command& command,std::int32_t time_mode){
     }
     if(changing_)changing_(command.index==147 || command.index==226);
     picture_=event;
-    request_=std::move(request);current_^=1;layers_[current_].reset();
+    request_=std::move(request);ready_image_=std::move(ready);current_^=1;layers_[current_].reset();
     mask_request_=std::move(mask_request);mask_.reset();mask_mode_=integer(4);
     effect_=effect==-1?1:effect;elapsed_=0;duration_=effect==-1?1:std::max(1,integer(3));
     x_=integer(5);y_=integer(6);width_=width;height_=height;angle_=angle;extended_=extended;loading_=true;active_=true;
@@ -59,7 +64,7 @@ void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& ad
     // before waiting for it; the new background image itself is still needed.
     if(duration<=1){mask_request_.reset();mask_.reset();}
     if(loading_){
-        auto raster=request_->get();if(!raster)return;
+        auto raster=ready_image_?ready_image_:request_->get();if(!raster)return;
         if(mask_request_){auto mask=mask_request_->get();if(!mask)return;
             mask_=BackgroundFrame::Mask{std::move(mask),-1.f,1.f,(effect_&0x800)!=0,(effect_&0x1000)!=0,(effect_&0x100)!=0};
             mask_request_.reset();}
@@ -74,7 +79,7 @@ void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& ad
         pose.angle=angle_==10000?previous.angle:angle_;
         camera_.bind(unsigned(current_),raster->width,raster->height,pose);
         layers_[current_]=BackgroundLayer{std::move(raster),0,0,width,height,0};
-        request_.reset();loading_=false;
+        request_.reset();ready_image_.reset();loading_=false;
     }
     if(!active_)return;
     if(++elapsed_>=duration){layers_[current_]->opacity=255;layers_[current_^1].reset();mask_.reset();active_=false;return;}
