@@ -1,5 +1,6 @@
 #pragma once
 #include "raster_image.hpp"
+#include "image_colours.hpp"
 #include "resource_archive.hpp"
 #include <functional>
 #include <memory>
@@ -23,6 +24,6 @@ public:
     ~ImageStore();
     ImageStore(const ImageStore&)=delete;
     ImageStore& operator=(const ImageStore&)=delete;
-    std::shared_ptr<ImageRequest> request(std::string_view name);
+    std::shared_ptr<ImageRequest> request(std::string_view name,ImageStyle style={});
 };
 }

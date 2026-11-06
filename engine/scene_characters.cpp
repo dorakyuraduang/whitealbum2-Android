@@ -34,7 +34,8 @@ void SceneCharacters::set(std::int32_t id,std::int32_t number,const Value& posit
     if(!item){for(auto& candidate:slots_)if(candidate.id==-1){item=&candidate;break;}}
     if(!item)throw Error("more than eight active native characters");
     Pose target{nullptr,number,layer,std::clamp(short_integer(alpha),0,255),brightness,offset};
-    const bool same_image=item->id==id && item->current.number==number;
+    target.style_generation=style_generation_;
+    const bool same_image=item->id==id && item->current.number==number && item->current.style_generation==style_generation_;
     if(same_image){target.image=item->current.image;if(target==item->current && !item->retiring)return;}
     std::shared_ptr<image::ImageRequest> request;
     if(!same_image){std::array<char,32> name{};std::snprintf(name.data(),name.size(),"%s%06d.tga",character_prefixes[id].data(),int(number));
@@ -80,7 +81,7 @@ std::span<const image::Sprite> SceneCharacters::sprites(){
         const auto t=item.changing?item.progress:1.f;
         const auto progress=item.removing?1-t:t;const auto ease=1-(1-progress)*(1-progress);
         const auto centre=[](const Pose& pose){return pose.image?float((1280-int(pose.image->width))/2)+pose.position:0.f;};
-        const bool replacement=bool(item.previous.image) && item.previous.number!=item.current.number;
+        const bool replacement=bool(item.previous.image) && (item.previous.number!=item.current.number || item.previous.style_generation!=item.current.style_generation);
         auto append=[&](const Pose& pose,bool previous){if(!pose.image)return;
             float x=centre(pose),y=float(720-int(pose.image->height)),scale=1,alpha=float(pose.alpha);
             if(previous)alpha*=1-t;

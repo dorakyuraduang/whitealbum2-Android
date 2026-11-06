@@ -24,10 +24,10 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     },[this]{return dialogue_.speaker();},[this]{return controls_.modes().voice_offset;},[this]{return skipping();},[this]{return input_.advance;}),
     weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto name){return image::Animation::parse(resources_.data("grp",name));}),
     shake_([this]{return random_.next();}),
-    backgrounds_([this](auto name){return resources_.image("bak",name);},[this](bool keep_characters){bitmaps_.clear_retired();characters_.clear_retired();background_changing_=true;preserve_characters_=keep_characters;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
-        [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name);}),
+    backgrounds_([this](auto name){return resources_.image("bak",name,controls_.modes().background_chroma,controls_.modes().background_effect);},[this](bool keep_characters){bitmaps_.clear_retired();characters_.clear_retired();background_changing_=true;preserve_characters_=keep_characters;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
+        [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name,controls_.modes().background_chroma,controls_.modes().background_effect);}),
     bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);},[this](auto name,auto group){return image::Animation::parse(resources_.data(group,name));}),
-    characters_([this](auto name){return resources_.image("char",name);}),
+    characters_([this](auto name){return resources_.image("char",name,controls_.modes().character_chroma,controls_.modes().character_effect);}),
     dialogue_(fonts_,[this](auto name){return resources_.image("grp",name);},[this](auto line){
         reading_.seen(session_.active()?session_.active()->program().name():statistics_.scene,line);controls_.reset_message_timer();++statistics_.messages;}),
     movies_([this](auto name,auto){auto player=std::make_unique<movie::Player>(resources_.movie(name),mixer_);player->gain(1);return player;},{},0,[this](auto id){
@@ -73,6 +73,8 @@ script::CommandResult Scene::command(script::Command& call){
     if(call.index==238){if(!call.arguments.empty())throw script::Error("Invalid GetSkip2 parameters");const bool active=controls_.modes().demo_mode?(input_.skip || controls_.modes().latched_skip) && reading_.status(replay_mode_)!=0:skipping();return {true,false,script::Value(std::int32_t(active))};}
     if(call.index==222){if(!call.arguments.empty())throw script::Error("Invalid GetReplayMode parameters");return {true,false,script::Value(std::int32_t(replay_mode_))};}
     if(auto value=builtins_.dispatch(call))return *value;
+    if(call.index==171 || call.index==172){const auto chroma=controls_.modes().character_chroma;const auto effect=controls_.modes().character_effect;
+        auto value=controls_.dispatch(call);if(chroma!=controls_.modes().character_chroma || effect!=controls_.modes().character_effect)characters_.invalidate_image_style();return *value;}
     if(auto value=controls_.dispatch(call)){voices_.adult_mode(controls_.modes().adult_mode!=0);return *value;}
     if(auto value=progress_.dispatch(call))return *value;
     if(auto value=choices_.dispatch(call))return *value;

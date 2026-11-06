@@ -41,9 +41,19 @@ Catalog::Found Catalog::find(std::string_view group,std::string_view name){
     }
     throw Error("missing original resource "+std::string(name)+" in "+pack+"/IC");
 }
-std::shared_ptr<image::ImageRequest> Catalog::image(std::string_view group,std::string_view name){
+std::shared_ptr<image::ImageRequest> Catalog::image(std::string_view group,std::string_view name,std::int32_t chroma,std::string_view colour_map){
+    image::ImageStyle style{chroma};image::validate_image_style(style);
+    if(!colour_map.empty()){
+        filename(colour_map);std::string folded(colour_map);for(auto& ch:folded)if(ch>='A' && ch<='Z')ch+=32;
+        // The image loader resolves AMP effects through its default grp bank,
+        // independently of whether the image itself belongs to bak or char.
+        const auto key=std::pair{std::string("grp"),std::move(folded)};
+        if(const auto found=colours_.find(key);found!=colours_.end())style.colours=found->second.lock();
+        if(!style.colours){const auto selected=find("grp",colour_map);style.colours=std::make_shared<const image::ColourMap>(image::parse_colour_map(selected.bank->archive->load(selected.member,1280)));
+            std::erase_if(colours_,[](const auto& item){return item.second.expired();});colours_[key]=style.colours;}
+    }
     auto selected=find(group,name);if(!selected.bank->images)selected.bank->images=std::make_unique<image::ImageStore>(*selected.bank->archive);
-    return selected.bank->images->request(selected.bank->archive->members()[selected.member].name);
+    return selected.bank->images->request(selected.bank->archive->members()[selected.member].name,std::move(style));
 }
 std::shared_ptr<Source> Catalog::stream(std::string_view group,std::string_view name){const auto selected=find(group,name);return selected.bank->archive->open_member(selected.member);}
 std::vector<std::uint8_t> Catalog::data(std::string_view group,std::string_view name){const auto selected=find(group,name);return selected.bank->archive->load(selected.member);}

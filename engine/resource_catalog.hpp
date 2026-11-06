@@ -11,6 +11,7 @@ class Catalog {
     BankOpener opener_;
     std::map<std::string,Bank,std::less<>> banks_;
     std::map<std::string,std::shared_ptr<Source>,std::less<>> movies_;
+    std::map<std::pair<std::string,std::string>,std::weak_ptr<const image::ColourMap>> colours_;
     Bank& bank(std::string_view path);
     struct Found {Bank* bank;std::size_t member;};
     Found find(std::string_view group,std::string_view name);
@@ -18,7 +19,7 @@ public:
     explicit Catalog(BankOpener opener);
     const Archive& required(std::string_view group);
     const Archive* optional(std::string_view group,bool introductory=false);
-    std::shared_ptr<image::ImageRequest> image(std::string_view group,std::string_view name);
+    std::shared_ptr<image::ImageRequest> image(std::string_view group,std::string_view name,std::int32_t chroma=256,std::string_view colour_map={});
     std::shared_ptr<Source> stream(std::string_view group,std::string_view name);
     std::vector<std::uint8_t> data(std::string_view group,std::string_view name);
     std::shared_ptr<Source> movie(std::string_view filename);

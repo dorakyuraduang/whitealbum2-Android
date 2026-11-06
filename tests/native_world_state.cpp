@@ -26,13 +26,15 @@ int main(int argc,char** argv){try{
     for(auto world:{i::SpriteWorld::both,i::SpriteWorld::previous,i::SpriteWorld::current}){
         CHECK(i::in_world(world,true)==(world!=i::SpriteWorld::current) && i::in_world(world,false)==(world!=i::SpriteWorld::previous));++cases;
     }
-    s::SceneCharacters characters([&](auto){return request;});
+    unsigned character_loads{};s::SceneCharacters characters([&](auto){++character_loads;return request;});
     CHECK(!invoke(characters,155,{s::Value(10),s::Value(1111),s::Value(1),s::Value(0),s::Value(255),s::Value(128)}).complete);characters.update();
     CHECK(characters.sprites().size()==1 && characters.sprites()[0].world==i::SpriteWorld::both);const auto old_x=characters.sprites()[0].x;++cases;
     characters.retire_background();CHECK(characters.sprites().size()==1 && characters.sprites()[0].world==i::SpriteWorld::previous);++cases;
     CHECK(invoke(characters,155,{s::Value(10),s::Value(1111),s::Value(80.f),s::Value(0),s::Value(255),s::Value(128)}).complete);characters.update();
     auto layers=characters.sprites();CHECK(characters.count()==1 && layers.size()==2 && layers[0].x==old_x && layers[1].x==old_x+80 && layers[0].world==i::SpriteWorld::previous && layers[1].world==i::SpriteWorld::both && layers[0].order==layers[1].order);++cases;
     characters.clear_retired();CHECK(characters.sprites().size()==1 && characters.sprites()[0].x==old_x+80);++cases;
+    const auto loads_before=character_loads;characters.invalidate_image_style();CHECK(!invoke(characters,155,{s::Value(10),s::Value(1111),s::Value(80.f),s::Value(0),s::Value(255),s::Value(128)}).complete);
+    characters.update();CHECK(character_loads==loads_before+1 && characters.count()==1);++cases;
     // Reasserting an identical character still transfers it to the new world.
     characters.retire_background();invoke(characters,155,{s::Value(10),s::Value(1111),s::Value(80.f),s::Value(0),s::Value(255),s::Value(128)});characters.update();
     CHECK(characters.sprites().size()==2);characters.clear_retired();CHECK(characters.count()==1);++cases;

@@ -16,12 +16,14 @@ public:
     void clear();
     void retire_background();
     void clear_retired();
+    void invalidate_image_style(){if(style_generation_==std::uint64_t(-1))throw Error("Native character style generation exhausted");++style_generation_;}
     std::size_t count()const noexcept;
 private:
     struct Pose {
         std::shared_ptr<const image::Raster> image;
         std::int32_t number{},layer{},alpha{255},brightness{128};
         float position{};
+        std::uint64_t style_generation{};
         bool operator==(const Pose&)const=default;
     };
     struct Slot {
@@ -34,6 +36,7 @@ private:
     Loader loader_;
     std::array<Slot,8> slots_;
     std::vector<Slot> retired_;
+    std::uint64_t style_generation_{};
     std::vector<image::Sprite> sprites_;
     Slot* find(std::int32_t id);
     const Slot* find(std::int32_t id)const;

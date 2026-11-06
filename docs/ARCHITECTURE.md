@@ -145,6 +145,18 @@ are reused, while participating live sprites invalidate their bank. Optional
 software-reference checks use only constructed solid-colour layers and owned
 memory pixels. They do not verify original whole-scene pixels or frame rates.
 
+SetChromaMode/SetEffctMode now affect subsequent native background/CG/character
+loads. Chroma uses the original integer luminance coefficients, separate
+truncations and distinct 0/255/256 behavior; alpha is preserved. AMP colour maps
+support the original 256/768/1280-byte formats, including composed channel
+lookups. Shared image workers apply the style once before upload. Request and
+decoded-image cache keys include the style so grey, normal and tinted variants
+cannot alias or mutate each other. AMP maps resolve from the default grp bank,
+with existing patch/root/IC precedence. Character style changes invalidate
+same-filename reuse for subsequent character commands. Static resource checks
+parse the main-story negative/sepia maps; only constructed pixels are converted
+by tests. Native backdrop/audio settings and full application UI remain pending.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations

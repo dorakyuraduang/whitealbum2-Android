@@ -35,6 +35,9 @@ decoding or presenting their pixels.
 The same audit validates original INAS animation structure and texture-crop
 bounds without advancing its sequences. Animation clock/loop/checkpoint tests
 use constructed containers only.
+The same static audit parses the two main-story AMP colour-map containers.
+Colour conversion, alpha preservation and style-specific cache checks operate
+on synthetic pixels and synthetic in-memory archives only.
 
 Camera/background checks cover interrupted pans, easing, both camera banks,
 timed pauses, skip completion, checkpoint continuation, pixel/scale command

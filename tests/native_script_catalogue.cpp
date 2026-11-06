@@ -4,6 +4,7 @@
 #include "file_io.hpp"
 #include "resource_catalog.hpp"
 #include "sprite_animation.hpp"
+#include "image_colours.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -38,7 +39,8 @@ int main(int argc,char** argv){try{
         std::cout<<names[n]<<' '<<header.width<<'x'<<header.height<<'\n';
         if(header.width<width || header.height<height)throw std::runtime_error("Original calendar atlas crop exceeds image dimensions: "+std::string(names[n]));++calendar_atlases;
     }
-    unsigned animations{},animation_frames{};
+    unsigned animations{},animation_frames{},colour_maps{};
+    for(const auto name:{"nega.amp","sepia.amp"}){const auto bytes=resources.data("grp",name);wa2::image::parse_colour_map(bytes);++colour_maps;}
     for(unsigned n=0;n<3;++n){constexpr std::string_view names[]{"sakura1_2.tga","sakura2.tga","sakura3.tga"};constexpr unsigned cell[]{128,32,16};
         const auto header=wa2::image::inspect_game_tga(resources.data("grp",names[n]));if(header.width<12*cell[n] || header.height<2*cell[n])throw std::runtime_error("Original sakura atlas crop exceeds image dimensions");}
     for(bool introductory:{false,true})if(const auto* bank=resources.optional("grp",introductory))for(const auto& member:bank->members())if(member.name.ends_with(".ani")){
@@ -49,7 +51,7 @@ int main(int argc,char** argv){try{
     }
     std::ofstream report(argv[2]);report<<"{\"schema\":\"wa2.native-script-catalogue.v1\",\"scenes\":"<<scenes<<",\"labels\":"<<labels<<",\"command_sites\":"<<calls<<",\"command_indices\":[";
     bool first=true;for(auto id:commands){if(!first)report<<',';first=false;report<<id;}
-    report<<"],\"calendar_atlas_headers\":"<<calendar_atlases<<",\"sprite_animations\":"<<animations<<",\"animation_frames\":"<<animation_frames<<",\"animation_sequences_executed\":false,\"resource_metadata_and_script_data_only\":true,\"script_executed\":false,\"source_executable_opened\":false,\"screen_access\":false,\"game_launched\":false,\"whole_game_verified\":false,\"passed\":true}\n";
+    report<<"],\"calendar_atlas_headers\":"<<calendar_atlases<<",\"sprite_animations\":"<<animations<<",\"animation_frames\":"<<animation_frames<<",\"colour_maps_parsed\":"<<colour_maps<<",\"animation_sequences_executed\":false,\"resource_metadata_and_script_data_only\":true,\"script_executed\":false,\"source_executable_opened\":false,\"screen_access\":false,\"game_launched\":false,\"whole_game_verified\":false,\"passed\":true}\n";
     report.close();if(!report)throw std::runtime_error("Cannot write original script structure report");
     std::cout<<"PASS static resource script structure: "<<scenes<<" scripts, "<<labels<<" labels, "<<calls<<" command sites; no gameplay executed.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

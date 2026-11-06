@@ -5,6 +5,7 @@
 #include <map>
 #include <mutex>
 #include <thread>
+#include <tuple>
 
 namespace wa2::image {
 struct ImageRequest::State {
@@ -12,6 +13,7 @@ struct ImageRequest::State {
     std::shared_ptr<const Raster> image;
     std::string error;
     std::size_t member{};
+    ImageStyle style;
 };
 ImageRequest::ImageRequest(std::shared_ptr<State> state):state_(std::move(state)){}
 std::shared_ptr<const Raster> ImageRequest::get()const{
@@ -22,8 +24,9 @@ struct ImageStore::Impl {
     std::mutex mutex;
     std::condition_variable wake;
     std::deque<std::shared_ptr<ImageRequest::State>> pending;
-    std::map<std::size_t,std::weak_ptr<ImageRequest>> cache;
-    std::map<std::size_t,std::weak_ptr<const Raster>> decoded;
+    using Key=std::tuple<std::size_t,std::int32_t,std::shared_ptr<const ColourMap>>;
+    std::map<Key,std::weak_ptr<ImageRequest>> cache;
+    std::map<Key,std::weak_ptr<const Raster>> decoded;
     bool stop{};
     std::thread worker;
     Impl(resource::Archive value,std::function<void()> initialize):archive(std::move(value)){
@@ -41,11 +44,11 @@ struct ImageStore::Impl {
                 try{
                     if(!initialization_error.empty())throw Error(initialization_error);
                     auto source=archive.load(request->member);
-                    result=std::make_shared<const Raster>(source.size()>=2 && source[0]=='B' && source[1]=='M'
-                        ?decode_game_bmp(source):decode_game_tga(source));
+                    auto pixels=source.size()>=2 && source[0]=='B' && source[1]=='M'?decode_game_bmp(source):decode_game_tga(source);
+                    apply_image_style(pixels,request->style);result=std::make_shared<const Raster>(std::move(pixels));
                 }catch(const std::exception& failure){error=failure.what();}
                 catch(...){error="native image loading failed";}
-                if(result){std::lock_guard lock(mutex);decoded[request->member]=result;}
+                if(result){std::lock_guard lock(mutex);decoded[{request->member,request->style.chroma,request->style.colours}]=result;}
                 std::lock_guard lock(request->mutex);request->image=std::move(result);request->error=std::move(error);
             }
         });
@@ -60,18 +63,20 @@ struct ImageStore::Impl {
 ImageStore::ImageStore(resource::Archive archive,std::function<void()> initialize)
     :impl_(std::make_unique<Impl>(std::move(archive),std::move(initialize))){}
 ImageStore::~ImageStore()=default;
-std::shared_ptr<ImageRequest> ImageStore::request(std::string_view name){
+std::shared_ptr<ImageRequest> ImageStore::request(std::string_view name,ImageStyle style){
+    validate_image_style(style);
     auto& self=*impl_;const auto index=self.archive.find(name);
     if(index==resource::Archive::missing)throw Error("missing image resource "+std::string(name));
     std::lock_guard lock(self.mutex);
-    if(const auto found=self.cache.find(index);found!=self.cache.end())if(auto request=found->second.lock())return request;
-    auto state=std::make_shared<ImageRequest::State>();state->member=index;
-    if(const auto found=self.decoded.find(index);found!=self.decoded.end())state->image=found->second.lock();
+    const Impl::Key key{index,style.chroma,style.colours};
+    if(const auto found=self.cache.find(key);found!=self.cache.end())if(auto request=found->second.lock())return request;
+    auto state=std::make_shared<ImageRequest::State>();state->member=index;state->style=std::move(style);
+    if(const auto found=self.decoded.find(key);found!=self.decoded.end())state->image=found->second.lock();
     if(!state->image && self.pending.size()>=8)throw Error("native image loading queue is full");
     auto request=std::shared_ptr<ImageRequest>(new ImageRequest(state));
     std::erase_if(self.cache,[](const auto& item){return item.second.expired();});
     std::erase_if(self.decoded,[](const auto& item){return item.second.expired();});
-    self.cache[index]=request;
+    self.cache[key]=request;
     if(!state->image){self.pending.push_back(std::move(state));self.wake.notify_one();}
     return request;
 }
