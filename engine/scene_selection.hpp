@@ -10,6 +10,7 @@ struct SelectionSettings {
     text::Colour normal{255,255,255},highlight{255,247,153},disabled{160,160,160};
 };
 struct SelectionInput {bool pointer{},activate{},confirm{};float x{},y{};std::int32_t navigation{};};
+enum class SelectionSound {focus,accept,reject};
 struct SelectionRow {std::uint32_t ordinal{};float y{};bool enabled{},chosen{};};
 // Shared original selection layout and focus/input state. Platform input must
 // already be expressed in the game's logical 1280x720 coordinate space.
@@ -17,7 +18,8 @@ class SceneSelection {
 public:
     using Loader=std::function<std::shared_ptr<image::ImageRequest>(std::string_view)>;
     using Text=std::function<text::PreparedText(std::string_view)>;
-    SceneSelection(Loader,Text);
+    using Sound=std::function<void(SelectionSound)>;
+    SceneSelection(Loader,Text,Sound sound={});
     void settings(SelectionSettings);
     void replay_mode(bool value)noexcept{settings_.replay=value;}
     void sync(const SceneChoices&);
@@ -30,7 +32,7 @@ public:
     bool loading()const noexcept{return active_ && (!images_[0] || (needs_marker_ && !images_[1]));}
     std::uint8_t opacity()const noexcept{return opacity_;}
 private:
-    Loader loader_;Text text_;
+    Loader loader_;Text text_;Sound sound_;
     SelectionSettings settings_;
     std::optional<std::uint64_t> generation_;
     const SceneChoices* owner_{};

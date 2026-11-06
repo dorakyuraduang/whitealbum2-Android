@@ -182,9 +182,11 @@ hidden/disabled rows, supports pointer focus and keyboard navigation, and gates
 activation during the original 30-tick fade. Labels use prepared native font
 atlases with foreground tint separate from their shadows. Input/layout tests
 use synthetic atlases and stub text preparation; real selection atlas checks
-read headers only. An unchosen replay-mode option requests the still-unsupported
-history panel explicitly instead of changing the story branch. Device rendering,
-sound cues and that panel's integration remain unverified/incomplete.
+read headers only. Visible unavailable/replay-unchosen options can receive focus;
+activation retains the selection and emits the original rejection cue. Hover,
+confirmation and rejection use system effects 9211/9212/9214. Their typed events
+and blocked selections are checked without opening an audio device. Actual
+rendering and sound synchronization remain unverified.
 
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
@@ -195,7 +197,7 @@ both profiles. A software reference still checks owned-memory pixel equations.
 No actual GL context, window or hardware rendering is exercised by these checks.
 
 The native story engine remains incomplete: the full title/option UI,
-choice-history/backlog integration, full scene snapshots and restore, lifecycle integration and
+backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations
 or integration. Reading-history APIs exist but are not yet connected to every
 dialogue transition. No whole-game or device/performance claim follows from

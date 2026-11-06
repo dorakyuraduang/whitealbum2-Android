@@ -26,7 +26,7 @@ s::CommandResult invoke(s::SceneChoices& choices,unsigned id,std::initializer_li
 void entry(s::SceneChoices& choices,const char* text,int flag=0,int expected=0,bool disabled=false){invoke(choices,208,{s::Value(std::string(text)),s::Value(flag),s::Value(expected),s::Value(int(disabled))});}
 int main(int argc,char** argv){try{
     CHECK(argc==2);unsigned cases{},guards{},prepared{};i::ImageStore images(fixture());auto progress=std::make_shared<p::Store>(std::make_shared<Storage>());progress->state().set_flag(992,1);
-    s::SceneChoices choices(progress,[]{return "1001";});s::SceneSelection view([&](auto name){return images.request(name);},[&](auto raw){CHECK(!raw.empty());++prepared;return wa2::text::PreparedText{};});
+    std::array<unsigned,3> sounds{};s::SceneChoices choices(progress,[]{return "1001";});s::SceneSelection view([&](auto name){return images.request(name);},[&](auto raw){CHECK(!raw.empty());++prepared;return wa2::text::PreparedText{};},[&](auto sound){++sounds[unsigned(sound)];});
     entry(choices,"first");entry(choices,"hidden",1,1);entry(choices,"disabled",2,1,true);entry(choices,"last");invoke(choices,209,{s::Value(0)});view.sync(choices);
     CHECK(view.rows().size()==3 && view.rows()[0].ordinal==0 && view.rows()[1].ordinal==2 && view.rows()[2].ordinal==3 && view.rows()[0].chosen && !view.ready());++cases;
     CHECK(view.rows()[0].y==208 && view.rows()[1].y==292 && view.rows()[2].y==376 && !view.rows()[1].enabled);++cases;
@@ -36,14 +36,16 @@ int main(int argc,char** argv){try{
     for(unsigned tick=2;tick<=30;++tick){view.update();CHECK(view.opacity()==(tick==30?255:tick*255/30) && view.ready()==(tick==30));}++cases;
     const auto count=prepared;view.sync(choices);view.sync(choices);CHECK(prepared==count);++cases;
     auto sprites=view.sprites();CHECK(sprites.size()==7 && sprites[0].x==248 && sprites[0].y==194 && sprites[0].source_y==144 && sprites[0].blend==i::SpriteBlend::add && sprites[1].source_y==0 && sprites.back().x==328 && sprites.back().source_x==208 && sprites.back().layer==0x1058);++cases;
-    CHECK(!view.input({true,false,false,400,300,0}) && !view.focused());CHECK(!view.input({true,false,false,248,220,0}) && !view.focused());++cases;
+    CHECK(!view.input({true,false,false,400,300,0}) && view.focused()==2 && sounds[0]==0);CHECK(!view.input({true,false,false,248,220,0}) && !view.focused());++cases;
     CHECK(view.input({true,true,false,400,390,0})==3 && view.focused()==3);++cases;
     sprites=view.sprites();CHECK(sprites.size()==8);++cases;
-    CHECK(!view.input({false,false,false,0,0,1}) && view.focused()==0);CHECK(!view.input({false,false,false,0,0,1}) && view.focused()==3);++cases;
+    CHECK(!view.input({false,false,false,0,0,1}) && view.focused()==0);CHECK(!view.input({false,false,false,0,0,1}) && view.focused()==2);CHECK(!view.input({false,false,false,0,0,1}) && view.focused()==3);++cases;
+    CHECK(!view.input({false,false,false,0,0,-1}) && view.focused()==2 && !view.input({false,false,true,0,0,0}) && sounds[2]==1);
     CHECK(!view.input({false,false,false,0,0,-1}) && view.focused()==0 && view.input({false,false,true,0,0,0})==0);++cases;
-    view.replay_mode(true);CHECK(view.input({true,true,false,400,220,0})==0);rejects([&]{view.input({true,true,false,400,390,0});});++guards;view.replay_mode(false);++cases;
+    view.replay_mode(true);CHECK(view.input({true,true,false,400,220,0})==0);CHECK(!view.input({true,true,false,400,390,0}) && sounds[2]==2 && choices.active());view.replay_mode(false);++cases;
     const auto before=view.rows().size();rejects([&]{view.input({true,false,false,std::numeric_limits<float>::quiet_NaN(),0,0});});rejects([&]{view.input({false,false,false,0,0,2});});CHECK(view.rows().size()==before);guards+=2;
     s::SelectionSettings bad;bad.skin=10;rejects([&]{view.settings(bad);});++guards;
+    rejects([&]{s::SceneSelection missing({},[](auto){return wa2::text::PreparedText{};});});++guards;
     choices.choose(*view.input({true,true,false,400,390,0}));CHECK((progress->state().flag(992)&9)==9);view.sync(choices);CHECK(view.rows().empty() && view.sprites().empty() && !view.ready());++cases;
     for(unsigned n:{1u,2u,8u}){s::SceneChoices separate(progress,[]{return "1001";});for(unsigned row=0;row<n;++row)entry(separate,"fixture");invoke(separate,209,{s::Value(0)});view.sync(separate);
         CHECK(view.rows().size()==n && view.rows().front().y==334-int(n)*42 && view.rows().back().y==334-int(n)*42+int(n-1)*84);

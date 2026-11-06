@@ -13,7 +13,8 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();},[this]{return reading_.status(replay_mode_);}),
     progress_(progress_store_),
     choices_(progress_store_,[this]()->std::string_view{return session_.active()?session_.active()->program().name():statistics_.scene;}),
-    selection_([this](auto name){return resources_.image("grp",name);},[this](auto raw){text::TextStyle style;style.rows=1;style.columns=34;style.line_gap=0;style.shadow={33,46,56};return fonts_.prepare(text::layout(raw,style));}),
+    selection_([this](auto name){return resources_.image("grp",name);},[this](auto raw){text::TextStyle style;style.rows=1;style.columns=34;style.line_gap=0;style.shadow={33,46,56};return fonts_.prepare(text::layout(raw,style));},
+        [this](auto sound){effects_.once(sound==script::SelectionSound::focus?9211:sound==script::SelectionSound::accept?9212:9214,255);}),
     calendar_([this](auto name){return resources_.image("grp",name);},[this]{for(const auto& variable:library_.globals().variables())if(variable.name=="FLG_00")return variable.value.integer();throw script::Error("Missing calendar theme global FLG_00");}),
     music_([this](auto id,bool loop){return music(id,loop);},[this](auto id){
         if(!progress_store_)throw script::Error("Missing native music progress storage");progress_store_->state().set_flag(std::uint32_t(100+id),1);progress_store_->flush();}),
@@ -107,7 +108,7 @@ script::CommandResult Scene::command(script::Command& call){
 }
 script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     if(title_requested_)return script::RunState::stopped;
-    selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))throw script::Unsupported("Native replay choice history panel is not implemented");choices_.choose(std::uint32_t(input.choice));}
+    selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))effects_.once(9214,255);else choices_.choose(std::uint32_t(input.choice));}
     else if(auto selected=selection_.input(input.selection))choices_.choose(*selected);
     input_=input;milliseconds_=std::uint32_t(std::uint64_t(monotonic_us)/1000);++statistics_.ticks;
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}
