@@ -60,9 +60,11 @@ add_executable(wa2_native_selection_state_tests "${WA2_ROOT}/tests/native_select
 target_link_libraries(wa2_native_selection_state_tests PRIVATE wa2_script)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
-add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp")
-target_include_directories(wa2_native_presentation_check PRIVATE "${WA2_ROOT}/platform")
+add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
+target_include_directories(wa2_native_presentation_check PRIVATE "${WA2_ROOT}/platform" "${WA2_ROOT}/tools/SDL-release-2.32.10/include")
 target_link_libraries(wa2_native_presentation_check PRIVATE wa2_script)
+add_executable(wa2_native_mask_source_tests "${WA2_ROOT}/tests/native_mask_sources.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
+target_include_directories(wa2_native_mask_source_tests PRIVATE "${WA2_ROOT}/platform")
 # Optional bounded memory-only renderer checks reuse an existing SDL archive.
 # No device test or source SDL build is started implicitly by this root.
 set(WA2_NATIVE_SDL_ARCHIVE "" CACHE FILEPATH "Existing Windows SDL2 archive for owned-memory composition checks")
@@ -73,7 +75,7 @@ if(WIN32 AND WA2_NATIVE_SDL_ARCHIVE)
     add_library(wa2_native_memory_sdl STATIC IMPORTED)
     set_target_properties(wa2_native_memory_sdl PROPERTIES IMPORTED_LOCATION "${WA2_NATIVE_SDL_ARCHIVE}")
     add_executable(wa2_native_scene_composition_tests "${WA2_ROOT}/tests/native_scene_composition.cpp"
-        "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp")
+        "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
     target_include_directories(wa2_native_scene_composition_tests PRIVATE "${WA2_ROOT}/platform" "${WA2_ROOT}/tools/SDL-release-2.32.10/include")
     target_link_libraries(wa2_native_scene_composition_tests PRIVATE wa2_script wa2_native_memory_sdl
         comctl32 comdlg32 setupapi winmm imm32 version ole32 oleaut32 uuid advapi32 user32 gdi32 shell32 kernel32 ws2_32 bcrypt ntdll)

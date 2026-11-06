@@ -51,6 +51,11 @@ and checks pixels and retired-image lifetime; no window, screen, PAK artwork,
 game scene or timing/pressure loop is involved. The SDL archive, test executable
 and actual native link graph are bound into the verification report. This
 does not verify GLES output or device performance.
+The verifier also compiles/links both native mask-shader profiles offline using
+the local glslang binary. `--shader-compiler` can select another installed
+glslang executable. This creates shader text in the build directory and no GL
+context. The common canvas/mask adapter sources compile on x64 and ARM64;
+actual desktop/GLES rendering remains unverified under the development limits.
 
 ## Public source boundary
 

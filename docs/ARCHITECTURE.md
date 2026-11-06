@@ -186,6 +186,14 @@ read headers only. An unchosen replay-mode option requests the still-unsupported
 history panel explicitly instead of changing the story branch. Device rendering,
 sound cues and that panel's integration remain unverified/incomplete.
 
+The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
+one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
+precision declarations. This makes native mask transitions available through
+the desktop GL renderer as well. The scene, canvas and mask adapters compile
+on both toolchains; generated shader pairs are compiled/linked offline for
+both profiles. A software reference still checks owned-memory pixel equations.
+No actual GL context, window or hardware rendering is exercised by these checks.
+
 The native story engine remains incomplete: the full title/option UI,
 choice-history/backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations

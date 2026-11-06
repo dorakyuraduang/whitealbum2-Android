@@ -1,4 +1,5 @@
 #include "sdl_mask.hpp"
+#include "mask_shaders.hpp"
 #include <SDL.h>
 #define SDL_USE_BUILTIN_OPENGL_DEFINITIONS
 #include <SDL_opengles2.h>
@@ -50,8 +51,8 @@ struct SdlMaskProgram::Impl {
     GLuint program{},buffer{};
     GLint image_uniform{},mask_uniform{},bias_uniform{},gain_uniform{},flags_uniform{},target_uniform{};
 
-    Impl(){
-#define LOAD(name) name=reinterpret_cast<decltype(name)>(SDL_GL_GetProcAddress(#name));if(!name)throw std::runtime_error("Missing GLES2 function " #name)
+    explicit Impl(bool embedded){
+#define LOAD(name) name=reinterpret_cast<decltype(name)>(SDL_GL_GetProcAddress(#name));if(!name)throw std::runtime_error("Missing native GL function " #name)
         LOAD(glCreateShader);LOAD(glShaderSource);LOAD(glCompileShader);LOAD(glGetShaderiv);LOAD(glGetShaderInfoLog);LOAD(glDeleteShader);
         LOAD(glCreateProgram);LOAD(glAttachShader);LOAD(glBindAttribLocation);LOAD(glLinkProgram);LOAD(glGetProgramiv);LOAD(glGetProgramInfoLog);
         LOAD(glDeleteProgram);LOAD(glGetUniformLocation);LOAD(glUseProgram);LOAD(glUniform1i);LOAD(glUniform1f);LOAD(glUniform3f);
@@ -60,19 +61,11 @@ struct SdlMaskProgram::Impl {
         LOAD(glActiveTexture);LOAD(glBindTexture);LOAD(glIsEnabled);LOAD(glEnable);LOAD(glDisable);LOAD(glBlendEquationSeparate);
         LOAD(glBlendFuncSeparate);LOAD(glDrawArrays);
 #undef LOAD
-        context=SDL_GL_GetCurrentContext();if(!context)throw std::runtime_error("Native mask shader requires a GLES2 context");
-        constexpr const char* vertex=
-            "attribute vec2 position;attribute vec2 texcoord;varying vec2 uv;uniform float target;"
-            "void main(){uv=texcoord;gl_Position=vec4(position.x,position.y*target,0.0,1.0);}";
-        constexpr const char* fragment=
-            "precision highp float;varying vec2 uv;uniform sampler2D image;uniform sampler2D mask;"
-            "uniform float bias;uniform float gain;uniform vec3 flags;"
-            "void main(){vec2 m=mix(uv,vec2(1.0)-uv,flags.xy);float a=texture2D(mask,m).a;"
-            "a=mix(a,1.0-a,flags.z);vec4 colour=texture2D(image,uv);"
-            "colour.a=clamp((a+bias)*gain,0.0,1.0);gl_FragColor=colour;}";
+        context=SDL_GL_GetCurrentContext();if(!context)throw std::runtime_error("Native mask shader requires a GL context");
+        const auto sources=mask_shader_sources(embedded);
         GLuint vs{},fs{};
         try{
-            vs=shader(GL_VERTEX_SHADER,vertex);fs=shader(GL_FRAGMENT_SHADER,fragment);
+            vs=shader(GL_VERTEX_SHADER,sources.vertex.c_str());fs=shader(GL_FRAGMENT_SHADER,sources.fragment.c_str());
             program=glCreateProgram();if(!program)throw std::runtime_error("Cannot allocate native mask program");
             glAttachShader(program,vs);glAttachShader(program,fs);glBindAttribLocation(program,0,"position");glBindAttribLocation(program,1,"texcoord");
             glLinkProgram(program);GLint okay{};glGetProgramiv(program,GL_LINK_STATUS,&okay);
@@ -131,7 +124,7 @@ struct SdlMaskProgram::Impl {
         }
     };
     void draw(SDL_Renderer* renderer,SDL_Texture* image,SDL_Texture* mask,float bias,float gain,bool flip_x,bool flip_y,bool invert){
-        if(SDL_GL_GetCurrentContext()!=context)throw std::runtime_error("Native mask program belongs to another GLES2 context");
+        if(SDL_GL_GetCurrentContext()!=context)throw std::runtime_error("Native mask program belongs to another GL context");
         Saved saved(*this);
         const bool target=SDL_GetRenderTarget(renderer)!=nullptr;
         struct Unbind {
@@ -150,7 +143,7 @@ struct SdlMaskProgram::Impl {
         glDrawArrays(GL_TRIANGLE_STRIP,0,4);
     }
 };
-SdlMaskProgram::SdlMaskProgram():impl_(std::make_unique<Impl>()){}
+SdlMaskProgram::SdlMaskProgram(bool embedded):impl_(std::make_unique<Impl>(embedded)){}
 SdlMaskProgram::~SdlMaskProgram()=default;
 void SdlMaskProgram::draw(SDL_Renderer* renderer,SDL_Texture* image,SDL_Texture* mask,float bias,float gain,bool x,bool y,bool invert){
     impl_->draw(renderer,image,mask,bias,gain,x,y,invert);

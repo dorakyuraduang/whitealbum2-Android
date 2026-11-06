@@ -31,7 +31,7 @@ struct SdlCanvas::State {
     SDL_Texture* memory_mask_texture{};
     int memory_mask_width{},memory_mask_height{};
     std::vector<std::uint8_t> memory_mask_pixels;
-    bool gles{},memory_only{};
+    bool gles{},shader_backend{},memory_only{};
     void enter(){
         if(std::this_thread::get_id()!=owner)throw std::runtime_error("native canvas called from a foreign thread");
         if(!renderer)throw std::runtime_error("native canvas is closed");
@@ -61,19 +61,22 @@ SdlCanvas::SdlCanvas(SDL_Renderer* renderer):state_(std::make_shared<State>()){
     if(!renderer)throw std::runtime_error("missing native canvas renderer");state_->renderer=renderer;
     SDL_RendererInfo info{};if(SDL_GetRendererInfo(renderer,&info))fail("SDL_GetRendererInfo");
     state_->gles=info.name && std::string_view(info.name)=="opengles2";
+    state_->shader_backend=state_->gles || (info.name && std::string_view(info.name)=="opengl");
     state_->memory_only=(info.flags&SDL_RENDERER_SOFTWARE) && !SDL_RenderGetWindow(renderer);
 }
 std::unique_ptr<SdlCanvas> SdlCanvas::create(SDL_Window* window,bool vsync){
     if(!window)throw std::runtime_error("missing native canvas window");
 #ifdef __ANDROID__
     SDL_SetHint(SDL_HINT_RENDER_DRIVER,"opengles2");
+#else
+    SDL_SetHint(SDL_HINT_RENDER_DRIVER,"opengl");
 #endif
     auto* renderer=SDL_CreateRenderer(window,-1,SDL_RENDERER_ACCELERATED|(vsync?SDL_RENDERER_PRESENTVSYNC:0));
     if(!renderer)fail("SDL_CreateRenderer");
     auto result=adopt(renderer);
     // Compile once while constructing the graphics backend, before a script
     // starts its timed fade. The first transition must not compile a shader.
-    if(result->state_->gles)result->state_->mask_program=std::make_unique<SdlMaskProgram>();
+    if(result->state_->shader_backend)result->state_->mask_program=std::make_unique<SdlMaskProgram>(result->state_->gles);
     return result;
 }
 std::unique_ptr<SdlCanvas> SdlCanvas::adopt(SDL_Renderer* renderer){
@@ -180,7 +183,7 @@ void SdlCanvas::masked(const std::shared_ptr<CanvasTexture>& image,const std::sh
     auto* renderer=state_->renderer;
     if(SDL_GetRenderTarget(renderer)==image->impl_->texture || SDL_GetRenderTarget(renderer)==mask->impl_->texture)
         throw std::runtime_error("native mask cannot sample the active render target");
-    if(state_->gles){
+    if(state_->shader_backend){
         // Flush through a harmless transparent primitive so SDL applies its
         // deferred viewport/clip before the native pass. Reconstructing the
         // physical viewport from RenderGetViewport loses a pixel when a
@@ -189,7 +192,7 @@ void SdlCanvas::masked(const std::shared_ptr<CanvasTexture>& image,const std::sh
            SDL_RenderDrawPointF(renderer,0,0) || SDL_RenderFlush(renderer))fail("prepare native mask viewport");
         if(!state_->mask_program){
             if(SDL_GL_BindTexture(image->impl_->texture,nullptr,nullptr))fail("activate native mask context");
-            SDL_GL_UnbindTexture(image->impl_->texture);state_->mask_program=std::make_unique<SdlMaskProgram>();
+            SDL_GL_UnbindTexture(image->impl_->texture);state_->mask_program=std::make_unique<SdlMaskProgram>(state_->gles);
         }
         state_->mask_program->draw(renderer,image->impl_->texture,mask->impl_->texture,bias,gain,flip_x,flip_y,invert);
     }else if(state_->memory_only){
@@ -219,7 +222,7 @@ void SdlCanvas::masked(const std::shared_ptr<CanvasTexture>& image,const std::sh
            SDL_SetTextureBlendMode(state_->memory_mask_texture,SDL_BLENDMODE_BLEND))fail("update owned test mask texture");
         const SDL_FRect rectangle{0,0,float(source.width),float(source.height)};
         if(SDL_RenderCopyF(renderer,state_->memory_mask_texture,nullptr,&rectangle))fail("draw owned test mask texture");
-    }else throw std::runtime_error("native mask shaders require the GLES2 rendering backend");
+    }else throw std::runtime_error("Native mask shaders require an OpenGL or GLES2 rendering backend");
     ++state_->statistics.draws;state_->statistics.vertices+=4;
 }
 void SdlCanvas::reset_effects(){

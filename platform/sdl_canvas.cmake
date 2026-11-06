@@ -1,5 +1,5 @@
 get_filename_component(WA2_CANVAS_ROOT "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
-add_library(wa2_canvas STATIC "${WA2_CANVAS_ROOT}/platform/sdl_canvas.cpp" "${WA2_CANVAS_ROOT}/platform/sdl_input.cpp" "${WA2_CANVAS_ROOT}/platform/sdl_scene.cpp" "${WA2_CANVAS_ROOT}/platform/sdl_movie.cpp" "${WA2_CANVAS_ROOT}/platform/sdl_mask.cpp")
+add_library(wa2_canvas STATIC "${WA2_CANVAS_ROOT}/platform/sdl_canvas.cpp" "${WA2_CANVAS_ROOT}/platform/sdl_input.cpp" "${WA2_CANVAS_ROOT}/platform/sdl_scene.cpp" "${WA2_CANVAS_ROOT}/platform/sdl_movie.cpp" "${WA2_CANVAS_ROOT}/platform/sdl_mask.cpp" "${WA2_CANVAS_ROOT}/platform/mask_shaders.cpp")
 target_compile_features(wa2_canvas PUBLIC cxx_std_20)
 target_include_directories(wa2_canvas PUBLIC "${WA2_CANVAS_ROOT}/platform" "${WA2_CANVAS_ROOT}/engine")
 set_target_properties(wa2_canvas PROPERTIES POSITION_INDEPENDENT_CODE ON)
