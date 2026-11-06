@@ -1,4 +1,5 @@
 #include "scene_dialogue.hpp"
+#include "checkpoint_codec.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <limits>
@@ -61,7 +62,7 @@ std::uint32_t SceneDialogue::duration()const {
 void SceneDialogue::update(bool fast_forward){
     fast_=fast_forward;
     novel_.update([&](auto ticks){return fast_forward?0:ticks==-1?15:ticks==-2?30:ticks;});
-    if(assets_started_ && !assets_ready_)load_assets();
+    if(!assets_ready_ && (assets_started_ || phase_!=DialoguePhase::closed))load_assets();
     if(!assets_ready_ || phase_==DialoguePhase::closed)return;
     if(phase_==DialoguePhase::closing){
         if(fast_forward || open_elapsed_>=close_ticks_){phase_=DialoguePhase::closed;raw_.clear();body_={};name_text_={};old_name_text_={};name_.clear();has_text_=false;}
@@ -124,6 +125,36 @@ std::optional<CommandResult> SceneDialogue::dispatch(Command& command){
         return CommandResult{true,false,Value(1)};
     default:return std::nullopt;
     }
+}
+std::vector<std::uint8_t> SceneDialogue::checkpoint()const{
+    checkpoint::Writer out;
+    for(auto v:{settings_.skin,settings_.window_alpha,settings_.picture_alpha,settings_.button_alpha,settings_.text_step,settings_.open_ticks,settings_.novel_alpha})out.i32(v);
+    out.boolean(settings_.window);out.blob(novel_.checkpoint());
+    out.blob(text::checkpoint_layout(body_.metrics()));out.blob(text::checkpoint_layout(name_text_.metrics()));out.blob(text::checkpoint_layout(old_name_text_.metrics()));
+    out.string(raw_);out.string(name_);out.u32(std::uint32_t(phase_));out.u32(budget_);out.u32(open_elapsed_);out.u32(name_elapsed_);out.u32(idle_elapsed_);out.u32(close_ticks_);out.u32(std::uint32_t(page_));
+    out.i32(speaker_);out.i32(message_);for(auto value:{visible_,picture_,has_text_,fast_,transparent_})out.boolean(value);
+    return out.seal("LSDI");
+}
+void SceneDialogue::restore(std::span<const std::uint8_t> bytes){
+    auto in=checkpoint::Reader::open("LSDI",bytes);SceneDialogue next(fonts_,loader_,seen_,end_message_);DialogueSettings settings;
+    settings.skin=in.i32();settings.window_alpha=in.i32();settings.picture_alpha=in.i32();settings.button_alpha=in.i32();settings.text_step=in.i32();settings.open_ticks=in.i32();settings.novel_alpha=in.i32();settings.window=in.boolean();next.settings(settings);
+    next.novel_.restore(in.blob(1024));auto body=text::restore_layout(in.blob(2u*1024*1024));auto name=text::restore_layout(in.blob(2u*1024*1024));auto old_name=text::restore_layout(in.blob(2u*1024*1024));
+    next.raw_=in.string(4095);next.name_=in.string(4095);const auto phase=in.u32();
+    next.budget_=in.u32();next.open_elapsed_=in.u32();next.name_elapsed_=in.u32();next.idle_elapsed_=in.u32();next.close_ticks_=in.u32();next.page_=in.u32();
+    next.speaker_=in.i32();next.message_=in.i32();next.visible_=in.boolean();next.picture_=in.boolean();next.has_text_=in.boolean();next.fast_=in.boolean();next.transparent_=in.boolean();in.finish();
+    if(phase>std::uint32_t(DialoguePhase::closing) || next.open_elapsed_>100001 || next.name_elapsed_>10 || next.close_ticks_>100000 || next.page_>=4096 || next.speaker_<-1 || next.speaker_>100 || next.message_<-1 ||
+       next.raw_.find('\0')!=std::string::npos || next.name_.find('\0')!=std::string::npos ||
+       (next.has_text_ && (next.page_>=body.pages.size() || std::uint64_t(next.budget_)>std::uint64_t(body.pages[next.page_].duration)+160)) ||
+       (!next.has_text_ && (phase==std::uint32_t(DialoguePhase::typing) || phase==std::uint32_t(DialoguePhase::waiting))))
+        throw Error("Invalid saved dialogue state");
+    next.phase_=DialoguePhase(phase);
+    // Rebuild only transient glyph textures. Neither dialogue history nor
+    // script callbacks are replayed; original resources remain external.
+    next.body_=fonts_.prepare(std::move(body));next.name_text_=fonts_.prepare(std::move(name));next.old_name_text_=fonts_.prepare(std::move(old_name));
+    settings_=next.settings_;novel_=std::move(next.novel_);body_=std::move(next.body_);name_text_=std::move(next.name_text_);old_name_text_=std::move(next.old_name_text_);
+    raw_=std::move(next.raw_);name_=std::move(next.name_);phase_=next.phase_;budget_=next.budget_;open_elapsed_=next.open_elapsed_;name_elapsed_=next.name_elapsed_;idle_elapsed_=next.idle_elapsed_;close_ticks_=next.close_ticks_;page_=next.page_;
+    speaker_=next.speaker_;message_=next.message_;visible_=next.visible_;picture_=next.picture_;has_text_=next.has_text_;fast_=next.fast_;transparent_=next.transparent_;
+    requests_={};images_={};sprites_.clear();assets_started_=assets_ready_=false;
 }
 std::span<const image::Sprite> SceneDialogue::sprites(){
     sprites_.clear();if(!visible_)return sprites_;

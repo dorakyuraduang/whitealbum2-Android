@@ -25,6 +25,9 @@ extern "C" WA2_LINK_CHECK void wa2_native_link_start(void* pointer){static_cast<
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_script_state(wa2::script::Session* session,const std::uint8_t* data,std::size_t size){
     if(data)session->restore({data,size});return session->checkpoint().size();
 }
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_dialogue_state(wa2::script::SceneDialogue* dialogue,const std::uint8_t* data,std::size_t size){
+    if(data)dialogue->restore({data,size});return dialogue->checkpoint().size();
+}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_animation(const std::uint8_t* data,std::size_t size){
     auto definition=wa2::image::Animation::parse({data,size});wa2::image::AnimationPlayer player(definition);player.tick();return player.checkpoint().size();
 }

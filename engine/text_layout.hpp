@@ -27,6 +27,8 @@ struct Layout {std::vector<Letter> letters;std::vector<TextPage> pages;TextStyle
 // Raw game encoding is deliberately preserved. These bytes index the original
 // font atlases; interpreting them as platform Unicode would select other glyphs.
 Layout layout(std::string_view raw,const TextStyle& style={});
+std::vector<std::uint8_t> checkpoint_layout(const Layout&);
+Layout restore_layout(std::span<const std::uint8_t>);
 std::string_view speaker_name(int index);
 int speaker_style(int index,std::string_view name={});
 Colour speaker_colour(int style);

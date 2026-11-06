@@ -32,6 +32,8 @@ public:
     const text::PreparedText& text()const noexcept{return body_;}
     const SceneNovel& novel()const noexcept{return novel_;}
     std::span<const image::Sprite> sprites();
+    std::vector<std::uint8_t> checkpoint()const;
+    void restore(std::span<const std::uint8_t>);
 private:
     text::FontBook& fonts_;
     Loader loader_;

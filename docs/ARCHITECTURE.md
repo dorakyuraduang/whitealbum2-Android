@@ -238,6 +238,17 @@ EndMessage argument remains ignored as in the cached wrapper. A missing binding
 is an explicit error instead of a silent callback omission. Synthetic checks
 dispatch the actual dialogue command, including both reserved finite durations.
 
+Native dialogue checkpoints now retain the current prepared text layouts,
+typing budget/page, opening/closing/name-fade counters, window settings,
+visibility and novel backing state. Layouts store bounded ordinary glyph
+metadata and exact float bits; font/UI textures are reconstructed from external
+resources. Restore validates every section before replacing live state and
+does not replay history callbacks. Changing the skin during an active message
+also reloads its assets on the following update rather than leaving it waiting
+with no pending request. Synthetic checks cover metadata layouts and empty-text
+dialogue continuation with fake UI atlases; restored glyph pixel output and
+whole-scene save/load integration remain unverified/incomplete.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through
