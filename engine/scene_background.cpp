@@ -69,16 +69,17 @@ void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& ad
             mask_=BackgroundFrame::Mask{std::move(mask),-1.f,1.f,(effect_&0x800)!=0,(effect_&0x1000)!=0,(effect_&0x100)!=0};
             mask_request_.reset();}
         const auto width=float(raster->width),height=float(raster->height);
-        // The original scales about the 1280x720 screen centre, with image
-        // placement initially centred and the script offset applied to it.
+        // Camera pan is the source rectangle, not a destination translation.
+        // Ordinary BGs centre this source offset; event images use it directly.
         const auto previous=camera_.pose(unsigned(current_^1));
-        CameraPose pose;pose.x=x_==10000?previous.x:float((1280-std::int64_t(raster->width))/2+x_);
-        pose.y=y_==10000?previous.y:float((720-std::int64_t(raster->height))/2+y_);
+        CameraPose pose;pose.x=x_==10000?previous.x:float((picture_?0:(1280-std::int64_t(raster->width))/2)+x_);
+        pose.y=y_==10000?previous.y:float((picture_?0:(720-std::int64_t(raster->height))/2)+y_);
         pose.scale_x=width_==10000?previous.scale_x:extended_?width_:width_/1280.f;
         pose.scale_y=height_==10000?previous.scale_y:extended_?height_:height_/720.f;
         pose.angle=angle_==10000?previous.angle:angle_;
         camera_.bind(unsigned(current_),raster->width,raster->height,pose);
-        layers_[current_]=BackgroundLayer{std::move(raster),0,0,width,height,0};
+        const auto x=float((1280-std::int64_t(raster->width))/2),y=float((720-std::int64_t(raster->height))/2);
+        layers_[current_]=BackgroundLayer{std::move(raster),x,y,width,height,0};
         request_.reset();ready_image_.reset();loading_=false;
     }
     if(!active_)return;
@@ -98,8 +99,8 @@ void SceneBackground::update(const std::function<std::int32_t(std::int32_t)>& ad
 BackgroundFrame SceneBackground::frame()const{
     auto previous=layers_[current_^1],current=layers_[current_];
     const auto transform=[&](std::optional<BackgroundLayer>& layer,unsigned index){if(!layer)return;const auto& pose=camera_.pose(index);
-        layer->x=pose.pivot_x+(pose.x-pose.pivot_x)*pose.scale_x;layer->y=pose.pivot_y+(pose.y-pose.pivot_y)*pose.scale_y;
-        layer->width*=pose.scale_x;layer->height*=pose.scale_y;layer->angle=pose.angle;layer->pivot_x=pose.pivot_x;layer->pivot_y=pose.pivot_y;};
+        layer->source_x=pose.x;layer->source_y=pose.y;layer->source_width=layer->width;layer->source_height=layer->height;
+        layer->scale_x=pose.scale_x;layer->scale_y=pose.scale_y;layer->angle=pose.angle;layer->pivot_x=pose.pivot_x;layer->pivot_y=pose.pivot_y;};
     transform(previous,unsigned(current_^1));transform(current,unsigned(current_));return {std::move(previous),std::move(current),loading_?std::nullopt:mask_};
 }
 }

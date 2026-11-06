@@ -46,6 +46,8 @@ add_executable(wa2_native_calendar_state_tests "${WA2_ROOT}/tests/native_calenda
 target_link_libraries(wa2_native_calendar_state_tests PRIVATE wa2_script)
 add_executable(wa2_native_animation_state_tests "${WA2_ROOT}/tests/native_animation_state.cpp")
 target_link_libraries(wa2_native_animation_state_tests PRIVATE wa2_script)
+add_executable(wa2_native_scene_geometry_tests "${WA2_ROOT}/tests/native_scene_geometry.cpp")
+target_link_libraries(wa2_native_scene_geometry_tests PRIVATE wa2_engine)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp")
@@ -66,6 +68,7 @@ if(NOT ANDROID)
     add_test(NAME native_weather_state COMMAND wa2_native_weather_state_tests "${CMAKE_BINARY_DIR}/native-weather-state.json")
     add_test(NAME native_calendar_state COMMAND wa2_native_calendar_state_tests "${CMAKE_BINARY_DIR}/native-calendar-state.json")
     add_test(NAME native_animation_state COMMAND wa2_native_animation_state_tests "${CMAKE_BINARY_DIR}/native-animation-state.json")
+    add_test(NAME native_scene_geometry COMMAND wa2_native_scene_geometry_tests "${CMAKE_BINARY_DIR}/native-scene-geometry.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

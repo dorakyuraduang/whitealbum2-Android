@@ -10,6 +10,7 @@ struct BackgroundLayer {
     std::uint8_t opacity{255};
     std::array<std::int32_t,3> colour{128,128,128};
     float angle{},pivot_x{640},pivot_y{360};
+    float source_x{},source_y{},source_width{},source_height{},scale_x{1},scale_y{1};
 };
 struct BackgroundFrame {
     std::optional<BackgroundLayer> previous,current;

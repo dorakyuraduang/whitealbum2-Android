@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(WA2NativeEngine LANGUAGES CXX)
 endif()
-add_library(wa2_engine STATIC pcm_audio.cpp pcm_stream.cpp resource_archive.cpp resource_catalog.cpp vorbis_stream.cpp ogg_reader.cpp wave_reader.cpp stream_voice.cpp raster_image.cpp sprite_animation.cpp image_store.cpp font_glyphs.cpp text_layout.cpp subtitles.cpp)
+add_library(wa2_engine STATIC pcm_audio.cpp pcm_stream.cpp resource_archive.cpp resource_catalog.cpp vorbis_stream.cpp ogg_reader.cpp wave_reader.cpp stream_voice.cpp raster_image.cpp sprite_animation.cpp scene_geometry.cpp image_store.cpp font_glyphs.cpp text_layout.cpp subtitles.cpp)
 target_compile_features(wa2_engine PUBLIC cxx_std_20)
 target_include_directories(wa2_engine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 add_library(wa2_pixel_transfer STATIC pixel_transfer.cpp)
@@ -13,6 +13,7 @@ add_library(wa2_scalar_math STATIC scalar_math.cpp trigonometry.cpp crt_trigonom
 target_compile_features(wa2_scalar_math PUBLIC cxx_std_20)
 target_include_directories(wa2_scalar_math PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 set_target_properties(wa2_scalar_math PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(wa2_engine PUBLIC wa2_scalar_math)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     # Decode and callback mixing are latency-sensitive on mobile CPUs.
     # Preserve operation order; never trade PCM values for fast-math.

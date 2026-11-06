@@ -4,6 +4,7 @@
 #include "scene.hpp"
 #include "progress_storage.hpp"
 #include "sprite_animation.hpp"
+#include "scene_geometry.hpp"
 #if defined(_WIN32)
 #define WA2_LINK_CHECK __declspec(dllexport)
 #else
@@ -26,4 +27,7 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_script_state(wa2::script::
 }
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_animation(const std::uint8_t* data,std::size_t size){
     auto definition=wa2::image::Animation::parse({data,size});wa2::image::AnimationPlayer player(definition);player.tick();return player.checkpoint().size();
+}
+extern "C" WA2_LINK_CHECK bool wa2_native_link_geometry(const wa2::image::QuadGeometry* geometry,std::uint32_t width,std::uint32_t height){
+    if(!geometry)throw std::invalid_argument("Missing link-check geometry");return wa2::image::scene_quad(*geometry,width,height).has_value();
 }

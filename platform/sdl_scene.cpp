@@ -1,4 +1,5 @@
 #include "sdl_scene.hpp"
+#include "scene_geometry.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -11,14 +12,13 @@ std::shared_ptr<CanvasTexture> SdlScene::texture(const std::shared_ptr<const ima
 }
 void SdlScene::draw(const script::BackgroundLayer& layer){
     if(!layer.image || !layer.opacity)return;
-    const auto x=layer.x,y=layer.y,right=x+layer.width,bottom=y+layer.height;
     const CanvasColour colour{std::uint8_t(std::clamp(layer.colour[0]*2,0,255)),std::uint8_t(std::clamp(layer.colour[1]*2,0,255)),
         std::uint8_t(std::clamp(layer.colour[2]*2,0,255)),layer.opacity};
-    std::array<CanvasVertex,6> vertices{{{x,y,0,0,colour},{right,y,1,0,colour},{right,bottom,1,1,colour},
-        {x,y,0,0,colour},{right,bottom,1,1,colour},{x,bottom,0,1,colour}}};
-    if(layer.angle){const auto radians=double(layer.angle)*.01745329238474369;const auto c=float(std::cos(radians)),s=float(std::sin(radians));
-        for(auto& vertex:vertices){const auto px=vertex.x-layer.pivot_x,py=vertex.y-layer.pivot_y;
-            vertex.x=layer.pivot_x+px*c-py*s;vertex.y=layer.pivot_y+px*s+py*c;}}
+    const image::QuadGeometry geometry{layer.x,layer.y,layer.width,layer.height,layer.source_x,layer.source_y,
+        layer.source_width?layer.source_width:float(layer.image->width),layer.source_height?layer.source_height:float(layer.image->height),
+        layer.angle,layer.pivot_x,layer.pivot_y,layer.scale_x,layer.scale_y};
+    const auto quad=image::scene_quad(geometry,layer.image->width,layer.image->height);if(!quad)return;
+    std::array<CanvasVertex,6> vertices;for(unsigned n=0;n<vertices.size();++n){const auto& v=(*quad)[n];vertices[n]={v.x,v.y,v.u,v.v,colour};}
     canvas_.triangles(texture(layer.image),vertices);
     if(std::any_of(layer.colour.begin(),layer.colour.end(),[](auto channel){return channel>128;})){
         const CanvasColour light{std::uint8_t(std::clamp(layer.colour[0]*2-256,0,255)),std::uint8_t(std::clamp(layer.colour[1]*2-256,0,255)),
@@ -34,21 +34,11 @@ void SdlScene::sprites(std::span<const image::Sprite> items){
     const auto flush=[&]{if(!vertices.empty()){canvas_.triangles(texture(source),vertices,blend==image::SpriteBlend::add?CanvasBlend::add:CanvasBlend::alpha);vertices.clear();}};
     for(const auto& item:items){
         if(!item.image || !item.alpha)continue;
-        if(!item.image->width || !item.image->height || item.width<0 || item.height<0 || item.source_x<0 || item.source_y<0 ||
-            item.source_width<0 || item.source_height<0 || item.source_x+item.source_width>item.image->width ||
-            item.source_y+item.source_height>item.image->height)throw std::runtime_error("native sprite source is out of bounds");
+        const auto quad=image::scene_quad({item.x,item.y,item.width,item.height,item.source_x,item.source_y,item.source_width,item.source_height,
+            item.angle,item.pivot_x,item.pivot_y,1,1,item.flip},item.image->width,item.image->height);if(!quad)continue;
         if(source!=item.image || blend!=item.blend){flush();source=item.image;blend=item.blend;}
-        const auto x=item.x,y=item.y,right=x+item.width,bottom=y+item.height;
-        auto u=item.source_x/source->width,v=item.source_y/source->height;
-        auto u1=(item.source_x+item.source_width)/source->width,v1=(item.source_y+item.source_height)/source->height;
-        if(item.flip&1)std::swap(u,u1);if(item.flip&2)std::swap(v,v1);
         const CanvasColour colour{item.red,item.green,item.blue,item.alpha};
-        std::array<CanvasVertex,6> quad{{{x,y,u,v,colour},{right,y,u1,v,colour},{right,bottom,u1,v1,colour},
-            {x,y,u,v,colour},{right,bottom,u1,v1,colour},{x,bottom,u,v1,colour}}};
-        if(item.angle){const auto radians=double(item.angle)*.01745329238474369;const auto c=float(std::cos(radians)),s=float(std::sin(radians));
-            for(auto& vertex:quad){const auto px=vertex.x-item.pivot_x,py=vertex.y-item.pivot_y;
-                vertex.x=item.pivot_x+px*c-py*s;vertex.y=item.pivot_y+px*s+py*c;}}
-        vertices.insert(vertices.end(),quad.begin(),quad.end());
+        for(const auto& v:*quad)vertices.push_back({v.x,v.y,v.u,v.v,colour});
     }
     flush();
 }
@@ -63,7 +53,9 @@ void SdlScene::background(const script::BackgroundFrame& frame,std::span<const i
         if(!mask.image || !layer.image)throw std::runtime_error("missing native background mask image");
         if(!mask_source_ || mask_source_->image!=layer.image || mask_source_->x!=layer.x || mask_source_->y!=layer.y ||
             mask_source_->width!=layer.width || mask_source_->height!=layer.height || mask_source_->colour!=layer.colour ||
-            mask_source_->angle!=layer.angle || mask_source_->pivot_x!=layer.pivot_x || mask_source_->pivot_y!=layer.pivot_y){
+            mask_source_->angle!=layer.angle || mask_source_->pivot_x!=layer.pivot_x || mask_source_->pivot_y!=layer.pivot_y ||
+            mask_source_->source_x!=layer.source_x || mask_source_->source_y!=layer.source_y || mask_source_->source_width!=layer.source_width ||
+            mask_source_->source_height!=layer.source_height || mask_source_->scale_x!=layer.scale_x || mask_source_->scale_y!=layer.scale_y){
             mask_source_=layer;if(!mask_target_)mask_target_=canvas_.target(1280,720);
             canvas_.render_to(mask_target_,[&]{canvas_.clear({0,0,0,255});auto opaque=layer;opaque.opacity=255;draw(opaque);});
         }

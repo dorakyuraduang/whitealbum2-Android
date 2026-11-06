@@ -3,6 +3,7 @@ add_library(wa2_canvas STATIC "${WA2_CANVAS_ROOT}/platform/sdl_canvas.cpp" "${WA
 target_compile_features(wa2_canvas PUBLIC cxx_std_20)
 target_include_directories(wa2_canvas PUBLIC "${WA2_CANVAS_ROOT}/platform" "${WA2_CANVAS_ROOT}/engine")
 set_target_properties(wa2_canvas PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(wa2_canvas PUBLIC wa2_engine)
 if(TARGET SDL2)
     target_link_libraries(wa2_canvas PUBLIC SDL2)
 elseif(TARGET SDL2-static)

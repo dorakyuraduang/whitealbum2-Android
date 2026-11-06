@@ -61,6 +61,16 @@ compile this adapter; these checks do not exercise a rendering device.
 The background reuse selector -2 shares the prior immutable raster instead of
 forming a resource filename or decoding it again. Mask shader mode arguments
 are consumed only by masked transitions, as in the cached renderer.
+Camera pan now changes source sampling independently of the fixed destination
+rectangle. Ordinary backgrounds centre that source offset; CG commands use
+their offsets directly. The shared native quad builder clips available source
+pixels before reflection, clockwise-in-mathematical-coordinates rotation and
+independent screen-axis scaling. Reflection acts about the pivot, rather than
+only swapping UVs. Radians retain the source's binary32 conversion. SDL pixel
+edges need no D3D9 half-pixel subtraction. Native textures omit unused source
+allocation padding; edge-filter parity still needs presentation verification.
+Constructed geometry checks and both compilation targets cover these changes
+without opening a renderer or launching the game.
 
 The native speech controller owns the original four bounded channels and handles
 VXV gain fades separately from VS fades that stop and lock a channel. Fades
