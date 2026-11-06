@@ -19,6 +19,7 @@
 #include "scene_movie.hpp"
 #include "scene_weather.hpp"
 #include "scene_shake.hpp"
+#include "scene_captions.hpp"
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};};
@@ -44,6 +45,7 @@ class Scene {
     script::SceneProgress progress_;
     script::SceneChoices choices_;
     script::SceneCalendar calendar_;
+    script::SceneCaptions captions_;
     script::SceneMusic music_;
     script::SceneEffects effects_;
     script::SceneVoices voices_;
@@ -65,7 +67,7 @@ public:
     explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={});
     void start(std::string_view scene="1001",std::int32_t label=0);
     script::RunState update(std::int64_t monotonic_us,Input input={});
-    void pause(bool paused,std::int64_t monotonic_us){movies_.pause(paused,monotonic_us);}
+    void pause(bool paused,std::int64_t monotonic_us){movies_.pause(paused,monotonic_us);captions_.pause(paused,std::uint64_t(monotonic_us)/1000);}
     void stop_movie(){movies_.stop();}
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
     script::BackgroundFrame background()const;
@@ -79,6 +81,7 @@ public:
     const script::SceneDialogue& dialogue_state()const noexcept{return dialogue_;}
     const script::SceneChoices& choices()const noexcept{return choices_;}
     std::span<const image::Sprite> calendar(){return calendar_.sprites();}
+    std::span<const image::Sprite> captions(){return captions_.sprites();}
     bool title_requested()const noexcept{return title_requested_;}
     void skip_read_only(bool value){skip_read_only_=value;}
     void replay_mode(bool value){replay_mode_=value;}

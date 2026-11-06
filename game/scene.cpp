@@ -16,12 +16,14 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     calendar_([this](auto name){return resources_.image("grp",name);},[this]{for(const auto& variable:library_.globals().variables())if(variable.name=="FLG_00")return variable.value.integer();throw script::Error("Missing calendar theme global FLG_00");}),
     music_([this](auto id,bool loop){return music(id,loop);},[this](auto id){
         if(!progress_store_)throw script::Error("Missing native music progress storage");progress_store_->state().set_flag(std::uint32_t(100+id),1);progress_store_->flush();}),
-    effects_([this](auto id,bool loop){return sound(id,loop);},[this]{return skipping();},[this](auto id,bool loop,bool paused){return sound(id,loop,paused);}),
+    effects_([this](auto id,bool loop){return sound(id,loop);},[this]{return skipping();},[this](auto id,bool loop,bool paused){return sound(id,loop,paused);},
+        {[this](auto slot,auto id,const auto& voice){if(id>=0 && id<=65535)captions_.queue(std::uint32_t(id),subtitles::Kind::effect,slot,voice);},[this](auto slot){captions_.stop(subtitles::Kind::effect,slot);}}),
     voices_([this](const auto& line){return speech(line);},[this]{
         if(controls_.modes().voice_chapter!=-1)return controls_.modes().voice_chapter;
         std::int32_t chapter{};const auto& name=session_.active()?session_.active()->program().name():statistics_.scene;const auto value=std::from_chars(name.data(),name.data()+name.size(),chapter);
         if(value.ec!=std::errc{} || value.ptr!=name.data()+name.size())throw script::Error("scene has no numeric voice chapter");return chapter;
-    },[this]{return dialogue_.speaker();},[this]{return controls_.modes().voice_offset;},[this]{return skipping();},[this]{return input_.advance;}),
+    },[this]{return dialogue_.speaker();},[this]{return controls_.modes().voice_offset;},[this]{return skipping();},[this]{return input_.advance;},
+        {[this](auto slot,const auto& line,const auto& voice){captions_.queue((std::uint32_t(line.chapter)<<16)|std::uint32_t(line.line),subtitles::Kind::voice,slot,voice);},[this](auto slot){captions_.stop(subtitles::Kind::voice,slot);}}),
     weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto name){return image::Animation::parse(resources_.data("grp",name));}),
     shake_([this]{return random_.next();}),
     backgrounds_([this](auto name){return resources_.image("bak",name,controls_.modes().background_chroma,controls_.modes().background_effect);},[this](bool keep_characters){bitmaps_.clear_retired();characters_.clear_retired();background_changing_=true;preserve_characters_=keep_characters;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
@@ -114,7 +116,7 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     backgrounds_.update(duration);colour_.update(duration);bitmaps_.update(duration);characters_.update(duration);dialogue_.update(skipping());
     calendar_.update([this](auto frames){return skipping()?frames/3:frames;});
     if(background_changing_ && !backgrounds_.busy()){weather_.background_finished(backgrounds_.picture());bitmaps_.clear_retired();characters_.clear_retired();background_changing_=false;}
-    const auto state=session_.advance([this](auto& call){return command(call);});
+    const auto state=session_.advance([this](auto& call){return command(call);});captions_.update(std::uint64_t(monotonic_us)/1000);
     if(session_.active())statistics_.scene=session_.active()->program().name();
     statistics_.voices=voices_.played();
     controls_.take_draw_request();return title_requested_?script::RunState::stopped:state;

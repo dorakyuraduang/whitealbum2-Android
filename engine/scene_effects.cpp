@@ -5,10 +5,11 @@ namespace wa2::script{
 namespace{
 void check_voice(const audio::Voice& voice){if(const auto error=voice.failure();!error.empty())throw Error("effect playback failed: "+error);}
 }
-SceneEffects::SceneEffects(Factory factory,std::function<bool()> skip,PreparedFactory prepared):factory_(std::move(factory)),prepared_factory_(std::move(prepared)),skip_(std::move(skip)){
+SceneEffects::SceneEffects(Factory factory,std::function<bool()> skip,PreparedFactory prepared,Events events):factory_(std::move(factory)),prepared_factory_(std::move(prepared)),skip_(std::move(skip)),events_(std::move(events)){
     if(!factory_)throw Error("missing native sound-effect loader");
 }
 SceneEffects::~SceneEffects(){stop_all();}
+void SceneEffects::halt(EffectSlot& value){if(value.voice){if(events_.stopped)events_.stopped(std::uint32_t(&value-slots_.data()));value.voice->stop();}value={};}
 std::uint8_t SceneEffects::scaled(std::int32_t volume)const{
     return std::uint8_t(std::clamp(std::int64_t(volume)*master_*effects_/65536,std::int64_t(0),std::int64_t(255)));
 }
@@ -39,16 +40,17 @@ void SceneEffects::play(std::int32_t channel,std::int32_t sound,std::int32_t fad
         if(!value.voice || !value.prepared)throw Error("native sound-effect channel was not prepared");
         if(value.loop!=(loop!=0))throw Unsupported("native prepared effect loop change");
         value.prepared=false;value.duration=fade;value.elapsed=0;value.from=0;value.target=std::clamp(volume,0,255);value.volume=fade?0:value.target;
-        value.voice->gain(scaled(value.volume));value.voice->pause(false);return;
+        value.voice->gain(scaled(value.volume));value.voice->pause(false);if(events_.started)events_.started(std::uint32_t(channel),value.sound,*value.voice);return;
     }
     if(mode==1){
         if(!prepared_factory_)throw Unsupported("native sound-effect factory has no prepared transport");
         auto voice=prepared_factory_(sound,loop!=0,true);if(!voice)throw Error("native prepared effect loader returned no voice");
-        if(value.voice)value.voice->stop();value={};value.voice=std::move(voice);value.sound=sound;value.loop=loop!=0;value.prepared=true;return;
+        halt(value);value.voice=std::move(voice);value.sound=sound;value.loop=loop!=0;value.prepared=true;return;
     }
     auto voice=factory_(sound,loop!=0);if(!voice)throw Error("native effect loader returned no voice");
-    if(value.voice)value.voice->stop();value={};value.sound=sound;value.duration=fade;value.loop=loop!=0;
+    halt(value);value.sound=sound;value.duration=fade;value.loop=loop!=0;
     value.target=std::clamp(volume,0,255);value.volume=fade?0:value.target;voice->gain(scaled(value.volume));value.voice=std::move(voice);
+    if(events_.started)events_.started(std::uint32_t(channel),sound,*value.voice);
 }
 void SceneEffects::volume(std::int32_t channel,std::int32_t volume,std::int32_t fade){
     auto& value=checked(channel);if(!value.voice)return;
@@ -57,23 +59,23 @@ void SceneEffects::volume(std::int32_t channel,std::int32_t volume,std::int32_t 
 void SceneEffects::stop(std::int32_t channel,std::int32_t fade){
     auto& value=checked(channel);if(!value.voice)return;
     if(fade>0){volume(channel,0,fade);value.stop_after_fade=true;return;}
-    value.voice->stop();value={};
+    halt(value);
 }
 void SceneEffects::stop_all(){
-    for(auto& value:slots_){if(value.voice)value.voice->stop();value={};}
+    for(auto& value:slots_)halt(value);
     for(auto& value:ones_){if(value.voice)value.voice->stop();value={};}
 }
 void SceneEffects::update(const std::function<std::int32_t(std::int32_t)>& adjust){
     for(auto& value:ones_)if(value.voice){check_voice(*value.voice);if(value.voice->finished()){value.voice->stop();value={};}}
     for(auto& value:slots_)if(value.voice){
         check_voice(*value.voice);
-        if(value.voice->finished()){value.voice->stop();value={};continue;}
+        if(value.voice->finished()){halt(value);continue;}
         if(value.prepared)continue;
         if(!value.voice->ready())continue;
         const auto frames=adjust?adjust(value.duration):value.duration;
         if(frames<=0 || value.elapsed>=frames){
             value.volume=value.target;
-            if(value.stop_after_fade){value.voice->stop();value={};return;}
+            if(value.stop_after_fade){halt(value);continue;}
         }else{
             value.volume=std::int32_t((std::int64_t(frames-value.elapsed)*value.from+std::int64_t(value.target)*value.elapsed)/frames);++value.elapsed;
         }

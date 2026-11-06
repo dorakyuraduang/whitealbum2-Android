@@ -4,13 +4,13 @@
 
 namespace wa2::script {
 SceneVoices::SceneVoices(Factory factory,std::function<std::int32_t()> chapter,std::function<std::int32_t()> speaker,
-                         std::function<std::int32_t()> offset,std::function<bool()> skip,std::function<bool()> advance)
-    :factory_(std::move(factory)),chapter_(std::move(chapter)),speaker_(std::move(speaker)),offset_(std::move(offset)),skip_(std::move(skip)),advance_(std::move(advance)){
+                         std::function<std::int32_t()> offset,std::function<bool()> skip,std::function<bool()> advance,Events events)
+    :factory_(std::move(factory)),chapter_(std::move(chapter)),speaker_(std::move(speaker)),offset_(std::move(offset)),skip_(std::move(skip)),advance_(std::move(advance)),events_(std::move(events)){
     if(!factory_ || !chapter_ || !speaker_)throw Error("missing native voice environment");
 }
 SceneVoices::~SceneVoices(){for(auto& item:slots_)stop(item);}
 SceneVoices::Slot& SceneVoices::checked(std::int32_t index){if(index<0 || std::size_t(index)>=slots_.size())throw Error("native voice channel out of range");return slots_[std::size_t(index)];}
-void SceneVoices::stop(Slot& item){if(item.voice)item.voice->stop();item={};}
+void SceneVoices::stop(Slot& item){if(item.voice){if(events_.stopped)events_.stopped(std::uint32_t(&item-slots_.data()));item.voice->stop();}item={};}
 std::size_t SceneVoices::active()const noexcept{std::size_t count=0;for(const auto& item:slots_)count+=bool(item.voice);return count;}
 void SceneVoices::apply(Slot& item){if(item.voice)item.voice->gain(std::uint8_t(std::clamp(std::int64_t(item.volume)*master_*speech_/65536,std::int64_t(0),std::int64_t(255))));}
 void SceneVoices::settings(std::int32_t master,std::int32_t speech,bool mute_adult){
@@ -26,8 +26,9 @@ void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t ch
     // /forced line remains audible, with the original four bounded channels.
     if(skip_ && skip_() && loop==0){stop(item);return;}
     if(mute_adult_ && adult_mode_ && speaker==0){stop(item);return;}
-    stop(item);auto voice=factory_({speaker,chapter,std::int32_t(adjusted),loop!=0});if(!voice)throw Error("native voice loader returned no voice");
+    stop(item);const SpokenLine line_info{speaker,chapter,std::int32_t(adjusted),loop!=0};auto voice=factory_(line_info);if(!voice)throw Error("native voice loader returned no voice");
     item.volume=item.from=item.target=item.remembered=std::clamp(volume,0,255);item.voice=std::move(voice);apply(item);++played_;
+    if(events_.started)events_.started(std::uint32_t(channel),line_info,*item.voice);
 }
 void SceneVoices::update(const std::function<std::int32_t(std::int32_t)>& adjust){
     for(auto& item:slots_)if(item.voice){

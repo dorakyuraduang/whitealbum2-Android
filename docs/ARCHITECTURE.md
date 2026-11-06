@@ -162,6 +162,18 @@ same-filename reuse for subsequent character commands. Static resource checks
 parse the main-story negative/sepia maps; only constructed pixels are converted
 by tests. Native backdrop/audio settings and full application UI remain pending.
 
+The native scene's embedded main-story captions now receive typed speech and
+effect lifecycle events. Pending captions wait for their asynchronous voice to
+be ready; prepared effects do not start captions before playback. Stop events
+clear borrowed transport references before voices are destroyed. Caption
+arrival order, overlap policy and pause-adjusted timing are common engine code.
+One lazily decoded font atlas and per-cue sprite geometry are reused; the scene
+exposes a final caption overlay independent of camera/dialogue shake. The
+existing main-story-only data scope is unchanged. Synthetic transports cover
+all 46 embedded tracks, preparation/stop/readiness and subtitle layout reuse.
+Audio-device synchronization, interview-menu integration and application
+presentation remain separate incomplete migration boundaries.
+
 The native story engine remains incomplete: the full title/selection/option UI,
 backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations
