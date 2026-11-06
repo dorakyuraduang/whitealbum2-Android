@@ -26,6 +26,7 @@ public:
     bool active()const noexcept{return active_;}
     std::uint64_t generation()const noexcept{return generation_;}
     void choose(std::uint32_t ordinal);
+    bool previously_chosen(std::uint32_t ordinal)const;
     void clear()noexcept{items_.clear();result_.reset();active_=false;++generation_;}
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t> bytes);

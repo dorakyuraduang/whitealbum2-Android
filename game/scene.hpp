@@ -10,6 +10,7 @@
 #include "scene_controls.hpp"
 #include "scene_progress.hpp"
 #include "scene_choices.hpp"
+#include "scene_selection.hpp"
 #include "scene_read_history.hpp"
 #include "scene_builtins.hpp"
 #include "scene_dialogue.hpp"
@@ -22,7 +23,7 @@
 #include "scene_captions.hpp"
 
 namespace wa2::game {
-struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};};
+struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;};
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
 // Shared native migration core; not yet the released app's game entry.
 // It contains ordinary game state and the original LSCR language, no CPU state,
@@ -44,6 +45,7 @@ class Scene {
     script::SceneControls controls_;
     script::SceneProgress progress_;
     script::SceneChoices choices_;
+    script::SceneSelection selection_;
     script::SceneCalendar calendar_;
     script::SceneCaptions captions_;
     script::SceneMusic music_;
@@ -80,11 +82,12 @@ public:
     const Statistics& statistics()const noexcept{return statistics_;}
     const script::SceneDialogue& dialogue_state()const noexcept{return dialogue_;}
     const script::SceneChoices& choices()const noexcept{return choices_;}
+    std::span<const image::Sprite> selection(){return selection_.sprites();}
     std::span<const image::Sprite> calendar(){return calendar_.sprites();}
     std::span<const image::Sprite> captions(){return captions_.sprites();}
     bool title_requested()const noexcept{return title_requested_;}
     void skip_read_only(bool value){skip_read_only_=value;}
-    void replay_mode(bool value){replay_mode_=value;}
+    void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
     void flush_progress(){reading_.finish();}
 };
 }

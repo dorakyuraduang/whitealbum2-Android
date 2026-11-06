@@ -4,6 +4,7 @@
 #include "scene_sprite.hpp"
 #include <array>
 #include <memory>
+#include <optional>
 #include <string_view>
 
 namespace wa2::text {
@@ -39,7 +40,7 @@ public:
     // Appends into a retained host buffer. This does not decode, lay out text,
     // allocate textures, or allocate a fresh vector on each logic/render tick.
     void append(std::vector<image::Sprite>& out,std::uint32_t page,std::uint32_t budget,
-                float x,float y,std::uint8_t opacity=255)const;
+                float x,float y,std::uint8_t opacity=255,std::optional<Colour> foreground={})const;
     std::size_t image_bytes()const noexcept{return image_?image_->rgba.size():0;}
 };
 class FontBook {

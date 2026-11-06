@@ -56,6 +56,8 @@ add_executable(wa2_native_image_style_tests "${WA2_ROOT}/tests/native_image_styl
 target_link_libraries(wa2_native_image_style_tests PRIVATE wa2_engine)
 add_executable(wa2_native_caption_state_tests "${WA2_ROOT}/tests/native_caption_state.cpp")
 target_link_libraries(wa2_native_caption_state_tests PRIVATE wa2_script)
+add_executable(wa2_native_selection_state_tests "${WA2_ROOT}/tests/native_selection_state.cpp")
+target_link_libraries(wa2_native_selection_state_tests PRIVATE wa2_script)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp")
@@ -96,6 +98,7 @@ if(NOT ANDROID)
     add_test(NAME native_world_state COMMAND wa2_native_world_state_tests "${CMAKE_BINARY_DIR}/native-world-state.json")
     add_test(NAME native_image_styles COMMAND wa2_native_image_style_tests "${CMAKE_BINARY_DIR}/native-image-styles.json")
     add_test(NAME native_caption_state COMMAND wa2_native_caption_state_tests "${CMAKE_BINARY_DIR}/native-caption-state.json")
+    add_test(NAME native_selection_state COMMAND wa2_native_selection_state_tests "${CMAKE_BINARY_DIR}/native-selection-state.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

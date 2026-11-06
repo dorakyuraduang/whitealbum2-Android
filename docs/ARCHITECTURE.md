@@ -39,7 +39,8 @@ include a complete rendered scene or audio transport snapshot.
 Selection commands 208/209 now retain original insertion ordinals, conditional
 hidden/disabled entries, eight-entry limits, and persistent choice-history
 bits. Pending choices and completed results can be checkpointed. The common
-scene accepts typed selection input; native selection presentation is pending.
+scene accepts typed selection input; its shared presentation/input controller
+uses the original row sprites, visible-row geometry and logical coordinates.
 Static resource checks parsed all 187 local scripts and their 1157 labels and
 299575 command sites without executing them or inspecting their rendered output.
 
@@ -174,8 +175,19 @@ all 46 embedded tracks, preparation/stop/readiness and subtitle layout reuse.
 Audio-device synchronization, interview-menu integration and application
 presentation remain separate incomplete migration boundaries.
 
-The native story engine remains incomplete: the full title/selection/option UI,
-backlog integration, full scene snapshots and restore, lifecycle integration and
+The native selection view uses the cached 784x72 three-state background crops,
+history marker, original visible-row spacing/position and narrower text-area
+hit boxes. Its shared input controller retains insertion ordinals while skipping
+hidden/disabled rows, supports pointer focus and keyboard navigation, and gates
+activation during the original 30-tick fade. Labels use prepared native font
+atlases with foreground tint separate from their shadows. Input/layout tests
+use synthetic atlases and stub text preparation; real selection atlas checks
+read headers only. An unchosen replay-mode option requests the still-unsupported
+history panel explicitly instead of changing the story branch. Device rendering,
+sound cues and that panel's integration remain unverified/incomplete.
+
+The native story engine remains incomplete: the full title/option UI,
+choice-history/backlog integration, full scene snapshots and restore, lifecycle integration and
 unsupported render/animation/weather modes still need native implementations
 or integration. Reading-history APIs exist but are not yet connected to every
 dialogue transition. No whole-game or device/performance claim follows from

@@ -165,7 +165,7 @@ PreparedText FontBook::prepare(Layout layout){
     }
     result.image_=std::move(pixels);return result;
 }
-void PreparedText::append(std::vector<image::Sprite>& out,std::uint32_t page,std::uint32_t budget,float x,float y,std::uint8_t opacity)const {
+void PreparedText::append(std::vector<image::Sprite>& out,std::uint32_t page,std::uint32_t budget,float x,float y,std::uint8_t opacity,std::optional<Colour> foreground)const {
     if(!image_ || page>=layout_.pages.size() || !opacity)return;
     for(unsigned layer=1;;--layer){
         for(const auto& item:layout_.letters){
@@ -177,7 +177,7 @@ void PreparedText::append(std::vector<image::Sprite>& out,std::uint32_t page,std
             const auto inset=layer?0:(pitch-source_size)/2;
             const auto extent=layer?pitch:source_size;
             const auto offset=layer?0.f:(pitch-source_size)/2.f*item.scale;
-            const auto colour=layer?item.shadow:item.colour;
+            const auto colour=layer?item.shadow:foreground.value_or(item.colour);
             out.push_back({image_,x+item.x+offset,y+item.y+offset,extent*item.scale,extent*item.scale,
                 float(tile%16*40+inset),float(tile/16*40+inset),float(extent),float(extent),colour.r,colour.g,colour.b,alpha});
         }

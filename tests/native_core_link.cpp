@@ -19,7 +19,7 @@ extern "C" WA2_LINK_CHECK void wa2_native_link_destroy(void* pointer){delete sta
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_tick(void* pointer,std::int64_t clock){
     auto& scene=*static_cast<wa2::game::Scene*>(pointer);scene.update(clock);
     scene.background();scene.movie();scene.pause(false,clock);scene.stop_movie();scene.dialogue_transform();
-    return scene.environment().size()+scene.foreground().size()+scene.dialogue().size()+scene.calendar().size()+scene.captions().size();
+    return scene.environment().size()+scene.foreground().size()+scene.dialogue().size()+scene.calendar().size()+scene.captions().size()+scene.selection().size();
 }
 extern "C" WA2_LINK_CHECK void wa2_native_link_start(void* pointer){static_cast<wa2::game::Scene*>(pointer)->start();}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_script_state(wa2::script::Session* session,const std::uint8_t* data,std::size_t size){

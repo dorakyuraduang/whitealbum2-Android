@@ -13,6 +13,7 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();},[this]{return reading_.status(replay_mode_);}),
     progress_(progress_store_),
     choices_(progress_store_,[this]()->std::string_view{return session_.active()?session_.active()->program().name():statistics_.scene;}),
+    selection_([this](auto name){return resources_.image("grp",name);},[this](auto raw){text::TextStyle style;style.rows=1;style.columns=34;style.line_gap=0;style.shadow={33,46,56};return fonts_.prepare(text::layout(raw,style));}),
     calendar_([this](auto name){return resources_.image("grp",name);},[this]{for(const auto& variable:library_.globals().variables())if(variable.name=="FLG_00")return variable.value.integer();throw script::Error("Missing calendar theme global FLG_00");}),
     music_([this](auto id,bool loop){return music(id,loop);},[this](auto id){
         if(!progress_store_)throw script::Error("Missing native music progress storage");progress_store_->state().set_flag(std::uint32_t(100+id),1);progress_store_->flush();}),
@@ -106,7 +107,8 @@ script::CommandResult Scene::command(script::Command& call){
 }
 script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     if(title_requested_)return script::RunState::stopped;
-    if(input.choice>=0)choices_.choose(std::uint32_t(input.choice));
+    selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))throw script::Unsupported("Native replay choice history panel is not implemented");choices_.choose(std::uint32_t(input.choice));}
+    else if(auto selected=selection_.input(input.selection))choices_.choose(*selected);
     input_=input;milliseconds_=std::uint32_t(std::uint64_t(monotonic_us)/1000);++statistics_.ticks;
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}
     if(input_.advance){window_visible_=true;dialogue_.visible(true);dialogue_.advance();}
@@ -116,7 +118,7 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     backgrounds_.update(duration);colour_.update(duration);bitmaps_.update(duration);characters_.update(duration);dialogue_.update(skipping());
     calendar_.update([this](auto frames){return skipping()?frames/3:frames;});
     if(background_changing_ && !backgrounds_.busy()){weather_.background_finished(backgrounds_.picture());bitmaps_.clear_retired();characters_.clear_retired();background_changing_=false;}
-    const auto state=session_.advance([this](auto& call){return command(call);});captions_.update(std::uint64_t(monotonic_us)/1000);
+    const auto state=session_.advance([this](auto& call){return command(call);});captions_.update(std::uint64_t(monotonic_us)/1000);selection_.sync(choices_);selection_.update(duration);
     if(session_.active())statistics_.scene=session_.active()->program().name();
     statistics_.voices=voices_.played();
     controls_.take_draw_request();return title_requested_?script::RunState::stopped:state;

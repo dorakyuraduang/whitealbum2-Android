@@ -46,6 +46,10 @@ void SceneChoices::choose(std::uint32_t ordinal){
     progress_->state().set_flag(history_flag_,std::bit_cast<std::int32_t>(bits));progress_->flush();
     result_=std::int32_t(ordinal);active_=false;++generation_;
 }
+bool SceneChoices::previously_chosen(std::uint32_t ordinal)const{
+    if(ordinal>=items_.size() || !progress_)throw Error("Native choice history ordinal out of range");
+    return (std::bit_cast<std::uint32_t>(progress_->state().flag(history_flag_))&(std::uint32_t(1)<<ordinal))!=0;
+}
 std::vector<std::uint8_t> SceneChoices::checkpoint()const{
     checkpoint::Writer out;out.boolean(active_);out.boolean(result_.has_value());if(result_)out.i32(*result_);out.u32(history_flag_);out.u32(std::uint32_t(items_.size()));
     for(const auto& item:items_){out.string(item.text);out.u32(item.flag);out.i32(item.expected);out.boolean(item.show_disabled);out.boolean(item.enabled);out.boolean(item.visible);}
