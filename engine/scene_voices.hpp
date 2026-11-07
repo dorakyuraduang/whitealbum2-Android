@@ -17,6 +17,8 @@ public:
     void stop(std::int32_t channel,std::int32_t fade=0);
     // Source settings use channel zero without adding a story/backlog entry.
     void preview(const SpokenLine&);
+    void replay(const SpokenLine&,std::int32_t volume);
+    bool playing(std::int32_t channel=0)const;
     std::size_t active()const noexcept;
     bool loading()const;
     std::uint64_t played()const noexcept{return played_;}
@@ -42,6 +44,6 @@ private:
     void apply(Slot&);
     Slot& checked(std::int32_t index);
     void stop(Slot& item);
-    void play(std::int32_t slot,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop,bool record=true);
+    void play(std::int32_t slot,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop,bool record=true,bool resolved=false);
 };
 }

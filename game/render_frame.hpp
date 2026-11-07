@@ -24,7 +24,7 @@ public:
                  std::span<const std::span<const image::Sprite>> overlays,
                  const image::SceneTransform& dialogue={},bool movie_active=false,
                  std::optional<movie::VideoFrame> movie={});
-    void capture(Scene&);
+    void capture(Scene&,bool dialogue=true);
     void capture(const TitleScene&);
     // Full modal page views are still under construction. Until supplied they
     // fail explicitly, rather than passing an unpainted menu off as supported.

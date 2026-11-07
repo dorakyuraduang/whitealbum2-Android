@@ -41,6 +41,9 @@ int main(int argc,char** argv){try{
     forced[0]=s::Value(1);call={139,forced};voices.dispatch(call);CHECK(created.size()==count+1);++cases;
     auto preset=created.back();stop={s::Value(-1),s::Value(2)};call={141,stop};voices.dispatch(call);for(int n=0;n<15;++n)voices.update();CHECK(!preset->done);voices.update();CHECK(preset->done);++cases;
     volume[2]=s::Value(4);call={235,volume};bool failed=false;try{voices.dispatch(call);}catch(const std::exception&){failed=true;}CHECK(failed);++cases;
+    const auto recorded=issued;voices.replay({1,1200,9,false},64);CHECK(voices.playing() && created.back()->line.chapter==1200 && created.back()->line.line==9 && created.back()->gain==64 && issued==recorded);++cases;
+    created.back()->done=true;CHECK(!voices.playing());voices.update();CHECK(!voices.playing());++cases;
+    failed=false;try{voices.replay({-1,1200,9,false},64);}catch(const std::exception&){failed=true;}CHECK(failed);++cases;
     std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-voices.v1\",\"cases\":"<<cases<<",\"maximum_voice_slots\":4,\"screen_access\":false,\"audio_devices_opened\":0,\"cpu_emulator_linked\":false,\"passed\":true}\n";
     std::cout<<"PASS native speech commands: "<<cases<<" cases.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

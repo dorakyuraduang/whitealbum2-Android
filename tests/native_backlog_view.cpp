@@ -1,0 +1,68 @@
+#include "application.hpp"
+#include "render_frame.hpp"
+#include "scene_geometry.hpp"
+#include "native_scene_fixture.hpp"
+#include "native_save_atlases.hpp"
+#include "native_options_atlases.hpp"
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <limits>
+
+struct Settings:g::PreferenceStorage {std::optional<Bytes> bytes;std::optional<Bytes> read()override{return bytes;}void replace(std::span<const std::uint8_t> data)override{bytes=Bytes(data.begin(),data.end());}};
+struct Saves:g::SaveStorage {std::map<unsigned,Bytes> entries;std::optional<Bytes> read(unsigned slot)override{const auto it=entries.find(slot);return it==entries.end()?std::optional<Bytes>{}:it->second;}void replace(unsigned slot,std::span<const std::uint8_t> data)override{entries[slot]=Bytes(data.begin(),data.end());}std::vector<g::SaveSlotInfo> list()override{std::vector<g::SaveSlotInfo> result;for(const auto& [slot,data]:entries)result.push_back({slot,data.size(),1000});return result;}};
+struct VoiceState {s::SpokenLine line;bool done{};unsigned gain{};};
+struct Voice:wa2::audio::Voice {std::shared_ptr<VoiceState> state;explicit Voice(std::shared_ptr<VoiceState> value):state(std::move(value)){}bool ready()const override{return true;}bool finished()const override{return state->done;}std::string failure()const override{return {};}void gain(std::uint8_t value)override{state->gain=value;}void stop()override{state->done=true;}};
+int main(int argc,char** argv){try{
+    CHECK(argc==2);unsigned cases{},guards{},image_requests{},texts{},maximum_new_images{},maximum_pending{};bool missing{},text_failure{};
+    std::map<std::string,Bytes> assets;for(const auto& atlas:wa2::test::save_atlases)assets[atlas.name]=raster(atlas.w,atlas.h);for(const auto& atlas:wa2::test::options_atlases)assets[atlas.name]=raster(atlas.w,atlas.h);
+    for(const auto skin:{0,1})for(const auto& item:std::array<std::array<unsigned,3>,6>{{{30,96,640},{31,28,84},{32,1280,40},{33,64,672},{9000,1280,56},{9100,56,72}}}){std::array<char,32> name{};std::snprintf(name.data(),name.size(),"sys_%d%04u.tga",skin,item[0]);assets[name.data()]=raster(item[1],item[2]);}
+    i::ImageStore images(r::Archive::open(bank(std::move(assets))));std::vector<std::weak_ptr<i::ImageRequest>> pending;
+    const g::BacklogView::Loader loader=[&](auto name){++image_requests;if(missing)return std::shared_ptr<i::ImageRequest>{};unsigned live{};for(const auto& weak:pending)if(auto request=weak.lock())live+=!request->get();CHECK(live==0);auto result=images.request(name);pending.push_back(result);maximum_pending=std::max(maximum_pending,live+unsigned(!result->get()));return result;};
+    const g::BacklogView::Text text_loader=[&](auto raw,const auto& style){if(text_failure)throw std::runtime_error("owned backlog text failure");++texts;return wa2::text::FontBook::defer(wa2::text::layout(raw,style));};
+    s::SceneBacklog history;for(int n=0;n<6;++n){s::BacklogEntry entry{"1001","ABC\\kDEF","A",n,1,false,false,{{1,1001,n,128},{2,1001,n+1,200}}};history.push(entry);}
+    rejects([&]{g::BacklogView bad({},text_loader);});rejects([&]{g::BacklogView bad(loader,{});});guards+=2;g::BacklogView view(loader,text_loader);rejects([&]{view.update();});++guards;
+    const auto until=[&](auto ready,auto tick){const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(5);unsigned n{};while(!ready()){CHECK(++n<1000 && std::chrono::steady_clock::now()<end);const auto before=image_requests;tick();maximum_new_images=std::max(maximum_new_images,image_requests-before);std::this_thread::sleep_for(std::chrono::milliseconds(1));}};
+    const auto active=[&]{until([&]{return view.phase()==g::BacklogPhase::active;},[&]{view.update();});};
+    const auto click=[&](unsigned id){const auto hit=std::find_if(view.hits().begin(),view.hits().end(),[&](const auto& value){return value.id==id;});CHECK(hit!=view.hits().end());view.update({{true,true,false,hit->x+1,hit->y+1,0}});};
+    view.prepare({},history);CHECK(view.phase()==g::BacklogPhase::loading && image_requests==1 && texts==8 && view.maximum()==2);active();CHECK(view.position()==0 && view.hits().size()==8 && maximum_new_images<=2 && maximum_pending<=1);++cases;
+    const auto panel=std::find_if(view.sprites().begin(),view.sprites().end(),[](const auto& sprite){return sprite.order==0x431;});CHECK(panel!=view.sprites().end() && panel->x==216 && panel->width==848 && panel->height==672);const auto knob=std::find_if(view.sprites().begin(),view.sprites().end(),[](const auto& sprite){return sprite.order==0x42e;});CHECK(knob!=view.sprites().end() && knob->x==1040 && knob->y==530 && knob->source_x==64);++cases;
+    const auto retained=std::vector(view.sprites().begin(),view.sprites().end());click(4);const auto replay=view.take_command();CHECK(replay && replay->kind==g::BacklogCommand::Kind::replay && replay->entry==3 && !view.take_command());++cases;
+    g::BacklogInput wheel;wheel.scroll=1;view.update(wheel);CHECK(view.position()==1);const auto prepared=texts;view.update();CHECK(texts==prepared);wheel.page_delta=1;view.update(wheel);CHECK(view.position()==2);++cases;
+    click(4);CHECK(view.take_command()->entry==5);click(1);CHECK(view.position()==1);click(0);CHECK(view.position()==2);++cases;
+    g::BacklogInput drag;drag.held=true;drag.selection={true,true,false,1041,531,0};view.update(drag);CHECK(view.position()==0);drag.selection={true,false,false,1041,86,0};view.update(drag);CHECK(view.position()==2);drag.held=false;view.update(drag);++cases;
+    const auto position=view.position();text_failure=true;rejects([&]{click(1);});++guards;text_failure=false;CHECK(view.position()==position && view.phase()==g::BacklogPhase::active && !view.sprites().empty());++cases;
+    missing=true;rejects([&]{view.prepare({1,false,0},history);});++guards;missing=false;CHECK(view.position()==position && view.phase()==g::BacklogPhase::active);++cases;
+    for(const auto context:{g::BacklogContext{-1},g::BacklogContext{10},g::BacklogContext{0,false,4096},g::BacklogContext{0,false,2}}){rejects([&]{view.prepare(context,history);});++guards;}++cases;
+    for(auto input:{g::BacklogInput{.page_delta=2},g::BacklogInput{.scroll=-2}}){rejects([&]{view.update(input);});++guards;}g::BacklogInput invalid;invalid.selection.x=std::numeric_limits<float>::quiet_NaN();rejects([&]{view.update(invalid);});++guards;++cases;
+    view.prepare({1,true,1},history);active();CHECK(view.hits().size()==4 && view.maximum()==5);CHECK(std::any_of(view.sprites().begin(),view.sprites().end(),[](const auto& sprite){return sprite.order==0x431 && sprite.x==20 && sprite.width==1240;}));wheel={};wheel.scroll=1;view.update(wheel);CHECK(view.position()==1);++cases;
+    g::BacklogInput cancel;cancel.cancel=true;view.update(cancel);CHECK(view.phase()==g::BacklogPhase::closed && view.take_command()->kind==g::BacklogCommand::Kind::close && !retained.empty() && retained.front().image);++cases;
+    s::SceneBacklog empty;view.prepare({},empty);active();CHECK(view.maximum()==0 && view.entries().empty());view.update(wheel);CHECK(view.position()==0);click(3);CHECK(view.take_command()->kind==g::BacklogCommand::Kind::close);++cases;
+    view.prepare({},history);view.update(cancel);CHECK(view.phase()==g::BacklogPhase::closed && view.take_command()->kind==g::BacklogCommand::Kind::close);view.clear();CHECK(view.phase()==g::BacklogPhase::idle && view.sprites().empty());++cases;
+    const auto point=i::scene_point(900,700,{});CHECK(point && (*point)[0]==900 && (*point)[1]==700 && !i::scene_point(1,2,{0,0,0,0}));++cases;
+    const i::SceneTransform transform{12,34,1.2f,15};const auto quad=i::scene_quad({900,680,40,40,0,0,40,40,0,0,0,1,1,0,transform},40,40);CHECK(quad);const auto mapped=i::scene_point((*quad)[0].x,(*quad)[0].y,transform);CHECK(mapped && std::abs((*mapped)[0]-900)<.001 && std::abs((*mapped)[1]-680)<.001);++cases;
+    rejects([&]{i::scene_point(0,0,{0,0,-1,0});});rejects([&]{i::scene_point(std::numeric_limits<float>::infinity(),0,{});});guards+=2;
+    auto banks=memory_banks();Script script;for(int n=0;n<2;++n){script.call(138,{s::Value(1),s::Value(128),s::Value(0),s::Value(0),s::Value(7+n)});script.call(131,{s::Value(std::string()),s::Value(n),s::Value(1)});}script.call(194,{s::Value(1000000),s::Value(0),s::Value(1)});script.finish();
+    banks["ck-gal.pak"]=bank({{"Global.vrb",text("3,FLG_00,0\r\n3,FLG_\x8f\xcd\x8a\xc7\x97\x9d\x83T\x83u,0\r\n")},{"LFScriptFunc.fnc",functions(0,200)},{"LFScriptFuncEx.fnc",functions(200,239)},{"1001.bnr",script.code},{"1001.txt",text(script.strings)}});
+    std::vector<std::shared_ptr<VoiceState>> voices;g::SceneServices transport;transport.speech=[&](const auto& line){auto state=std::make_shared<VoiceState>();state->line=line;voices.push_back(state);return std::make_unique<Voice>(state);};
+    auto saves=std::make_shared<Saves>();g::Application app([&](auto name)->std::shared_ptr<r::Source>{const auto it=banks.find(std::string(name));return it==banks.end()?nullptr:it->second;},std::make_shared<p::Store>(std::make_shared<Storage>()),std::make_shared<Settings>(),saves,memory_resolver(),1,transport);
+    const g::BacklogView::Loader app_loader=[&](auto name){return images.request(name);};
+    rejects([&]{app.prepare_backlog({},text_loader);});++guards;app.prepare_backlog(app_loader,text_loader);app.prepare_options(app_loader);g::SaveServices save;save.images=app_loader;save.text=text_loader;save.stamp=[]{return g::SaveStamp{};};save.thumbnail=[](auto&){return std::make_shared<const i::Raster>(i::Raster{128,72,Bytes(128u*72*4,255)});};app.prepare_saves(save);
+    app.start({},0);std::int64_t now{};const auto tick=[&](g::Input input={}){now+=16667;return app.frame(now,input,[&]{return now;});};
+    until([&]{return app.scene()->backlog().entries().size()==1 && app.scene()->dialogue_state().phase()==s::DialoguePhase::waiting;},[&]{tick();});g::Input advance;advance.advance=true;tick(advance);
+    until([&]{return app.scene()->backlog().entries().size()==2 && app.scene()->dialogue_state().phase()==s::DialoguePhase::waiting;},[&]{tick();});const auto frozen=app.scene()->checkpoint();auto mixer=app.mixer();const auto ticks=app.scene()->statistics().ticks;++cases;
+    const auto button=[&](unsigned id){g::Input input;input.advance=true;input.selection={true,true,false,float(s::story_button_x.at(id)+1),681,0};return tick(input);};
+    CHECK(button(5).ticks==0 && app.page()==g::Page::backlog && app.backlog_view() && app.scene()->statistics().ticks==ticks);const auto menu_frozen=app.scene()->checkpoint();const auto before_menu=g::SavedScene::decode(frozen),after_menu=g::SavedScene::decode(menu_frozen);CHECK(before_menu.parts==after_menu.parts && after_menu.logical_us==before_menu.logical_us+16667);
+    until([&]{return app.backlog_view()->phase()==g::BacklogPhase::active;},[&]{tick();});CHECK(app.scene()->checkpoint()==menu_frozen && app.mixer()==mixer && !mixer->paused());++cases;
+    g::RenderFrame rendered;rendered.capture(app);CHECK(std::none_of(rendered.overlays().begin(),rendered.overlays().end(),[](const auto& item){return item.space==i::SpriteSpace::dialogue;}) && rendered.overlays().size()>=app.backlog_view()->sprites().size());++cases;
+    g::Input replay_click;replay_click.selection={true,true,false,237,33,0};const auto history_state=app.scene()->backlog().checkpoint();tick(replay_click);CHECK(voices.back()->line.line==7 && app.scene()->backlog().checkpoint()==history_state);auto replay_voice=voices.back();++cases;
+    app.background(true,now);tick();CHECK(mixer->paused() && !replay_voice->done && app.scene()->statistics().ticks==ticks);app.background(false,now);tick();CHECK(!mixer->paused());++cases;
+    g::Input back;back.cancel=true;tick(back);CHECK(app.page()==g::Page::story && !app.backlog_view() && replay_voice->done && app.mixer()==mixer && app.scene()->statistics().ticks==ticks);tick();++cases;
+    button(0);CHECK(saves->entries.contains(g::quick_slot) && g::SaveDocument::wrapped(saves->entries.at(g::quick_slot)));++cases;
+    const auto revision=app.scene_revision();button(1);CHECK(app.scene_revision()==revision+1 && app.page()==g::Page::story);tick();++cases;
+    button(3);CHECK(app.page()==g::Page::save && app.save_view());app.back(now);tick();button(4);CHECK(app.page()==g::Page::load && app.save_view());app.back(now);tick();++cases;
+    button(2);CHECK(app.page()==g::Page::options && app.options_view());app.back(now);tick();++cases;
+    button(8);CHECK(app.scene()->dialogue().empty());tick(advance);CHECK(!app.scene()->dialogue().empty());++cases;
+    app.open(g::Page::backlog,now);until([&]{return app.backlog_view()->phase()==g::BacklogPhase::active;},[&]{tick();});rejects([&]{app.prepare_backlog(loader,text_loader);});++guards;app.title(now);CHECK(!app.backlog_view() && app.page()==g::Page::title);++cases;
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-backlog-view.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"maximum_pending_images\":"<<maximum_pending<<",\"maximum_new_images_per_tick\":"<<maximum_new_images<<",\"four_normal_rows\":true,\"novel_page_and_scroll\":true,\"shared_application_bound\":true,\"voice_replay_keeps_history\":true,\"toolbar_does_not_advance_story\":true,\"deferred_font_geometry_only\":true,\"synthetic_resources_only\":true,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out);std::cout<<"PASS common backlog layout, bounded images, input, replay ownership and story toolbar.\n";return 0;
+}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

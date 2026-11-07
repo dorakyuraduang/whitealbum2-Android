@@ -36,9 +36,11 @@ bool SceneVoices::permitted(std::int32_t speaker)const noexcept{
     for(unsigned n=0;n<groups.size();++n)if(groups[n]==speaker)return characters_[n];return true;
 }
 void SceneVoices::preview(const SpokenLine& line){play(0,line.speaker,line.chapter,line.line,255,0,false);}
-void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop,bool record){
+void SceneVoices::replay(const SpokenLine& line,std::int32_t volume){if(line.speaker<0 || line.speaker>99 || line.chapter<0 || line.chapter>9999 || line.line<0 || line.line>9999 || line.loop || volume<0 || volume>255)throw Error("Invalid native replay voice descriptor");play(0,line.speaker,line.chapter,line.line,volume,0,false,true);}
+bool SceneVoices::playing(std::int32_t channel)const{if(channel<0 || std::size_t(channel)>=slots_.size())throw Error("Native voice channel out of range");const auto& slot=slots_[std::size_t(channel)];return slot.voice && !slot.voice->finished();}
+void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop,bool record,bool resolved){
     auto& item=checked(channel);if(speaker==-1)speaker=speaker_();if(chapter==-1)chapter=chapter_();
-    const auto adjusted=std::int64_t(line)+(offset_?offset_():0);
+    const auto adjusted=std::int64_t(line)+(!resolved && offset_?offset_():0);
     if(chapter<0 || chapter>9999 || speaker<0 || speaker>99 || adjusted<0 || adjusted>9999)throw Error("native voice identity out of range");
     const SpokenLine line_info{speaker,chapter,std::int32_t(adjusted),loop!=0};if(record && events_.issued)events_.issued(std::uint32_t(channel),line_info,std::clamp(volume,0,255));
     // 0x461400 passes (mode == 0) as the repeat count. Both -1 and 1

@@ -5,6 +5,14 @@
 #include <stdexcept>
 
 namespace wa2::image {
+std::optional<std::array<float,2>> scene_point(float x,float y,const SceneTransform& transform){
+    for(auto value:{x,y,transform.x,transform.y,transform.scale,transform.angle})if(!std::isfinite(value) || std::abs(value)>1.e9f)throw std::runtime_error("Native input transform out of range");
+    if(transform.scale<0)throw std::runtime_error("Invalid native input scale");if(!transform.scale)return {};
+    float cosine=1,sine=0;if(transform.angle){const auto phase=float(double(transform.angle)*.01745329238474369);cosine=float(math::cosine_finite(phase).value);sine=float(math::sine_finite(phase).value);}
+    const auto dx=(x-640)/transform.scale,dy=(y-360)/transform.scale;
+    const std::array point{cosine*dx-sine*dy+640-transform.x,sine*dx+cosine*dy+360-transform.y};
+    if(!std::isfinite(point[0]) || !std::isfinite(point[1]))throw std::runtime_error("Native input transform overflow");return point;
+}
 std::optional<std::array<QuadVertex,6>> scene_quad(const QuadGeometry& q,std::uint32_t image_width,std::uint32_t image_height){
     for(const auto value:{q.x,q.y,q.width,q.height,q.source_x,q.source_y,q.source_width,q.source_height,q.angle,q.pivot_x,q.pivot_y,q.scale_x,q.scale_y,q.outer.x,q.outer.y,q.outer.scale,q.outer.angle})
         if(!std::isfinite(value) || std::abs(value)>1.e9f)throw std::runtime_error("Native quad coordinate out of range");

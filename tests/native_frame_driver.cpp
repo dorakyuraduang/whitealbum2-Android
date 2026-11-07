@@ -18,6 +18,7 @@ int main(int argc,char** argv){try{
     g::Input toggle;toggle.toggle_window=true;queue.add(toggle);queue.add(toggle);CHECK(!queue.take().toggle_window);queue.add(toggle);CHECK(queue.take().toggle_window && !queue.take().toggle_window);++cases;
     g::Input choice;choice.choice=3;queue.add(choice);choice.choice=6;queue.add(choice);CHECK(queue.take().choice==3 && queue.take().choice==-1);++cases;
     g::Input page;page.page_delta=1;queue.add(page);queue.add(page);CHECK(queue.take().page_delta==1 && !queue.take().page_delta && !page.continued().page_delta);page.page_delta=-2;rejects([&]{queue.add(page);});++guards;++cases;
+    g::Input wheel;wheel.scroll=1;queue.add(wheel);queue.add(wheel);CHECK(queue.take().scroll==1 && !queue.take().scroll && !wheel.continued().scroll);wheel.scroll=-2;rejects([&]{queue.add(wheel);});++guards;++cases;
     g::Input navigate;navigate.selection.navigation=1;navigate.selection.confirm=true;queue.add(navigate);queue.add(navigate);CHECK(queue.take().selection.navigation==1 && !queue.take().selection.confirm);++cases;
     queue.add(click);queue.clear();received=queue.take();CHECK(!received.advance && !received.selection.activate && !received.selection.pointer);++cases;
     for(auto invalid:{g::Input{.choice=8},g::Input{.choice=-2}}){rejects([&]{queue.add(invalid);});++guards;}

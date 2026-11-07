@@ -2,6 +2,7 @@
 #include "checkpoint_codec.hpp"
 #include "resource_catalog.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <limits>
 
@@ -181,8 +182,7 @@ std::span<const image::Sprite> SceneDialogue::sprites(){
         phase_==DialoguePhase::closing && close_ticks_?std::uint8_t(255-std::min(255u,open_elapsed_*255/close_ticks_)):std::uint8_t(255);
     if(settings_.window && !novel_.enabled()){add(0,16,496,1248,208,0,0,1248,208,transparent_?0:std::uint8_t(std::min(255,(picture_?settings_.picture_alpha:settings_.window_alpha))*alpha/255));
         add(1,16,496,1248,208,0,0,1248,208,alpha);}
-    static constexpr std::array<int,9> button_x{808,848,928,968,1008,1048,1088,1128,1168};
-    for(std::size_t i=0;i<button_x.size();++i)add(2,float(button_x[i]),680,40,40,float(i*40),0,40,40,std::uint8_t(std::min(255,settings_.button_alpha)*alpha/255),0x40f+int(i));
+    for(std::size_t i=0;i<story_button_x.size();++i)add(2,float(story_button_x[i]),680,40,40,float(i*40),0,40,40,std::uint8_t(std::min(255,settings_.button_alpha)*alpha/255),0x40f+int(i));
     add(3,0,672,1280,48,208,104,120,48,alpha);
     if(has_text_ && (!novel_.enabled() || novel_.text_visible())){
         const auto first=sprites_.size();
@@ -199,5 +199,10 @@ std::span<const image::Sprite> SceneDialogue::sprites(){
         if(name_elapsed_<10){const auto first=sprites_.size();fonts_.materialize(old_name_text_);old_name_text_.append(sprites_,0,100000,274+32-offset,508,std::uint8_t((255-name_alpha)*alpha/255));tag(first,0x105b,0x444+int(name_slot_^1));}
     }
     return sprites_;
+}
+std::optional<StoryControl> SceneDialogue::control_at(float x,float y)const{
+    if(!std::isfinite(x) || !std::isfinite(y))throw Error("Invalid native story control coordinates");
+    if(!visible_ || !assets_ready_ || phase_==DialoguePhase::closed || phase_==DialoguePhase::opening || phase_==DialoguePhase::closing || y<680 || y>=720)return {};
+    for(unsigned n=0;n<story_button_x.size();++n)if(x>=story_button_x[n] && x<story_button_x[n]+40)return StoryControl(n);return {};
 }
 }

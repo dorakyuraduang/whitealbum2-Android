@@ -73,6 +73,17 @@ std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
 void Scene::options_preview_effects(){game::options_preview_effects(effects_,preferences_);}
 void Scene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
 void Scene::options_reset_sound(){game::options_reset_sound(effects_);}
+std::optional<script::StoryControl> Scene::control_at(float x,float y)const{
+    const auto point=image::scene_point(x,y,shake_.dialogue());return point?dialogue_.control_at((*point)[0],(*point)[1]):std::nullopt;
+}
+void Scene::story_control(script::StoryControl control){
+    switch(control){
+    case script::StoryControl::skip:controls_.latched_skip(!controls_.modes().latched_skip);break;
+    case script::StoryControl::automatic:controls_.auto_mode(!controls_.modes().auto_mode,preferences_.auto_ticks);break;
+    case script::StoryControl::hide:window_visible_=!window_visible_;dialogue_.visible(window_visible_);break;
+    default:throw script::Error("Native scene control requires its application owner");
+    }
+}
 std::int32_t Scene::theme()const{
     for(const auto& variable:library_.globals().variables())if(variable.name=="FLG_00"){
         const auto value=variable.value.integer();if(value<0 || value>6)throw script::Unsupported("Native story theme is out of range");return value;

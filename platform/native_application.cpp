@@ -40,6 +40,7 @@ std::unique_ptr<game::Application> native_application(resource::BankOpener opene
         game::SaveStamp stamp{{local.tm_year+1900,local.tm_mon+1,local.tm_mday,local.tm_wday,local.tm_hour,local.tm_min,local.tm_sec},std::uint64_t(milliseconds)};stamp.date.validate();return stamp;
     };
     application->prepare_saves(std::move(saves));
+    application->prepare_backlog([menu_resources](auto name){return menu_resources->image("grp",name);},[owner=application.get()](auto raw,const auto& style){return owner->menu_text(raw,style);});
     // A failed title/provider preparation must not persist test-mode changes.
     if(startup.test_mode)progress->flush();return application;
 }

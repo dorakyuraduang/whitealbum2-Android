@@ -27,6 +27,7 @@ game::Input game_input(const InputSnapshot& events){
     input.selection.navigation=int(events.pressed_keys[SDL_SCANCODE_DOWN])-int(events.pressed_keys[SDL_SCANCODE_UP]);
     input.pointer_held=events.buttons[0];
     input.page_delta=int(events.pressed_keys[SDL_SCANCODE_PAGEDOWN])-int(events.pressed_keys[SDL_SCANCODE_PAGEUP]);
+    input.scroll=events.wheel_y>0?1:events.wheel_y<0?-1:0;
     return input;
 }
 SdlApplication::SdlApplication(game::Application& application,SdlCanvas& canvas,game::DriverSettings settings,AudioOutputFactory factory,std::function<void()> submitted)

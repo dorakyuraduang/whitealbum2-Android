@@ -7,6 +7,8 @@
 
 namespace wa2::script {
 enum class DialoguePhase {closed,opening,typing,waiting,complete,closing};
+enum class StoryControl {quick_save,quick_load,options,save,load,backlog,skip,automatic,hide};
+inline constexpr std::array<int,9> story_button_x{808,848,928,968,1008,1048,1088,1128,1168};
 struct DialogueSettings {
     int skin{},window_alpha{207},picture_alpha{134},button_alpha{134},text_step{2},open_ticks{10};
     bool window{true};
@@ -34,6 +36,7 @@ public:
     const text::PreparedText& text()const noexcept{return body_;}
     const SceneNovel& novel()const noexcept{return novel_;}
     std::span<const image::Sprite> sprites();
+    std::optional<StoryControl> control_at(float x,float y)const;
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t>);
     void prepare_restored_assets(resource::Catalog&,const image::Resolve&);

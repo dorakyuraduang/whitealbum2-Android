@@ -18,10 +18,10 @@ void RenderFrame::compose(const script::BackgroundFrame& background,std::span<co
     // share the same source slot. Preserve their original order on equal keys.
     std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});
 }
-void RenderFrame::capture(Scene& scene){
+void RenderFrame::capture(Scene& scene,bool dialogue){
     const auto active=scene.movie_active();
     if(active){const std::array groups{scene.captions()};compose({}, {},groups,{},true,scene.movie());}
-    else{const std::array groups{scene.foreground(),scene.dialogue(),scene.selection(),scene.calendar(),scene.captions()};
+    else{const std::array groups{scene.foreground(),dialogue?scene.dialogue():std::span<const image::Sprite>{},dialogue?scene.selection():std::span<const image::Sprite>{},scene.calendar(),scene.captions()};
         compose(scene.background(),scene.environment(),groups,scene.dialogue_transform());}
 }
 void RenderFrame::capture(const TitleScene& title){
@@ -41,7 +41,11 @@ void RenderFrame::capture(Application& application){
         overlays_.insert(overlays_.end(),sprites.begin(),sprites.end());
         std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return;
     }
-    case Page::backlog:case Page::extras:
+    case Page::backlog:
+        if(!application.backlog_view() || !application.scene() || application.navigation().size()!=2)throw script::Unsupported("Native backlog presentation has not been prepared");
+        capture(*application.scene(),false);overlays_.insert(overlays_.end(),application.backlog_view()->sprites().begin(),application.backlog_view()->sprites().end());
+        std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return;
+    case Page::extras:
         throw script::Unsupported("Native page view is not implemented: "+std::to_string(unsigned(application.page())));
     }
     throw script::Unsupported("Unknown native presentation page");

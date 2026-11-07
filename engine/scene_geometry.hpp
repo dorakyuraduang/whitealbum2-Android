@@ -24,4 +24,5 @@ struct QuadGeometry {
 // reflection precedes rotation, followed by the independent X/Y scales.
 // SDL uses pixel edges directly, so no D3D9 half-pixel offset is applied here.
 std::optional<std::array<QuadVertex,6>> scene_quad(const QuadGeometry&,std::uint32_t image_width,std::uint32_t image_height);
+std::optional<std::array<float,2>> scene_point(float x,float y,const SceneTransform&);
 }

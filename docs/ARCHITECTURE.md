@@ -331,8 +331,9 @@ LogOut suppresses voice attachment; ordinary text/name/novel-mode records remain
 Raw text is bounded by the native language's 4095-byte limit, names by 63 bytes.
 Checkpoints retain ordered entries and the pending voice descriptor and validate
 before replacing live state. Synthetic checks cover capacity, order, metadata
-while skipping, and corruption recovery. Backlog presentation/audio replay,
-source UI edge cases and whole-scene save integration remain incomplete.
+while skipping, and corruption recovery. Backlog presentation/audio replay now
+has the common application binding described below. Source UI edge cases and
+whole-game compatibility remain incomplete.
 
 Background checkpoints now retain both world layers, pending/reused image
 references, masks, camera tween state and every transition counter/parameter.
@@ -715,8 +716,8 @@ parent-image zoom are pending. The current compositor retains the live parent
 scene beneath the options overlay. Persisting confirmation/window policies is
 not a claim that every action using them has been implemented.
 
-The native story engine remains incomplete: full options/extras/
-backlog views, production host integration and unsupported render/animation/
+The native story engine remains incomplete: full options/extras views,
+production host integration and unsupported render/animation/
 weather modes still need native implementations or integration. Source manual
 save and INI conversion are also unfinished. No whole-game or device/performance
 claim follows from these component checks. Existing generated C++/CFG is a
@@ -780,6 +781,34 @@ owner. Story menus reuse the existing FontBook; the title creates a lazy one.
 An options confirmation no longer creates a second long-lived copy of the
 same source font pages alongside an active story. Glyph images still own their
 pixels independently and can outlive scene/view replacement in a retained frame.
+
+`game/backlog_view.*` now binds the native history deque to the common
+Application. Cached layout constants supply four normal rows in chronological
+display order, one novel entry, name/body metrics, speaker controls, scrollbar,
+top/bottom strips and return control. Only the visible entries prepare text;
+scrolling retains the old rows if preparing an incoming page fails. Image
+preparation retains one pending request and starts at most two per logic tick.
+Normal/novel row limits and retained-frame ownership use ordinary game objects.
+The application suppresses current dialogue/choice overlays under the history
+page and freezes story logic while continuing its existing mixer. Backgrounding
+freezes the page as well. Sequential replay retains at most ten descriptors,
+uses the same speech channel and character/mute settings, and never creates a
+new history event. Recorded line numbers are absolute: replay does not add the
+current script's speech offset again. Closing or replacing the view releases its
+replay owner before replacing the scene.
+
+The nine bottom controls now share their cached hit rectangles with the
+dialogue renderer. Their quick-save/load, settings, save/load, history, skip,
+auto and window actions are processed before story advancement. Input is
+unprojected through the dialogue transform before hit testing. The scroll and
+page edges are queued once by the shared frame driver; held pointer state is
+reserved for scrollbar dragging. Quick-save currently writes the isolated
+native quick slot directly; its source confirmation/result presentation, menu
+entry/exit capture/zoom, held-arrow repetition, live replay-level meter and
+native per-speaker voice-control disabling remain unfinished. The view checks
+use constructed PAKs and deferred font geometry, not original glyph pixels,
+game playback, a screen or device input. No native game package is released by
+these checks.
 
 ## Current released implementation
 

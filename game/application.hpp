@@ -4,6 +4,7 @@
 #include "title_scene.hpp"
 #include "options_preferences.hpp"
 #include "save_view.hpp"
+#include "backlog_view.hpp"
 
 namespace wa2::game {
 enum class Page {title,story,options,save,load,backlog,extras,closed};
@@ -36,6 +37,12 @@ class Application {
     std::unique_ptr<OptionsView> options_view_;
     SaveServices save_services_;
     std::unique_ptr<SaveView> save_view_;
+    BacklogView::Loader backlog_loader_;
+    BacklogView::Text backlog_text_;
+    std::unique_ptr<BacklogView> backlog_view_;
+    std::vector<script::BacklogVoice> replay_;
+    std::size_t replay_next_{};
+    std::optional<std::size_t> replay_entry_;
     std::int32_t extra_{-1};
     std::vector<Page> pages_{Page::title};
     std::int64_t observed_{};
@@ -47,6 +54,8 @@ class Application {
     void suspend_scene(std::int64_t now);
     void replace_scene(std::unique_ptr<Scene>,std::int64_t now);
     SaveDocument save_document();
+    void close_backlog();
+    void control(script::StoryControl,std::int64_t now);
 public:
     Application(resource::BankOpener,std::shared_ptr<progress::Store>,std::shared_ptr<PreferenceStorage>,std::shared_ptr<SaveStorage>,Scene::SavedImageResolver,std::uint32_t seed=1,SceneServices services={});
     Page page()const noexcept{return pages_.back();}
@@ -58,6 +67,7 @@ public:
     const TitleScene* title_scene()const noexcept{return title_scene_.get();}
     const OptionsView* options_view()const noexcept{return options_view_.get();}
     const SaveView* save_view()const noexcept{return save_view_.get();}
+    const BacklogView* backlog_view()const noexcept{return backlog_view_.get();}
     text::PreparedText menu_text(std::string_view,const text::TextStyle&);
     std::int32_t extra()const noexcept{return extra_;}
     bool background()const noexcept{return background_;}
@@ -68,6 +78,7 @@ public:
     // decode menu assets. Reset/preview owners remain explicit integration work.
     void prepare_options(OptionsView::Loader,std::function<void(OptionsCommand)> = {},ConfirmationView::Text = {});
     void prepare_saves(SaveServices);
+    void prepare_backlog(BacklogView::Loader,BacklogView::Text);
     void prepare_save_thumbnail(std::function<std::shared_ptr<const image::Raster>(Scene&)>);
     bool has_save_thumbnail()const noexcept{return bool(save_services_.thumbnail);}
     void start(const StoryStart&,std::int64_t now);
