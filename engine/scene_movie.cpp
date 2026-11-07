@@ -1,9 +1,15 @@
 #include "scene_movie.hpp"
+#include <cmath>
 
 namespace wa2::script{
 SceneMovie::SceneMovie(Factory factory,std::function<void()> before_play,unsigned file_suffix,std::function<void(std::int32_t)> seen)
     :factory_(std::move(factory)),before_play_(std::move(before_play)),suffix_(file_suffix),seen_(std::move(seen)){
     if(!factory_ || suffix_>2)throw Error("invalid native movie factory or file suffix");
+}
+SceneMovie::~SceneMovie(){if(playback_)playback_->stop();}
+void SceneMovie::gain(float value){
+    if(!std::isfinite(value) || value<0 || value>1)throw Error("Invalid native movie amplitude");
+    amplitude_=value;if(playback_)playback_->gain(value);
 }
 void SceneMovie::record_seen(){if(!recorded_ && record_>=200 && seen_){seen_(record_);recorded_=true;}}
 std::optional<CommandResult> SceneMovie::dispatch(Command& command){
@@ -18,7 +24,7 @@ std::optional<CommandResult> SceneMovie::dispatch(Command& command){
         stop();playback_.reset();record_=record;recorded_=false;
         if(before_play_)before_play_();
         playback_=factory_(stem+char('0'+suffix_)+".pak",command.arguments[1].integer());
-        if(!playback_)throw Error("native movie factory returned no playback");command.continuation=1;
+        if(!playback_)throw Error("native movie factory returned no playback");playback_->gain(amplitude_);command.continuation=1;
     }
     if(!playback_)throw Error("SetMovie resumed without a player");
     const bool done=playback_->finished();if(done){record_seen();playback_.reset();}

@@ -11,6 +11,7 @@ struct StoryStart {std::string scene{"1001"};std::int32_t label{};bool replay{};
 // version of the story/save/menu transition rules. Page views are separate.
 class Application {
     resource::BankOpener opener_;
+    SceneServices services_;
     std::shared_ptr<progress::Store> progress_;
     PreferenceStore preferences_;
     SaveSlots saves_;
@@ -30,7 +31,7 @@ class Application {
     void suspend_scene(std::int64_t now);
     void replace_scene(std::unique_ptr<Scene>,std::int64_t now);
 public:
-    Application(resource::BankOpener,std::shared_ptr<progress::Store>,std::shared_ptr<PreferenceStorage>,std::shared_ptr<SaveStorage>,Scene::SavedImageResolver,std::uint32_t seed=1);
+    Application(resource::BankOpener,std::shared_ptr<progress::Store>,std::shared_ptr<PreferenceStorage>,std::shared_ptr<SaveStorage>,Scene::SavedImageResolver,std::uint32_t seed=1,SceneServices services={});
     Page page()const noexcept{return pages_.back();}
     std::span<const Page> navigation()const noexcept{return pages_;}
     Scene* scene()noexcept{return scene_.get();}

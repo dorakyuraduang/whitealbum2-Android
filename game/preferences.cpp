@@ -1,5 +1,6 @@
 #include "preferences.hpp"
 #include "checkpoint_codec.hpp"
+#include <algorithm>
 #include <stdexcept>
 
 namespace wa2::game {
@@ -9,6 +10,7 @@ void Preferences::validate()const{
     for(auto v:{window_alpha,picture_alpha,button_alpha,novel_alpha})if(v<0 || v>255)throw std::invalid_argument("Native preference opacity is out of range");
     if(text_step<0 || text_step>1000 || auto_ticks<0 || auto_ticks>36000)throw std::invalid_argument("Native preference text timing is out of range");
 }
+float Preferences::movie_amplitude()const{validate();return float(std::min(255,master*music/256))/255.f;}
 std::vector<std::uint8_t> Preferences::encode()const{
     validate();checkpoint::Writer out;
     for(auto v:{master,music,effects,speech,skin,window_alpha,picture_alpha,button_alpha,novel_alpha,text_step,auto_ticks})out.i32(v);

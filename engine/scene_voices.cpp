@@ -61,6 +61,10 @@ void SceneVoices::update(const std::function<std::int32_t(std::int32_t)>& adjust
         apply(item);
     }
 }
+void SceneVoices::stop(std::int32_t channel,std::int32_t fade){
+    auto& item=checked(channel);if(!item.voice)return;
+    if(!fade)stop(item);else{item.from=item.volume;item.target=0;item.duration=fade;item.elapsed=0;item.fading=item.stopping=true;}
+}
 std::optional<CommandResult> SceneVoices::dispatch(Command& command){
     const auto count=[&](std::size_t n){if(command.arguments.size()!=n)throw Error("invalid native voice parameters");};
     const auto v=[&](std::size_t n){return command.arguments[n].integer();};
@@ -72,8 +76,7 @@ std::optional<CommandResult> SceneVoices::dispatch(Command& command){
     case 140:{count(2);const auto& item=checked(v(0));const bool interrupted=v(1)!=0 && ((skip_ && skip_()) || (advance_ && advance_()));
         return CommandResult{!item.voice || interrupted,true,Value{}};}
     // VS(fade, channel), matching the actual 0x454e40 stack order.
-    case 141:{count(2);auto& item=checked(v(1));if(item.voice){if(v(0)==0)stop(item);else{item.from=item.volume;item.target=0;item.duration=v(0);item.elapsed=0;item.fading=item.stopping=true;}}
-        return CommandResult{true,false,Value{}};}
+    case 141:count(2);stop(v(1),v(0));return CommandResult{true,false,Value{}};
     // Cached 0x456630 reorders VXV(volume, duration, channel) for 0x406160.
     // A VS fade locks the channel against further volume changes. VXV(0/1)
     // lowers its gain without stopping playback or losing the remembered gain.

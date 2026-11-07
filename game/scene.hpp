@@ -33,11 +33,21 @@ struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};scri
     Input continued()const{auto next=*this;next.advance=next.toggle_window=next.cancel=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=0;return next;}
 };
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
+// Optional transport providers, used without changing common game policy.
+// Default providers decode the same external PAK members on every host.
+// State checks inject finite fakes instead of opening device/codec transports.
+struct SceneServices {
+    script::SceneMusic::Factory music;
+    script::SceneEffects::PreparedFactory effects;
+    script::SceneVoices::Factory speech;
+    script::SceneMovie::Factory movie;
+};
 // Shared native migration core; not yet the released app's game entry.
 // It contains ordinary game state and the original LSCR language, no CPU state,
 // original machine-code image, Windows imports, or instruction dispatcher.
 class Scene {
     resource::Catalog resources_;
+    SceneServices services_;
     std::shared_ptr<audio::Mixer> mixer_;
     audio::SystemSounds system_sounds_;
     text::FontBook fonts_;
@@ -80,7 +90,7 @@ class Scene {
     void choose(std::uint32_t ordinal);
     bool skipping()const{return (input_.skip || controls_.modes().latched_skip) && !controls_.modes().demo_mode && !choices_.active() && (!skip_read_only_ || reading_.status(replay_mode_)!=0);}
 public:
-    explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={});
+    explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={},SceneServices services={});
     void start(std::string_view scene="1001",std::int32_t label=0);
     script::RunState update(std::int64_t monotonic_us,Input input={});
     FrameBatch advance_frame(std::int64_t monotonic_us,Input input,const std::function<std::int64_t()>& budget_clock,FrameBudget budget={});
@@ -112,7 +122,7 @@ public:
     void flush_progress(){reading_.finish();}
     std::vector<std::uint8_t> checkpoint()const;
     using SavedImageResolver=std::function<image::Resolve(resource::Catalog&)>;
-    static std::unique_ptr<Scene> restore(resource::BankOpener,std::shared_ptr<progress::Store>,std::span<const std::uint8_t>,std::int64_t monotonic_us,const SavedImageResolver&,const Preferences& preferences={});
+    static std::unique_ptr<Scene> restore(resource::BankOpener,std::shared_ptr<progress::Store>,std::span<const std::uint8_t>,std::int64_t monotonic_us,const SavedImageResolver&,const Preferences& preferences={},SceneServices services={});
 private:
     bool can_accelerate()const;
 };

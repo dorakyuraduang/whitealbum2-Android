@@ -110,6 +110,8 @@ add_executable(wa2_native_title_scene_tests "${WA2_ROOT}/tests/native_title_scen
 target_link_libraries(wa2_native_title_scene_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_render_frame_tests "${WA2_ROOT}/tests/native_render_frame.cpp")
 target_link_libraries(wa2_native_render_frame_tests PRIVATE wa2_game_scene)
+add_executable(wa2_native_movie_state_tests "${WA2_ROOT}/tests/native_movie_state.cpp")
+target_link_libraries(wa2_native_movie_state_tests PRIVATE wa2_game_scene)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -177,6 +179,7 @@ if(NOT ANDROID)
     add_test(NAME native_title_view COMMAND wa2_native_title_view_tests "${CMAKE_BINARY_DIR}/native-title-view.json")
     add_test(NAME native_title_scene COMMAND wa2_native_title_scene_tests "${CMAKE_BINARY_DIR}/native-title-scene.json")
     add_test(NAME native_render_frame COMMAND wa2_native_render_frame_tests "${CMAKE_BINARY_DIR}/native-render-frame.json")
+    add_test(NAME native_movie_state COMMAND wa2_native_movie_state_tests "${CMAKE_BINARY_DIR}/native-movie-state.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

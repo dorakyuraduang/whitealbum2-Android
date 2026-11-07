@@ -14,6 +14,7 @@ public:
     ~SceneVoices();
     std::optional<CommandResult> dispatch(Command& command);
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
+    void stop(std::int32_t channel,std::int32_t fade=0);
     std::size_t active()const noexcept;
     bool loading()const;
     std::uint64_t played()const noexcept{return played_;}

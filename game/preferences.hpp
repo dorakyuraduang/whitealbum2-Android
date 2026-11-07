@@ -20,6 +20,7 @@ struct Preferences {
     std::array<bool,10> character_voice{true,true,true,true,true,true,true,true,true,true};
     bool operator==(const Preferences&)const=default;
     void validate()const;
+    float movie_amplitude()const;
     std::vector<std::uint8_t> encode()const;
     static Preferences decode(std::span<const std::uint8_t>);
 };

@@ -8,8 +8,8 @@
 #include <iomanip>
 
 namespace wa2::game {
-Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<progress::Store> progress)
-    :resources_(std::move(opener)),mixer_(std::make_shared<audio::Mixer>()),system_sounds_(*mixer_,[this](auto id){return sound_resource(id);}),fonts_(resources_.required("fon")),
+Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<progress::Store> progress,SceneServices services)
+    :resources_(std::move(opener)),services_(std::move(services)),mixer_(std::make_shared<audio::Mixer>()),system_sounds_(*mixer_,[this](auto id){return sound_resource(id);}),fonts_(resources_.required("fon")),
     library_(resources_.required("ck-gal")),session_(library_),random_(seed),progress_store_(std::move(progress)),reading_(progress_store_),builtins_(random_),
     controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();},[this]{return reading_.status(replay_mode_);}),
     progress_(progress_store_),
@@ -36,7 +36,11 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     characters_([this](auto name){return resources_.image("char",name,controls_.modes().character_chroma,controls_.modes().character_effect);}),
     dialogue_(fonts_,[this](auto name){return resources_.image("grp",name);},[this](auto line){
         reading_.seen(session_.active()?session_.active()->program().name():statistics_.scene,line);controls_.reset_message_timer();++statistics_.messages;},[this]{shake_.end_message();}),
-    movies_([this](auto name,auto){auto player=std::make_unique<movie::Player>(resources_.movie(name),mixer_);player->gain(1);return player;},{},0,[this](auto id){
+    movies_([this](auto name,auto record)->std::unique_ptr<movie::Playback>{return services_.movie?services_.movie(name,record):std::make_unique<movie::Player>(resources_.movie(name),mixer_);},[this]{
+        // Cached SetMovie 0x413a1c stops speech channel 0, then 0x413920
+        // stops all ordinary/channel effects. Other voices, BGM and visual
+        // state remain live; 0x413bf0 is a different full-reset path.
+        voices_.stop(0);effects_.stop_all();},0,[this](auto id){
         if(!progress_store_)throw script::Error("Missing native movie progress storage");progress_store_->state().set_flag(std::uint32_t(id),1);progress_store_->flush();}){
     environment_.reserve(432);foreground_.reserve(432);
     system_sounds_.prepare();
@@ -46,8 +50,10 @@ void Scene::preferences(const Preferences& value){
     value.validate();auto dialogue=dialogue_.settings();dialogue.skin=value.skin;dialogue.window_alpha=value.window_alpha;dialogue.picture_alpha=value.picture_alpha;dialogue.button_alpha=value.button_alpha;dialogue.novel_alpha=value.novel_alpha;dialogue.text_step=value.text_step;dialogue.window=value.window;
     music_.settings(value.master,value.music);effects_.settings(value.master,value.effects);voices_.settings(value.master,value.speech,value.mute_adult);voices_.enabled(value.voice_enabled);voices_.character_switches(value.character_voice);system_sounds_.settings(value.master,value.effects);
     dialogue_.settings(dialogue);script::SelectionSettings selection;selection.skin=value.skin;selection.replay=replay_mode_;selection_.settings(selection);controls_.auto_delay(value.auto_ticks);skip_read_only_=value.skip_read_only;preferences_=value;
+    movies_.gain(value.movie_amplitude());
 }
 std::unique_ptr<audio::Voice> Scene::sound(std::int32_t id,bool loop,bool paused){
+    if(services_.effects)return services_.effects(id,loop,paused);
     auto resource=sound_resource(id);
     if(resource.ogg)return audio::play_ogg(*mixer_,{resource.source,loop?resource.source:nullptr},{},paused);
     return audio::play_wave(*mixer_,std::move(resource.source),loop,{},paused);
@@ -56,9 +62,11 @@ audio::SoundResource Scene::sound_resource(std::int32_t id){
     return audio::effect_resource(resources_,id);
 }
 std::unique_ptr<audio::Voice> Scene::music(std::int32_t id,bool loop){
+    if(services_.music)return services_.music(id,loop);
     return audio::play_ogg(*mixer_,audio::music_resources(resources_,id,loop));
 }
 std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
+    if(services_.speech)return services_.speech(line);
     auto source=audio::speech_resource(resources_,line.chapter,line.line,line.speaker);return audio::play_ogg(*mixer_,{source,line.loop?source:nullptr});
 }
 void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);reading_.enter(scene);choices_.clear();backlog_.clear();title_requested_=false;statistics_.scene=scene;}

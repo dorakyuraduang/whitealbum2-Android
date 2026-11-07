@@ -501,6 +501,24 @@ in memory. This does not verify a movie decoder on a device or visual parity.
 The remaining full options/save/load/extras/backlog page views and production
 host loop still need completion before this is a complete native game.
 
+Story `SetMovie` now uses the cached pre-play audio sequence: stop speech
+channel 0, then every one-shot, looping and prepared effect. Other speech
+channels, BGM and all scene/UI state remain owned while movie presentation
+temporarily replaces the picture. This is distinct from the cached full-reset
+path. Movie amplitude follows the same quantized master/music preferences as
+title movies, including live edits, and dropping a scene stops its active
+movie transport without marking an uncompleted movie seen.
+
+`SceneServices` injects common music/effect/speech/movie transports and survives
+application save/load replacement. Defaults still use the common resource and
+codec components; platform adapters do not implement game policy. Twenty-eight
+constructed cases and fourteen guards cover pre-play ordering, retained visual
+owners, preference changes, background clock suspension, movie EOF, failed
+providers and transport ownership after load. They use fake transports and
+constructed scripts/archives only. Movie completion intentionally yields one
+frame before the following script command. No original story, audio/video
+device, game window or screen is used by these checks.
+
 `game/render_frame.*` assembles an owned shared presentation snapshot for title
 and story. Background/environment membership remains separate from overlays;
 foreground bitmaps, dialogue, selection, calendar and captions merge by the

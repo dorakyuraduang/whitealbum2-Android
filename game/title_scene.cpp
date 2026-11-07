@@ -15,12 +15,12 @@ TitleScene::TitleScene(resource::BankOpener opener,std::shared_ptr<progress::Sto
 TitleScene::~TitleScene(){if(movie_)movie_->stop();}
 void TitleScene::preferences(const Preferences& value){
     value.validate();preferences_=value;music_.settings(value.master,value.music);sounds_.settings(value.master,value.effects);
-    if(movie_)movie_->gain(float(std::min(255,value.master*value.music/256))/255.f);
+    if(movie_)movie_->gain(value.movie_amplitude());
 }
 void TitleScene::begin_movie(std::string_view stem){
     const auto name=std::string(stem)+char('0'+startup_.movie_suffix)+".pak";
     auto next=services_.movie?services_.movie(name):std::make_unique<movie::Player>(resources_.movie(name),mixer_);
-    if(!next)throw script::Error("Native title movie factory returned no player");next->gain(float(std::min(255,preferences_.master*preferences_.music/256))/255.f);movie_=std::move(next);
+    if(!next)throw script::Error("Native title movie factory returned no player");next->gain(preferences_.movie_amplitude());movie_=std::move(next);
 }
 void TitleScene::begin_view(){view_.prepare(content_,progress_->state());stage_=TitleStage::view;}
 void TitleScene::pause(bool value,std::int64_t now){timeline_.pause(value,now);if(value)mixer_->pause(true);if(movie_)movie_->pause(value,now);if(!value)mixer_->pause(false);}

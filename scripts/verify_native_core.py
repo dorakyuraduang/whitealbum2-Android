@@ -56,6 +56,7 @@ def main():
     inputs += [ROOT/'tests/native_title_view.cpp']
     inputs += [ROOT/'tests/native_title_scene.cpp']
     inputs += [ROOT/'tests/native_render_frame.cpp',ROOT/'platform/sdl_movie.cpp',ROOT/'platform/sdl_movie.hpp',ROOT/'platform/sdl_presentation.cpp',ROOT/'platform/sdl_presentation.hpp']
+    inputs += [ROOT/'tests/native_movie_state.cpp']
     inputs += [ROOT/'tests/native_preference_storage.cpp',ROOT/'platform/private_file.cpp',ROOT/'platform/private_file.hpp',ROOT/'platform/preference_storage.cpp',ROOT/'platform/preference_storage.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
@@ -97,6 +98,7 @@ def main():
             if host=='windows':targets+=['wa2_native_title_view_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
+            if host=='windows':targets+=['wa2_native_movie_state_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -116,6 +118,7 @@ def main():
             allowed+=('tests/native_title_view.cpp',)
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
+            allowed+=('tests/native_movie_state.cpp',)
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -280,6 +283,9 @@ def main():
                 run([directory/'wa2_native_render_frame_tests.exe',directory/'native-render-frame.json'],console,90)
                 render_frame=json.loads((directory/'native-render-frame.json').read_text())
                 if not render_frame['passed'] or render_frame['cases']<23 or render_frame['guards']<3 or not render_frame['source_layer_order'] or not render_frame['equal_keys_stable'] or not render_frame['owned_snapshot'] or not render_frame['capture_does_not_advance_logic'] or not render_frame['synthetic_resources_only'] or render_frame['original_resources_opened'] or render_frame['devices_opened'] or render_frame['game_launched'] or render_frame['screen_access']:raise ValueError('Native frame assembly checks failed')
+                run([directory/'wa2_native_movie_state_tests.exe',directory/'native-movie-state.json'],console,90)
+                movie_state=json.loads((directory/'native-movie-state.json').read_text())
+                if not movie_state['passed'] or movie_state['cases']<28 or movie_state['guards']<12 or not movie_state['source_preplay_audio_order'] or not movie_state['movie_gain_follows_preferences'] or not movie_state['visual_state_preserved'] or not movie_state['services_survive_save_load'] or not movie_state['fake_transports_only'] or not movie_state['synthetic_resources_only'] or movie_state['original_resources_opened'] or movie_state['devices_opened'] or movie_state['game_launched'] or movie_state['screen_access']:raise ValueError('Native movie integration checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -330,6 +336,7 @@ def main():
     report['title_view']=title_view
     report['title_scene']=title_scene
     report['render_frame']=render_frame
+    report['movie_state']=movie_state
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 
