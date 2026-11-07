@@ -449,8 +449,26 @@ the bounded skip scheduler and reports unsupported modal movie use or a script
 ending without a title request. Its synthetic integration checks use constructed
 PAKs/scripts and memory PCM/storage, with no window, device or original story.
 Hosts must retain a shared mixer owner until their old audio output is detached.
-These navigation transitions do not yet provide the missing title/options,
-save/load, extras or backlog page views, nor a launchable native application.
+These navigation transitions do not yet connect all page views or provide a
+launchable native application.
+
+`game/title_view.*` implements the original root/chapter/extras title view with
+ordinary shared state and external image requests. Cached menu tables supply
+the normal/highlight atlas cells, exact hit widths and content unlock rules;
+button focus uses logical 1280x720 input, independently of display scaling.
+The background advances by the source's binary32 1.2 promoted to binary64,
+then stored back as binary32. Background/heading/button fades, staggered scale
+easing, copyright, help crops, perspective snow, chapter entries 1001/2001/3001,
+special-story entries 5000/5100 and exit timings remain in the common code.
+The combined title's eight atlases are loaded before its first tick; unsupported
+smaller atlas layouts fail explicitly. Injected music/cue services and typed
+commands keep device audio and application navigation outside the view.
+Twenty-one constructed-image cases and six guards check the fades, boundary
+hits, modal resume, chapter gating, menu back paths and delayed scene/quit
+commands. These are owned-memory component checks, without original pixels,
+game/window launch or visual verification. Startup movies, the title's
+application/audio integration, and the remaining full menu views still need
+completion before this can be a complete native game.
 
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
