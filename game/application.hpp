@@ -102,6 +102,8 @@ public:
     void start(const StoryStart&,std::int64_t now);
     void open(Page,std::int64_t now);
     void open_extra(std::int32_t,std::int64_t now);
+    UserMenuState user_menu()const;
+    bool user_command(UserCommand,std::int64_t now);
     bool back(std::int64_t now);
     void title(std::int64_t now);
     void background(bool,std::int64_t now);

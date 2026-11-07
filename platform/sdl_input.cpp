@@ -13,6 +13,7 @@ void SdlInput::logical_size(int width,int height){enter();if(width<1 || height<1
 void SdlInput::begin_frame(){
     enter();snapshot_.pressed_keys.reset();snapshot_.released_keys.reset();snapshot_.pressed_buttons.reset();snapshot_.released_buttons.reset();
     snapshot_.wheel_x=snapshot_.wheel_y=0;snapshot_.renderer_reset=false;
+    snapshot_.commands.clear();
 }
 void SdlInput::position(float x,float y){
     if(coordinates_){const auto point=coordinates_(x,y);x=point.first;y=point.second;}
@@ -31,6 +32,8 @@ void SdlInput::release_all(){
 void SdlInput::consume(const SDL_Event& event){
     enter();
     switch(event.type){
+    case SDL_USEREVENT:
+        if(accepts(event.user.windowID))if(const auto command=user_command(event)){if(snapshot_.commands.size()==game::maximum_user_commands)throw std::runtime_error("Native SDL menu event queue exceeds its limit");snapshot_.commands.push_back(*command);}break;
     case SDL_QUIT:snapshot_.quit=true;release_all();break;
     case SDL_APP_WILLENTERBACKGROUND:case SDL_APP_DIDENTERBACKGROUND:snapshot_.background=true;release_all();break;
     case SDL_APP_WILLENTERFOREGROUND:case SDL_APP_DIDENTERFOREGROUND:snapshot_.background=false;break;

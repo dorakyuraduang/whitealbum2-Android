@@ -141,6 +141,10 @@ void Application::load(unsigned slot,std::int64_t now){
 FrameBatch Application::frame(std::int64_t now,Input input,const std::function<std::int64_t()>& clock,FrameBudget budget){
     observe(now);
     if(recover_clock_){suspend_scene(now);recover_clock_=false;input={};}
+    if(!input.commands.empty()){
+        if(input.commands.size()>maximum_user_commands)throw std::invalid_argument("Too many native user commands");for(auto command:input.commands)if(!valid(command))throw std::invalid_argument("Unknown native user command");
+        for(auto command:input.commands){const auto revision=clock_revision_;user_command(command,now);if(page()==Page::closed || clock_revision_!=revision)break;}return {script::RunState::yielded,0};
+    }
     if(input.cancel && pages_.size()>1 && !(page()==Page::options && options_view_) && !save_view_ && !backlog_view_ && !music_view_ && !extra_grid_){back(now);input={};}
     if(page()==Page::extras && extra_grid_){
         title_scene_->update(now);if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}

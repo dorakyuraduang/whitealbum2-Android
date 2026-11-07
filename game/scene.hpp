@@ -1,4 +1,5 @@
 #pragma once
+#include "user_command.hpp"
 #include "scene_calendar.hpp"
 #include "resource_catalog.hpp"
 #include "native_random.hpp"
@@ -29,8 +30,8 @@
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;
-    bool cancel{},pointer_held{};std::int32_t page_delta{},scroll{};
-    Input continued()const{auto next=*this;next.advance=next.toggle_window=next.cancel=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=next.page_delta=next.scroll=0;return next;}
+    bool cancel{},pointer_held{};std::int32_t page_delta{},scroll{};std::vector<UserCommand> commands;
+    Input continued()const{auto next=*this;next.advance=next.toggle_window=next.cancel=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=next.page_delta=next.scroll=0;next.commands.clear();return next;}
 };
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
 // Optional transport providers, used without changing common game policy.
@@ -114,6 +115,8 @@ public:
     const script::SceneBacklog& backlog()const noexcept{return backlog_;}
     std::optional<script::StoryControl> control_at(float x,float y)const;
     void story_control(script::StoryControl);
+    const script::SceneModes& modes()const noexcept{return controls_.modes();}
+    bool window_visible()const noexcept{return window_visible_;}
     void replay_voice(const script::BacklogVoice& line){voices_.replay({line.speaker,line.chapter,line.line,false},line.volume);}
     bool replay_playing()const{return voices_.playing();}
     void stop_replay(){voices_.stop(0);}

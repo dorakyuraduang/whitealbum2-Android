@@ -27,6 +27,13 @@ int main(int argc,char** argv){try{
     for(unsigned count:{0u,9u}){g::DriverSettings value;value.maximum_catch_up=count;rejects([&]{value.validate();});++guards;}
     for(auto value:{g::FrameBudget{-1,1},g::FrameBudget{50001,1},g::FrameBudget{0,0},g::FrameBudget{0,4097}}){g::DriverSettings settings;settings.skip=value;rejects([&]{settings.validate();});++guards;}++cases;
     Fixture fixture;
+    {
+        g::Input commands;commands.commands={g::UserCommand::hide,g::UserCommand::automatic};commands.advance=commands.skip=true;queue.add(commands);queue.suspend();received=queue.take();CHECK(received.commands==commands.commands && !received.advance && !received.skip && received.continued().commands.empty() && queue.take().commands.empty());++cases;
+        queue.add(commands);g::Input invalid;invalid.commands={g::UserCommand::count};rejects([&]{queue.add(invalid);});CHECK(queue.take().commands==commands.commands);++guards;++cases;
+        invalid.commands.assign(g::maximum_user_commands+1,g::UserCommand::hide);rejects([&]{queue.add(invalid);});CHECK(queue.take().commands.empty());++guards;++cases;
+        auto app=fixture.application();g::FrameDriver driver(*app);driver.pump(0,{},[]{return 0;});const auto ticks=app->scene()->statistics().ticks;commands.commands={g::UserCommand::hide};auto frame=driver.pump(100,{commands,true,false},[]{return 0;});CHECK(frame.suspended && app->scene()->window_visible());frame=driver.pump(200,{{},true,false},[]{return 0;});CHECK(frame.suspended);frame=driver.pump(201,{commands.continued(),false,false},[]{return 0;});CHECK(frame.updates==1 && frame.batch.ticks==0 && !app->scene()->window_visible() && app->scene()->statistics().ticks==ticks);++cases;
+        frame=driver.pump(150201,{},[]{return 0;});CHECK(frame.updates==8 && !app->scene()->window_visible());++cases;
+    }
     // A finite simulated second checks cadence, not real elapsed time or FPS.
     // Different presentation rates must all produce the same sixty advances.
     for(unsigned rate:{30u,60u,120u,240u}){

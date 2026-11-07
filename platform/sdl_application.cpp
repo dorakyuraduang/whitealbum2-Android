@@ -28,6 +28,11 @@ game::Input game_input(const InputSnapshot& events){
     input.pointer_held=events.buttons[0];
     input.page_delta=int(events.pressed_keys[SDL_SCANCODE_PAGEDOWN])-int(events.pressed_keys[SDL_SCANCODE_PAGEUP]);
     input.scroll=events.wheel_y>0?1:events.wheel_y<0?-1:0;
+    input.commands=events.commands;
+    constexpr std::array shortcuts{std::pair{SDL_SCANCODE_F1,game::UserCommand::settings},std::pair{SDL_SCANCODE_F2,game::UserCommand::save},std::pair{SDL_SCANCODE_F3,game::UserCommand::load},
+        std::pair{SDL_SCANCODE_F5,game::UserCommand::quick_save},std::pair{SDL_SCANCODE_F6,game::UserCommand::quick_load},std::pair{SDL_SCANCODE_F7,game::UserCommand::backlog},std::pair{SDL_SCANCODE_F8,game::UserCommand::hide},
+        std::pair{SDL_SCANCODE_F9,game::UserCommand::automatic},std::pair{SDL_SCANCODE_F10,game::UserCommand::skip},std::pair{SDL_SCANCODE_F11,game::UserCommand::fullscreen}};
+    for(const auto& [key,command]:shortcuts)if(events.pressed_keys[key]){if(input.commands.size()==game::maximum_user_commands)throw std::invalid_argument("Native menu input exceeds its limit");input.commands.push_back(command);}
     return input;
 }
 SdlApplication::SdlApplication(game::Application& application,SdlCanvas& canvas,game::DriverSettings settings,AudioOutputFactory factory,std::function<void()> submitted)

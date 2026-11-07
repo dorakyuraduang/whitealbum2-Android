@@ -888,6 +888,38 @@ its saved scene and return to the retained page. Importing original manual
 slots, reconstructing a replay's menu after application restart, full source
 page transitions/counters and visual/device verification remain pending.
 
+Native host menus use `game/user_command.*`: one bounded action set and one
+availability/checked-state policy for both hosts. Settings, slots, quick slots,
+backlog, dialogue visibility, auto, skip, display mode, title and quit enter the
+same Application methods as in-game controls. A whole queued batch is validated
+before any action runs; a disabled/stale action is rejected and a blocking error
+ends the batch. Actions do not also advance the current dialogue. SDL function
+keys and pointer-free, tagged SDL user events feed this common path. The frame
+driver retains explicit menu selections through popup focus loss but releases
+ordinary keys/pointer clicks, applying selections once on resumption. Finite
+synthetic event/clock tests cover the focus gap and multi-update catch-up.
+
+Android's common activity and touch gestures now depend on a presentation-only
+`PortUi` adapter. The retained AOT source set uses its old widget/file-dialog
+transport; the native source set replaces that class and excludes NativeWidgets,
+WidgetSession/Controls/Icon and FileChooser. Native Java displays labels and
+enabled/checked masks supplied by C++, forwards a selected action through its
+three registered JNI methods, and never reads a scene. Its state comes from an
+atomic snapshot; the game thread alone validates and executes actions. The same
+launcher, SAF resources, FPS HUD, long-press control and two-finger toggle remain.
+`android_source_sets.py` audits the source selection. Java/API compilation and
+native-only DEX checks cover both adapter sets without loading an Activity; the
+unavailable retained original-widget fixture is explicitly not reverified.
+
+`hosts/native-android` is a separate full SDL/ARM64 CMake root, including GLES,
+audio and Android HID JNI sources required by SDLActivity. Definition checks
+require fresh native-core and Java reports, compare the compiled native-menu
+Java signatures with actual linked registration literals, verify all SDL Java
+native exports against the existing SDL library, and audit the production
+source closure. This is a configuration/interface check, not an Android game
+session, production-SDL build or native APK publication. Remaining original UI
+behavior and voice comments still prevent a complete-game claim.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.

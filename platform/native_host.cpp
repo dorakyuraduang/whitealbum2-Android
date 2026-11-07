@@ -22,7 +22,8 @@ int run_native_host(NativeHost host){
     auto canvas=SdlCanvas::create(window.get(),true);canvas->logical_size(1280,720);
     auto application=native_application(std::move(host.resources),directory,host.startup);
     SdlInput input(SDL_GetWindowID(window.get()));input.logical_size(1280,720);
-    SdlApplication runner(*application,*canvas,host.driver,{},std::move(host.submitted));const auto epoch=std::chrono::steady_clock::now();
+    struct MenuLifetime {decltype(host.menu_status) publish;~MenuLifetime(){if(publish)publish({});}} menu_lifetime{host.menu_status};
+    SdlApplication runner(*application,*canvas,host.driver,{},[&]{if(host.menu_status)host.menu_status(application->user_menu());if(host.submitted)host.submitted();});if(host.menu_status)host.menu_status(application->user_menu());const auto epoch=std::chrono::steady_clock::now();
     runner.run(input,[&]{return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-epoch).count();},
         [](auto microseconds){std::this_thread::sleep_for(std::chrono::microseconds(microseconds));});
     return 0;

@@ -10,6 +10,9 @@ public:
     void add(const Input&);
     Input take();
     void clear()noexcept{held_={};edges_={};}
+    // Native menu selections can close an Android popup before SDL reports
+    // focus restoration. Retain these explicit actions, release ordinary input.
+    void suspend(){auto commands=std::move(edges_.commands);clear();edges_.commands=std::move(commands);}
 };
 struct DriverSettings {
     unsigned presentation_hz{120},maximum_catch_up{8};

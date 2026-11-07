@@ -13,7 +13,9 @@ import org.libsdl.app.SDLSurface;
 /** Android touch adapter: feeds SDL's existing pointer and keyboard paths. */
 final class GameTouchControls {
     interface Forwarder {boolean forward(MotionEvent event);}
+    interface Menu {void toggle();boolean contains(float x,float y);}
     private final Forwarder forwarder;
+    private final Menu menu;
     private final TouchGestures gestures;
     private final TouchGestures.ControlKey control=new TouchGestures.ControlKey();
     private final Handler handler=new Handler(Looper.getMainLooper());
@@ -22,9 +24,10 @@ final class GameTouchControls {
     private long scheduled=-1;
     private boolean longPress;
     private final Runnable timer;
-    GameTouchControls(SDLSurface surface,boolean longPress,Forwarder forwarder) {
+    GameTouchControls(SDLSurface surface,boolean longPress,Forwarder forwarder,Menu menu) {
         if(surface==null)throw new IllegalStateException("SDL input surface unavailable");
-        this.forwarder=forwarder;this.longPress=longPress;
+        if(forwarder==null || menu==null)throw new IllegalArgumentException("Missing touch presentation adapter");
+        this.forwarder=forwarder;this.menu=menu;this.longPress=longPress;
         long hold=Math.max(1,ViewConfiguration.getLongPressTimeout());
         gestures=new TouchGestures(longPress,Math.min(300,hold),hold,ViewConfiguration.get(surface.getContext()).getScaledTouchSlop());
         timer=() -> {scheduled=-1;apply(gestures.tick(SystemClock.uptimeMillis()),null);schedule();};
@@ -39,7 +42,7 @@ final class GameTouchControls {
         if((effects&TouchGestures.MOVE_BEFORE_UP)!=0 && event!=null){MotionEvent move=MotionEvent.obtain(event);move.setAction(MotionEvent.ACTION_MOVE);
             try{forwarder.forward(move);}finally{move.recycle();}}
         if((effects&TouchGestures.FORWARD)!=0 && event!=null)forwarder.forward(event);
-        if((effects&TouchGestures.TOGGLE_MENU)!=0)NativeWidgets.toggleMenuButton();
+        if((effects&TouchGestures.TOGGLE_MENU)!=0)menu.toggle();
         if(!gestures.active() && down!=null){down.recycle();down=null;}
     }
     private void schedule(){long next=gestures.nextDeadline();if(next==scheduled)return;handler.removeCallbacks(timer);scheduled=next;if(next>=0)handler.postAtTime(timer,next);}
@@ -55,7 +58,7 @@ final class GameTouchControls {
         int source=event.getSource();
         if((source&InputDevice.SOURCE_TOUCHSCREEN)!=InputDevice.SOURCE_TOUCHSCREEN || (source&InputDevice.SOURCE_MOUSE)==InputDevice.SOURCE_MOUSE)return forwarder.forward(event);
         int action=event.getActionMasked(),index=event.getActionIndex();
-        if(action==MotionEvent.ACTION_DOWN){cancelTouch();apply(gestures.enabled(longPress && !NativeWidgets.menuButtonContains(event.getX(),event.getY())),null);
+        if(action==MotionEvent.ACTION_DOWN){cancelTouch();apply(gestures.enabled(longPress && !menu.contains(event.getX(),event.getY())),null);
             down=MotionEvent.obtain(event);lastX=event.getX();lastY=event.getY();}
         for(int n=0;n<event.getPointerCount();++n)gestures.pointer(event.getPointerId(n),event.getX(n),event.getY(n));
         if(down!=null){int primary=event.findPointerIndex(down.getPointerId(0));if(primary>=0){lastX=event.getX(primary);lastY=event.getY(primary);}}

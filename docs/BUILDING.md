@@ -368,3 +368,20 @@ root without building or running it. It requires a fresh native-core proof,
 then checks the production window, OpenGL and audio source closure alongside
 the same common game sources. Its configuration-only report is
 `logs/native-desktop-definition.json`; it does not verify a game session.
+
+The separate `hosts/native-android` root targets Android ARM64/API 26 with full
+SDL GLES/audio/HID adapters and the same common native game sources. It does not
+include the retained `hosts` AOT root. Native Java must be selected with
+`scripts/android_source_sets.py` (`java_sources('native')`); compiling every Java
+file from both directories would select two conflicting presentation adapters.
+The existing release packager still uses the retained AOT source set.
+
+`verify_native_android_ui.py` compiles both adapter sets against the verified
+Android API jar, creates only the native set's DEX, rejects legacy widget classes
+and runs finite pure path/gesture tests. It cannot reverify the missing cached
+original-widget transport fixture and does not load JNI or an Android app.
+After fresh native-core/UI reports, `verify_native_android_definition.py` checks
+the actual native-entry menu registration signatures and existing SDL JNI
+exports, then configures/audits the full production Android root. Reports are
+`logs/native-android-ui.json` and `logs/native-android-definition.json`. These
+artifacts are verification components; no native game APK is released yet.

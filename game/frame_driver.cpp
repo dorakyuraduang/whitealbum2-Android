@@ -6,7 +6,10 @@ namespace wa2::game {
 void FrameInput::add(const Input& input){
     if(input.choice< -1 || input.choice>=8 || input.selection.navigation< -1 || input.selection.navigation>1 ||
         input.page_delta< -1 || input.page_delta>1 || input.scroll< -1 || input.scroll>1 || !std::isfinite(input.selection.x) || !std::isfinite(input.selection.y))throw std::invalid_argument("Invalid native frame input");
+    if(input.commands.size()>maximum_user_commands || edges_.commands.size()>maximum_user_commands-input.commands.size())throw std::invalid_argument("Native user-command queue exceeds its limit");
+    for(auto command:input.commands)if(!valid(command))throw std::invalid_argument("Unknown native user command");
     held_=input.continued();
+    edges_.commands.insert(edges_.commands.end(),input.commands.begin(),input.commands.end());
     edges_.advance|=input.advance;edges_.toggle_window^=input.toggle_window;edges_.cancel|=input.cancel;
     edges_.selection.confirm|=input.selection.confirm;
     edges_.selection.navigation=std::clamp(edges_.selection.navigation+input.selection.navigation,-1,1);
@@ -23,6 +26,7 @@ Input FrameInput::take(){
     next.selection.confirm=edges_.selection.confirm;next.selection.navigation=edges_.selection.navigation;
     next.page_delta=edges_.page_delta;
     next.scroll=edges_.scroll;
+    next.commands=std::move(edges_.commands);
     if(edges_.selection.activate){next.selection.activate=true;next.selection.pointer=edges_.selection.pointer;next.selection.x=edges_.selection.x;next.selection.y=edges_.selection.y;}
     edges_={};return next;
 }
@@ -54,8 +58,8 @@ DriverFrame FrameDriver::pump(std::int64_t now,DriverInput input,const std::func
     clock_revision_=application_.clock_revision();const auto elapsed=first || recover?0:now-observed_;observed_=now;started_=true;
     if(application_.background()!=input.background)application_.background(input.background,now);
     suspended_=input.background;
-    if(suspended_){pending_.clear();logic_phase_=present_phase_=0;result.suspended=true;result.sleep_us=16000;return result;}
-    if(first || resume || recover){pending_.clear();if(first)pending_=pending;if(recover)logic_phase_=present_phase_=0;}
+    if(suspended_){pending_=std::move(pending);pending_.suspend();logic_phase_=present_phase_=0;result.suspended=true;result.sleep_us=16000;return result;}
+    if(first || resume || recover){pending_.clear();if(first)pending_=pending;else if(resume && !recover){pending_=std::move(pending);pending_.suspend();}if(recover)logic_phase_=present_phase_=0;}
     else pending_=pending;
     auto due=first || resume || recover?1:advance(logic_phase_,elapsed,60);
     result.draw=first || resume || recover || advance(present_phase_,elapsed,settings_.presentation_hz)!=0;

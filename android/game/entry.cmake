@@ -11,6 +11,7 @@ function(wa2_add_native_android_entry target)
     add_library(${target} SHARED
         "${WA2_NATIVE_ANDROID_ROOT}/android/game/game_host.cpp"
         "${WA2_NATIVE_ANDROID_ROOT}/android/game/game_jni.cpp"
+        "${WA2_NATIVE_ANDROID_ROOT}/android/game/user_menu_jni.cpp"
         "${WA2_NATIVE_ANDROID_ROOT}/android/native/android_entry.cpp"
         "${WA2_NATIVE_ANDROID_ROOT}/android/native/android_resources.cpp"
         "${WA2_NATIVE_ANDROID_ROOT}/android/native/frame_metrics.cpp"

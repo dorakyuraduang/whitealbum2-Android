@@ -1,4 +1,5 @@
 #pragma once
+#include "sdl_user_command.hpp"
 #include <SDL_events.h>
 #include <array>
 #include <bitset>
@@ -7,6 +8,7 @@
 #include <optional>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace wa2::platform {
 struct InputSnapshot {
@@ -14,6 +16,7 @@ struct InputSnapshot {
     std::bitset<5> buttons,pressed_buttons,released_buttons;
     float x{},y{},wheel_x{},wheel_y{};
     bool pointer{},quit{},focused{true},background{},minimized{},renderer_reset{};
+    std::vector<game::UserCommand> commands;
 };
 class SdlInput {
 public:

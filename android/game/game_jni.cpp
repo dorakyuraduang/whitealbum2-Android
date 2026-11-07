@@ -1,14 +1,16 @@
 #include "frame_hud_jni.hpp"
 #include "resource_jni.hpp"
 #include "service_lifecycle.hpp"
+#include "user_menu_jni.hpp"
 #include <array>
 
 namespace {
 // Native menus belong to the common engine. No Win32 widget, shell, compiled
 // resource-image or AOT process adapter participates in this library.
-constexpr std::array<wa2::android::JniService<JNIEnv>,2> services{{
+constexpr std::array<wa2::android::JniService<JNIEnv>,3> services{{
     {wa2::android::initialize_frame_hud_jni,wa2::android::release_frame_hud_jni},
-    {wa2::android::initialize_resource_jni,wa2::android::release_resource_jni}
+    {wa2::android::initialize_resource_jni,wa2::android::release_resource_jni},
+    {wa2::android::initialize_user_menu_jni,wa2::android::release_user_menu_jni}
 }};
 }
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm,void*){

@@ -13,7 +13,7 @@ public final class Wa2Activity extends SDLActivity {
     @Override public void finish() {
         if (!ResourceDirectory.finishGame(this, this::finishNormally)) super.finish();
     }
-    @Override protected String[] getLibraries() { return new String[] { "SDL2", "wa2_android" }; }
+    @Override protected String[] getLibraries() { return PortUi.libraries(); }
     @Override protected String[] getArguments() { return LaunchSettings.testMode(this) ? new String[] { "--test-mode" } : new String[0]; }
     private static native void nativeResetFrameMetrics();
     private static void resetFrameMetricsIfLoaded() {
@@ -25,9 +25,8 @@ public final class Wa2Activity extends SDLActivity {
         super.onCreate(state);
         if (SDLActivity.mBrokenLibraries) return;
         ResourceDirectory.attach(this);
-        NativeWidgets.attach(this);
-        FileChooser.attach(this);
-        touchControls=new GameTouchControls(mSurface,LaunchSettings.longPressFastForward(this),this::forwardTouch);
+        PortUi.attach(this);
+        touchControls=new GameTouchControls(mSurface,LaunchSettings.longPressFastForward(this),this::forwardTouch,PortUi.touchMenu());
         FrameHud.install(this);
         WindowManager.LayoutParams attributes = getWindow().getAttributes();
         attributes.preferredRefreshRate = 120f;
@@ -50,8 +49,7 @@ public final class Wa2Activity extends SDLActivity {
         // Release a game thread waiting for directory selection before SDL
         // joins it in its own onDestroy handler.
         ResourceDirectory.detach(this);
-        FileChooser.detach();
-        NativeWidgets.detach(this);
+        PortUi.detach(this);
         FrameHud.detach();
         super.onDestroy();
     }
@@ -69,7 +67,7 @@ public final class Wa2Activity extends SDLActivity {
         return super.dispatchTouchEvent(event);
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
-        if (!ResourceDirectory.result(this, request, result, data) && !FileChooser.result(this, request, result, data))
+        if (!ResourceDirectory.result(this, request, result, data) && !PortUi.result(this, request, result, data))
             super.onActivityResult(request, result, data);
     }
 }

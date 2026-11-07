@@ -10,6 +10,7 @@ struct NativeHost {
     game::DriverSettings driver;
     bool fullscreen{};
     std::function<void()> submitted;
+    void(*menu_status)(game::UserMenuState)noexcept{};
 };
 // Shared SDL application entry. OS wrappers supply paths/resource access and
 // final error reporting; neither wrapper has its own story or frame policy.

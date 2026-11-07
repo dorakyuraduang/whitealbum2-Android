@@ -58,6 +58,7 @@ def main():
     inputs += [ROOT/'tests/native_backlog_view.cpp']
     inputs += [ROOT/'tests/native_music_view.cpp']
     inputs += [ROOT/'tests/native_extra_grid.cpp']
+    inputs += [ROOT/p for p in ('platform/native_user_menu.hpp','platform/sdl_user_command.hpp','android/game/user_menu_jni.hpp','android/game/user_menu_jni.cpp','hosts/native-android/CMakeLists.txt')]
     inputs += [ROOT/p for p in ('tests/native_desktop.cpp','platform/native_desktop.hpp','platform/native_desktop.cpp',
         'platform/native_host.hpp','platform/native_host.cpp','platform/native_host.cmake','hosts/native/CMakeLists.txt',
         'hosts/native/entry.cmake','hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')]
@@ -179,7 +180,7 @@ def main():
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
             allowed+=('tests/native_image_wait.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
             allowed+=('tests/android_jni_services.cpp',)
-            if host=='android':allowed+=('android/game/game_host.cpp','android/game/game_jni.cpp','android/native/android_entry.cpp',
+            if host=='android':allowed+=('android/game/game_host.cpp','android/game/game_jni.cpp','android/game/user_menu_jni.cpp','android/native/android_entry.cpp',
                 'android/native/android_resources.cpp','android/native/frame_metrics.cpp','android/native/frame_hud_jni.cpp',
                 'android/native/frame_metrics_jni.cpp','platform/resource_fd.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
@@ -230,8 +231,11 @@ def main():
                     for token in ('JNI_OnLoad','JNI_OnUnload','SDL_main','Java_org_wa2_port_Wa2Activity_nativeResetFrameMetrics',
                             'wa2::android::run_game(','wa2::android::frame_presented(','wa2::android::open_resource_bank(',
                             'wa2::platform::SdlApplication::run(','wa2::platform::SdlAudio::open(','wa2::game::Application::frame(',
-                            'wa2::game::SaveView::update(','wa2::platform::save_thumbnail(','wa2::game::BacklogView::update('):
+                            'wa2::game::SaveView::update(','wa2::platform::save_thumbnail(','wa2::game::BacklogView::update(',
+                            'wa2::android::initialize_user_menu_jni(','wa2::android::publish_user_menu(','wa2::game::Application::user_command('):
                         if token not in entry_symbols:raise ValueError('Missing native Android entry service: '+token)
+                    for name in (b'org/wa2/port/PortUi',b'nativeLabels',b'nativeState',b'nativeChoose'):
+                        if name not in entry.read_bytes():raise ValueError('Missing native Android menu JNI registration literal: '+str(name))
                     entry_header=output([llvm/'llvm-readelf.exe','-h',entry])
                     if 'AArch64' not in entry_header:raise ValueError('Native Android entry has wrong architecture')
                     entry_dynamic=output([llvm/'llvm-readelf.exe','-d',entry])
