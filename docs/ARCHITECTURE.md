@@ -8,7 +8,7 @@ CPU state, checked source-address memory, or the Windows compatibility runtime.
 The current released APK still uses AOT; a linkable component is not a full port.
 
 The current native application targets are `hosts/native` (Windows x64) and
-`hosts/native-android` (Android ARM64). Both link the same 85 common game/engine
+`hosts/native-android` (Android ARM64). Both link the same 86 common game/engine
 sources through `platform/native_host.cpp`; OS paths, input, resources, device
 audio and SDL presentation stay outside game policy. Actual production builds
 include window/render/audio backends, and Android includes its native-only Java
@@ -73,6 +73,25 @@ checks resource content identity, catalogue signatures and instruction
 boundaries before committing any state. These script checkpoints do not yet
 include rendered scene/audio state by themselves; the aggregate described
 below binds them to the native controllers.
+
+`engine/script_legacy.*` translates the original manual save's appended script
+and global blocks into an ordinary native LSSN checkpoint. The converter checks
+the serialized block sizes, label tables, running positions, pending command
+sites, value/flow bounds and global schema before returning anything. Globals
+are matched by name and storage type, with saved global stack references remapped
+to the current catalogue. Integers, float payloads, local arrays, conditional
+flows, switch cases and nested scene owners become native values. Obsolete
+allocation/callback pointers are neither resolved nor retained. Conversion does
+not advance a script, publish globals or replace the current session.
+
+The original format omits suspended command string contents. Translation
+therefore requires an explicit scene-state resolver for each such parameter;
+it rejects unrecoverable heap text rather than guessing. The current native
+save menus still use native documents only: this script-data converter is not
+yet an original manual-scene importer. Thirty-one constructed-data cases and
+seventy-seven guards exercise native resumption, exact real bits, call ownership,
+reference remapping, malformed files and conversion without execution or
+mutation. No original save, original script or device is used in those checks.
 
 Selection commands 208/209 now retain original insertion ordinals, conditional
 hidden/disabled entries, eight-entry limits, and persistent choice-history

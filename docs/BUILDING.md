@@ -31,6 +31,13 @@ accelerated story ticks, background release and transactional retirement.
 Its report is `native-movie-input.json` in the Windows core build directory;
 it initializes no device and executes no original script or game.
 
+`native-legacy-script.json` checks the original script-save block converter
+against owned format records and LSCR programs. It validates globals, locals,
+flow/call stacks, suspended command text policy and conversion failure guards.
+Only constructed continuations are executed after conversion; original saves
+and scripts are not opened. This check does not make original manual slots
+loadable: whole-scene conversion and a read-only file adapter remain required.
+
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional
 restore failures and conditionally visible selections. `--resource-root res`
