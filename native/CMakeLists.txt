@@ -134,6 +134,8 @@ add_executable(wa2_native_bootstrap_tests "${WA2_ROOT}/tests/native_bootstrap.cp
 target_link_libraries(wa2_native_bootstrap_tests PRIVATE wa2_native_application)
 add_executable(wa2_android_jni_service_tests "${WA2_ROOT}/tests/android_jni_services.cpp")
 target_include_directories(wa2_android_jni_service_tests PRIVATE "${WA2_ROOT}/android/native")
+add_executable(wa2_native_options_view_tests "${WA2_ROOT}/tests/native_options_view.cpp")
+target_link_libraries(wa2_native_options_view_tests PRIVATE wa2_game_scene)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -218,6 +220,7 @@ if(NOT ANDROID)
     add_test(NAME native_image_wait COMMAND wa2_native_image_wait_tests "${CMAKE_BINARY_DIR}/native-image-wait.json")
     add_test(NAME native_bootstrap COMMAND wa2_native_bootstrap_tests "${CMAKE_BINARY_DIR}/native-bootstrap.json" "${CMAKE_BINARY_DIR}/native-bootstrap-owned")
     add_test(NAME android_jni_services COMMAND wa2_android_jni_service_tests "${CMAKE_BINARY_DIR}/android-jni-services.json")
+    add_test(NAME native_options_view COMMAND wa2_native_options_view_tests "${CMAKE_BINARY_DIR}/native-options-view.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

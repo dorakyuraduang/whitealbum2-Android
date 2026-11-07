@@ -55,6 +55,7 @@ def main():
     inputs += [ROOT/'tests/native_preferences.cpp']
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
+    inputs += [ROOT/'tests/native_options_view.cpp']
     inputs += [ROOT/'tests/native_title_scene.cpp']
     inputs += [ROOT/'tests/native_render_frame.cpp',ROOT/'platform/sdl_movie.cpp',ROOT/'platform/sdl_movie.hpp',ROOT/'platform/sdl_presentation.cpp',ROOT/'platform/sdl_presentation.hpp']
     inputs += [ROOT/'tests/native_movie_state.cpp']
@@ -111,6 +112,7 @@ def main():
             if host=='windows':targets+=['wa2_native_preference_storage_tests']
             if host=='windows':targets+=['wa2_native_application_tests']
             if host=='windows':targets+=['wa2_native_title_view_tests']
+            if host=='windows':targets+=['wa2_native_options_view_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
@@ -136,6 +138,7 @@ def main():
             allowed+=('tests/native_preference_storage.cpp','platform/private_file.cpp','platform/preference_storage.cpp')
             allowed+=('tests/native_application.cpp',)
             allowed+=('tests/native_title_view.cpp',)
+            allowed+=('tests/native_options_view.cpp',)
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
@@ -326,6 +329,9 @@ def main():
                 run([directory/'wa2_native_title_view_tests.exe',directory/'native-title-view.json'],console,90)
                 title_view=json.loads((directory/'native-title-view.json').read_text())
                 if not title_view['passed'] or title_view['cases']<21 or title_view['guards']<6 or not title_view['synthetic_images_only'] or title_view['original_resources_opened'] or title_view['devices_opened'] or title_view['game_launched'] or title_view['screen_access']:raise ValueError('Native title view checks failed')
+                run([directory/'wa2_native_options_view_tests.exe',directory/'native-options-view.json'],console,90)
+                options_view=json.loads((directory/'native-options-view.json').read_text())
+                if not options_view['passed'] or options_view['cases']<24 or options_view['guards']<60 or options_view['maximum_pending_images']>1 or options_view['maximum_new_requests_per_tick']>2 or not options_view['synthetic_images_only'] or options_view['preference_storage_bound'] or options_view['application_view_bound'] or options_view['original_resources_opened'] or options_view['devices_opened'] or options_view['game_launched'] or options_view['screen_access']:raise ValueError('Native options view checks failed')
                 run([directory/'wa2_native_title_scene_tests.exe',directory/'native-title-scene.json'],console,90)
                 title_scene=json.loads((directory/'native-title-scene.json').read_text())
                 if not title_scene['passed'] or title_scene['cases']<20 or title_scene['guards']<13 or title_scene['audio_lookup_cases']<12 or not title_scene['synthetic_resources_only'] or not title_scene['fake_music_and_movies'] or not title_scene['title_story_handoff'] or title_scene['devices_opened'] or title_scene['game_launched'] or title_scene['screen_access']:raise ValueError('Native title/application integration checks failed')
@@ -409,6 +415,7 @@ def main():
     report['preference_storage']=preference_storage
     report['application']=application
     report['title_view']=title_view
+    report['options_view']=options_view
     report['title_scene']=title_scene
     report['render_frame']=render_frame
     report['movie_state']=movie_state

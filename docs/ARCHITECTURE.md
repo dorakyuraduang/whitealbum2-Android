@@ -629,6 +629,23 @@ on both toolchains; generated shader pairs are compiled/linked offline for
 both profiles. A software reference still checks owned-memory pixel equations.
 No actual GL context, window or hardware rendering is exercised by these checks.
 
+`game/options_view.*` now supplies the common three-page settings view as a
+component: source-resource atlas geometry, selected cells, hover/help regions,
+volume mute cells, the ten character voice switches, wrapping tabs/arrows,
+quantized sliders and pointer capture outside a slider while dragging. It uses
+ordinary typed fields and shared immutable images. Page loading retains the
+displayed page until incoming atlases are complete; one outstanding image
+request and at most two new requests per tick bound this component's queue use.
+Opening/closing use 15 logic ticks and page fades use 7 by default; the owner
+can supply source-adjusted durations. Applying an edit calls the supplied
+writer before publishing the new value, so a failed write preserves the model.
+Reset confirmation, sound previews and return are explicit owner commands.
+The current checks use constructed blank atlas images and inspect geometry and
+state only; no original image pixels are decoded or displayed. The view model
+is not yet bound to the application's preference storage, window service or
+modal presentation. Skin/colour popup behavior and held-button repetition are
+also pending. Linking this component is not completion of the settings page.
+
 The native story engine remains incomplete: full options/save/load/extras/
 backlog views, production host integration and unsupported render/animation/
 weather modes still need native implementations or integration. Source manual
