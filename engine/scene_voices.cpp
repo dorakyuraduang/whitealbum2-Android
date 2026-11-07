@@ -17,6 +17,24 @@ void SceneVoices::apply(Slot& item){if(item.voice)item.voice->gain(std::uint8_t(
 void SceneVoices::settings(std::int32_t master,std::int32_t speech,bool mute_adult){
     master_=std::clamp(master,0,256);speech_=std::clamp(speech,0,256);mute_adult_=mute_adult;for(auto& item:slots_)apply(item);
 }
+void SceneVoices::enabled(bool value){
+    if(enabled_==value)return;enabled_=value;
+    // Cached 0x40ebc0 -> 0x4061c0 lowers existing channels to zero via
+    // VXV(0,0). Re-enabling permits new lines, without restarting old speech.
+    if(!value)for(auto& item:slots_)if(item.voice && !item.stopping){item.from=item.volume;item.target=0;item.duration=item.elapsed=0;item.fading=true;}
+}
+bool SceneVoices::permitted(std::int32_t speaker)const noexcept{
+    // Cached 0x406380 normalizes supporting roles into the two original
+    // voice groups. 0x406410 checks these ten switches before replacing a
+    // channel. An unmapped speaker is permitted, not silently assigned to a
+    // different character's switch.
+    switch(speaker){
+    case 12:case 13:case 15:case 17:case 18:case 20:case 21:case 27:case 28:case 30:case 31:case 32:case 36:case 37:case 99:speaker=99;break;
+    case 14:case 16:case 19:case 22:case 23:case 24:case 25:case 26:case 29:case 33:case 34:case 35:case 98:speaker=98;break;
+    }
+    constexpr std::array<std::int32_t,10> groups{0,2,1,3,4,5,10,11,99,98};
+    for(unsigned n=0;n<groups.size();++n)if(groups[n]==speaker)return characters_[n];return true;
+}
 void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop){
     auto& item=checked(channel);if(speaker==-1)speaker=speaker_();if(chapter==-1)chapter=chapter_();
     const auto adjusted=std::int64_t(line)+(offset_?offset_():0);
@@ -26,8 +44,8 @@ void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t ch
     // therefore select continuous playback; scripts use -1 for ambient voice.
     // The original skips ordinary speech while fast-forward is held. A looped
     // /forced line remains audible, with the original four bounded channels.
-    if(skip_ && skip_() && loop==0){stop(item);return;}
-    if(mute_adult_ && adult_mode_ && speaker==0){stop(item);return;}
+    if(!enabled_ || !permitted(speaker) || (skip_ && skip_() && loop==0))return;
+    if(mute_adult_ && adult_mode_ && speaker==0)return;
     stop(item);auto voice=factory_(line_info);if(!voice)throw Error("native voice loader returned no voice");
     item.volume=item.from=item.target=item.remembered=std::clamp(volume,0,255);item.line=line_info;item.voice=std::move(voice);apply(item);++played_;
     if(events_.started)events_.started(std::uint32_t(channel),line_info,*item.voice);

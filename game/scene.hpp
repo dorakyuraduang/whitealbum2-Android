@@ -25,6 +25,7 @@
 #include "timeline.hpp"
 #include "frame_batch.hpp"
 #include "scene_backlog.hpp"
+#include "preferences.hpp"
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;
@@ -49,6 +50,7 @@ class Scene {
     Timeline timeline_;
     Input input_;
     Statistics statistics_;
+    Preferences preferences_;
     bool background_changing_{},preserve_characters_{},window_visible_{true},title_requested_{},skip_read_only_{true},replay_mode_{};
     script::SceneControls controls_;
     script::SceneProgress progress_;
@@ -97,14 +99,16 @@ public:
     const script::SceneBacklog& backlog()const noexcept{return backlog_;}
     std::span<const image::Sprite> selection(){return selection_.sprites();}
     std::span<const image::Sprite> calendar(){return calendar_.sprites();}
-    std::span<const image::Sprite> captions(){return captions_.sprites();}
+    std::span<const image::Sprite> captions(){return preferences_.captions?captions_.sprites():std::span<const image::Sprite>{};}
     bool title_requested()const noexcept{return title_requested_;}
-    void skip_read_only(bool value){skip_read_only_=value;}
+    void skip_read_only(bool value){skip_read_only_=preferences_.skip_read_only=value;}
+    void preferences(const Preferences&);
+    const Preferences& preferences()const noexcept{return preferences_;}
     void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
     void flush_progress(){reading_.finish();}
     std::vector<std::uint8_t> checkpoint()const;
     using SavedImageResolver=std::function<image::Resolve(resource::Catalog&)>;
-    static std::unique_ptr<Scene> restore(resource::BankOpener,std::shared_ptr<progress::Store>,std::span<const std::uint8_t>,std::int64_t monotonic_us,const SavedImageResolver&);
+    static std::unique_ptr<Scene> restore(resource::BankOpener,std::shared_ptr<progress::Store>,std::span<const std::uint8_t>,std::int64_t monotonic_us,const SavedImageResolver&,const Preferences& preferences={});
 private:
     bool can_accelerate()const;
 };

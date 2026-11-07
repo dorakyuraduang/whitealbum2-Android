@@ -36,7 +36,7 @@ std::vector<std::uint8_t> SceneVoices::checkpoint()const{
 void SceneVoices::restore(std::span<const std::uint8_t> bytes){
     auto in=checkpoint::Reader::open("LSVR",bytes);const auto played=in.u64();std::array<Slot,4> next;PendingAudio pending{next};std::array<bool,4> resume{};
     for(unsigned n=0;n<next.size();++n)if((resume[n]=in.boolean())){auto& slot=next[n];slot.line={in.i32(),in.i32(),in.i32(),true};slot.volume=slot.from=slot.target=slot.remembered=in.i32();if(slot.line.speaker<0 || slot.line.speaker>99 || slot.line.chapter<0 || slot.line.chapter>9999 || slot.line.line<0 || slot.line.line>9999)throw Error("Invalid saved looping voice identity");volume_range(slot.volume);}in.finish();
-    for(unsigned n=0;n<next.size();++n)if(resume[n]){auto& slot=next[n];if(mute_adult_ && adult_mode_ && slot.line.speaker==0)continue;slot.voice=factory_(slot.line);if(!slot.voice)throw Error("Saved looping voice loader returned no voice");slot.voice->gain(0);}
+    for(unsigned n=0;n<next.size();++n)if(resume[n]){auto& slot=next[n];if(!enabled_ || !permitted(slot.line.speaker) || (mute_adult_ && adult_mode_ && slot.line.speaker==0))continue;slot.voice=factory_(slot.line);if(!slot.voice)throw Error("Saved looping voice loader returned no voice");slot.voice->gain(0);}
     for(auto& slot:slots_)stop(slot);slots_=std::move(next);pending.committed=true;played_=played;for(unsigned n=0;n<slots_.size();++n)if(auto& slot=slots_[n];slot.voice){apply(slot);if(events_.started)events_.started(n,slot.line,*slot.voice);}
 }
 }

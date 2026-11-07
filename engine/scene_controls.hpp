@@ -24,6 +24,7 @@ public:
     bool automatic_advance();
     void reset_message_timer()noexcept{message_elapsed_=0;}
     void auto_mode(bool value,std::int32_t ticks){modes_.auto_mode=value;modes_.auto_ticks=ticks;message_elapsed_=0;}
+    void auto_delay(std::int32_t ticks)noexcept{modes_.auto_ticks=ticks;}
     void latched_skip(bool value){modes_.latched_skip=value;}
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t> bytes);

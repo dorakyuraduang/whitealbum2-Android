@@ -1,4 +1,4 @@
-add_library(wa2_game_scene STATIC scene.cpp scene_checkpoint.cpp saved_scene.cpp save_slots.cpp timeline.cpp)
+add_library(wa2_game_scene STATIC scene.cpp scene_checkpoint.cpp saved_scene.cpp save_slots.cpp preferences.cpp timeline.cpp)
 target_compile_features(wa2_game_scene PUBLIC cxx_std_20)
 target_include_directories(wa2_game_scene PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(wa2_game_scene PUBLIC wa2_script wa2_movie)

@@ -21,6 +21,7 @@ public:
     void advance();
     void visible(bool value){visible_=value;}
     void settings(DialogueSettings value);
+    const DialogueSettings& settings()const noexcept{return settings_;}
     void picture(bool value){picture_=value;}
     DialoguePhase phase()const noexcept{return phase_;}
     const std::string& raw_text()const noexcept{return raw_;}

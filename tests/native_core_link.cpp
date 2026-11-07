@@ -23,6 +23,7 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_tick(void* pointer,std::in
     return scene.environment().size()+scene.foreground().size()+scene.dialogue().size()+scene.calendar().size()+scene.captions().size()+scene.selection().size();
 }
 extern "C" WA2_LINK_CHECK void wa2_native_link_start(void* pointer){static_cast<wa2::game::Scene*>(pointer)->start();}
+extern "C" WA2_LINK_CHECK bool wa2_native_link_preferences(void* pointer,wa2::game::PreferenceStorage* storage,const wa2::game::Preferences* value){wa2::game::PreferenceStore preferences(std::shared_ptr<wa2::game::PreferenceStorage>(storage,[](auto*){}));if(value)preferences.replace(*value);static_cast<wa2::game::Scene*>(pointer)->preferences(preferences.current());return value && preferences.current()==*value;}
 extern "C" WA2_LINK_CHECK std::uint32_t wa2_native_link_frame(void* pointer,std::int64_t now){return static_cast<wa2::game::Scene*>(pointer)->advance_frame(now,{},[now]{return now;}).ticks;}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_save_scene(void* pointer){return static_cast<wa2::game::Scene*>(pointer)->checkpoint().size();}
 extern "C" WA2_LINK_CHECK void* wa2_native_link_restore_scene(wa2::resource::BankOpener* opener,std::shared_ptr<wa2::progress::Store>* progress,const std::uint8_t* data,std::size_t size,std::int64_t now,const wa2::game::Scene::SavedImageResolver* resolve){return wa2::game::Scene::restore(*opener,*progress,{data,size},now,*resolve).release();}

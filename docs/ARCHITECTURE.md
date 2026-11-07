@@ -405,6 +405,24 @@ Tests use memory storage and newly created synthetic directories, preserve
 sentinel original-format filenames, and check bounded slots, failed writes,
 hard links and malformed data. The application save menu is still pending.
 
+Native application preferences have a separate versioned `WAPR` format and
+injected storage. Unchanged edits do not write; invalid values and failed
+writes cannot publish a new current value. Current audio gains, character voice
+switches, text budget, window skin/opacity, auto delay, skip-read policy and
+caption visibility can be applied to a scene. Restore applies current
+preferences before preparing UI images or restarting looping audio, preserving
+script-controlled opening durations and scene progress. These are new native
+preferences; importing original registry/INI settings is not implemented.
+
+The voice switches follow the cached original ten-character group order and
+supporting-role mapping. Disabled/fast-skipped new lines do not replace an
+already playing channel. Turning speech off lowers existing gains through the
+original zero-duration volume operation; turning it back on permits future
+lines rather than replaying an old line. Looping-voice restore observes the
+current policy without creating a decoder for excluded speech. Synthetic checks
+use fake voices and memory settings storage; application option controls and
+the ordinary settings-file adapter remain to be connected.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

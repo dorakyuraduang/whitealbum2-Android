@@ -39,6 +39,12 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
         if(!progress_store_)throw script::Error("Missing native movie progress storage");progress_store_->state().set_flag(std::uint32_t(id),1);progress_store_->flush();}){
     environment_.reserve(432);foreground_.reserve(432);
     system_sounds_.prepare();
+    preferences(preferences_);
+}
+void Scene::preferences(const Preferences& value){
+    value.validate();auto dialogue=dialogue_.settings();dialogue.skin=value.skin;dialogue.window_alpha=value.window_alpha;dialogue.picture_alpha=value.picture_alpha;dialogue.button_alpha=value.button_alpha;dialogue.novel_alpha=value.novel_alpha;dialogue.text_step=value.text_step;dialogue.window=value.window;
+    music_.settings(value.master,value.music);effects_.settings(value.master,value.effects);voices_.settings(value.master,value.speech,value.mute_adult);voices_.enabled(value.voice_enabled);voices_.character_switches(value.character_voice);system_sounds_.settings(value.master,value.effects);
+    dialogue_.settings(dialogue);script::SelectionSettings selection;selection.skin=value.skin;selection.replay=replay_mode_;selection_.settings(selection);controls_.auto_delay(value.auto_ticks);skip_read_only_=value.skip_read_only;preferences_=value;
 }
 std::unique_ptr<audio::Voice> Scene::sound(std::int32_t id,bool loop,bool paused){
     auto resource=sound_resource(id);

@@ -18,6 +18,8 @@ public:
     bool loading()const;
     std::uint64_t played()const noexcept{return played_;}
     void settings(std::int32_t master,std::int32_t speech,bool mute_adult=false);
+    void enabled(bool value);
+    void character_switches(std::array<bool,10> value)noexcept{characters_=value;}
     void adult_mode(bool value)noexcept{adult_mode_=value;}
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t>);
@@ -31,6 +33,9 @@ private:
     std::uint64_t played_{};
     std::int32_t master_{256},speech_{256};
     bool mute_adult_{},adult_mode_{};
+    bool enabled_{true};
+    std::array<bool,10> characters_{true,true,true,true,true,true,true,true,true,true};
+    bool permitted(std::int32_t speaker)const noexcept;
     void apply(Slot&);
     Slot& checked(std::int32_t index);
     void stop(Slot& item);
