@@ -34,10 +34,10 @@ void RenderFrame::capture(Application& application){
     case Page::closed:clear();return;
     case Page::options:case Page::save:case Page::load:{
         const bool options=application.page()==Page::options;
-        if(options?!application.options_view():!application.save_view())throw script::Unsupported("Native modal presentation has not been prepared");
+        if(options?!application.options_view():!application.save_view() && !application.quick_view())throw script::Unsupported("Native modal presentation has not been prepared");
         if(application.navigation().size()!=2)throw script::Unsupported("Native options presentation over a modal page is not implemented");
         if(application.scene())capture(*application.scene());else if(application.title_scene())capture(*application.title_scene());else throw script::Unsupported("Native options presentation has no parent scene");
-        const auto sprites=options?application.options_view()->sprites():application.save_view()->sprites();
+        const auto sprites=options?application.options_view()->sprites():application.quick_view()?application.quick_view()->sprites():application.save_view()->sprites();
         overlays_.insert(overlays_.end(),sprites.begin(),sprites.end());
         std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return;
     }

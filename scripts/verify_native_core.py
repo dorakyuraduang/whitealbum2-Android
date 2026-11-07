@@ -55,6 +55,7 @@ def main():
     inputs += [ROOT/'tests/native_save_document.cpp']
     inputs += [ROOT/'tests/native_save_view.cpp',ROOT/'tests/native_save_atlases.hpp']
     inputs += [ROOT/'tests/native_save_application.cpp']
+    inputs += [ROOT/'tests/native_quick_view.cpp']
     inputs += [ROOT/'tests/native_backlog_view.cpp']
     inputs += [ROOT/'tests/native_music_view.cpp']
     inputs += [ROOT/'tests/native_extra_grid.cpp']
@@ -100,7 +101,7 @@ def main():
             if status:raise subprocess.CalledProcessError(status,command)
     def output(command):
         return subprocess.run(list(map(str,command)),cwd=ROOT,env=env,creationflags=flags,capture_output=True,text=True,encoding='utf-8',errors='replace',check=True,timeout=60).stdout
-    sources={};artifacts={};codec_bindings={};composition_state=None;composition_artifact=None;sdl_application=None;input_state=None
+    sources={};artifacts={};codec_bindings={};composition_state=None;composition_artifact=None;sdl_application=None;input_state=None;quick_view=None
     composition_sdl_sha=digest(args.sdl_archive) if args.sdl_archive else None
     android_sdl_sha=digest(args.android_sdl_library) if args.android_sdl_library else None
     android_entry_artifact=None;windows_entry_artifact=None
@@ -132,6 +133,7 @@ def main():
             if host=='windows':targets+=['wa2_native_options_action_tests']
             if host=='windows':targets+=['wa2_native_save_document_tests']
             if host=='windows':targets+=['wa2_native_save_view_tests','wa2_native_save_application_tests']
+            if host=='windows':targets+=['wa2_native_quick_view_tests']
             if host=='windows':targets+=['wa2_native_backlog_view_tests']
             if host=='windows':targets+=['wa2_native_music_view_tests']
             if host=='windows':targets+=['wa2_native_extra_grid_tests']
@@ -170,6 +172,7 @@ def main():
             allowed+=('tests/native_save_document.cpp',)
             allowed+=('tests/native_save_view.cpp',)
             allowed+=('tests/native_save_application.cpp',)
+            allowed+=('tests/native_quick_view.cpp',)
             allowed+=('tests/native_backlog_view.cpp',)
             allowed+=('tests/native_music_view.cpp',)
             allowed+=('tests/native_extra_grid.cpp',)
@@ -385,6 +388,11 @@ def main():
                 run([directory/'wa2_native_save_view_tests.exe',directory/'native-save-view.json'],console,90)
                 save_view=json.loads((directory/'native-save-view.json').read_text())
                 if not save_view['passed'] or save_view['cases']<26 or save_view['guards']<24 or save_view['manual_slots']!=100 or not save_view['two_column_source_geometry'] or not save_view['source_bitmap_digit_grid'] or not save_view['overwrite_and_load_confirmations'] or save_view['maximum_preview_reads']>1 or save_view['maximum_pending_images']>1 or save_view['maximum_new_images_per_tick']>2 or not save_view['failed_operations_keep_rows'] or not save_view['synthetic_resources_only'] or save_view['original_resources_opened'] or save_view['devices_opened'] or save_view['game_launched'] or save_view['screen_access']:raise ValueError('Native save view checks failed')
+                run([directory/'wa2_native_quick_view_tests.exe',directory/'native-quick-view.json'],console,90)
+                quick_view=json.loads((directory/'native-quick-view.json').read_text())
+                if not quick_view['passed'] or quick_view['cases']<22 or quick_view['guards']<19 or quick_view['maximum_pending_images']>1 or not all(quick_view[key] for key in
+                        ('save_direct_load_confirmed','transactional_load','background_freezes_modal','failure_rebases_story','source_result_atlas','synthetic_resources_only')) or any(quick_view[key] for key in
+                        ('devices_opened','game_launched','screen_access')):raise ValueError('Native quick-operation checks failed')
                 run([directory/'wa2_native_preference_tests.exe',directory/'native-preferences.json'],console,90)
                 run([directory/'wa2_native_audio_level_tests.exe',directory/'native-audio-levels.json'],console,90)
                 audio_levels=json.loads((directory/'native-audio-levels.json').read_text())
@@ -521,6 +529,7 @@ def main():
     report['save_document']=save_document
     report['save_view']=save_view
     report['save_application']=save_application
+    report['quick_view']=quick_view
     report['backlog_view']=backlog_view
     report['music_view']=music_view
     report['extra_grid']=extra_grid

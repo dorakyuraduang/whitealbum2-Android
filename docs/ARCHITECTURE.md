@@ -845,9 +845,22 @@ dialogue renderer. Their quick-save/load, settings, save/load, history, skip,
 auto and window actions are processed before story advancement. Input is
 unprojected through the dialogue transform before hit testing. The scroll and
 page edges are queued once by the shared frame driver; held pointer state is
-reserved for scrollbar dragging. Quick-save currently writes the isolated
-native quick slot directly; its source confirmation/result presentation, menu
-entry/exit capture/zoom remain unfinished. Cached source 41247c..41250d gates
+reserved for scrollbar dragging. Quick-save writes the isolated native quick
+slot directly and displays the common completion view; quick-load uses the
+confirmation setting before preparing its replacement scene. Source 40a19f..
+40a1ad writes before calling 41ef80 with zero, whereas 40a281..40a2ca checks
+the quick slot and calls it with one. A save confirmation would add behavior
+which that source path does not have. The notification retains its original
+sys_*0110 atlas (480 by 112), 400/304 position, 450/345 text position, seven
+tick fade and sixty tick minimum display. The load prompt closes before its
+result appears. Modal loading, closing and result timers freeze in the
+background; the original scene's mixer continues in the foreground. Failed
+loads keep the old scene; read/write failures clear the operation, report the
+error and rebase input/time before resuming. Manual-save completion uses the
+same result atlas instead of cropping a dialogue background. The captured
+parent-image transitions of options/save menus remain unfinished; the backlog
+source itself enters and leaves directly (403850 and 403e00). Cached source
+41247c..41250d gates
 each recorded voice control using its first speaker and the existing ten
 character switches (406410); master/global speech mute does not disable that
 control. Its icon atlas rows are disabled 0, ordinary 28 and hovered 56. The

@@ -115,6 +115,8 @@ add_executable(wa2_native_save_view_tests "${WA2_ROOT}/tests/native_save_view.cp
 target_link_libraries(wa2_native_save_view_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_save_application_tests "${WA2_ROOT}/tests/native_save_application.cpp")
 target_link_libraries(wa2_native_save_application_tests PRIVATE wa2_game_scene)
+add_executable(wa2_native_quick_view_tests "${WA2_ROOT}/tests/native_quick_view.cpp")
+target_link_libraries(wa2_native_quick_view_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_backlog_view_tests "${WA2_ROOT}/tests/native_backlog_view.cpp")
 target_link_libraries(wa2_native_backlog_view_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_music_view_tests "${WA2_ROOT}/tests/native_music_view.cpp")

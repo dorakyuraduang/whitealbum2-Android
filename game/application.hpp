@@ -4,6 +4,7 @@
 #include "title_scene.hpp"
 #include "options_preferences.hpp"
 #include "save_view.hpp"
+#include "quick_view.hpp"
 #include "backlog_view.hpp"
 #include "music_view.hpp"
 #include "extra_grid.hpp"
@@ -40,6 +41,7 @@ class Application {
     std::unique_ptr<OptionsView> options_view_;
     SaveServices save_services_;
     std::unique_ptr<SaveView> save_view_;
+    std::unique_ptr<QuickView> quick_view_;
     BacklogView::Loader backlog_loader_;
     BacklogView::Text backlog_text_;
     std::unique_ptr<BacklogView> backlog_view_;
@@ -70,6 +72,7 @@ class Application {
     void replace_scene(std::unique_ptr<Scene>,std::int64_t now);
     SaveDocument save_document();
     void close_backlog();
+    void quick(QuickKind,std::int64_t now);
     void control(script::StoryControl,std::int64_t now);
     void report_error(std::string_view,std::int64_t now);
     void return_replay(std::int64_t now);
@@ -87,6 +90,7 @@ public:
     const TitleScene* title_scene()const noexcept{return title_scene_.get();}
     const OptionsView* options_view()const noexcept{return options_view_.get();}
     const SaveView* save_view()const noexcept{return save_view_.get();}
+    const QuickView* quick_view()const noexcept{return quick_view_.get();}
     const BacklogView* backlog_view()const noexcept{return backlog_view_.get();}
     const MusicView* music_view()const noexcept{return music_view_.get();}
     const ExtraGrid* extra_grid()const noexcept{return extra_grid_.get();}

@@ -26,7 +26,7 @@ std::string SaveView::name(unsigned index)const{
     if(index==3)return context_.mode==SaveMode::save?"sys_01011.tga":"sys_02011.tga";
     if(index<12)return std::string(common[index]);
     if(index==12)return context_.title || context_.theme>2?"sys_04010.tga":"sys_0501"+std::to_string(context_.theme)+".tga";
-    if(index==13)return "sys_"+std::to_string(context_.skin)+"0000.tga";
+    if(index==13)return "sys_"+std::to_string(context_.skin)+"0110.tga";
     if(index==14)return "sys_02030.tga";if(index==15)return "sys_02031.tga";if(index==16)return "sys_02050.tga";
     if(index==17)return "sys_"+std::to_string(context_.skin)+"0011.tga";
     if(index==18)return "sys_00301.tga";if(index==19)return "sys_00300.tga";
@@ -40,7 +40,7 @@ void SaveView::prepare(SaveContext context,std::span<const SaveSlotInfo> invento
     std::array<std::optional<SaveSlotInfo>,300> next;std::array<bool,native_save_slots> seen{};std::array<unsigned,2> latest{};std::array<std::uint64_t,2> newest{};
     for(const auto& entry:inventory){if(entry.slot>=native_save_slots || seen[entry.slot])throw script::Error("Invalid native save view inventory");seen[entry.slot]=true;if(entry.slot>=next.size())continue;next[entry.slot]=entry;
         if(entry.slot<100 || entry.slot>=alternate_save_base){const auto bank=entry.slot>=alternate_save_base?1u:0u;if(entry.diagnostic.empty() && entry.modified_ms>newest[bank]){newest[bank]=entry.modified_ms;latest[bank]=entry.slot%100;}}}
-    auto result=text_(save_result_prompt(),prompt_style());auto request=loader_(context.mode==SaveMode::save?"sys_01000.tga":"sys_02000.tga");if(!request)throw script::Error("Missing native save image request");
+    auto result_style=label_style();result_style.columns=20;auto result=text_(save_result_prompt(),result_style);auto request=loader_(context.mode==SaveMode::save?"sys_01000.tga":"sys_02000.tga");if(!request)throw script::Error("Missing native save image request");
     clear();context_=context;inventory_=std::move(next);latest_=latest;pages_={latest[0]/10,latest[1]/10};page_=pages_[0];incoming_=page_data(page_,0);result_label_=std::move(result);image_request_=std::move(request);phase_=SavePhase::loading;
 }
 bool SaveView::images(){
