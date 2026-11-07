@@ -62,6 +62,7 @@ public:
     void commentary_stop(){if(commentary_)commentary_->stop();commentary_.reset();}
     bool commentary_playing()const;
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
+    std::int32_t music_song()const noexcept{return music_.song();}
     TitleStage stage()const noexcept{return stage_;}
     const TitleView& view()const noexcept{return view_;}
     std::span<const image::Sprite> sprites()const noexcept{return stage_==TitleStage::view?view_.sprites():std::span<const image::Sprite>{};}

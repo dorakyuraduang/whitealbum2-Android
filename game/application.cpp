@@ -131,10 +131,11 @@ void Application::open_extra(std::int32_t extra,std::int64_t now){
     observe(now);if(page()!=Page::title || !title_scene_ || title_scene_->stage()!=TitleStage::view || !title_setup_)throw std::logic_error("Native extras require a prepared title page");
     if(!extras_loader_)throw script::Unsupported("Native extras image services are not prepared");if(extra<1 || extra>4)throw script::Unsupported("Native extra view is not implemented: "+std::to_string(extra));
     std::unique_ptr<MusicView> music;std::unique_ptr<ExtraGrid> grid;std::unique_ptr<CommentaryView> commentary;
-    if(extra==2){music=std::make_unique<MusicView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});music->prepare(title_setup_->content,progress_->state(),options_timing(preferences()));
+    const CurrentMusic music_source=[this]{return title_scene_?title_scene_->music_song():-1;};
+    if(extra==2){music=std::make_unique<MusicView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);},music_source);music->prepare(title_setup_->content,progress_->state(),options_timing(preferences()));
         if(progress_->state().flag(104) && progress_->state().flag(163)){progress_->state().set_flag(134,1);progress_->flush();}title_scene_->music_preview({},120);
     }else if(extra==4){commentary=std::make_unique<CommentaryView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});commentary->prepare(options_timing(preferences()));title_scene_->music_preview({},120);
-    }else{grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});grid->prepare(extra==1?ExtraGridKind::gallery:ExtraGridKind::replay,title_setup_->content,progress_->state(),0,options_timing(preferences()));title_scene_->music_preview(extra==1?41:15,extra==1?30:0);}
+    }else{grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);},music_source);grid->prepare(extra==1?ExtraGridKind::gallery:ExtraGridKind::replay,title_setup_->content,progress_->state(),0,options_timing(preferences()));title_scene_->music_preview(extra==1?41:15,extra==1?30:0);}
     open(Page::extras,now);extra_=extra;music_view_=std::move(music);extra_grid_=std::move(grid);commentary_view_=std::move(commentary);
 }
 bool Application::back(std::int64_t now){observe(now);if(pages_.size()==1)return false;const auto leaving=page();if(leaving==Page::extras && (music_view_ || extra_grid_ || commentary_view_)){title_scene_->commentary_stop();title_scene_->music_preview({},120);music_view_.reset();extra_grid_.reset();commentary_view_.reset();extra_=-1;}pages_.pop_back();if(leaving==Page::options)options_view_.reset();if(leaving==Page::save || leaving==Page::load)save_view_.reset();if(leaving==Page::backlog)close_backlog();if(page()==Page::title && title_scene_ && title_scene_->view().modal_parent())title_scene_->resume();release_input_=true;suspend_scene(now);return true;}
@@ -148,7 +149,7 @@ void Application::title(std::int64_t now){
     if(scene_ && scene_->replay_mode() && !replay_return_){
         observe(now);if(!title_setup_ || !extras_loader_)throw script::Unsupported("Native replay exit needs prepared title/extra services");const auto seed=scene_->random_state();auto startup=title_setup_->startup;startup.movies=false;
         auto title=std::make_unique<TitleScene>(opener_,progress_,preferences(),title_setup_->content,startup,seed,title_setup_->services);title->restore_extras_parent();title->pause(true,now);
-        auto grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});grid->prepare(ExtraGridKind::replay,title_setup_->content,progress_->state(),unsigned(scene_->replay_mode()-1)/12,options_timing(preferences()));
+        auto grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);},[this]{return title_scene_?title_scene_->music_song():-1;});grid->prepare(ExtraGridKind::replay,title_setup_->content,progress_->state(),unsigned(scene_->replay_mode()-1)/12,options_timing(preferences()));
         replay_return_=ReplayReturn{std::move(title),std::move(grid),3};return_replay(now);return;
     }
     if(scene_ && scene_->replay_mode() && replay_return_){observe(now);return_replay(now);return;}

@@ -6,9 +6,9 @@
 namespace wa2::game {
 namespace {
 std::string image_name(std::string_view prefix,unsigned id){if(id>=1000000)throw script::Error("Native extra image identifier is out of range");std::array<char,48> name{};std::snprintf(name.data(),name.size(),"%.*s%06u.tga",int(prefix.size()),prefix.data(),id);return name.data();}
-constexpr unsigned chrome(ExtraGridKind kind){return kind==ExtraGridKind::replay?15:12;}
+constexpr unsigned chrome(ExtraGridKind kind){return kind==ExtraGridKind::replay?17:14;}
 }
-ExtraGrid::ExtraGrid(Loader loader,Sound sound):loader_(std::move(loader)),sound_(std::move(sound)){
+ExtraGrid::ExtraGrid(Loader loader,Sound sound,CurrentMusic music):loader_(std::move(loader)),sound_(std::move(sound)),current_music_(std::move(music)){
     if(!loader_)throw script::Error("Missing native extra-grid image loader");auto black=std::make_shared<image::Raster>();black->width=black->height=1;black->rgba={0,0,0,255};black_=std::move(black);sprites_.reserve(64);
 }
 void ExtraGrid::clear(){pages_.clear();data_={};pending_.reset();full_request_.reset();full_.reset();previous_full_.reset();variants_.clear();sprites_.clear();focus_.reset();command_.reset();leaving_.reset();page_=variant_=full_id_=elapsed_=0;timing_={};close_from_=1;coda_complete_=false;phase_=ExtraGridPhase::idle;}
@@ -19,7 +19,7 @@ void ExtraGrid::prepare(ExtraGridKind kind,TitleContent content,const progress::
     if(kind==ExtraGridKind::gallery){for(unsigned n=introductory?0:3;n<(progress.flag(5)?14:9);++n)pages.push_back(n);}else pages={0,1};
     if(std::find(pages.begin(),pages.end(),page)==pages.end())page=pages.front();
     // Preparing is a transaction even if the first resource adapter rejects it.
-    ExtraGrid next(loader_,sound_);next.kind_=kind;next.content_=content;next.pages_=std::move(pages);next.timing_=timing;next.coda_complete_=progress.flag(5)!=0;
+    ExtraGrid next(loader_,sound_,current_music_);next.kind_=kind;next.content_=content;next.pages_=std::move(pages);next.timing_=timing;next.coda_complete_=progress.flag(5)!=0;
     for(unsigned group=0;group<extras::gallery.size();++group)for(unsigned n=0;n<10;++n){const auto id=extras::gallery[group][n];next.gallery_[group][n]=id && progress.gallery(0,id)!=0;}
     for(unsigned n=0;n<extras::replays.size();++n){const auto& row=extras::replays[n];next.replay_[n]=progress.flag(row.flag)!=0 && (row.theme!=0 || content.local_introductory || content.external_introductory);}
     next.begin_page(page);*this=std::move(next);
@@ -30,6 +30,7 @@ ExtraGrid::PageData ExtraGrid::plan(unsigned page)const{
     const auto asset=[&](std::string name){const auto old=std::find_if(data_.assets.begin(),data_.assets.end(),[&](const auto& value){return value.name==name;});next.assets.push_back({std::move(name),old==data_.assets.end()?nullptr:old->pixels});};
     for(const auto& name:std::array<std::string,12>{gallery?"sys_05000.tga":"sys_06000.tga","sys_09000.tga","sys_05100.tga","sys_05110.tga","sys_05020.tga","sys_09100.tga","sys_05201.tga",gallery?"sys_05021.tga":"sys_06021.tga","sys_05900.tga","sys_05901.tga","sys_05902.tga","sys_05200.tga"})asset(name);
     if(!gallery)for(const auto name:{"sys_05903.tga","sys_05300.tga","sys_05301.tga"})asset(name);
+    asset("sys_00301.tga");asset("sys_00300.tga");
     for(unsigned ordinal=0;ordinal<12;++ordinal){ExtraGridRow row;row.ordinal=ordinal;row.index=page*12+ordinal;row.theme=unsigned(theme);
         if(gallery){const auto& variants=extras::gallery.at(row.index);for(unsigned n=0;n<10;++n)if(variants[n] && gallery_[row.index][n])row.variants.push_back(variants[n]);row.enabled=!row.variants.empty();row.thumbnail=variants[0];
             // The source chooses the first seen thumbnail for these two groups.
@@ -44,10 +45,14 @@ void ExtraGrid::begin_page(unsigned page){
 }
 bool ExtraGrid::poll(){
     if(!pending_)throw script::Error("Native extra-grid lost its page request");auto& pending=*pending_;
-    constexpr unsigned widths[]{1280,1280,272,272,144,56,840,288,272,272,272,1000,272,288,288},heights[]{36,56,160,160,128,72,96,40,160,160,160,24,160,24,384};
+    constexpr unsigned widths[]{1280,1280,272,272,144,56,840,288,272,272,272,1000},heights[]{36,56,160,160,128,72,96,40,160,160,160,24};
+    const auto expected=[&](unsigned index){if(index<12)return std::pair{widths[index],heights[index]};
+        if(kind_==ExtraGridKind::replay && index<15){constexpr std::pair<unsigned,unsigned> extra[]{{272,160},{288,24},{288,384}};return extra[index-12];}
+        return index==chrome(kind_)-2?std::pair{192u,8u}:std::pair{264u,1008u};};
     try{for(unsigned issued=0;pending.next<pending.data.assets.size();){auto& asset=pending.data.assets[pending.next];if(asset.pixels){++pending.next;continue;}if(!pending.request){if(issued==2)return false;pending.request=loader_(asset.name);++issued;if(!pending.request)throw script::Error("Missing native extra-grid image request");}
             auto image=pending.request->get();if(!image)return false;
-            if(!image->width || !image->height || (pending.next<chrome(kind_) && (image->width<widths[pending.next] || image->height<heights[pending.next])))throw script::Unsupported("Native extra-grid atlas dimensions are not supported: "+asset.name);
+            const auto [width,height]=expected(pending.next);
+            if(!image->width || !image->height || (pending.next<chrome(kind_) && (image->width<width || image->height<height)))throw script::Unsupported("Native extra-grid atlas dimensions are not supported: "+asset.name);
             asset.pixels=std::move(image);pending.request.reset();++pending.next;}
     }catch(...){pending_.reset();phase_=data_.assets.empty()?ExtraGridPhase::idle:ExtraGridPhase::cards;throw;}
     elapsed_=0;if(data_.assets.empty()){commit_page();phase_=timing_.open?ExtraGridPhase::opening:ExtraGridPhase::cards;}
@@ -139,6 +144,9 @@ void ExtraGrid::draw(){
     }
     add(assets[4].pixels,440,600,48,64,focus_==51?96:0,0,48,64,255,scale);add(assets[4].pixels,792,600,48,64,focus_==52?96:0,64,48,64,255,scale);
     add(assets[7].pixels,496,608,288,40,0,0,288,40,255,scale);add(assets[5].pixels,1164,688+32*(1-whole),56,24,0,focus_==50?24:0,56,24);
+    if(current_music_ && (phase_==ExtraGridPhase::cards || phase_==ExtraGridPhase::page_out || phase_==ExtraGridPhase::page_in || phase_==ExtraGridPhase::loading)){
+        const auto index=chrome(kind_)-2;append_music_caption(sprites_,assets[index].pixels,assets[index+1].pixels,current_music_(),0x1060,order);
+    }
     }
     if(previous_full_)add(previous_full_,0,0,1280,720,0,0,float(previous_full_->width),float(previous_full_->height));
     if(full_)add(full_,0,0,1280,720,0,0,float(full_->width),float(full_->height),phase_==ExtraGridPhase::full_in?std::min(255u,elapsed_*16):255);

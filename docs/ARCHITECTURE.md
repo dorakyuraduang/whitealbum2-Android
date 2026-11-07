@@ -1058,6 +1058,15 @@ clear flag 5 is set, then `sys_05902` for an unseen individual scene. Marker
 pixels and exact crop/input checks use constructed images; the three external
 atlas headers additionally enter the static metadata audit.
 
+The native music browser and gallery/replay grids also share the small BGM
+caption's 63-song name order. Their current-song provider reads the common
+title audio owner, independently of the hovered or last acknowledged browser
+row. The original `sys_00301` marker uses its first 4x8 pixels at (24,688),
+and `sys_00300` supplies 264x16 name rows at (24,696). Playback stop hides the
+caption; unknown/sentinel name rows remain blank. Opening/closing transitions
+and full CG presentation hide this footer. The pictures stay external and use
+the same bounded request/cache services as the rest of each page.
+
 The native script library reuses an immutable parsed LSCR Program while an
 existing scene/call owns it. The cache contains weak program references, never
 Runtime objects, locals, globals, flow stacks or an old scene kept alive for

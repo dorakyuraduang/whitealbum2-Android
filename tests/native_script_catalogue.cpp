@@ -101,7 +101,7 @@ int main(int argc,char** argv){try{
     for(const auto& atlas:wa2::test::save_atlases)menu_atlas(atlas);
     struct MenuAtlas {const char* name;unsigned w,h;};
     constexpr MenuAtlas extras[]{
-        {"sys_04000.tga",1280,40},{"sys_04100.tga",400,128},{"sys_04101.tga",344,1512},{"sys_04021.tga",288,40},{"sys_04030.tga",1024,56},{"sys_04031.tga",512,1512},
+        {"sys_04000.tga",1280,40},{"sys_04100.tga",400,128},{"sys_04101.tga",344,1512},{"sys_04021.tga",288,40},{"sys_04030.tga",1024,56},{"sys_04031.tga",512,1512},{"sys_00301.tga",192,8},{"sys_00300.tga",264,1008},
         {"sys_05000.tga",1280,36},{"sys_06000.tga",1280,36},{"sys_05100.tga",272,160},{"sys_05110.tga",272,160},{"sys_05020.tga",144,128},{"sys_05201.tga",840,96},{"sys_05021.tga",288,40},{"sys_06021.tga",288,40},{"sys_05900.tga",272,160},{"sys_05901.tga",272,160},{"sys_05902.tga",272,160},{"sys_05200.tga",1000,24},{"sys_05903.tga",272,160},{"sys_05300.tga",288,24},{"sys_05301.tga",288,384},
         {"sys_07000.tga",1280,40},{"sys_07100.tga",1280,720},{"sys_07020.tga",160,120},{"sys_07021.tga",288,40},
         {"sys_07200.tga",1280,720},{"sys_07201.tga",1280,720},{"sys_07202.tga",1280,720},{"sys_07203.tga",1280,720},{"sys_07204.tga",1280,720}

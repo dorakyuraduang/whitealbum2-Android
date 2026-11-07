@@ -2,6 +2,7 @@
 #include "title_view.hpp"
 #include "extras_catalogue.hpp"
 #include "menu_timing.hpp"
+#include "music_caption.hpp"
 
 namespace wa2::game {
 enum class ExtraGridKind {gallery,replay};
@@ -15,7 +16,7 @@ class ExtraGrid {
 public:
     using Loader=script::SceneSelection::Loader;
     using Sound=std::function<void(audio::SystemCue)>;
-    ExtraGrid(Loader,Sound={});
+    ExtraGrid(Loader,Sound={},CurrentMusic={});
     void prepare(ExtraGridKind,TitleContent,const progress::State&,unsigned page=0,MenuTiming={});
     void update(ExtraGridInput={});
     void clear();
@@ -32,7 +33,7 @@ private:
     struct Asset {std::string name;std::shared_ptr<const image::Raster> pixels;};
     struct PageData {unsigned page{};std::vector<ExtraGridRow> rows;std::vector<Asset> assets;};
     struct Pending {PageData data;unsigned next{};std::shared_ptr<image::ImageRequest> request;};
-    Loader loader_;Sound sound_;ExtraGridKind kind_{ExtraGridKind::gallery};TitleContent content_;
+    Loader loader_;Sound sound_;CurrentMusic current_music_;ExtraGridKind kind_{ExtraGridKind::gallery};TitleContent content_;
     bool coda_complete_{};
     std::array<std::array<bool,10>,168> gallery_{};std::array<bool,24> replay_{};
     std::vector<unsigned> pages_;PageData data_;std::optional<Pending> pending_;

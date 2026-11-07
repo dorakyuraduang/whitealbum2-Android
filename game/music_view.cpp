@@ -6,12 +6,12 @@ namespace wa2::game {
 namespace {
 // Content metadata recovered from the existing cached 0x4c1dd0/0x4c1ed0
 // tables. No machine addresses or recompiled functions enter the runtime.
-constexpr std::array<int,63> songs{4,1,2,3,5,6,18,7,8,9,10,11,12,13,14,15,16,17,27,33,32,28,19,20,21,26,29,23,24,22,34,60,31,40,41,42,43,44,45,46,47,69,74,52,53,61,50,51,62,63,67,68,70,71,54,55,64,58,59,66,56,57,65};
+constexpr const auto& songs=music_songs;
 constexpr std::array<unsigned,27> closing_indices{1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,22,23,24,25,26,27,28};
-constexpr std::array<std::string_view,9> names{"sys_04000.tga","sys_09000.tga","sys_04100.tga","sys_04101.tga","sys_04010.tga","sys_04021.tga","sys_09100.tga","sys_04030.tga","sys_04031.tga"};
-constexpr unsigned widths[]{1280,1280,400,344,304,288,56,1024,512},heights[]{40,56,128,1512,168,40,72,56,1512};
+constexpr std::array<std::string_view,11> names{"sys_04000.tga","sys_09000.tga","sys_04100.tga","sys_04101.tga","sys_04010.tga","sys_04021.tga","sys_09100.tga","sys_04030.tga","sys_04031.tga","sys_00301.tga","sys_00300.tga"};
+constexpr unsigned widths[]{1280,1280,400,344,304,288,56,1024,512,192,264},heights[]{40,56,128,1512,168,40,72,56,1512,8,1008};
 }
-MusicView::MusicView(Loader loader,Sound sound):loader_(std::move(loader)),sound_(std::move(sound)){
+MusicView::MusicView(Loader loader,Sound sound,CurrentMusic music):loader_(std::move(loader)),sound_(std::move(sound)),current_music_(std::move(music)){
     if(!loader_)throw script::Error("Missing native music-browser image loader");auto black=std::make_shared<image::Raster>();black->width=black->height=1;black->rgba={0,0,0,255};black_=std::move(black);sprites_.reserve(108);
 }
 void MusicView::clear(){images_={};request_.reset();rows_.clear();sprites_.clear();focus_.reset();playing_.reset();command_.reset();phase_=MusicViewPhase::idle;page_=image_next_=elapsed_=0;timing_={};close_from_=1;}
@@ -65,7 +65,7 @@ void MusicView::update(MusicInput input){
         draw();return;
     }
     if(input.page_delta){turn();draw();return;}const auto previous=focus_;
-    if(selected.pointer){focus_.reset();for(const auto& row:rows_){const float x=40.f+400*(row.ordinal/13),y=88.f+32*(row.ordinal%13);if(selected.x>=x && selected.x<x+400 && selected.y>=y && selected.y<y+32){focus_=row.ordinal;break;}}
+    if(selected.pointer){focus_.reset();for(const auto& row:rows_){const float x=40.f+400*(row.ordinal/13),y=88.f+32*(row.ordinal%13);if(row.enabled && selected.x>=x && selected.x<x+400 && selected.y>=y && selected.y<y+32){focus_=row.ordinal;break;}}
         if(selected.x>=1164 && selected.x<1220 && selected.y>=688 && selected.y<712)focus_=50;
         if(selected.y>=600 && selected.y<664){if(selected.x>=440 && selected.x<488)focus_=51;if(selected.x>=792 && selected.x<840)focus_=52;}}
     if(selected.navigation){std::vector<unsigned> controls;for(const auto& row:rows_)if(row.enabled)controls.push_back(row.ordinal);controls.insert(controls.end(),{51,52,50});const auto at=std::find(controls.begin(),controls.end(),focus_.value_or(999));const int size=int(controls.size());const auto n=at==controls.end()?(selected.navigation>0?0:size-1):(int(at-controls.begin())+selected.navigation+size)%size;focus_=controls[unsigned(n)];}
@@ -86,5 +86,7 @@ void MusicView::draw(){
     add(images_[7],120,528,1040,56,0,0,1024,56,255,body_scale);if(playing_)add(images_[8],156,552,512,24,0,float(*playing_*24),512,24,255,body_scale);
     add(images_[4],440,600,48,64,focus_==51?96:0,0,48,64,255,body_scale);add(images_[4],792,600,48,64,focus_==52?96:0,64,48,64,255,body_scale);
     add(images_[5],496,608,288,40,0,0,288,40,255,body_scale);add(images_[6],1164,688+32*(1-whole),56,24,0,focus_==50?24:0,56,24);
+    if(current_music_ && (phase_==MusicViewPhase::active || phase_==MusicViewPhase::page_out || phase_==MusicViewPhase::page_in))
+        append_music_caption(sprites_,images_[9],images_[10],current_music_(),0x1060,order);
 }
 }

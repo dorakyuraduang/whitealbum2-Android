@@ -1,6 +1,7 @@
 #pragma once
 #include "title_view.hpp"
 #include "menu_timing.hpp"
+#include "music_caption.hpp"
 
 namespace wa2::game {
 struct MusicRow {unsigned ordinal{},index{};std::int32_t song{};bool enabled{};};
@@ -13,7 +14,7 @@ class MusicView {
 public:
     using Loader=script::SceneSelection::Loader;
     using Sound=std::function<void(audio::SystemCue)>;
-    MusicView(Loader,Sound={});
+    MusicView(Loader,Sound={},CurrentMusic={});
     void prepare(TitleContent,const progress::State&,MenuTiming={});
     void update(MusicInput={});
     void clear();
@@ -27,8 +28,8 @@ public:
     float visibility()const noexcept;
     std::optional<MusicCommand> take_command();
 private:
-    Loader loader_;Sound sound_;TitleContent content_;std::array<bool,200> unlocked_{};
-    std::array<std::shared_ptr<const image::Raster>,9> images_;
+    Loader loader_;Sound sound_;CurrentMusic current_music_;TitleContent content_;std::array<bool,200> unlocked_{};
+    std::array<std::shared_ptr<const image::Raster>,11> images_;
     std::shared_ptr<const image::Raster> black_;
     std::shared_ptr<image::ImageRequest> request_;
     std::vector<MusicRow> rows_;std::vector<image::Sprite> sprites_;
