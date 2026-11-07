@@ -5,6 +5,7 @@
 #include "options_preferences.hpp"
 #include "save_view.hpp"
 #include "backlog_view.hpp"
+#include "music_view.hpp"
 
 namespace wa2::game {
 enum class Page {title,story,options,save,load,backlog,extras,closed};
@@ -40,6 +41,8 @@ class Application {
     BacklogView::Loader backlog_loader_;
     BacklogView::Text backlog_text_;
     std::unique_ptr<BacklogView> backlog_view_;
+    MusicView::Loader extras_loader_;
+    std::unique_ptr<MusicView> music_view_;
     std::vector<script::BacklogVoice> replay_;
     std::size_t replay_next_{};
     std::optional<std::size_t> replay_entry_;
@@ -73,6 +76,7 @@ public:
     const OptionsView* options_view()const noexcept{return options_view_.get();}
     const SaveView* save_view()const noexcept{return save_view_.get();}
     const BacklogView* backlog_view()const noexcept{return backlog_view_.get();}
+    const MusicView* music_view()const noexcept{return music_view_.get();}
     text::PreparedText menu_text(std::string_view,const text::TextStyle&);
     std::int32_t extra()const noexcept{return extra_;}
     bool background()const noexcept{return background_;}
@@ -86,10 +90,12 @@ public:
     void prepare_options(OptionsView::Loader,std::function<void(OptionsCommand)> = {},ConfirmationView::Text = {});
     void prepare_saves(SaveServices);
     void prepare_backlog(BacklogView::Loader,BacklogView::Text);
+    void prepare_extras(MusicView::Loader);
     void prepare_save_thumbnail(std::function<std::shared_ptr<const image::Raster>(Scene&)>);
     bool has_save_thumbnail()const noexcept{return bool(save_services_.thumbnail);}
     void start(const StoryStart&,std::int64_t now);
     void open(Page,std::int64_t now);
+    void open_extra(std::int32_t,std::int64_t now);
     bool back(std::int64_t now);
     void title(std::int64_t now);
     void background(bool,std::int64_t now);

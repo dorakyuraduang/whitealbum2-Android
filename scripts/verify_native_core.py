@@ -56,6 +56,7 @@ def main():
     inputs += [ROOT/'tests/native_save_view.cpp',ROOT/'tests/native_save_atlases.hpp']
     inputs += [ROOT/'tests/native_save_application.cpp']
     inputs += [ROOT/'tests/native_backlog_view.cpp']
+    inputs += [ROOT/'tests/native_music_view.cpp']
     inputs += [ROOT/p for p in ('tests/native_desktop.cpp','platform/native_desktop.hpp','platform/native_desktop.cpp',
         'platform/native_host.hpp','platform/native_host.cpp','platform/native_host.cmake','hosts/native/CMakeLists.txt',
         'hosts/native/entry.cmake','hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')]
@@ -129,6 +130,7 @@ def main():
             if host=='windows':targets+=['wa2_native_save_document_tests']
             if host=='windows':targets+=['wa2_native_save_view_tests','wa2_native_save_application_tests']
             if host=='windows':targets+=['wa2_native_backlog_view_tests']
+            if host=='windows':targets+=['wa2_native_music_view_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
@@ -164,6 +166,7 @@ def main():
             allowed+=('tests/native_save_view.cpp',)
             allowed+=('tests/native_save_application.cpp',)
             allowed+=('tests/native_backlog_view.cpp',)
+            allowed+=('tests/native_music_view.cpp',)
             allowed+=('tests/native_desktop.cpp','platform/native_desktop.cpp','platform/native_host.cpp',
                 'hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')
             allowed+=('tests/native_title_scene.cpp',)
@@ -376,6 +379,9 @@ def main():
                 run([directory/'wa2_native_backlog_view_tests.exe',directory/'native-backlog-view.json'],console,90)
                 backlog_view=json.loads((directory/'native-backlog-view.json').read_text())
                 if not backlog_view['passed'] or backlog_view['cases']<31 or backlog_view['guards']<14 or backlog_view['maximum_pending_images']>1 or backlog_view['maximum_new_images_per_tick']>2 or not backlog_view['four_normal_rows'] or not backlog_view['novel_page_and_scroll'] or not backlog_view['shared_application_bound'] or not backlog_view['voice_replay_keeps_history'] or not backlog_view['toolbar_does_not_advance_story'] or not backlog_view['error_resume_rebases_driver'] or not backlog_view['synthetic_resources_only'] or backlog_view['devices_opened'] or backlog_view['game_launched'] or backlog_view['screen_access']:raise ValueError('Native backlog/application checks failed')
+                run([directory/'wa2_native_music_view_tests.exe',directory/'native-music-view.json'],console,90)
+                music_view=json.loads((directory/'native-music-view.json').read_text())
+                if not music_view['passed'] or music_view['cases']<26 or music_view['guards']<12 or music_view['track_count']!=63 or music_view['maximum_pending_images']>1 or music_view['maximum_new_images_per_tick']>2 or not music_view['source_progress_rules'] or not music_view['two_page_mapping'] or not music_view['title_application_bound'] or not music_view['failed_play_preserves_active_track'] or not music_view['fake_music_only'] or not music_view['synthetic_resources_only'] or music_view['devices_opened'] or music_view['game_launched'] or music_view['screen_access']:raise ValueError('Native music-browser/application checks failed')
                 run([directory/'wa2_native_save_application_tests.exe',directory/'native-save-application.json'],console,90)
                 save_application=json.loads((directory/'native-save-application.json').read_text())
                 if not save_application['passed'] or save_application['cases']<18 or save_application['guards']<12 or not save_application['common_save_view_bound'] or not save_application['failed_load_preserves_scene'] or not save_application['metadata_and_thumbnail_written'] or not save_application['recoverable_operation_errors'] or not save_application['bounded_preview_reads'] or not save_application['right_click_save_route'] or not save_application['same_mixer_on_return'] or not save_application['synthetic_resources_only'] or save_application['devices_opened'] or save_application['game_launched'] or save_application['screen_access']:raise ValueError('Native save/application checks failed')
@@ -488,6 +494,7 @@ def main():
     report['save_view']=save_view
     report['save_application']=save_application
     report['backlog_view']=backlog_view
+    report['music_view']=music_view
     report['preferences']=preferences
     report['preference_storage']=preference_storage
     report['application']=application

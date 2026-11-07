@@ -41,6 +41,7 @@ std::unique_ptr<game::Application> native_application(resource::BankOpener opene
     };
     application->prepare_saves(std::move(saves));
     application->prepare_backlog([menu_resources](auto name){return menu_resources->image("grp",name);},[owner=application.get()](auto raw,const auto& style){return owner->menu_text(raw,style);});
+    application->prepare_extras([menu_resources](auto name){return menu_resources->image("grp",name);});
     // A failed title/provider preparation must not persist test-mode changes.
     if(startup.test_mode)progress->flush();return application;
 }

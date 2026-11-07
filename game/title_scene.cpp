@@ -28,6 +28,10 @@ void TitleScene::preferences(const Preferences& value){
 void TitleScene::options_preview_effects(){game::options_preview_effects(effects_,preferences_);}
 void TitleScene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
 void TitleScene::options_reset_sound(){game::options_reset_sound(effects_);}
+void TitleScene::music_preview(std::optional<std::int32_t> song,std::int32_t fade){
+    if(stage_!=TitleStage::view || fade<0 || fade>120 || (song && std::uint32_t(*song)>=200))throw std::invalid_argument("Invalid native title music preview");
+    if(song)music_.play(*song,fade,1,255);else music_.stop(fade);
+}
 text::PreparedText TitleScene::menu_text(std::string_view raw,const text::TextStyle& style){if(!menu_fonts_)menu_fonts_=std::make_unique<text::FontBook>(resources_.required("fon"));return menu_fonts_->prepare(text::layout(raw,style));}
 void TitleScene::begin_movie(std::string_view stem){
     const auto name=std::string(stem)+char('0'+startup_.movie_suffix)+".pak";

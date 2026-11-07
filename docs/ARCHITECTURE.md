@@ -850,6 +850,22 @@ SDL Windows build; it is not selected as the released host. Android's retained
 Java/widget startup still needs its native-only adapter selection before native
 APK packaging. Extras views and remaining source UI behavior remain incomplete.
 
+The title's music extra now owns `game/music_view.*`, with the cached 63-track
+order, two pages, closing-only 27-track first page, bonus flag 134, alternate
+21/35 rule and source hit/atlas coordinates. Opening and leaving stop the title
+track with the source 120-tick fade; selection toggles stop (60 ticks) and uses
+0/60 ticks for first/subsequent previews. Commands acknowledge playback only
+after the shared title audio owner accepts it, so an open/decoder failure does
+not select a new row or discard an existing playing voice. The page keeps the
+same mixer and preference gains, and freezes input while backgrounded. Loading
+has one outstanding atlas request and starts at most two new requests per tick;
+it copies only needed flag booleans, not the multi-megabyte progress blocks.
+Synthetic atlas/input/voice tests cover the application route and retained-frame
+composition without opening a device. Animated transitions, level meters and
+device appearance remain unverified. CG/replay/voice-comment views are still
+pending; cached source 0x42a6d0 is a voice-comment menu using `9500_...` speech,
+not a movie gallery. No native release or whole-game compatibility is claimed.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.

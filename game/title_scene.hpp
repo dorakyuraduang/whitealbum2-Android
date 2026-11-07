@@ -55,6 +55,7 @@ public:
     void options_preview_effects();
     void options_preview_voice();
     void options_reset_sound();
+    void music_preview(std::optional<std::int32_t> song,std::int32_t fade);
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
     TitleStage stage()const noexcept{return stage_;}
     const TitleView& view()const noexcept{return view_;}

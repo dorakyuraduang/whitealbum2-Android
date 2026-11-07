@@ -46,7 +46,9 @@ void RenderFrame::capture(Application& application){
         capture(*application.scene(),false);overlays_.insert(overlays_.end(),application.backlog_view()->sprites().begin(),application.backlog_view()->sprites().end());
         std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return;
     case Page::extras:
-        throw script::Unsupported("Native page view is not implemented: "+std::to_string(unsigned(application.page())));
+        if(!application.music_view() || !application.title_scene() || application.navigation().size()!=2)throw script::Unsupported("Native extras presentation has not been prepared");
+        capture(*application.title_scene());overlays_.insert(overlays_.end(),application.music_view()->sprites().begin(),application.music_view()->sprites().end());
+        std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return;
     }
     throw script::Unsupported("Unknown native presentation page");
 }
