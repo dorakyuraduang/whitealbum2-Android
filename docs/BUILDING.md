@@ -347,3 +347,24 @@ to `org.wa2.port.test` and label to `WA2 全内容测试`; activity names are fu
 qualified as `org.wa2.port.*`. It is verified to contain identical DEX, native
 libraries and licensed assets, and keeps its private data separate. Neither keys
 nor passwords belong in public source.
+
+The native-engine migration has a separate desktop CMake root at `hosts/native`.
+It builds full SDL window/audio adapters and the common native game sources;
+the retained `hosts` root continues to select the AOT reference. The native
+desktop wrapper accepts `--resources <UTF-8 directory>` and `--test-mode`.
+Resource discovery uses external PAKs beside the program or in a `res` child
+before checking the working directory. Settings/native slots use SDL's separate
+private data path; no PAK is extracted or embedded.
+
+`verify_native_core.py --sdl-archive <existing software-reference SDL archive>`
+also links `wa2_native_windows_entry_check.exe`. This is an unlaunched GUI/x64
+link artifact against a reference dependency without production device drivers.
+Its entry exports and complete native source closure are checked, including the real
+common frame loop. Do not distribute or run it as a complete game. The native
+Android and Windows entries remain incomplete and no native game APK is released.
+
+`verify_native_desktop_root.py` additionally configures the full desktop SDL
+root without building or running it. It requires a fresh native-core proof,
+then checks the production window, OpenGL and audio source closure alongside
+the same common game sources. Its configuration-only report is
+`logs/native-desktop-definition.json`; it does not verify a game session.

@@ -827,6 +827,29 @@ catch-up updates. Finite checks inject display/write failures and a simulated
 sixty-second dialog interval; no actual window, message box or game is opened.
 Real fullscreen switching and message-box appearance remain untested on devices.
 
+`platform/native_host.*` now owns SDL initialization, window/canvas creation,
+the native application, shared frame/input policy and device-audio loop for both
+hosts. The Android wrapper supplies SAF resources, private storage and frame-HUD
+submission; the desktop wrapper supplies external-directory resources and an SDL
+private-storage path. Neither entry links generated functions or guest memory.
+
+`platform/native_desktop.*` accepts an explicit UTF-8 `--resources` directory or
+discovers PAKs beside the program, in its `res` child, or in the working directory
+and its `res` child, in that order. It examines directory metadata, never an
+original executable. Optional PAK absence returns null; permission/provider errors
+remain errors. Native files stay in their separate private storage. The desktop
+GUI entry uses SDL's own UTF-8 Windows main shim and the same native host as Android.
+
+The core verifier now links the real Windows entry against its existing
+software-reference SDL archive, audits the GUI/x64 PE, entry exports, linked
+native-host archive symbols, source closure
+and absence of recompilation dependencies, and never starts that executable.
+That dependency has no production window/audio driver and its artifact must not
+be delivered as a game. `hosts/native/CMakeLists.txt` defines the separate full
+SDL Windows build; it is not selected as the released host. Android's retained
+Java/widget startup still needs its native-only adapter selection before native
+APK packaging. Extras views and remaining source UI behavior remain incomplete.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.

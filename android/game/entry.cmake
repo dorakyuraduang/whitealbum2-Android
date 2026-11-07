@@ -7,6 +7,7 @@ function(wa2_add_native_android_entry target)
     if(NOT TARGET wa2_canvas)
         include("${WA2_NATIVE_ANDROID_ROOT}/platform/sdl_canvas.cmake")
     endif()
+    include("${WA2_NATIVE_ANDROID_ROOT}/platform/native_host.cmake")
     add_library(${target} SHARED
         "${WA2_NATIVE_ANDROID_ROOT}/android/game/game_host.cpp"
         "${WA2_NATIVE_ANDROID_ROOT}/android/game/game_jni.cpp"
@@ -14,12 +15,9 @@ function(wa2_add_native_android_entry target)
         "${WA2_NATIVE_ANDROID_ROOT}/android/native/android_resources.cpp"
         "${WA2_NATIVE_ANDROID_ROOT}/android/native/frame_metrics.cpp"
         "${WA2_NATIVE_ANDROID_ROOT}/android/native/frame_hud_jni.cpp"
-        "${WA2_NATIVE_ANDROID_ROOT}/platform/resource_fd.cpp"
-        "${WA2_NATIVE_ANDROID_ROOT}/platform/sdl_application.cpp"
-        "${WA2_NATIVE_ANDROID_ROOT}/platform/sdl_presentation.cpp"
-        "${WA2_NATIVE_ANDROID_ROOT}/platform/sdl_audio.cpp")
+        "${WA2_NATIVE_ANDROID_ROOT}/platform/resource_fd.cpp")
     target_include_directories(${target} PRIVATE "${WA2_NATIVE_ANDROID_ROOT}/android/native")
     target_compile_features(${target} PRIVATE cxx_std_20)
-    target_link_libraries(${target} PRIVATE wa2_native_application wa2_native_audio_binding wa2_canvas SDL2 log android)
+    target_link_libraries(${target} PRIVATE wa2_native_host SDL2 log android)
     target_link_options(${target} PRIVATE "-Wl,--no-undefined" "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
 endfunction()

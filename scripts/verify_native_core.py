@@ -56,6 +56,9 @@ def main():
     inputs += [ROOT/'tests/native_save_view.cpp',ROOT/'tests/native_save_atlases.hpp']
     inputs += [ROOT/'tests/native_save_application.cpp']
     inputs += [ROOT/'tests/native_backlog_view.cpp']
+    inputs += [ROOT/p for p in ('tests/native_desktop.cpp','platform/native_desktop.hpp','platform/native_desktop.cpp',
+        'platform/native_host.hpp','platform/native_host.cpp','platform/native_host.cmake','hosts/native/CMakeLists.txt',
+        'hosts/native/entry.cmake','hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')]
     inputs += [ROOT/'tests/native_preferences.cpp']
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
@@ -96,7 +99,7 @@ def main():
     sources={};artifacts={};codec_bindings={};composition_state=None;composition_artifact=None;sdl_application=None;input_state=None
     composition_sdl_sha=digest(args.sdl_archive) if args.sdl_archive else None
     android_sdl_sha=digest(args.android_sdl_library) if args.android_sdl_library else None
-    android_entry_artifact=None
+    android_entry_artifact=None;windows_entry_artifact=None
     shader_compiler_sha=digest(args.shader_compiler);mask_shader_checks=[]
     with (ROOT/'logs/native-core-build.log').open('wb') as console:
         for host in ('windows','android'):
@@ -131,11 +134,13 @@ def main():
             if host=='windows':targets+=['wa2_native_movie_state_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
             if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
+            if host=='windows':targets+=['wa2_native_desktop_tests']
             if host=='android':targets+=['wa2_native_android_host_check','wa2_retained_android_jni_check']
             if host=='android' and args.android_sdl_library:targets+=['wa2_native_android_entry_check']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows' and args.sdl_archive:targets+=['wa2_native_sdl_application_tests','wa2_native_input_tests']
+            if host=='windows' and args.sdl_archive:targets+=['wa2_native_windows_entry_check']
             if host=='windows':targets.append('wa2_native_mask_source_tests')
             run([cmake,'--build',directory,'--target',*targets,'--parallel','1'],console,2400)
             commands=json.loads((directory/'compile_commands.json').read_text())
@@ -159,6 +164,8 @@ def main():
             allowed+=('tests/native_save_view.cpp',)
             allowed+=('tests/native_save_application.cpp',)
             allowed+=('tests/native_backlog_view.cpp',)
+            allowed+=('tests/native_desktop.cpp','platform/native_desktop.cpp','platform/native_host.cpp',
+                'hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
@@ -234,6 +241,27 @@ def main():
                 native_archives_sha256={p.relative_to(directory).as_posix():digest(p) for p in archives},
                 symbol_audit_scope='PE exports and link-input archives' if host=='windows' else 'linked ELF symbols',
                 compile_commands_sha256=digest(directory/'compile_commands.json'),native_link_graph_sha256=hashlib.sha256(graph.encode()).hexdigest())
+            if host=='windows' and args.sdl_archive:
+                entry=directory/'wa2_native_windows_entry_check.exe';entry_graph=output([ninja,'-C',directory,'-t','graph',entry.name]).replace('\\','/').lower()
+                if any(token in entry_graph for token in forbidden):raise ValueError('Recompilation dependency in native Windows entry')
+                entry_exports=output([llvm/'llvm-readobj.exe','--coff-exports',entry])
+                for token in ('SDL_main','run_native_host'):
+                    if token not in entry_exports:raise ValueError('Missing actual native Windows entry export: '+token)
+                host_archive=directory/'libwa2_native_host.a';host_symbols=output([llvm/'llvm-nm.exe','--defined-only','--demangle',host_archive])
+                for token in ('run_native_host','SdlApplication::run'):
+                    if token not in host_symbols:raise ValueError('Missing native Windows host loop symbol: '+token)
+                for token in ('wr::','wa2::aot::','code_page_','native_backend_'):
+                    if token in entry_exports or token in host_symbols:raise ValueError('Recompilation symbol in native Windows entry')
+                entry_header=output([llvm/'llvm-readobj.exe','--file-headers','--coff-imports',entry])
+                if 'IMAGE_FILE_MACHINE_AMD64' not in entry_header or 'IMAGE_SUBSYSTEM_WINDOWS_GUI' not in entry_header:raise ValueError('Native Windows entry is not a GUI x64 executable')
+                if any(token in entry_header.lower() for token in ('libwinrecomp','wa2_android','wa2_aot')):raise ValueError('Legacy DLL imported by native Windows entry')
+                entry_sources=sorted({Path(item['file']).resolve().relative_to(ROOT).as_posix() for item in commands
+                    if Path(item['output']).resolve().relative_to(directory.resolve()).as_posix().lower() in entry_graph})
+                if not set(sources[host]).issubset(entry_sources):raise ValueError('Native Windows entry does not use the complete common core')
+                windows_entry_artifact=dict(file=str(entry),sha256=digest(entry),bytes=entry.stat().st_size,
+                    native_host_archive_sha256=digest(host_archive),compiled_sources=entry_sources,symbol_audit_scope='PE entry exports and linked native-host archive',
+                    native_link_graph_sha256=hashlib.sha256(entry_graph.encode()).hexdigest(),actual_entry_symbols_audited=True,
+                    memory_reference_sdl_only=True,executable_started=False,released_game=False)
             codec_host='windows' if host=='windows' else 'arm64'
             for path in (ROOT/'tools/media-codec'/codec_host/'lib').glob('*.a'):codec_bindings[path.relative_to(ROOT).as_posix()]=digest(path)
             if host=='windows':
@@ -396,6 +424,9 @@ def main():
                 bootstrap=json.loads((directory/'native-bootstrap.json').read_text())
                 if not bootstrap['passed'] or bootstrap['cases']<17 or bootstrap['guards']<11 or not bootstrap['source_ic_presence_rule'] or not bootstrap['title_story_storage_connected'] or not bootstrap['native_preferences_reopened'] or not bootstrap['saved_image_wait_not_polled'] or not bootstrap['test_mode_persisted_after_prepare'] or not bootstrap['failed_prepare_writes_nothing'] or not bootstrap['fake_movies_only'] or not bootstrap['synthetic_resources_only'] or bootstrap['original_resources_opened'] or bootstrap['devices_opened'] or bootstrap['game_launched'] or bootstrap['screen_access']:raise ValueError('Native shared bootstrap checks failed')
                 run([directory/'wa2_android_jni_service_tests.exe',directory/'android-jni-services.json'],console,90)
+                run([directory/'wa2_native_desktop_tests.exe',directory/'native-desktop.json',directory/'native-desktop-owned'],console,90)
+                desktop=json.loads((directory/'native-desktop.json').read_text())
+                if not desktop['passed'] or desktop['cases']<13 or desktop['guards']<20 or not all(desktop[key] for key in ('external_resource_discovery','unicode_directories','provider_failures_not_missing','metadata_only_discovery','synthetic_files_only')) or any(desktop[key] for key in ('original_resources_opened','devices_opened','game_launched','screen_access')):raise ValueError('Native desktop resource/argument checks failed')
                 jni_services=json.loads((directory/'android-jni-services.json').read_text())
                 if not jni_services['passed'] or jni_services['cases']<21 or jni_services['guards']<6 or not all(jni_services[key] for key in
                         ('native_and_retained_service_sets','partial_registration_unwound','reverse_release_order','retry_after_failure','fake_services_only')) or any(jni_services[key] for key in
@@ -474,6 +505,8 @@ def main():
     report['input_state']=input_state
     report['image_wait']=image_wait
     report['bootstrap']=bootstrap
+    report['desktop']=desktop
+    report['windows_native_entry']=windows_entry_artifact
     report['android_native_host_compiled']=True
     report['android_native_host_linked']=android_entry_artifact is not None
     report['android_native_entry']=android_entry_artifact

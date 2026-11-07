@@ -17,3 +17,5 @@ target_include_directories(wa2_native_audio_binding PUBLIC "${WA2_NATIVE_SERVICE
 add_library(wa2_native_application STATIC "${WA2_NATIVE_SERVICE_ROOT}/platform/native_application.cpp")
 target_link_libraries(wa2_native_application PUBLIC wa2_game_scene wa2_native_progress_storage wa2_native_save_storage wa2_native_preference_storage)
 target_include_directories(wa2_native_application PUBLIC "${WA2_NATIVE_SERVICE_ROOT}/platform")
+add_library(wa2_native_desktop_resources STATIC "${WA2_NATIVE_SERVICE_ROOT}/platform/native_desktop.cpp" "${WA2_NATIVE_SERVICE_ROOT}/platform/file_io.cpp")
+target_link_libraries(wa2_native_desktop_resources PUBLIC wa2_native_application)
