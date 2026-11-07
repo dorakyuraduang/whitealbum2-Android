@@ -39,7 +39,7 @@ void Application::open(Page page,std::int64_t now){
         if(!scene_ && (!title_scene_ || title_scene_->stage()!=TitleStage::view))throw script::Unsupported("Native options require a prepared title view or story");
         next=std::make_unique<OptionsView>(options_loader_,[this](const OptionsState& state){const auto next=options_preferences(state,preferences());
             if(next.fullscreen!=preferences().fullscreen)throw script::Unsupported("Native options display-mode adapter is not implemented");
-            if(next.right_click!=preferences().right_click)throw script::Unsupported("Native options right-click actions are not implemented");preferences(next);},
+            if(next.right_click!=preferences().right_click && next.right_click==2)throw script::Unsupported("Native right-click save-page view is not implemented");preferences(next);},
             [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);});
         next->prepare(options_state(preferences()),0,options_timing(preferences()));
     }
@@ -95,6 +95,11 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
     if(!scene_)return {script::RunState::yielded,0};
     if(background_ || page()!=Page::story){scene_->ambient_update(now);return {script::RunState::yielded,0};}
     if(release_input_){input={};release_input_=false;}
+    if(input.toggle_window && preferences().right_click){
+        if(preferences().right_click==2)throw script::Unsupported("Native right-click save-page view is not implemented");
+        if(!options_loader_)throw script::Unsupported("Native right-click settings view is not prepared");
+        open(Page::options,now);return {script::RunState::yielded,0};
+    }
     const auto batch=scene_->advance_frame(now,input,clock,budget);if(scene_->title_requested())title(now);else if(batch.state==script::RunState::stopped)throw script::Unsupported("Native story ended without a title transition");return batch;
 }
 void Application::close(std::int64_t now){observe(now);if(scene_)scene_->flush_progress();progress_->flush();scene_.reset();title_scene_.reset();options_view_.reset();pages_.resize(1);pages_[0]=Page::closed;release_input_=true;}

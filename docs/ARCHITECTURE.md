@@ -702,8 +702,13 @@ Reset's confirmation sound uses the existing ordinary effect pool. Fake voice
 checks cover replacement, muting, cleanup and the common application route;
 no decoder or audio device is opened by those checks.
 
-The full settings page is still incomplete. Display-mode changes, alternative
-right-click actions and options over another modal page fail explicitly.
+The right-click policy now distinguishes hiding the message window from opening
+the shared settings view, matching the cached source's 0/1 branches. The latter
+persists from its actual option cell, suspends story logic before processing that
+click, and consumes the closing click before resuming. Missing settings services
+and the still-missing right-click save view (source policy 2) fail before changing
+story/navigation. The full settings page is still incomplete. Display-mode
+changes, the right-click save action and options over another modal page fail explicitly.
 Skin/colour selection popup behavior, held-button repetition and the original captured
 parent-image zoom are pending. The current compositor retains the live parent
 scene beneath the options overlay. Persisting confirmation/window policies is
