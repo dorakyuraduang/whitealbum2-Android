@@ -4,18 +4,19 @@ namespace wa2::game {
 UserMenuState Application::user_menu()const{
     UserMenuState state;if(page()==Page::closed || background_)return state;
     const bool story=page()==Page::story && scene_ && !scene_->movie_active();
+    const auto control=[&](script::StoryControl value){return story && scene_->control_allowed(value);};
     const bool title=page()==Page::title && title_scene_ && title_scene_->stage()==TitleStage::view && title_scene_->view().phase()==TitlePhase::menu;
     const auto enable=[&](UserCommand command,bool value){if(value)state.enabled|=command_bit(command);};
     enable(UserCommand::quit,true);enable(UserCommand::title,bool(scene_));enable(UserCommand::fullscreen,bool(display_));
-    enable(UserCommand::settings,(story || title) && bool(options_loader_));
+    enable(UserCommand::settings,(control(script::StoryControl::options) || title) && bool(options_loader_));
     enable(UserCommand::movie_high,true);enable(UserCommand::movie_low,true);
     for(auto command:{UserCommand::window_hd,UserCommand::window_medium,UserCommand::window_small})enable(command,bool(resize_) && bool(display_));
     enable(UserCommand::about,bool(information_));enable(UserCommand::environment,bool(information_) && bool(environment_));
-    enable(UserCommand::save,story && bool(save_services_.images));enable(UserCommand::load,(story || title) && bool(save_services_.images));
-    enable(UserCommand::quick_save,story && bool(save_services_.images) && bool(save_services_.stamp) && bool(save_services_.thumbnail));
-    enable(UserCommand::quick_load,story && bool(save_services_.images));
-    enable(UserCommand::backlog,story && bool(backlog_loader_) && scene_->backlog().entries().size()>=2);
-    for(auto command:{UserCommand::hide,UserCommand::automatic,UserCommand::skip})enable(command,story);
+    enable(UserCommand::save,control(script::StoryControl::save) && bool(save_services_.images));enable(UserCommand::load,(control(script::StoryControl::load) || title) && bool(save_services_.images));
+    enable(UserCommand::quick_save,control(script::StoryControl::quick_save) && bool(save_services_.images) && bool(save_services_.stamp) && bool(save_services_.thumbnail));
+    enable(UserCommand::quick_load,control(script::StoryControl::quick_load) && bool(save_services_.images));
+    enable(UserCommand::backlog,control(script::StoryControl::backlog) && bool(backlog_loader_) && scene_->backlog().entries().size()>=2);
+    enable(UserCommand::hide,control(script::StoryControl::hide));enable(UserCommand::automatic,control(script::StoryControl::automatic));enable(UserCommand::skip,control(script::StoryControl::skip));
     if(preferences().fullscreen)state.checked|=command_bit(UserCommand::fullscreen);
     state.checked|=command_bit(preferences().movie_quality?UserCommand::movie_low:UserCommand::movie_high);
     if(!preferences().fullscreen)state.checked|=command_bit(UserCommand(unsigned(UserCommand::window_hd)+unsigned(preferences().window_size)));

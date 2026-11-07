@@ -58,6 +58,7 @@ def main():
     inputs += [ROOT/'tests/native_save_application.cpp']
     inputs += [ROOT/'tests/native_quick_view.cpp']
     inputs += [ROOT/'tests/native_backlog_view.cpp']
+    inputs += [ROOT/'tests/native_story_toolbar.cpp']
     inputs += [ROOT/'tests/native_music_view.cpp']
     inputs += [ROOT/'tests/native_extra_grid.cpp']
     inputs += [ROOT/'tests/native_commentary.cpp',ROOT/'tests/native_title_atlases.hpp']
@@ -137,6 +138,7 @@ def main():
             if host=='windows':targets+=['wa2_native_save_view_tests','wa2_native_save_application_tests']
             if host=='windows':targets+=['wa2_native_quick_view_tests']
             if host=='windows':targets+=['wa2_native_backlog_view_tests']
+            if host=='windows':targets+=['wa2_native_story_toolbar_tests']
             if host=='windows':targets+=['wa2_native_music_view_tests']
             if host=='windows':targets+=['wa2_native_extra_grid_tests']
             if host=='windows':targets+=['wa2_native_commentary_tests']
@@ -177,6 +179,7 @@ def main():
             allowed+=('tests/native_save_application.cpp',)
             allowed+=('tests/native_quick_view.cpp',)
             allowed+=('tests/native_backlog_view.cpp',)
+            allowed+=('tests/native_story_toolbar.cpp',)
             allowed+=('tests/native_music_view.cpp',)
             allowed+=('tests/native_extra_grid.cpp',)
             allowed+=('tests/native_commentary.cpp',)
@@ -464,6 +467,9 @@ def main():
                 run([directory/'wa2_native_image_wait_tests.exe',directory/'native-image-wait.json'],console,90)
                 image_wait=json.loads((directory/'native-image-wait.json').read_text())
                 if not image_wait['passed'] or image_wait['cases']<13 or image_wait['guards']<7 or not image_wait['completion_notification'] or not image_wait['multiple_waiters_same_owner'] or not image_wait['pending_shutdown_notifies'] or not image_wait['synthetic_resources_only'] or image_wait['original_resources_opened'] or image_wait['devices_opened'] or image_wait['game_launched'] or image_wait['screen_access']:raise ValueError('Native image completion wait checks failed')
+                run([directory/'wa2_native_story_toolbar_tests.exe',directory/'native-story-toolbar.json'],console,90)
+                story_toolbar=json.loads((directory/'native-story-toolbar.json').read_text())
+                if not story_toolbar['passed'] or story_toolbar['cases']<26 or story_toolbar['guards']<2 or not all(story_toolbar[key] for key in ('source_hover_tooltips','source_bottom_alpha_ramp','source_demo_replay_policy','disabled_click_does_not_advance','skip_does_not_accelerate_toolbar','capture_does_not_tick','suspension_freezes_toolbar','manual_click_stops_auto','transient_hover_not_saved','synthetic_resources_only','geometry_only')) or any(story_toolbar[key] for key in ('original_resources_opened','devices_opened','game_launched','screen_access')):raise ValueError('Native story toolbar checks failed')
                 run([directory/'wa2_native_loading_cache_tests.exe',directory/'native-loading-cache.json'],console,90)
                 loading_cache=json.loads((directory/'native-loading-cache.json').read_text())
                 if not loading_cache['passed'] or loading_cache['cases']<35 or loading_cache['guards']<17 or loading_cache['warm_reads_avoided']<9 or not all(loading_cache[key] for key in ('bounded_image_retention','lru_and_entry_limits','style_and_archive_isolation','active_pixels_survive_eviction','active_program_reused','program_cache_retains_no_runtime','script_patch_root_ic_order','font_patch_root_ic_order','selected_failure_preserved','member_read_limits','synthetic_font_pixels_only','synthetic_resources_only')) or any(loading_cache[key] for key in ('original_resources_opened','devices_opened','game_launched','screen_access')):raise ValueError('Native resource reuse checks failed')
@@ -559,6 +565,7 @@ def main():
     report['input_state']=input_state
     report['image_wait']=image_wait
     report['loading_cache']=loading_cache
+    report['story_toolbar']=story_toolbar
     report['bootstrap']=bootstrap
     report['desktop']=desktop
     report['windows_native_entry']=windows_entry_artifact

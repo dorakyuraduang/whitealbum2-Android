@@ -162,7 +162,18 @@ void SceneDialogue::restore(std::span<const std::uint8_t> bytes){
     settings_=next.settings_;novel_=std::move(next.novel_);body_=std::move(next.body_);name_text_=std::move(next.name_text_);old_name_text_=std::move(next.old_name_text_);
     raw_=std::move(next.raw_);name_=std::move(next.name_);phase_=next.phase_;budget_=next.budget_;open_elapsed_=next.open_elapsed_;name_elapsed_=next.name_elapsed_;name_slot_=next.name_slot_;idle_elapsed_=next.idle_elapsed_;close_ticks_=next.close_ticks_;page_=next.page_;
     speaker_=next.speaker_;message_=next.message_;visible_=next.visible_;picture_=next.picture_;has_text_=next.has_text_;fast_=next.fast_;transparent_=next.transparent_;
-    requests_={};images_={};sprites_.clear();assets_started_=assets_ready_=false;
+    requests_={};images_={};sprites_.clear();assets_started_=assets_ready_=false;toolbar_={};toolbar_ticks_=tooltip_ticks_=tooltip_step_=0;
+}
+bool SceneDialogue::toolbar(StoryToolbar next){
+    if(next.hover && unsigned(*next.hover)>unsigned(StoryControl::hide))throw Error("Invalid native toolbar control");
+    const auto previous=toolbar_.hover;
+    if(!visible_ || !assets_ready_ || phase_==DialoguePhase::closed || phase_==DialoguePhase::opening || phase_==DialoguePhase::closing){toolbar_={};toolbar_ticks_=tooltip_ticks_=tooltip_step_=0;return previous.has_value();}
+    if(next.demo && next.hover!=StoryControl::automatic)next.hover.reset();
+    toolbar_ticks_=next.near_bottom?std::min(16u,toolbar_ticks_+1):toolbar_ticks_?toolbar_ticks_-1:0;
+    // Cached 411c55 resets the counter after that frame's drawing when the
+    // hovered control changes, rather than carrying one label's fade onward.
+    tooltip_step_=next.hover?std::min(16u,tooltip_ticks_+1):0;
+    tooltip_ticks_=next.hover==previous?tooltip_step_:0;toolbar_=next;return next.hover!=previous;
 }
 std::span<const image::Sprite> SceneDialogue::sprites(){
     sprites_.clear();if(!visible_)return sprites_;
@@ -182,8 +193,20 @@ std::span<const image::Sprite> SceneDialogue::sprites(){
         phase_==DialoguePhase::closing && close_ticks_?std::uint8_t(255-std::min(255u,open_elapsed_*255/close_ticks_)):std::uint8_t(255);
     if(settings_.window && !novel_.enabled()){add(0,16,496,1248,208,0,0,1248,208,transparent_?0:std::uint8_t(std::min(255,(picture_?settings_.picture_alpha:settings_.window_alpha))*alpha/255));
         add(1,16,496,1248,208,0,0,1248,208,alpha);}
-    for(std::size_t i=0;i<story_button_x.size();++i)add(2,float(story_button_x[i]),680,40,40,float(i*40),0,40,40,std::uint8_t(std::min(255,settings_.button_alpha)*alpha/255),0x40f+int(i));
-    add(3,0,672,1280,48,208,104,120,48,alpha);
+    // Cached 411332..4113c0 ramps the buttons and footer from their stored
+    // alpha to 256 over sixteen input frames near the bottom of the window.
+    const auto toolbar_alpha=std::uint8_t(std::min(255u,(16-toolbar_ticks_)*unsigned(settings_.button_alpha)/16+toolbar_ticks_*16)*alpha/255);
+    for(unsigned i=0;i<story_button_x.size();++i){if(toolbar_.demo && i!=unsigned(StoryControl::automatic))continue;
+        const auto row=toolbar_.pressed && toolbar_.hover==StoryControl(i) && (i==6 || i==7)?80:toolbar_.hover==StoryControl(i)?40:0;
+        const auto first=sprites_.size();add(2,float(story_button_x[i]),680,40,40,float(i*40),float(row),40,40,toolbar_alpha,0x40f+int(i));
+        if(toolbar_.replay && (i==0 || i==1 || i==3 || i==4) && sprites_.size()!=first)sprites_.back().red=sprites_.back().green=sprites_.back().blue=128;
+    }
+    if(!toolbar_.demo)add(3,0,672,1280,48,208,104,120,48,toolbar_alpha);
+    if(toolbar_.hover && tooltip_step_){const auto index=unsigned(*toolbar_.hover);
+        const auto row=index==6?toolbar_.skipping?112u:96u:index==7?toolbar_.automatic?144u:128u:index==8?160u:index*16;
+        const auto remaining=16-tooltip_step_;const auto x=float((250-remaining*remaining/16)*4);
+        add(3,x,664,208,16,0,float(row),208,16,std::uint8_t(std::min(255u,tooltip_step_*16)*alpha/255),0x419);
+    }
     if(has_text_ && (!novel_.enabled() || novel_.text_visible())){
         const auto first=sprites_.size();
         if(page_ || budget_)fonts_.materialize(body_);

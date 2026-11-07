@@ -878,6 +878,21 @@ catalogue. Permission/provider errors and an existing but corrupt movie are
 never hidden by switching variants. Other filename conventions and a missing
 default remain explicit errors; original PAKs stay external and unmodified.
 
+The story toolbar also has its source hover/press atlas rows, moving 208x16
+help strip and sixteen-step bottom-proximity alpha. Cached 4112a3..411575
+supplies the integer truncation, crop rows and fade geometry; 4131b1..
+413301 supplies demo visibility and replay brightness. The footer/help strip
+stays in screen space while the buttons retain the dialogue transform.
+Application input frames tick those transient timers once, independently of
+accelerated story updates and repeated render capture. Menus/backgrounding
+freeze them; loading a checkpoint clears them without changing the save format.
+Replay save/quick/load actions and hidden demo actions share one availability
+policy with host menus/shortcuts. A disabled visible button consumes its click
+before dialogue advancement. Manual story advance, right-click and non-auto
+toolbar clicks clear ordinary auto-play, while demo timing remains separate.
+Constructed blank-image/script checks cover these bindings and a sixty-four
+tick accelerated frame; they do not establish original artwork appearance.
+
 The nine bottom controls now share their cached hit rectangles with the
 dialogue renderer. Their quick-save/load, settings, save/load, history, skip,
 auto and window actions are processed before story advancement. Input is

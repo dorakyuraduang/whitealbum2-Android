@@ -74,9 +74,25 @@ void Scene::options_preview_effects(){game::options_preview_effects(effects_,pre
 void Scene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
 void Scene::options_reset_sound(){game::options_reset_sound(effects_);}
 std::optional<script::StoryControl> Scene::control_at(float x,float y)const{
-    const auto point=image::scene_point(x,y,shake_.dialogue());return point?dialogue_.control_at((*point)[0],(*point)[1]):std::nullopt;
+    if(movies_.active())return {};
+    const auto point=image::scene_point(x,y,shake_.dialogue());const auto result=point?dialogue_.control_at((*point)[0],(*point)[1]):std::nullopt;
+    return controls_.modes().demo_mode && result!=script::StoryControl::automatic?std::nullopt:result;
+}
+bool Scene::control_allowed(script::StoryControl control)const{
+    if(unsigned(control)>unsigned(script::StoryControl::hide))throw script::Error("Unknown native story control");
+    if(movies_.active() || (controls_.modes().demo_mode && control!=script::StoryControl::automatic))return false;
+    return !replay_mode_ || (control!=script::StoryControl::quick_save && control!=script::StoryControl::quick_load && control!=script::StoryControl::save && control!=script::StoryControl::load);
+}
+void Scene::control_input(const script::SelectionInput& input){
+    if(movies_.active())return;
+    script::StoryToolbar state;state.hover=input.pointer?control_at(input.x,input.y):std::nullopt;
+    state.near_bottom=input.pointer && input.y>=664;state.automatic=controls_.modes().auto_mode;state.skipping=controls_.modes().latched_skip;
+    state.demo=controls_.modes().demo_mode!=0;state.replay=replay_mode_!=0;state.pressed=input.activate && state.hover && control_allowed(*state.hover);
+    if(dialogue_.toolbar(state) && state.hover && control_allowed(*state.hover))system_sounds_.play(audio::SystemCue::focus);
+    if(input.activate && state.hover && *state.hover!=script::StoryControl::automatic)cancel_automatic();
 }
 void Scene::story_control(script::StoryControl control){
+    if(!control_allowed(control)){system_sounds_.play(audio::SystemCue::reject);return;}
     switch(control){
     case script::StoryControl::skip:controls_.latched_skip(!controls_.modes().latched_skip);break;
     case script::StoryControl::automatic:controls_.auto_mode(!controls_.modes().auto_mode,preferences_.auto_ticks);break;
@@ -147,6 +163,7 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))system_sounds_.play(audio::SystemCue::reject);else choose(std::uint32_t(input.choice));}
     else if(auto selected=selection_.input(input.selection))choose(*selected);
     input_=input;milliseconds_=timeline_.milliseconds();++statistics_.ticks;
+    if(input_.toggle_window || (input_.advance && !choices_.active()))cancel_automatic();
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}
     if(input_.advance){window_visible_=true;dialogue_.visible(true);if(preferences_.cut_voice_on_advance && !controls_.modes().demo_mode && dialogue_.phase()==script::DialoguePhase::waiting)voices_.stop(0);dialogue_.advance();}
     if(dialogue_.phase()==script::DialoguePhase::waiting && controls_.automatic_advance())dialogue_.advance();

@@ -9,6 +9,10 @@ namespace wa2::script {
 enum class DialoguePhase {closed,opening,typing,waiting,complete,closing};
 enum class StoryControl {quick_save,quick_load,options,save,load,backlog,skip,automatic,hide};
 inline constexpr std::array<int,9> story_button_x{808,848,928,968,1008,1048,1088,1128,1168};
+struct StoryToolbar {
+    std::optional<StoryControl> hover;
+    bool near_bottom{},automatic{},skipping{},demo{},replay{},pressed{};
+};
 struct DialogueSettings {
     int skin{},window_alpha{207},picture_alpha{134},button_alpha{134},text_step{2},open_ticks{10};
     bool window{true};
@@ -37,6 +41,9 @@ public:
     const SceneNovel& novel()const noexcept{return novel_;}
     std::span<const image::Sprite> sprites();
     std::optional<StoryControl> control_at(float x,float y)const;
+    // Called once by the application input frame, separately from accelerated
+    // story ticks and render capture. Hover state is transient, never saved.
+    bool toolbar(StoryToolbar);
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t>);
     void prepare_restored_assets(resource::Catalog&,const image::Resolve&);
@@ -60,6 +67,8 @@ private:
     std::size_t page_{};
     std::int32_t speaker_{-1},message_{-1};
     bool assets_started_{},assets_ready_{},visible_{true},picture_{},has_text_{},fast_{},transparent_{};
+    StoryToolbar toolbar_;
+    unsigned toolbar_ticks_{},tooltip_ticks_{},tooltip_step_{};
     void load_assets();
     void open();
     void name(std::string_view value,std::int32_t speaker);

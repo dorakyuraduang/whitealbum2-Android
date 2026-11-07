@@ -68,6 +68,7 @@ void Application::quick(QuickKind kind,std::int64_t now){
 }
 void Application::control(script::StoryControl action,std::int64_t now){
     if(!scene_ || page()!=Page::story)throw std::logic_error("Native story control requires its story page");
+    if(!scene_->control_allowed(action)){scene_->cue(audio::SystemCue::reject);return;}
     switch(action){
     case script::StoryControl::quick_save:quick(QuickKind::save,now);break;
     case script::StoryControl::quick_load:quick(QuickKind::load,now);break;
@@ -281,11 +282,13 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
     if(!scene_)return {script::RunState::yielded,0};
     if(background_ || page()!=Page::story){scene_->ambient_update(now);return {script::RunState::yielded,0};}
     if(release_input_){input={};release_input_=false;}
+    scene_->control_input(input.selection);
     if(input.selection.pointer && input.selection.activate)if(auto action=scene_->control_at(input.selection.x,input.selection.y)){
         try{control(*action,now);}catch(const std::exception& error){if(error_)report_error(error.what(),now);else throw;}return {script::RunState::yielded,0};
     }
     if(input.scroll>0 && backlog_loader_ && scene_->backlog().entries().size()>=2){open(Page::backlog,now);return {script::RunState::yielded,0};}
     if(input.toggle_window && preferences().right_click){
+        scene_->cancel_automatic();
         if(preferences().right_click==2){if(!save_services_.images)throw script::Unsupported("Native right-click save-page services are not prepared");open(Page::save,now);return {script::RunState::yielded,0};}
         if(!options_loader_)throw script::Unsupported("Native right-click settings view is not prepared");
         open(Page::options,now);return {script::RunState::yielded,0};

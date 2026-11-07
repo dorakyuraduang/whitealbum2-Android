@@ -115,6 +115,9 @@ public:
     const script::SceneChoices& choices()const noexcept{return choices_;}
     const script::SceneBacklog& backlog()const noexcept{return backlog_;}
     std::optional<script::StoryControl> control_at(float x,float y)const;
+    bool control_allowed(script::StoryControl)const;
+    void control_input(const script::SelectionInput&);
+    void cancel_automatic(){if(!controls_.modes().demo_mode && controls_.modes().auto_mode)controls_.auto_mode(false,preferences_.auto_ticks);}
     void story_control(script::StoryControl);
     const script::SceneModes& modes()const noexcept{return controls_.modes();}
     MusicCaption music_caption()const{return music_caption_state(music_,effects_,mixer_->paused());}
