@@ -32,13 +32,16 @@ void RenderFrame::capture(Application& application){
     case Page::story:if(!application.scene())throw std::logic_error("Native story presentation has no scene");capture(*application.scene());return;
     case Page::title:if(!application.title_scene())throw script::Unsupported("Native title presentation has not been prepared");capture(*application.title_scene());return;
     case Page::closed:clear();return;
-    case Page::options:
-        if(!application.options_view())throw script::Unsupported("Native options presentation has not been prepared");
+    case Page::options:case Page::save:case Page::load:{
+        const bool options=application.page()==Page::options;
+        if(options?!application.options_view():!application.save_view())throw script::Unsupported("Native modal presentation has not been prepared");
         if(application.navigation().size()!=2)throw script::Unsupported("Native options presentation over a modal page is not implemented");
         if(application.scene())capture(*application.scene());else if(application.title_scene())capture(*application.title_scene());else throw script::Unsupported("Native options presentation has no parent scene");
-        overlays_.insert(overlays_.end(),application.options_view()->sprites().begin(),application.options_view()->sprites().end());
+        const auto sprites=options?application.options_view()->sprites():application.save_view()->sprites();
+        overlays_.insert(overlays_.end(),sprites.begin(),sprites.end());
         std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return;
-    case Page::save:case Page::load:case Page::backlog:case Page::extras:
+    }
+    case Page::backlog:case Page::extras:
         throw script::Unsupported("Native page view is not implemented: "+std::to_string(unsigned(application.page())));
     }
     throw script::Unsupported("Unknown native presentation page");

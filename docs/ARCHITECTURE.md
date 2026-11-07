@@ -706,15 +706,16 @@ The right-click policy now distinguishes hiding the message window from opening
 the shared settings view, matching the cached source's 0/1 branches. The latter
 persists from its actual option cell, suspends story logic before processing that
 click, and consumes the closing click before resuming. Missing settings services
-and the still-missing right-click save view (source policy 2) fail before changing
-story/navigation. The full settings page is still incomplete. Display-mode
-changes, the right-click save action and options over another modal page fail explicitly.
+and missing save services (source policy 2) fail before changing story/navigation.
+Policy 2 now opens the common save view when its services are prepared. The full
+settings page is still incomplete. Display-mode changes and options over another
+modal page fail explicitly.
 Skin/colour selection popup behavior, held-button repetition and the original captured
 parent-image zoom are pending. The current compositor retains the live parent
 scene beneath the options overlay. Persisting confirmation/window policies is
 not a claim that every action using them has been implemented.
 
-The native story engine remains incomplete: full options/save/load/extras/
+The native story engine remains incomplete: full options/extras/
 backlog views, production host integration and unsupported render/animation/
 weather modes still need native implementations or integration. Source manual
 save and INI conversion are also unfinished. No whole-game or device/performance
@@ -757,7 +758,22 @@ RGB 255, rather than changing alpha. Chapter badges retain the source type/sub
 rows and calendar month/day cells. Original atlas headers supply dimensions;
 view tests allocate blank pixels and deferred glyph metrics, so they verify
 geometry and state, not original font pixels, appearance or device compatibility.
-This component has not yet been connected to application save/load commands.
+The common Application now binds this view to real native slot writes and scene
+restoration. Opening it freezes story logic while retaining the same mixer;
+backgrounding also pauses the audio and menu clock. Successful loads prepare a
+complete new scene before releasing the active one. Failed writes/restores keep
+the current scene, navigation and slot data and expose their diagnostic. Slot
+errors still propagate to the host; an in-page recoverable error dialog is pending.
+Right-click save routing and one-shot PageUp/PageDown input use the same code on
+both hosts. A closing click is consumed before story logic resumes.
+
+The platform bootstrap supplies the local wall-clock date independently of game
+logic. The SDL adapter creates a separate owned 128x72 CPU surface and renders
+the retained scene into it for a save thumbnail. It does not read a window,
+framebuffer, screen, existing renderer target or device pixels. Checks use only
+constructed images/scripts and verify thumbnail pixels without an SDL window,
+video subsystem, event polling, GL context or audio output. These checks do not
+verify an original-resource scene or a complete playable port.
 
 The bootstrap now prepares menu descriptions through its current story/title
 owner. Story menus reuse the existing FontBook; the title creates a lazy one.

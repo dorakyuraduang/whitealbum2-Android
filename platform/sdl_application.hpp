@@ -6,6 +6,9 @@
 
 namespace wa2::platform {
 game::Input game_input(const InputSnapshot&);
+// Render into a new owned CPU surface. This never reads the game window,
+// framebuffer, desktop, renderer target or a device's displayed pixels.
+std::shared_ptr<const image::Raster> save_thumbnail(const game::RenderFrame&);
 // One production pump/loop for both hosts. Window/resource/private-storage
 // creation stays in the host; SDL events, rendering and device audio are
 // adapters around the common Application and FrameDriver.

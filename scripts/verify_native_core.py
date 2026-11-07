@@ -54,6 +54,7 @@ def main():
     inputs += [ROOT/'tests/native_save_slots.cpp',ROOT/'platform/save_storage.cpp',ROOT/'platform/save_storage.hpp']
     inputs += [ROOT/'tests/native_save_document.cpp']
     inputs += [ROOT/'tests/native_save_view.cpp',ROOT/'tests/native_save_atlases.hpp']
+    inputs += [ROOT/'tests/native_save_application.cpp']
     inputs += [ROOT/'tests/native_preferences.cpp']
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
@@ -122,7 +123,7 @@ def main():
             if host=='windows':targets+=['wa2_native_options_application_tests']
             if host=='windows':targets+=['wa2_native_options_action_tests']
             if host=='windows':targets+=['wa2_native_save_document_tests']
-            if host=='windows':targets+=['wa2_native_save_view_tests']
+            if host=='windows':targets+=['wa2_native_save_view_tests','wa2_native_save_application_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
@@ -154,6 +155,7 @@ def main():
             allowed+=('tests/native_options_actions.cpp',)
             allowed+=('tests/native_save_document.cpp',)
             allowed+=('tests/native_save_view.cpp',)
+            allowed+=('tests/native_save_application.cpp',)
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
@@ -211,7 +213,8 @@ def main():
                         if token in entry_symbols:raise ValueError('Legacy runtime service in native Android entry: '+token)
                     for token in ('JNI_OnLoad','JNI_OnUnload','SDL_main','Java_org_wa2_port_Wa2Activity_nativeResetFrameMetrics',
                             'wa2::android::run_game(','wa2::android::frame_presented(','wa2::android::open_resource_bank(',
-                            'wa2::platform::SdlApplication::run(','wa2::platform::SdlAudio::open(','wa2::game::Application::frame('):
+                            'wa2::platform::SdlApplication::run(','wa2::platform::SdlAudio::open(','wa2::game::Application::frame(',
+                            'wa2::game::SaveView::update(','wa2::platform::save_thumbnail('):
                         if token not in entry_symbols:raise ValueError('Missing native Android entry service: '+token)
                     entry_header=output([llvm/'llvm-readelf.exe','-h',entry])
                     if 'AArch64' not in entry_header:raise ValueError('Native Android entry has wrong architecture')
@@ -339,6 +342,9 @@ def main():
                 save_view=json.loads((directory/'native-save-view.json').read_text())
                 if not save_view['passed'] or save_view['cases']<26 or save_view['guards']<24 or save_view['manual_slots']!=100 or not save_view['two_column_source_geometry'] or not save_view['source_bitmap_digit_grid'] or not save_view['overwrite_and_load_confirmations'] or save_view['maximum_preview_reads']>1 or save_view['maximum_pending_images']>1 or save_view['maximum_new_images_per_tick']>2 or not save_view['failed_operations_keep_rows'] or not save_view['synthetic_resources_only'] or save_view['original_resources_opened'] or save_view['devices_opened'] or save_view['game_launched'] or save_view['screen_access']:raise ValueError('Native save view checks failed')
                 run([directory/'wa2_native_preference_tests.exe',directory/'native-preferences.json'],console,90)
+                run([directory/'wa2_native_save_application_tests.exe',directory/'native-save-application.json'],console,90)
+                save_application=json.loads((directory/'native-save-application.json').read_text())
+                if not save_application['passed'] or save_application['cases']<17 or save_application['guards']<10 or not save_application['common_save_view_bound'] or not save_application['failed_load_preserves_scene'] or not save_application['metadata_and_thumbnail_written'] or not save_application['bounded_preview_reads'] or not save_application['right_click_save_route'] or not save_application['same_mixer_on_return'] or not save_application['synthetic_resources_only'] or save_application['devices_opened'] or save_application['game_launched'] or save_application['screen_access']:raise ValueError('Native save/application checks failed')
                 preferences=json.loads((directory/'native-preferences.json').read_text())
                 if not preferences['passed'] or preferences['cases']<14 or preferences['guards']<30 or not preferences['memory_storage_only'] or not preferences['fake_voices_only'] or preferences['game_launched'] or preferences['screen_access']:raise ValueError('Native preference checks failed')
                 run([directory/'wa2_native_preference_storage_tests.exe',directory/'native-preference-storage.json'],console,90)
@@ -443,6 +449,7 @@ def main():
     report['save_slots']=save_slots
     report['save_document']=save_document
     report['save_view']=save_view
+    report['save_application']=save_application
     report['preferences']=preferences
     report['preference_storage']=preference_storage
     report['application']=application

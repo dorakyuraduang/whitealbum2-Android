@@ -5,11 +5,12 @@
 namespace wa2::game {
 void FrameInput::add(const Input& input){
     if(input.choice< -1 || input.choice>=8 || input.selection.navigation< -1 || input.selection.navigation>1 ||
-        !std::isfinite(input.selection.x) || !std::isfinite(input.selection.y))throw std::invalid_argument("Invalid native frame input");
+        input.page_delta< -1 || input.page_delta>1 || !std::isfinite(input.selection.x) || !std::isfinite(input.selection.y))throw std::invalid_argument("Invalid native frame input");
     held_=input.continued();
     edges_.advance|=input.advance;edges_.toggle_window^=input.toggle_window;edges_.cancel|=input.cancel;
     edges_.selection.confirm|=input.selection.confirm;
     edges_.selection.navigation=std::clamp(edges_.selection.navigation+input.selection.navigation,-1,1);
+    edges_.page_delta=std::clamp(edges_.page_delta+input.page_delta,-1,1);
     if(edges_.choice<0 && input.choice>=0)edges_.choice=input.choice;
     if(input.selection.activate && !edges_.selection.activate){
         edges_.selection.activate=true;edges_.selection.pointer=input.selection.pointer;
@@ -19,6 +20,7 @@ void FrameInput::add(const Input& input){
 Input FrameInput::take(){
     auto next=held_;next.advance=edges_.advance;next.toggle_window=edges_.toggle_window;next.cancel=edges_.cancel;next.choice=edges_.choice;
     next.selection.confirm=edges_.selection.confirm;next.selection.navigation=edges_.selection.navigation;
+    next.page_delta=edges_.page_delta;
     if(edges_.selection.activate){next.selection.activate=true;next.selection.pointer=edges_.selection.pointer;next.selection.x=edges_.selection.x;next.selection.y=edges_.selection.y;}
     edges_={};return next;
 }

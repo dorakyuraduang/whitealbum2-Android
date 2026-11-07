@@ -2,6 +2,7 @@
 #include "preference_storage.hpp"
 #include "progress_storage.hpp"
 #include "save_storage.hpp"
+#include <ctime>
 
 namespace wa2::platform {
 NativeStartup native_startup(std::span<const std::string_view> arguments){
@@ -26,6 +27,19 @@ std::unique_ptr<game::Application> native_application(resource::BankOpener opene
     application->prepare_options([menu_resources](std::string_view name){return menu_resources->image("grp",name);},{},
         [owner=application.get()](std::string_view prompt){
             text::TextStyle style;style.size=28;style.columns=15;style.rows=2;style.line_gap=0;return owner->menu_text(prompt,style);});
+    game::SaveServices saves;saves.images=[menu_resources](std::string_view name){return menu_resources->image("grp",name);};
+    saves.text=[owner=application.get()](auto raw,const auto& style){return owner->menu_text(raw,style);};
+    saves.stamp=[]{
+        const auto now=std::chrono::system_clock::now();const auto milliseconds=std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+        if(milliseconds<0)throw std::runtime_error("Native save wall clock is before its supported epoch");const auto seconds=std::chrono::system_clock::to_time_t(now);std::tm local{};
+#ifdef _WIN32
+        if(localtime_s(&local,&seconds))throw std::runtime_error("Native save local date is unavailable");
+#else
+        if(!localtime_r(&seconds,&local))throw std::runtime_error("Native save local date is unavailable");
+#endif
+        game::SaveStamp stamp{{local.tm_year+1900,local.tm_mon+1,local.tm_mday,local.tm_wday,local.tm_hour,local.tm_min,local.tm_sec},std::uint64_t(milliseconds)};stamp.date.validate();return stamp;
+    };
+    application->prepare_saves(std::move(saves));
     // A failed title/provider preparation must not persist test-mode changes.
     if(startup.test_mode)progress->flush();return application;
 }

@@ -12,11 +12,25 @@ void Application::observe(std::int64_t now){require_open();if(now<0 || (clock_st
 void Application::suspend_scene(std::int64_t now){if(scene_)scene_->suspend(background_ || page()!=Page::story,background_,now);if(title_scene_)title_scene_->pause(background_,now);}
 void Application::replace_scene(std::unique_ptr<Scene> next,std::int64_t now){
     if(scene_revision_==std::numeric_limits<std::uint64_t>::max())throw std::overflow_error("Native scene revision exhausted");
-    next->suspend(background_,background_,now);if(scene_)scene_->flush_progress();seed_=next->random_state();scene_=std::move(next);title_scene_.reset();options_view_.reset();extra_=-1;pages_.resize(1);pages_[0]=Page::story;release_input_=true;++scene_revision_;
+    next->suspend(background_,background_,now);if(scene_)scene_->flush_progress();save_view_.reset();seed_=next->random_state();scene_=std::move(next);title_scene_.reset();options_view_.reset();extra_=-1;pages_.resize(1);pages_[0]=Page::story;release_input_=true;++scene_revision_;
 }
 bool Application::preferences(const Preferences& next){require_open();const auto state=options_view_?std::optional(options_state(next)):std::nullopt;if(!preferences_.replace(next))return false;if(scene_)scene_->preferences(preferences_.current());if(title_scene_)title_scene_->preferences(preferences_.current());if(state){options_view_->state(*state);options_view_->timing(options_timing(next));}return true;}
 void Application::prepare_options(OptionsView::Loader loader,std::function<void(OptionsCommand)> commands,ConfirmationView::Text text){
     require_open();if(!loader)throw std::invalid_argument("Missing native options image loader");if(options_view_)throw std::logic_error("Cannot replace native options services while their view is open");options_loader_=std::move(loader);options_command_=std::move(commands);options_text_=std::move(text);
+}
+void Application::prepare_saves(SaveServices services){
+    require_open();if(!services.images || !services.text || !services.stamp)throw std::invalid_argument("Missing native save menu services");
+    if(save_view_)throw std::logic_error("Cannot replace native save services while their view is open");
+    if(!services.thumbnail)services.thumbnail=std::move(save_services_.thumbnail);save_services_=std::move(services);
+}
+void Application::prepare_save_thumbnail(std::function<std::shared_ptr<const image::Raster>(Scene&)> thumbnail){
+    require_open();if(!thumbnail)throw std::invalid_argument("Missing native save thumbnail adapter");if(save_view_)throw std::logic_error("Cannot replace native thumbnail service while saving");save_services_.thumbnail=std::move(thumbnail);
+}
+SaveDocument Application::save_document(){
+    if(!scene_ || !save_services_.stamp || !save_services_.thumbnail)throw script::Unsupported("Native save metadata or thumbnail adapter is not prepared");
+    SaveDocument document;const auto stamp=save_services_.stamp();auto& preview=document.preview;preview.date=stamp.date;preview.saved_ms=stamp.milliseconds;
+    preview.scene=scene_->statistics().scene;preview.description=save_description(scene_->dialogue_state().raw_text());preview.story_code=scene_->save_story_code();preview.story_known=true;
+    preview.thumbnail=save_services_.thumbnail(*scene_);if(!preview.thumbnail)throw script::Error("Native save thumbnail adapter returned no image");preview.validate();document.snapshot=scene_->checkpoint();return document;
 }
 void Application::prepare_title(TitleContent content,TitleStartup startup,TitleServices services){
     require_open();if(page()!=Page::title || scene_)throw std::logic_error("Native title preparation requires the title page");
@@ -34,24 +48,34 @@ void Application::open(Page page,std::int64_t now){
     if(page==Page::extras && pages_.front()!=Page::title)throw std::logic_error("Native extras require the title page");
     if(scene_ && scene_->movie_active())throw script::Unsupported("Native modal menu during movie playback is not implemented");
     if(page==this->page())return;if(pages_.size()>=8)throw std::logic_error("Native menu nesting exceeds its limit");
-    std::unique_ptr<OptionsView> next;
+    std::unique_ptr<OptionsView> next;std::unique_ptr<SaveView> next_save;
     if(page==Page::options && options_loader_){
         if(options_view_ || (this->page()!=Page::story && this->page()!=Page::title))throw script::Unsupported("Native options over another modal page are not implemented");
         if(!scene_ && (!title_scene_ || title_scene_->stage()!=TitleStage::view))throw script::Unsupported("Native options require a prepared title view or story");
         next=std::make_unique<OptionsView>(options_loader_,[this](const OptionsState& state){const auto next=options_preferences(state,preferences());
             if(next.fullscreen!=preferences().fullscreen)throw script::Unsupported("Native options display-mode adapter is not implemented");
-            if(next.right_click!=preferences().right_click && next.right_click==2)throw script::Unsupported("Native right-click save-page view is not implemented");preferences(next);},
+            if(next.right_click!=preferences().right_click && next.right_click==2 && !save_services_.images)throw script::Unsupported("Native right-click save-page services are not prepared");preferences(next);},
             [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);});
         next->prepare(options_state(preferences()),0,options_timing(preferences()));
     }
+    if((page==Page::save || page==Page::load) && save_services_.images){
+        if(save_view_ || (this->page()!=Page::story && this->page()!=Page::title))throw script::Unsupported("Native save menu over another modal page is not implemented");
+        if(!scene_ && (!title_scene_ || title_scene_->stage()!=TitleStage::view))throw script::Unsupported("Native load menu requires a prepared title view or story");
+        SaveContext context;context.mode=page==Page::save?SaveMode::save:SaveMode::load;context.title=!scene_;context.theme=scene_?scene_->theme():0;context.skin=preferences().skin;
+        context.alternate=title_setup_ && title_setup_->content.local_introductory;context.confirmation=preferences().confirmation;context.timing=options_timing(preferences());
+        next_save=std::make_unique<SaveView>(save_services_.images,[this](unsigned slot){return std::make_shared<SavePreviewRequest>([this,slot]{return saves_.preview(slot);},save_services_.worker);},save_services_.text,
+            [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);});
+        next_save->prepare(context,saves_.list());
+    }
     pages_.push_back(page);release_input_=true;suspend_scene(now);
     if(next)options_view_=std::move(next);
+    if(next_save)save_view_=std::move(next_save);
 }
-bool Application::back(std::int64_t now){observe(now);if(pages_.size()==1)return false;const auto leaving=page();pages_.pop_back();if(leaving==Page::options)options_view_.reset();if(page()==Page::title && title_scene_ && title_scene_->view().phase()==TitlePhase::modal)title_scene_->resume();release_input_=true;suspend_scene(now);return true;}
+bool Application::back(std::int64_t now){observe(now);if(pages_.size()==1)return false;const auto leaving=page();pages_.pop_back();if(leaving==Page::options)options_view_.reset();if(leaving==Page::save || leaving==Page::load)save_view_.reset();if(page()==Page::title && title_scene_ && title_scene_->view().phase()==TitlePhase::modal)title_scene_->resume();release_input_=true;suspend_scene(now);return true;}
 void Application::title(std::int64_t now){
     observe(now);const auto seed=scene_?scene_->random_state():title_scene_?title_scene_->random_state():seed_;std::unique_ptr<TitleScene> next;
     if(title_setup_){next=std::make_unique<TitleScene>(opener_,progress_,preferences_.current(),title_setup_->content,title_setup_->startup,seed,title_setup_->services);next->pause(background_,now);}
-    if(scene_)scene_->flush_progress();scene_.reset();title_scene_=std::move(next);options_view_.reset();seed_=seed;extra_=-1;pages_.resize(1);pages_[0]=Page::title;release_input_=true;
+    if(scene_)scene_->flush_progress();save_view_.reset();scene_.reset();title_scene_=std::move(next);options_view_.reset();seed_=seed;extra_=-1;pages_.resize(1);pages_[0]=Page::title;release_input_=true;
 }
 void Application::background(bool value,std::int64_t now){observe(now);if(background_==value)return;background_=value;release_input_=true;suspend_scene(now);if(value)progress_->flush();}
 void Application::save(unsigned slot){require_open();if(!scene_)throw std::logic_error("Native save requires an active story");saves_.write(slot,scene_->checkpoint());}
@@ -60,11 +84,24 @@ void Application::load(unsigned slot,std::int64_t now){
 }
 FrameBatch Application::frame(std::int64_t now,Input input,const std::function<std::int64_t()>& clock,FrameBudget budget){
     observe(now);
-    if(input.cancel && pages_.size()>1 && !(page()==Page::options && options_view_)){back(now);input={};}
+    if(input.cancel && pages_.size()>1 && !(page()==Page::options && options_view_) && !save_view_){back(now);input={};}
+    if((page()==Page::save || page()==Page::load) && save_view_){
+        if(scene_)scene_->ambient_update(now);if(title_scene_)title_scene_->update(now);
+        if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}
+        save_view_->update({input.selection,input.cancel || input.toggle_window,input.page_delta});
+        if(auto command=save_view_->take_command()){
+            if(command->kind==SaveCommand::Kind::close)back(now);
+            else try{
+                if(command->kind==SaveCommand::Kind::load)load(command->slot,now);
+                else{auto document=save_document();saves_.write(command->slot,document);save_view_->succeeded(std::move(document.preview));}
+            }catch(const std::exception& error){if(save_view_)save_view_->failed(error.what());throw;}
+        }
+        return {script::RunState::yielded,0};
+    }
     if(page()==Page::options && options_view_){
         if(scene_)scene_->ambient_update(now);if(title_scene_)title_scene_->update(now);
         if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}
-        options_view_->update({input.selection,input.cancel || input.toggle_window,input.pointer_held});
+        options_view_->update({input.selection,input.cancel || input.toggle_window,input.pointer_held,input.page_delta});
         if(auto command=options_view_->take_command()){
             if(command->kind==OptionsCommand::Kind::close)back(now);
             else if(options_command_)options_command_(*command);
@@ -97,11 +134,11 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
     if(background_ || page()!=Page::story){scene_->ambient_update(now);return {script::RunState::yielded,0};}
     if(release_input_){input={};release_input_=false;}
     if(input.toggle_window && preferences().right_click){
-        if(preferences().right_click==2)throw script::Unsupported("Native right-click save-page view is not implemented");
+        if(preferences().right_click==2){if(!save_services_.images)throw script::Unsupported("Native right-click save-page services are not prepared");open(Page::save,now);return {script::RunState::yielded,0};}
         if(!options_loader_)throw script::Unsupported("Native right-click settings view is not prepared");
         open(Page::options,now);return {script::RunState::yielded,0};
     }
     const auto batch=scene_->advance_frame(now,input,clock,budget);if(scene_->title_requested())title(now);else if(batch.state==script::RunState::stopped)throw script::Unsupported("Native story ended without a title transition");return batch;
 }
-void Application::close(std::int64_t now){observe(now);if(scene_)scene_->flush_progress();progress_->flush();scene_.reset();title_scene_.reset();options_view_.reset();pages_.resize(1);pages_[0]=Page::closed;release_input_=true;}
+void Application::close(std::int64_t now){observe(now);if(scene_)scene_->flush_progress();progress_->flush();save_view_.reset();scene_.reset();title_scene_.reset();options_view_.reset();pages_.resize(1);pages_[0]=Page::closed;release_input_=true;}
 }

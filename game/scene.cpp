@@ -73,6 +73,12 @@ std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
 void Scene::options_preview_effects(){game::options_preview_effects(effects_,preferences_);}
 void Scene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
 void Scene::options_reset_sound(){game::options_reset_sound(effects_);}
+std::int32_t Scene::theme()const{
+    for(const auto& variable:library_.globals().variables())if(variable.name=="FLG_00"){
+        const auto value=variable.value.integer();if(value<0 || value>6)throw script::Unsupported("Native story theme is out of range");return value;
+    }
+    throw script::Error("Missing native story theme global FLG_00");
+}
 std::uint32_t Scene::save_story_code()const{
     const auto flag=[&](std::string_view name){for(const auto& variable:library_.globals().variables())if(variable.name==name)return variable.value.integer();throw script::Error("Missing native save classification global");};
     const auto& date=calendar_.date();const auto theme=flag("FLG_00"),sub=flag("FLG_\x8f\xcd\x8a\xc7\x97\x9d\x83T\x83u");

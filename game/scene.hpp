@@ -29,8 +29,8 @@
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;
-    bool cancel{},pointer_held{};
-    Input continued()const{auto next=*this;next.advance=next.toggle_window=next.cancel=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=0;return next;}
+    bool cancel{},pointer_held{};std::int32_t page_delta{};
+    Input continued()const{auto next=*this;next.advance=next.toggle_window=next.cancel=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=next.page_delta=0;return next;}
 };
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
 // Optional transport providers, used without changing common game policy.
@@ -124,6 +124,7 @@ public:
     const Preferences& preferences()const noexcept{return preferences_;}
     text::PreparedText menu_text(std::string_view raw,const text::TextStyle& style){return fonts_.prepare(text::layout(raw,style));}
     std::uint32_t save_story_code()const;
+    std::int32_t theme()const;
     void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
     void flush_progress(){reading_.finish();}
     std::vector<std::uint8_t> checkpoint()const;
