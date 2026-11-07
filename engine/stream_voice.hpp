@@ -1,5 +1,6 @@
 #pragma once
 #include "pcm_audio.hpp"
+#include "audio_levels.hpp"
 #include "resource_archive.hpp"
 #include <functional>
 #include <string>
@@ -14,6 +15,7 @@ public:
     virtual void gain(std::uint8_t volume)=0;
     virtual void stop()=0;
     virtual void pause(bool){throw resource::Error("audio voice does not support preparation/pause");}
+    virtual Levels levels()const{return {};}
 };
 struct OggPlaylist {
     std::shared_ptr<resource::Source> first;

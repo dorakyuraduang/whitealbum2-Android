@@ -63,7 +63,7 @@ def main():
     inputs += [ROOT/p for p in ('tests/native_desktop.cpp','platform/native_desktop.hpp','platform/native_desktop.cpp',
         'platform/native_host.hpp','platform/native_host.cpp','platform/native_host.cmake','hosts/native/CMakeLists.txt',
         'hosts/native/entry.cmake','hosts/native/windows_main.cpp','hosts/app.rc.in','icon.ico','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')]
-    inputs += [ROOT/'tests/native_preferences.cpp']
+    inputs += [ROOT/'tests/native_preferences.cpp',ROOT/'tests/native_audio_levels.cpp']
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
     inputs += [ROOT/'tests/native_options_view.cpp']
@@ -141,7 +141,7 @@ def main():
             if host=='windows':targets+=['wa2_native_movie_state_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
             if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_loading_cache_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
-            if host=='windows':targets+=['wa2_native_desktop_tests']
+            if host=='windows':targets+=['wa2_native_desktop_tests','wa2_native_audio_level_tests']
             if host=='android':targets+=['wa2_native_android_host_check','wa2_retained_android_jni_check']
             if host=='android' and args.android_sdl_library:targets+=['wa2_native_android_entry_check']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
@@ -159,7 +159,7 @@ def main():
             allowed+=('tests/native_audio_checkpoint.cpp',)
             allowed+=('tests/native_saved_scene.cpp','tests/native_scene_checkpoint.cpp')
             allowed+=('tests/native_save_slots.cpp','platform/save_storage.cpp')
-            allowed+=('tests/native_preferences.cpp',)
+            allowed+=('tests/native_preferences.cpp','tests/native_audio_levels.cpp')
             allowed+=('tests/native_preference_storage.cpp','platform/private_file.cpp','platform/preference_storage.cpp')
             allowed+=('tests/native_application.cpp',)
             allowed+=('tests/native_title_view.cpp',)
@@ -386,6 +386,11 @@ def main():
                 save_view=json.loads((directory/'native-save-view.json').read_text())
                 if not save_view['passed'] or save_view['cases']<26 or save_view['guards']<24 or save_view['manual_slots']!=100 or not save_view['two_column_source_geometry'] or not save_view['source_bitmap_digit_grid'] or not save_view['overwrite_and_load_confirmations'] or save_view['maximum_preview_reads']>1 or save_view['maximum_pending_images']>1 or save_view['maximum_new_images_per_tick']>2 or not save_view['failed_operations_keep_rows'] or not save_view['synthetic_resources_only'] or save_view['original_resources_opened'] or save_view['devices_opened'] or save_view['game_launched'] or save_view['screen_access']:raise ValueError('Native save view checks failed')
                 run([directory/'wa2_native_preference_tests.exe',directory/'native-preferences.json'],console,90)
+                run([directory/'wa2_native_audio_level_tests.exe',directory/'native-audio-levels.json'],console,90)
+                audio_levels=json.loads((directory/'native-audio-levels.json').read_text())
+                if not audio_levels['passed'] or audio_levels['cases']<18 or audio_levels['guards']<6 or audio_levels['source_window_bytes']!=1024 or not all(audio_levels[key] for key in
+                        ('raw_mean_not_output_gain','source_meter_gain_stages','reading_does_not_consume_pcm','stereo_and_mono_pairing','queue_wrap_and_finished','music_or_loudest_effect','caption_rows_and_meter_steps','owned_pcm_only','fake_voices_only')) or any(audio_levels[key] for key in
+                        ('devices_opened','game_launched','screen_access')):raise ValueError('Native PCM level/caption checks failed')
                 run([directory/'wa2_native_backlog_view_tests.exe',directory/'native-backlog-view.json'],console,90)
                 backlog_view=json.loads((directory/'native-backlog-view.json').read_text())
                 if not backlog_view['passed'] or backlog_view['cases']<31 or backlog_view['guards']<14 or backlog_view['maximum_pending_images']>1 or backlog_view['maximum_new_images_per_tick']>2 or not backlog_view['four_normal_rows'] or not backlog_view['novel_page_and_scroll'] or not backlog_view['shared_application_bound'] or not backlog_view['voice_replay_keeps_history'] or not backlog_view['toolbar_does_not_advance_story'] or not backlog_view['error_resume_rebases_driver'] or not backlog_view['synthetic_resources_only'] or backlog_view['devices_opened'] or backlog_view['game_launched'] or backlog_view['screen_access']:raise ValueError('Native backlog/application checks failed')
@@ -521,6 +526,7 @@ def main():
     report['extra_grid']=extra_grid
     report['commentary']=commentary
     report['preferences']=preferences
+    report['audio_levels']=audio_levels
     report['preference_storage']=preference_storage
     report['application']=application
     report['title_view']=title_view

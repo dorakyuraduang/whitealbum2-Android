@@ -46,8 +46,8 @@ constexpr std::array<std::array<std::string_view,4>,3> pages{{
     {"sys_03101.tga","sys_03210.tga","sys_03211.tga","sys_03041.tga"},
     {"sys_03102.tga","sys_03220.tga","sys_03221.tga","sys_03042.tga"}
 }};
-constexpr std::array<unsigned,11> widths{1280,1280,756,576,432,208,56,1024,1024,1024,944};
-constexpr std::array<unsigned,11> heights{36,56,96,96,128,72,72,464,464,464,24};
+constexpr std::array<unsigned,13> widths{1280,1280,756,576,432,208,56,1024,1024,1024,944,192,264};
+constexpr std::array<unsigned,13> heights{36,56,96,96,128,72,72,464,464,464,24,8,1008};
 unsigned checked(Option option){if(unsigned(option)>=count)throw script::Error("Unknown native settings field");return unsigned(option);}
 bool slider(Option option){return option==Option::auto_delay || (option>=Option::window_opacity && option<=Option::button_opacity) || (option>=Option::master_volume && option<=Option::voice_volume);}
 int upper(Option option){return option==Option::auto_delay?600:slider(option)?256:option==Option::text_speed?3:option==Option::right_click?2:1;}
@@ -63,7 +63,7 @@ std::uint8_t opacity(float value){return std::uint8_t(std::clamp(int(value),0,25
 std::int32_t OptionsState::value(Option option)const{return values[checked(option)];}
 void OptionsState::value(Option option,std::int32_t next){const auto n=checked(option);if(next<(option==Option::auto_delay?60:0) || next>upper(option))throw script::Error("Native settings field is out of range");values[n]=next;}
 void OptionsState::validate()const{for(unsigned n=0;n<count;++n){auto copy=*this;copy.value(Option(n),values[n]);}}
-OptionsView::OptionsView(Loader loader,Apply apply,Sound sound):loader_(std::move(loader)),apply_(std::move(apply)),sound_(std::move(sound)){
+OptionsView::OptionsView(Loader loader,Apply apply,Sound sound,CurrentMusic music):loader_(std::move(loader)),apply_(std::move(apply)),sound_(std::move(sound)),current_music_(std::move(music)){
     if(!loader_)throw script::Error("Missing native settings image loader");
     black_=std::make_shared<const image::Raster>(image::Raster{1,1,{0,0,0,255}});hits_.reserve(48);sprites_.reserve(64);
 }
@@ -79,7 +79,7 @@ bool OptionsView::poll(){
     // Menu atlases cannot fill the eight-item shared image queue themselves.
     for(unsigned issued=0;next.next<next.images.size();){
         if(next.images[next.next]){++next.next;continue;}
-        if(!next.request){if(issued==2)return false;next.request=loader_(next.next<7?common[next.next]:pages[next.page][next.next-7]);++issued;if(!next.request)throw script::Error("Missing native settings image request");}
+        if(!next.request){if(issued==2)return false;const auto name=next.next<7?common[next.next]:next.next<11?pages[next.page][next.next-7]:next.next==11?"sys_00301.tga":"sys_00300.tga";next.request=loader_(name);++issued;if(!next.request)throw script::Error("Missing native settings image request");}
         auto image=next.request->get();if(!image)return false;
         const auto height=next.next==10?next.page==0?216u:next.page==1?120u:24u:heights[next.next];
         if(image->width<widths[next.next] || image->height<height)throw script::Unsupported("Native settings atlas dimensions are not supported");
@@ -97,7 +97,7 @@ void OptionsView::regions(){
     for(unsigned n=0;n<10;++n){const auto& row=rows[page_*10+n];for(unsigned cell=0;cell<cells(row.type);++cell){const auto [w,h]=extent(row.type,cell);hits_.push_back({10+n*10+cell,n,cell,row.option,float(128+row.cells[cell].x),float(112+row.cells[cell].y),w,h});}}
 }
 void OptionsView::change_page(unsigned page){
-    if(page==page_)return;Bundle next;next.page=page;for(unsigned n=0;n<7;++n)next.images[n]=assets_.images[n];next.next=7;
+    if(page==page_)return;Bundle next;next.page=page;for(unsigned n=0;n<next.images.size();++n)if(n<7 || n>=11)next.images[n]=assets_.images[n];next.next=7;
     // Keep the displayed page until all incoming page images are published.
     next.request=loader_(pages[page][0]);if(!next.request)throw script::Error("Missing native settings page image request");
     pending_=std::move(next);focus_.reset();drag_.reset();pressed_.reset();elapsed_=0;phase_=OptionsPhase::page_loading;if(sound_)sound_(audio::SystemCue::accept);
@@ -185,6 +185,7 @@ void OptionsView::draw(){
     if(focus_ && *focus_>=10){const auto row=(*focus_-10)/10;const auto help=page_==0?row:page_==1?row<2?row:row<6?2:row-3:0;
         // The last first-page row intentionally lies beyond its hint atlas.
         if(help*24<assets_.images[10]->height)item(10,168,552,994,24,0,float(help*24),0x1064,0x4ac,256*whole,chrome_scale);}
+    if(current_music_ && phase_!=OptionsPhase::opening && phase_!=OptionsPhase::closing){int order=0x43f;append_music_caption(sprites_,assets_.images[11],assets_.images[12],current_music_(),0x1065,order);}
     if(confirmation_)sprites_.insert(sprites_.end(),confirmation_->sprites().begin(),confirmation_->sprites().end());
     std::stable_sort(sprites_.begin(),sprites_.end(),[](const auto& a,const auto& b){return a.layer!=b.layer?a.layer<b.layer:a.order<b.order;});
 }

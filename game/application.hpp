@@ -74,6 +74,7 @@ class Application {
     void report_error(std::string_view,std::int64_t now);
     void return_replay(std::int64_t now);
     void information(bool environment,std::int64_t now);
+    MusicCaption audio_caption()const{return scene_?scene_->music_caption():title_scene_?title_scene_->music_caption():MusicCaption{};}
 public:
     Application(resource::BankOpener,std::shared_ptr<progress::Store>,std::shared_ptr<PreferenceStorage>,std::shared_ptr<SaveStorage>,Scene::SavedImageResolver,std::uint32_t seed=1,SceneServices services={});
     Page page()const noexcept{return pages_.back();}

@@ -25,6 +25,7 @@ public:
     void stop(std::int32_t fade);
     void volume(std::int32_t value,std::int32_t fade);
     std::int32_t song()const noexcept{return song_;}
+    audio::Levels levels()const{const auto& slot=current();const auto& voice=slot.voice;return voice && voice->ready() && !voice->finished()?audio::scaled_levels(voice->levels(),slot.volume,master_,music_):audio::Levels{};}
     const MusicSlot& current()const noexcept{return slots_[current_];}
     const std::array<MusicSlot,2>& slots()const noexcept{return slots_;}
     std::vector<std::uint8_t> checkpoint()const;

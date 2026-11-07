@@ -105,7 +105,7 @@ void Application::open(Page page,std::int64_t now){
         next=std::make_unique<OptionsView>(options_loader_,[this](const OptionsState& state){const auto next=options_preferences(state,preferences());
             if(next.fullscreen!=preferences().fullscreen && !display_)throw script::Unsupported("Native options display-mode adapter is not prepared");
             if(next.right_click!=preferences().right_click && next.right_click==2 && !save_services_.images)throw script::Unsupported("Native right-click save-page services are not prepared");preferences(next);},
-            [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);});
+            [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);},[this]{return audio_caption();});
         next->prepare(options_state(preferences()),0,options_timing(preferences()));
     }
     if((page==Page::save || page==Page::load) && save_services_.images){
@@ -114,12 +114,12 @@ void Application::open(Page page,std::int64_t now){
         SaveContext context;context.mode=page==Page::save?SaveMode::save:SaveMode::load;context.title=!scene_;context.theme=scene_?scene_->theme():0;context.skin=preferences().skin;
         context.alternate=title_setup_ && title_setup_->content.local_introductory;context.confirmation=preferences().confirmation;context.timing=options_timing(preferences());
         next_save=std::make_unique<SaveView>(save_services_.images,[this](unsigned slot){return std::make_shared<SavePreviewRequest>([this,slot]{return saves_.preview(slot);},save_services_.worker);},save_services_.text,
-            [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);});
+            [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);},[this]{return audio_caption();});
         next_save->prepare(context,saves_.list());
     }
     if(page==Page::backlog && backlog_loader_){
         if(this->page()!=Page::story || backlog_view_)throw script::Unsupported("Native backlog over another modal page is not implemented");
-        next_backlog=std::make_unique<BacklogView>(backlog_loader_,backlog_text_,[this](audio::SystemCue cue){scene_->cue(cue);});
+        next_backlog=std::make_unique<BacklogView>(backlog_loader_,backlog_text_,[this](audio::SystemCue cue){scene_->cue(cue);},[this]{return audio_caption();});
         next_backlog->prepare({preferences().skin,scene_->dialogue_state().novel().enabled(),std::uint32_t(scene_->dialogue_state().page())},scene_->backlog());
     }
     pages_.push_back(page);release_input_=true;suspend_scene(now);
@@ -131,7 +131,7 @@ void Application::open_extra(std::int32_t extra,std::int64_t now){
     observe(now);if(page()!=Page::title || !title_scene_ || title_scene_->stage()!=TitleStage::view || !title_setup_)throw std::logic_error("Native extras require a prepared title page");
     if(!extras_loader_)throw script::Unsupported("Native extras image services are not prepared");if(extra<1 || extra>4)throw script::Unsupported("Native extra view is not implemented: "+std::to_string(extra));
     std::unique_ptr<MusicView> music;std::unique_ptr<ExtraGrid> grid;std::unique_ptr<CommentaryView> commentary;
-    const CurrentMusic music_source=[this]{return title_scene_?title_scene_->music_song():-1;};
+    const CurrentMusic music_source=[this]{return audio_caption();};
     if(extra==2){music=std::make_unique<MusicView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);},music_source);music->prepare(title_setup_->content,progress_->state(),options_timing(preferences()));
         if(progress_->state().flag(104) && progress_->state().flag(163)){progress_->state().set_flag(134,1);progress_->flush();}title_scene_->music_preview({},120);
     }else if(extra==4){commentary=std::make_unique<CommentaryView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});commentary->prepare(options_timing(preferences()));title_scene_->music_preview({},120);
@@ -149,7 +149,7 @@ void Application::title(std::int64_t now){
     if(scene_ && scene_->replay_mode() && !replay_return_){
         observe(now);if(!title_setup_ || !extras_loader_)throw script::Unsupported("Native replay exit needs prepared title/extra services");const auto seed=scene_->random_state();auto startup=title_setup_->startup;startup.movies=false;
         auto title=std::make_unique<TitleScene>(opener_,progress_,preferences(),title_setup_->content,startup,seed,title_setup_->services);title->restore_extras_parent();title->pause(true,now);
-        auto grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);},[this]{return title_scene_?title_scene_->music_song():-1;});grid->prepare(ExtraGridKind::replay,title_setup_->content,progress_->state(),unsigned(scene_->replay_mode()-1)/12,options_timing(preferences()));
+        auto grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);},[this]{return audio_caption();});grid->prepare(ExtraGridKind::replay,title_setup_->content,progress_->state(),unsigned(scene_->replay_mode()-1)/12,options_timing(preferences()));
         replay_return_=ReplayReturn{std::move(title),std::move(grid),3};return_replay(now);return;
     }
     if(scene_ && scene_->replay_mode() && replay_return_){observe(now);return_replay(now);return;}

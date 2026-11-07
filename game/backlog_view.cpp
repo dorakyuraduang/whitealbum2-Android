@@ -4,11 +4,12 @@
 #include <limits>
 
 namespace wa2::game {
-BacklogView::BacklogView(Loader images,Text text,Sound sound):loader_(std::move(images)),text_(std::move(text)),sound_(std::move(sound)){
+BacklogView::BacklogView(Loader images,Text text,Sound sound,CurrentMusic music):loader_(std::move(images)),text_(std::move(text)),sound_(std::move(sound)),current_music_(std::move(music)){
     if(!loader_ || !text_)throw script::Error("Missing native backlog services");black_=std::make_shared<const image::Raster>(image::Raster{1,1,{0,0,0,255}});sprites_.reserve(2048);hits_.reserve(8);
 }
 void BacklogView::clear(){context_={};entries_.clear();rows_.clear();images_={};request_.reset();sprites_.clear();hits_.clear();focus_.reset();playing_.reset();command_.reset();phase_=BacklogPhase::idle;position_=image_next_=0;dragging_=false;}
 std::string BacklogView::name(unsigned index)const{
+    if(index==6)return "sys_00301.tga";if(index==7)return "sys_00300.tga";
     constexpr std::array<std::string_view,6> suffix{"0030","0031","0032","0033","9000","9100"};if(index>=suffix.size())throw script::Error("Unknown native backlog atlas");return "sys_"+std::to_string(context_.skin)+std::string(suffix[index])+".tga";
 }
 std::vector<BacklogView::Row> BacklogView::rows(std::size_t position,const std::deque<script::BacklogEntry>& entries,BacklogContext context)const{
@@ -29,7 +30,7 @@ void BacklogView::move(std::size_t position){
     if(position>maximum())throw script::Error("Native backlog scroll is out of range");if(position==position_)return;auto prepared=rows(position,entries_,context_);rows_=std::move(prepared);position_=position;focus_.reset();regions();if(sound_)sound_(audio::SystemCue::focus);
 }
 bool BacklogView::images(){
-    constexpr unsigned widths[]{96,28,1280,64,1280,56},heights[]{640,84,40,672,56,72};
+    constexpr unsigned widths[]{96,28,1280,64,1280,56,192,264},heights[]{640,84,40,672,56,72,8,1008};
     for(unsigned issued=0;image_next_<images_.size();){if(!request_){if(issued==2)return false;request_=loader_(name(image_next_));++issued;if(!request_)throw script::Error("Missing native backlog image request");}
         auto pixels=request_->get();if(!pixels)return false;if(pixels->width<widths[image_next_] || pixels->height<heights[image_next_])throw script::Unsupported("Native backlog atlas dimensions are not supported");images_[image_next_++]=std::move(pixels);request_.reset();}
     return true;
@@ -65,6 +66,7 @@ void BacklogView::draw(){
     add(3,context_.novel?20.f:216.f,0,context_.novel?1240.f:848.f,672,0,0,64,672,0x1064,0x431);
     add(2,0,0,1280,40,0,0,1280,40,0x1065,0x432);add(4,0,664,1280,56,0,0,1280,56,0x1065,0x433);
     add(5,1164,688,56,24,0,focus_==3?24:0,56,24,0x1066,0x434);
+    if(current_music_){int order=0x43f;append_music_caption(sprites_,images_[6],images_[7],current_music_(),0x1066,order);}
     const float x=context_.novel?1228.f:1032.f;add(0,x,32,32,48,focus_==0?64:0,0,32,48,0x1065,0x42b);
     add(0,x,624,32,48,focus_==1?64:0,592,32,48,0x1065,0x42c);add(0,x,80,32,544,focus_==2?48:0,48,32,544,0x1065,0x42d);
     const float knob=530.f-(maximum()?float(position_)*444.f/float(maximum()):0);add(0,x+8,knob,16,88,dragging_?80:64,48,16,88,0x1066,0x42e);

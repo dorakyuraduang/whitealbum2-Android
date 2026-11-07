@@ -1,4 +1,5 @@
 #pragma once
+#include "audio_levels.hpp"
 #include <cstdint>
 #include <mutex>
 #include <span>
@@ -14,7 +15,7 @@ struct StreamStatus {
 // operating system or decoder. Empty output is silence, never old ring data.
 class PcmStream {
     friend class Mixer;
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     unsigned rate_,channels_;
     std::vector<std::int16_t> samples_;
     std::size_t read_{},queued_{};
@@ -33,5 +34,6 @@ public:
     void stop();
     void gain(float amplitude);
     StreamStatus status();
+    Levels levels()const;
 };
 }

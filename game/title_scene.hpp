@@ -5,6 +5,7 @@
 #include "scene_voices.hpp"
 #include "movie_player.hpp"
 #include "preferences.hpp"
+#include "music_caption.hpp"
 #include "resource_catalog.hpp"
 #include "timeline.hpp"
 
@@ -63,6 +64,7 @@ public:
     bool commentary_playing()const;
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
     std::int32_t music_song()const noexcept{return music_.song();}
+    MusicCaption music_caption()const{return music_caption_state(music_,effects_,mixer_->paused());}
     TitleStage stage()const noexcept{return stage_;}
     const TitleView& view()const noexcept{return view_;}
     std::span<const image::Sprite> sprites()const noexcept{return stage_==TitleStage::view?view_.sprites():std::span<const image::Sprite>{};}

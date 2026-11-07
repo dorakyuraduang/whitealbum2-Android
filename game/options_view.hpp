@@ -3,6 +3,7 @@
 #include "system_sounds.hpp"
 #include "confirmation_view.hpp"
 #include "menu_timing.hpp"
+#include "music_caption.hpp"
 
 namespace wa2::game {
 enum class Option : unsigned {
@@ -41,7 +42,7 @@ public:
     using Loader=script::SceneSelection::Loader;
     using Sound=std::function<void(audio::SystemCue)>;
     using Apply=std::function<void(const OptionsState&)>;
-    OptionsView(Loader,Apply={},Sound={});
+    OptionsView(Loader,Apply={},Sound={},CurrentMusic={});
     void prepare(const OptionsState&,unsigned page=0,OptionsTiming={});
     void clear();
     void update(OptionsInput={});
@@ -58,8 +59,8 @@ public:
     std::optional<OptionsCommand> take_command();
 private:
     using Image=std::shared_ptr<const image::Raster>;
-    struct Bundle {std::array<Image,11> images;unsigned page{},next{};std::shared_ptr<image::ImageRequest> request;};
-    Loader loader_;Apply apply_;Sound sound_;
+    struct Bundle {std::array<Image,13> images;unsigned page{},next{};std::shared_ptr<image::ImageRequest> request;};
+    Loader loader_;Apply apply_;Sound sound_;CurrentMusic current_music_;
     OptionsState state_;OptionsTiming timing_;
     Bundle assets_;std::optional<Bundle> pending_;
     std::shared_ptr<const image::Raster> black_;

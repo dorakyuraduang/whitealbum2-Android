@@ -35,6 +35,14 @@ void PcmStream::gain(float amplitude){
 }
 StreamStatus PcmStream::status(){std::lock_guard lock(mutex_);
     return {queued_,samples_.size()/channels_-queued_,consumed_,underruns_,playing_,finished_,ended_};}
+Levels PcmStream::levels()const{
+    std::lock_guard lock(mutex_);Levels result{};if(!playing_ || finished_)return result;
+    // Cached 4607f0 averages alternating 16-bit words from a 1024-byte window
+    // at the play cursor. This also preserves its mono even/odd sample pairing.
+    const auto pairs=std::min<std::size_t>(256,queued_*channels_/2);if(!pairs)return result;
+    auto at=read_*channels_;for(std::size_t n=0;n<pairs;++n)for(auto& channel:result){const auto value=std::int32_t(samples_[at]);channel+=std::uint32_t(value<0?-value:value);if(++at==samples_.size())at=0;}
+    for(auto& channel:result)channel/=std::uint32_t(pairs);return result;
+}
 void PcmStream::mix(std::span<float> output,unsigned output_rate){
     std::lock_guard lock(mutex_);if(!playing_)return;
     const auto capacity=samples_.size()/channels_;const double step=double(rate_)/output_rate;

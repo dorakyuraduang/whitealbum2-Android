@@ -7,8 +7,8 @@
 
 namespace wa2::game {
 namespace {
-constexpr unsigned widths[]{1280,1280,1264,632,160,840,640,192,432,56,120,248,304,480,320,112,432,320};
-constexpr unsigned heights[]{40,56,192,96,20,96,96,32,128,72,96,384,168,112,56,16,312,288};
+constexpr unsigned widths[]{1280,1280,1264,632,160,840,640,192,432,56,120,248,304,480,320,112,432,320,192,264};
+constexpr unsigned heights[]{40,56,192,96,20,96,96,32,128,72,96,384,168,112,56,16,312,288,8,1008};
 std::uint8_t opacity(float value){return std::uint8_t(std::clamp(int(value),0,255));}
 text::TextStyle label_style(){text::TextStyle style;style.size=28;style.columns=22;style.rows=1;style.line_gap=0;return style;}
 text::TextStyle prompt_style(){auto style=label_style();style.columns=15;style.rows=2;return style;}
@@ -16,7 +16,7 @@ std::string label(const SavePreview& preview,unsigned size=20){return "<F"+std::
 std::string number(unsigned slot){std::array<char,8> buffer{};const auto value=slot%100+1;std::snprintf(buffer.data(),buffer.size(),value==100?"%03u":" %02u",value);return buffer.data();}
 std::string date(unsigned slot,const SavePreview& preview){std::array<char,80> buffer{};const auto& d=preview.date;std::snprintf(buffer.data(),buffer.size(),"            %04d %02d/%02d %02d:%02d",d.year,d.month,d.day,d.hour,d.minute);return number(slot)+buffer.data();}
 }
-SaveView::SaveView(Loader loader,Preview preview,Text text,Sound sound):loader_(std::move(loader)),preview_(std::move(preview)),text_(std::move(text)),sound_(std::move(sound)){
+SaveView::SaveView(Loader loader,Preview preview,Text text,Sound sound,CurrentMusic music):loader_(std::move(loader)),preview_(std::move(preview)),text_(std::move(text)),sound_(std::move(sound)),current_music_(std::move(music)){
     if(!loader_ || !preview_ || !text_)throw script::Error("Missing native save view services");black_=std::make_shared<const image::Raster>(image::Raster{1,1,{0,0,0,255}});hits_.reserve(25);sprites_.reserve(1024);
 }
 void SaveView::clear(){inventory_={};newly_saved_={};images_={};image_request_.reset();incoming_.reset();current_={};rows_={};result_label_={};hits_.clear();sprites_.clear();confirmation_.reset();focus_.reset();pressed_.reset();command_.reset();selected_.reset();operation_error_.clear();phase_=SavePhase::idle;page_=bank_=image_next_=elapsed_=0;}
@@ -29,6 +29,7 @@ std::string SaveView::name(unsigned index)const{
     if(index==13)return "sys_"+std::to_string(context_.skin)+"0000.tga";
     if(index==14)return "sys_02030.tga";if(index==15)return "sys_02031.tga";if(index==16)return "sys_02050.tga";
     if(index==17)return "sys_"+std::to_string(context_.skin)+"0011.tga";
+    if(index==18)return "sys_00301.tga";if(index==19)return "sys_00300.tga";
     throw script::Error("Unknown native save atlas");
 }
 SaveView::PageData SaveView::page_data(unsigned page,unsigned bank)const{
@@ -43,7 +44,7 @@ void SaveView::prepare(SaveContext context,std::span<const SaveSlotInfo> invento
     clear();context_=context;inventory_=std::move(next);latest_=latest;pages_={latest[0]/10,latest[1]/10};page_=pages_[0];incoming_=page_data(page_,0);result_label_=std::move(result);image_request_=std::move(request);phase_=SavePhase::loading;
 }
 bool SaveView::images(){
-    for(unsigned issued=0;image_next_<images_.size();){if(image_next_>=14 && context_.mode==SaveMode::save){++image_next_;continue;}if(!image_request_){if(issued==2)return false;image_request_=loader_(name(image_next_));++issued;if(!image_request_)throw script::Error("Missing native save image request");}
+    for(unsigned issued=0;image_next_<images_.size();){if(image_next_>=14 && image_next_<18 && context_.mode==SaveMode::save){++image_next_;continue;}if(!image_request_){if(issued==2)return false;image_request_=loader_(name(image_next_));++issued;if(!image_request_)throw script::Error("Missing native save image request");}
         auto value=image_request_->get();if(!value)return false;if(value->width<widths[image_next_] || value->height<heights[image_next_])throw script::Unsupported("Native save atlas dimensions are not supported");images_[image_next_++]=std::move(value);image_request_.reset();}
     return true;
 }
@@ -147,6 +148,7 @@ void SaveView::draw(){
         if(quick.preview){const auto& preview=*quick.preview;if(preview.thumbnail)push(preview.thumbnail,40,614,64,36,0,0,0x1064,0x4f9,(enabled?256:64)*whole);if(!preview.legacy){menu_digits(sprites_,images_[7],date(quick_slot,preview).substr(15),112,616,opacity((enabled?256:64)*whole),0x1064,0x4f7);const auto first=sprites_.size();current_.labels[10].append(sprites_,0,100000,106,628,opacity((enabled?256:64)*whole));for(auto n=first;n<sprites_.size();++n){sprites_[n].layer=0x1064;sprites_[n].order=0x4f8;}}}
         if(context_.alternate){item(16,896,600,368,40,0,float((1-bank_)*120+status(24)*40),0x1063,0x4fa,256*whole);if(focus_==24)item(16,832,640,432,16,0,280,0x1063,0x4fb,256*whole);}
     }
+    if(current_music_ && phase_!=SavePhase::opening && phase_!=SavePhase::closing){int order=0x43f;append_music_caption(sprites_,images_[18],images_[19],current_music_(),0x1063,order);}
     if(phase_==SavePhase::result){push(black_,0,0,1280,720,0,0,0x1066,0x4f1,76);sprites_.back().source_width=sprites_.back().source_height=1;item(13,400,304,480,112,0,0,0x1067,0x500,255);const auto first=sprites_.size();result_label_.append(sprites_,0,100000,450,345,255);for(auto n=first;n<sprites_.size();++n){sprites_[n].layer=0x1067;sprites_[n].order=0x501;}}
     if(confirmation_ && phase_!=SavePhase::result)sprites_.insert(sprites_.end(),confirmation_->sprites().begin(),confirmation_->sprites().end());
     std::stable_sort(sprites_.begin(),sprites_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});

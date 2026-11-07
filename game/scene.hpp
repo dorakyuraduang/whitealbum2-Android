@@ -27,6 +27,7 @@
 #include "frame_batch.hpp"
 #include "scene_backlog.hpp"
 #include "preferences.hpp"
+#include "music_caption.hpp"
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;
@@ -116,6 +117,7 @@ public:
     std::optional<script::StoryControl> control_at(float x,float y)const;
     void story_control(script::StoryControl);
     const script::SceneModes& modes()const noexcept{return controls_.modes();}
+    MusicCaption music_caption()const{return music_caption_state(music_,effects_,mixer_->paused());}
     bool window_visible()const noexcept{return window_visible_;}
     void replay_voice(const script::BacklogVoice& line){voices_.replay({line.speaker,line.chapter,line.line,false},line.volume);}
     bool replay_playing()const{return voices_.playing();}

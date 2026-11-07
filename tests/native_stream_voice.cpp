@@ -35,7 +35,7 @@ int main(int argc,char** argv){try{
     CHECK(!voice->ready() && !voice->finished() && voice->failure().empty() && !source->reads && !source->caller_access);++cases;
     voice->gain(128);voice->pause(false);voice->pause(true);gate.open();until([&]{return voice->ready() || !voice->failure().empty();});CHECK(voice->ready() && voice->failure().empty());++cases;
     std::array<float,10> out;out.fill(1);mixer.render(out,1000);CHECK(out[0]==0 && out[8]==0 && !voice->finished());++cases;
-    voice->pause(false);mixer.render(out,1000);CHECK(std::abs(out[0]-.125f*128/255)<.000001f && std::abs(out[6]-.5f*128/255)<.000001f && out[8]==0);until([&]{return voice->finished();});++cases;
+    CHECK(voice->levels()==a::Levels{});voice->pause(false);const auto reads_before_meter=source->reads.load();CHECK((voice->levels()==a::Levels{8192,12288}) && source->reads==reads_before_meter);mixer.render(out,1000);CHECK(std::abs(out[0]-.125f*128/255)<.000001f && std::abs(out[6]-.5f*128/255)<.000001f && out[8]==0);until([&]{return voice->finished();});CHECK(voice->levels()==a::Levels{});++cases;
     mixer.render(out,1000);CHECK(out[0]==0 && out[6]==0);voice->stop();voice->stop();CHECK(voice->finished() && voice->failure().empty());++cases;
     CHECK(source->reads>0 && source->caller_access==0);++cases;
     {auto wave=std::make_shared<Wave>(8192);auto loop=a::play_wave(mixer,wave,true,{},true);loop->gain(255);until([&]{return loop->ready() || !loop->failure().empty();});CHECK(loop->ready() && loop->failure().empty());++cases;

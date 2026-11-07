@@ -82,6 +82,7 @@ public:
         std::lock_guard lock(state_->mutex);return state_->pcm?state_->pcm->status().finished:!state_->error.empty();
     }
     std::string failure()const override{std::lock_guard lock(state_->mutex);return state_->error;}
+    Levels levels()const override{std::lock_guard lock(state_->mutex);return state_->pcm?state_->pcm->levels():Levels{};}
     void gain(std::uint8_t volume)override{
         std::lock_guard lock(state_->mutex);state_->volume=volume;if(state_->pcm)state_->pcm->gain(volume/255.f);
     }

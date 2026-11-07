@@ -9,6 +9,13 @@ SceneEffects::SceneEffects(Factory factory,std::function<bool()> skip,PreparedFa
     if(!factory_)throw Error("missing native sound-effect loader");
 }
 SceneEffects::~SceneEffects(){stop_all();}
+audio::Levels SceneEffects::levels()const{
+    audio::Levels result{};if(!master_ || !effects_)return result;
+    for(const auto& slot:slots_)if(slot.voice && !slot.prepared && slot.voice->ready() && !slot.voice->finished()){
+        const auto next=audio::scaled_levels(slot.voice->levels(),slot.volume,master_,effects_);if(std::uint64_t(next[0])+next[1]>std::uint64_t(result[0])+result[1])result=next;
+    }
+    return result;
+}
 void SceneEffects::halt(EffectSlot& value){if(value.voice){if(events_.stopped)events_.stopped(std::uint32_t(&value-slots_.data()));value.voice->stop();}value={};}
 std::uint8_t SceneEffects::scaled(std::int32_t volume)const{
     return std::uint8_t(std::clamp(std::int64_t(volume)*master_*effects_/65536,std::int64_t(0),std::int64_t(255)));

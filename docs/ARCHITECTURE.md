@@ -1076,14 +1076,23 @@ clear flag 5 is set, then `sys_05902` for an unseen individual scene. Marker
 pixels and exact crop/input checks use constructed images; the three external
 atlas headers additionally enter the static metadata audit.
 
-The native music browser and gallery/replay grids also share the small BGM
-caption's 63-song name order. Their current-song provider reads the common
-title audio owner, independently of the hovered or last acknowledged browser
-row. The original `sys_00301` marker uses its first 4x8 pixels at (24,688),
-and `sys_00300` supplies 264x16 name rows at (24,696). Playback stop hides the
-caption; unknown/sentinel name rows remain blank. Opening/closing transitions
-and full CG presentation hide this footer. The pictures stay external and use
-the same bounded request/cache services as the rest of each page.
+The native music browser, gallery/replay grids, settings, save/load and backlog
+pages share the small BGM caption's 63-song name order. Their provider reads
+the current story/title audio owner, independently of a hovered or last
+acknowledged browser row. `sys_00300` supplies 264x16 names at (24,696).
+Stopping music hides its name; unknown/sentinel name rows stay blank.
+`sys_00301` is an eight-pixel-high level bar at (24,688), not a fixed marker.
+The native PCM queue supplies mean absolute alternating signed-16 values from
+at most 1024 bytes at its software play cursor, preserving original mono
+even/odd pairing. Reading the meter consumes no PCM, performs no provider I/O,
+and allocates no sample history. Original voice-volume and master/category
+integer truncation stages precede four-pixel display steps. With no selected
+music, the bar uses the loudest active ordinary effect; muted/prepared effects
+and a paused application do not produce a bar. Saturated bars are clipped to
+their 192-pixel source atlas. Opening/closing transitions and full CG views
+hide these footers. Source pictures stay external and share the bounded image
+cache. Constructed PCM, voice and menu/application checks cover these rules;
+physical-device latency and actual meter appearance remain unverified.
 
 The native script library reuses an immutable parsed LSCR Program while an
 existing scene/call owns it. The cache contains weak program references, never

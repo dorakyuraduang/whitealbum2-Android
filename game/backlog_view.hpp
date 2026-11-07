@@ -2,6 +2,7 @@
 #include "scene_backlog.hpp"
 #include "scene_selection.hpp"
 #include "system_sounds.hpp"
+#include "music_caption.hpp"
 
 namespace wa2::game {
 struct BacklogContext {int skin{};bool novel{};std::uint32_t current_page{};};
@@ -14,7 +15,7 @@ public:
     using Loader=script::SceneSelection::Loader;
     using Text=std::function<text::PreparedText(std::string_view,const text::TextStyle&)>;
     using Sound=std::function<void(audio::SystemCue)>;
-    BacklogView(Loader,Text,Sound={});
+    BacklogView(Loader,Text,Sound={},CurrentMusic={});
     void prepare(BacklogContext,const script::SceneBacklog&);
     void update(BacklogInput={});
     void clear();
@@ -28,11 +29,11 @@ public:
     void playing(std::optional<std::size_t> entry){playing_=entry;}
 private:
     struct Row {std::size_t entry{};text::PreparedText name,body;std::uint32_t page{};};
-    Loader loader_;Text text_;Sound sound_;
+    Loader loader_;Text text_;Sound sound_;CurrentMusic current_music_;
     BacklogContext context_;
     std::deque<script::BacklogEntry> entries_;
     std::vector<Row> rows_;
-    std::array<std::shared_ptr<const image::Raster>,6> images_;
+    std::array<std::shared_ptr<const image::Raster>,8> images_;
     std::shared_ptr<const image::Raster> black_;
     std::shared_ptr<image::ImageRequest> request_;
     std::vector<image::Sprite> sprites_;

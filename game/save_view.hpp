@@ -19,7 +19,7 @@ public:
     using Preview=std::function<std::shared_ptr<SavePreviewRequest>(unsigned)>;
     using Text=std::function<text::PreparedText(std::string_view,const text::TextStyle&)>;
     using Sound=std::function<void(audio::SystemCue)>;
-    SaveView(Loader,Preview,Text,Sound={});
+    SaveView(Loader,Preview,Text,Sound={},CurrentMusic={});
     void prepare(SaveContext,std::span<const SaveSlotInfo>);
     void update(SaveInput={});
     void clear();
@@ -37,12 +37,12 @@ public:
     const std::string& operation_error()const noexcept{return operation_error_;}
 private:
     struct PageData {std::array<SaveRow,11> rows;std::array<text::PreparedText,11> labels;unsigned page{},bank{},next{};std::shared_ptr<SavePreviewRequest> request;};
-    Loader loader_;Preview preview_;Text text_;Sound sound_;
+    Loader loader_;Preview preview_;Text text_;Sound sound_;CurrentMusic current_music_;
     SaveContext context_;
     std::array<std::optional<SaveSlotInfo>,300> inventory_;
     std::array<bool,300> newly_saved_{};
     std::array<unsigned,2> pages_{},latest_{};
-    std::array<std::shared_ptr<const image::Raster>,18> images_;
+    std::array<std::shared_ptr<const image::Raster>,20> images_;
     std::shared_ptr<image::ImageRequest> image_request_;
     std::shared_ptr<const image::Raster> black_;
     std::optional<PageData> incoming_;
