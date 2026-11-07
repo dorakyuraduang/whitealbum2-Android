@@ -478,7 +478,7 @@ def main():
                 if args.resource_root:
                     run([directory/'wa2_native_script_catalogue_tests.exe',args.resource_root.resolve(),directory/'native-script-catalogue.json'],console,90)
                     catalogue=json.loads((directory/'native-script-catalogue.json').read_text())
-                    if not catalogue['passed'] or catalogue['calendar_atlas_headers']!=4 or catalogue['selection_atlas_headers']!=2 or catalogue['colour_maps_parsed']!=2 or not catalogue['sprite_animations'] or not catalogue['animation_frames'] or catalogue['animation_sequences_executed'] or catalogue['script_executed'] or catalogue['game_launched']:raise ValueError('Invalid static resource script audit')
+                    if not catalogue['passed'] or catalogue['menu_atlas_headers']<78 or not catalogue['calendar_literal_calls'] or catalogue['calendar_literal_calls']!=catalogue['calendar_literals_validated'] or catalogue['calendar_unknown_arguments'] or catalogue['calendar_atlas_headers']!=4 or catalogue['selection_atlas_headers']!=2 or catalogue['colour_maps_parsed']!=2 or not catalogue['sprite_animations'] or not catalogue['animation_frames'] or catalogue['animation_sequences_executed'] or catalogue['script_executed'] or catalogue['game_launched']:raise ValueError('Invalid static resource script audit')
     if sources['windows']!=sources['android']:raise ValueError('Native game sources differ between host platforms')
     for name,sha in bindings.items():
         if digest(ROOT/name)!=sha:raise ValueError('Native verification source changed: '+name)

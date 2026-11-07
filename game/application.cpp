@@ -133,7 +133,7 @@ void Application::open_extra(std::int32_t extra,std::int64_t now){
     std::unique_ptr<MusicView> music;std::unique_ptr<ExtraGrid> grid;std::unique_ptr<CommentaryView> commentary;
     if(extra==2){music=std::make_unique<MusicView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});music->prepare(title_setup_->content,progress_->state(),options_timing(preferences()));
         if(progress_->state().flag(104) && progress_->state().flag(163)){progress_->state().set_flag(134,1);progress_->flush();}title_scene_->music_preview({},120);
-    }else if(extra==4){commentary=std::make_unique<CommentaryView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});commentary->prepare();title_scene_->music_preview({},120);
+    }else if(extra==4){commentary=std::make_unique<CommentaryView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});commentary->prepare(options_timing(preferences()));title_scene_->music_preview({},120);
     }else{grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});grid->prepare(extra==1?ExtraGridKind::gallery:ExtraGridKind::replay,title_setup_->content,progress_->state(),0,options_timing(preferences()));title_scene_->music_preview(extra==1?41:15,extra==1?30:0);}
     open(Page::extras,now);extra_=extra;music_view_=std::move(music);extra_grid_=std::move(grid);commentary_view_=std::move(commentary);
 }
@@ -172,7 +172,7 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
     if(page()==Page::extras && commentary_view_){
         try{title_scene_->update(now);if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}
             commentary_view_->update({input.selection,input.cancel || input.toggle_window},title_scene_->commentary_playing());if(auto command=commentary_view_->take_command()){
-                if(command->kind==CommentaryCommand::Kind::close)back(now);else if(command->kind==CommentaryCommand::Kind::stop)title_scene_->commentary_stop();else title_scene_->commentary_play(command->speaker);}}
+                if(command->kind==CommentaryCommand::Kind::close)back(now);else if(command->kind==CommentaryCommand::Kind::leaving){title_scene_->commentary_stop();title_scene_->music_preview({},120);}else if(command->kind==CommentaryCommand::Kind::stop)title_scene_->commentary_stop();else title_scene_->commentary_play(command->speaker);}}
         catch(const std::exception& error){if(title_scene_)title_scene_->commentary_stop();if(commentary_view_){commentary_view_->failed();if(commentary_view_->phase()==CommentaryPhase::idle)back(now);}if(error_)report_error(error.what(),now);else throw;}
         return {script::RunState::yielded,0};
     }

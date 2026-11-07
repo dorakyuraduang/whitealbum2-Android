@@ -14,16 +14,23 @@ constexpr std::array<std::array<unsigned,18>,4> holidays{{
     {101,102,109,211,320,429,430,503,504,505,716,917,922,1008,1103,1123,1223,1224},
     {101,114,211,320,429,503,504,505,506,715,916,923,1014,1103,1104,1123,1223,0}}};
 auto alpha(std::int64_t value){return std::uint8_t(std::clamp(value,std::int64_t(0),std::int64_t(255)));}
+bool display_year(std::int32_t year){
+    // The installed 2029 script also requests 201-01-29. Cached source lookup
+    // for that literal has no matching month/day pair. Preserve its year and
+    // weekday with no holiday, without reproducing the source's off-table read.
+    return year==201 || (year>=2010 && year<=2013);
+}
 }
 CalendarDate SceneCalendar::date(std::int32_t year,std::int32_t month,std::int32_t day,std::int32_t weekday){
     if(year<1 || year>9999 || month<1 || month>12 || weekday< -1 || weekday>7)throw Error("Native calendar date out of range");
-    constexpr int days[]{31,28,31,30,31,30,31,31,30,31,30,31};
-    const auto leap=year%4==0 && (year%100!=0 || year%400==0);
-    if(day<1 || day>days[month-1]+int(month==2 && leap))throw Error("Invalid native calendar day");
+    // Source Calendar accepts month/day labels, including 2013-02-29 used by
+    // the installed story. It computes a weekday without civil-date validation.
+    if(day<1 || day>31)throw Error("Native calendar day is outside its label range");
     if(weekday==-1){const auto y=year-(month<=2),m=month+(month<=2?12:0);weekday=((13*m+8)/5+y/400-y/100+y/4+y+day)%7;}
     bool holiday=false;if(year>=2010 && year<=2013){const auto& row=holidays[std::size_t(year-2010)];holiday=std::find(row.begin(),row.end(),unsigned(month*100+day))!=row.end();}
     return {year,month,day,weekday,holiday};
 }
+bool SceneCalendar::supports_display(const CalendarDate& value)noexcept{return display_year(value.year) && value.weekday>=0 && value.weekday<=6;}
 SceneCalendar::SceneCalendar(Loader loader,std::function<std::int32_t()> theme):loader_(std::move(loader)),theme_(std::move(theme)){
     if(!loader_)throw Error("Missing native calendar image loader");
     line_=std::make_shared<image::Raster>(image::Raster{1,1,{21,37,83,255}});sprites_.reserve(9);
@@ -46,8 +53,7 @@ std::optional<CommandResult> SceneCalendar::dispatch(Command& call){
     if(!call.continuation){
         const auto next=date(call.arguments[0].integer(),call.arguments[1].integer(),call.arguments[2].integer(),call.arguments[3].integer());
         const bool display=call.arguments[4].integer()!=0;
-        if(display && (next.year<2010 || next.year>2013))throw Unsupported("Native calendar display year outside the retained holiday table");
-        if(display && next.weekday>6)throw Unsupported("Native calendar display weekday outside the original atlas");
+        if(display && !supports_display(next))throw Unsupported("Native calendar display date outside the recovered display cases");
         const bool alternate=display && theme_ && theme_()==2;
         auto requests=display?load(alternate):decltype(requests_){};
         date_=next;alternate_=alternate;requests_=std::move(requests);images_={};phase_=elapsed_=age_=bar_elapsed_=0;
@@ -105,7 +111,7 @@ void SceneCalendar::restore(std::span<const std::uint8_t> bytes){
     const auto width=std::bit_cast<float>(in.u32()),height=std::bit_cast<float>(in.u32()),offset=std::bit_cast<float>(in.u32());
     const auto active=in.boolean(),digits=in.boolean(),background=in.boolean(),bars=in.boolean(),alternate=in.boolean();in.finish();
     if(phase>5 || elapsed>1000000 || age>1000000 || bars_elapsed>1000000 || opacity>255 || digit_opacity>255 || !std::isfinite(width) || !std::isfinite(height) || !std::isfinite(offset) || width<0 || width>1.e6f || height<0 || height>1.e6f || offset<0 || offset>1.e6f || (!year && (month || day || weekday)) ||
-       (active && (year<2010 || year>2013 || weekday>6)))throw Error("Invalid saved native calendar state");
+       (active && !supports_display(next)))throw Error("Invalid saved native calendar state");
     auto requests=active?load(alternate):decltype(requests_){};
     date_=next;phase_=phase;elapsed_=elapsed;age_=age;bar_elapsed_=bars_elapsed;opacity_=std::uint8_t(opacity);digit_opacity_=std::uint8_t(digit_opacity);
     bar_width_=width;bar_height_=height;bar_offset_=offset;active_=active;digits_=digits;background_=background;bars_=bars;alternate_=alternate;requests_=std::move(requests);images_={};

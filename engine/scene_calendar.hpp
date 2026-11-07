@@ -23,6 +23,7 @@ public:
     void restore(std::span<const std::uint8_t>);
     void prepare_restored_assets(resource::Catalog&,const image::Resolve&);
     static CalendarDate date(std::int32_t year,std::int32_t month,std::int32_t day,std::int32_t weekday=-1);
+    static bool supports_display(const CalendarDate&)noexcept;
 private:
     Loader loader_;
     std::function<std::int32_t()> theme_;

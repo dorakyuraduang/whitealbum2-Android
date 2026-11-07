@@ -116,8 +116,15 @@ The native Calendar command computes date/weekday state, retains the 2010..2013
 holiday facts and selects the original three calendar image atlases. Its shared
 state machine handles the background, moving digit/weekday crops and line
 transitions, including the source's one-third skip timing. Display requests
-outside the retained year table fail explicitly; date-only assignments remain
-valid. Its overlay has a separate scene accessor for presentation after dialogue.
+outside recovered display cases fail explicitly; date-only assignments remain
+valid. The original `2029` scene's literal year `201` is a recovered compatibility
+case: retain `201-01-29`, its computed weekday and no holiday. Cached lookup data
+contains no valid month/day pair for that source access, so the native engine
+does not recreate its off-table memory lookup or silently change the year to
+2011. Several closing-story records also request `2013-02-29`; source Calendar
+treats month/day as labels and computes a weekday without civil-date validation.
+The native labels retain that value and still reject a day outside 1..31.
+Active checkpoints preserve these states. Its overlay has a separate scene accessor for presentation after dialogue.
 Calendar checkpoints reload resource handles without executing script commands.
 
 `engine/sprite_animation.*` parses the original INAS sprite-animation containers
@@ -978,9 +985,22 @@ An exit publishes its audio fade before leaving. Replay entry preparation keeps
 the return grid usable if a resource provider fails; a successful replay retains
 that same page and owner. Constructed tests cover alpha steps, suppressed
 transition clicks, failed preparation/retry, backgrounding and save restoration.
-Commentary-page transitions, remaining counters/chrome and full physical game
-compatibility are still migration work. Native desktop SDL windows now request
+Remaining counters/chrome and full physical game compatibility are still
+migration work. Native desktop SDL windows now request
 the provided embedded icon for both large and small window icons.
+
+Voice-comment pages also share the source menu timing. Their opening/closing
+opacity, centred content scale and header/footer motion stay in the common
+view, with no control activation during opening. Global close stops commentary
+immediately, then completes the visual transition before returning; cancellation
+from a loading text page cannot later start its clip. Finite tests cover partial
+opening cancellation, zero delay, backgrounded closing and active voice release.
+
+Original-resource verification additionally checks 78 menu atlas header/crop
+contracts, without decoding artwork pixels or presenting them. Every original
+Calendar call is examined through literal records and the pure date-support
+policy; unresolved arguments are reported explicitly. This static audit does
+not execute LSCR branches, a scene, UI or a game session.
 
 ## Current released implementation
 

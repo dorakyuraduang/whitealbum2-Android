@@ -18,7 +18,8 @@ int main(int argc,char** argv){try{
     CHECK(s::SceneCalendar::date(2011,1,10).weekday==1 && s::SceneCalendar::date(2011,1,10).holiday);++cases;
     CHECK(s::SceneCalendar::date(2012,2,29).weekday==3 && s::SceneCalendar::date(2013,11,4).holiday);++cases;
     CHECK(s::SceneCalendar::date(2010,1,1,7).weekday==7 && s::SceneCalendar::date(2000,2,29).weekday==2);++cases;
-    rejects([&]{s::SceneCalendar::date(1900,2,29);});rejects([&]{s::SceneCalendar::date(2010,4,31);});rejects([&]{s::SceneCalendar::date(0,1,1);});guards+=3;
+    CHECK(s::SceneCalendar::date(1900,2,29).day==29 && s::SceneCalendar::date(2010,4,31).day==31);++cases;
+    rejects([&]{s::SceneCalendar::date(1900,2,32);});rejects([&]{s::SceneCalendar::date(2010,4,0);});rejects([&]{s::SceneCalendar::date(0,1,1);});guards+=3;
     auto source=std::make_shared<Bytes>();auto& b=source->bytes;b.resize(60+18+1280*720*3);std::memcpy(b.data(),"KCAP",4);put(b,12,1);
     std::memcpy(b.data()+20,"calendar-test.tga",17);put(b,52,60);put(b,56,std::uint32_t(b.size()-60));b[62]=2;b[72]=0;b[73]=5;b[74]=208;b[75]=2;b[76]=24;b[77]=32;
     i::ImageStore images(r::Archive::open(source));auto request=images.request("calendar-test.tga");std::shared_ptr<const i::Raster> image;const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(3);
@@ -38,6 +39,9 @@ int main(int argc,char** argv){try{
     const auto before=calendar.checkpoint();auto bad=saved;bad.back()^=1;rejects([&]{calendar.restore(bad);});CHECK(calendar.checkpoint()==before);++guards;
     args[0]=s::Value(2009);call={203,args};rejects([&]{calendar.dispatch(call);});CHECK(calendar.checkpoint()==before);++guards;
     args[0]=s::Value(2010);args[3]=s::Value(7);call={203,args};rejects([&]{calendar.dispatch(call);});CHECK(calendar.checkpoint()==before);++guards;
+    args={s::Value(201),s::Value(1),s::Value(29),s::Value(-1),s::Value(1)};call={203,args};CHECK(!calendar.dispatch(call)->complete && calendar.date()==(s::CalendarDate{201,1,29,4,false}));calendar.update();const auto literal_year=calendar.checkpoint();s::SceneCalendar literal_restore(loader);literal_restore.restore(literal_year);CHECK(literal_restore.date()==calendar.date() && literal_restore.checkpoint()==literal_year);for(unsigned n=0;calendar.busy();++n){CHECK(n<200);calendar.update();literal_restore.update();CHECK(literal_restore.checkpoint()==calendar.checkpoint());}++cases;
+    args={s::Value(2013),s::Value(3),s::Value(1),s::Value(7),s::Value(0)};call={203,args};CHECK(calendar.dispatch(call)->complete && calendar.date().weekday==7 && !calendar.busy());++cases;
+    args={s::Value(2013),s::Value(2),s::Value(29),s::Value(-1),s::Value(1)};call={203,args};CHECK(!calendar.dispatch(call)->complete && calendar.date()==(s::CalendarDate{2013,2,29,5,false}));calendar.update();const auto source_label=calendar.checkpoint();literal_restore.restore(source_label);CHECK(literal_restore.checkpoint()==source_label && literal_restore.date().day==29);++cases;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-calendar-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"normal_ticks\":182,\"skip_ticks\":62,\"synthetic_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native calendar date, atlas placement and transition restore.\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
