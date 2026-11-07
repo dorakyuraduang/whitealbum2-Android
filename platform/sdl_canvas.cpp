@@ -88,6 +88,20 @@ std::unique_ptr<SdlCanvas> SdlCanvas::adopt(SDL_Renderer* renderer){
     try{return std::unique_ptr<SdlCanvas>(new SdlCanvas(renderer));}
     catch(...){SDL_DestroyRenderer(renderer);throw;}
 }
+CanvasWindowServices SdlCanvas::window_services(){
+    state_->enter();if(!SDL_RenderGetWindow(state_->renderer))return {};
+    const auto weak=std::weak_ptr<State>(state_);CanvasWindowServices services;
+    services.fullscreen=[weak](bool enabled){
+        const auto state=weak.lock();if(!state)throw std::runtime_error("Native display adapter is closed");state->enter();auto* window=SDL_RenderGetWindow(state->renderer);
+        if(!window)throw std::runtime_error("Native display adapter has no window");if(SDL_SetWindowFullscreen(window,enabled?SDL_WINDOW_FULLSCREEN_DESKTOP:0))fail("change native display mode");
+    };
+    services.error=[weak](std::string_view diagnostic){
+        const auto state=weak.lock();if(!state)throw std::runtime_error("Native error adapter is closed");state->enter();auto* window=SDL_RenderGetWindow(state->renderer);
+        if(!window)throw std::runtime_error("Native error adapter has no window");const auto message=std::string(diagnostic.substr(0,8192));
+        if(SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"WA2 operation failed",message.c_str(),window))fail("show native operation error");
+    };
+    return services;
+}
 SdlCanvas::~SdlCanvas(){
     // The canvas itself belongs to the render loop. Texture handles can outlive
     // it; SDL releases those handles here and their later destructors are inert.

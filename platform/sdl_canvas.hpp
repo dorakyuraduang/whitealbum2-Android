@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string_view>
 
 struct SDL_Renderer;
 struct SDL_Window;
@@ -27,6 +28,10 @@ public:
     CanvasTexture& operator=(const CanvasTexture&)=delete;
 };
 struct CanvasStatistics {std::uint64_t presents{},draws{},vertices{},uploads{};};
+struct CanvasWindowServices {
+    std::function<void(bool)> fullscreen;
+    std::function<void(std::string_view)> error;
+};
 // Renderer/window ownership stays on the creating thread. Worker threads can
 // release texture handles: destruction is deferred to the rendering thread.
 // This backend provides textured 2-D triangles; game effect shaders remain a
@@ -43,6 +48,7 @@ public:
     SdlCanvas(const SdlCanvas&)=delete;
     SdlCanvas& operator=(const SdlCanvas&)=delete;
     void logical_size(int width,int height);
+    CanvasWindowServices window_services();
     std::shared_ptr<CanvasTexture> upload(const image::Raster&,CanvasFilter filter=CanvasFilter::linear);
     std::shared_ptr<CanvasTexture> upload_yuv(const movie::VideoFrame&);
     void update_yuv(const std::shared_ptr<CanvasTexture>&,const movie::VideoFrame&);

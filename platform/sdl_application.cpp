@@ -34,6 +34,7 @@ SdlApplication::SdlApplication(game::Application& application,SdlCanvas& canvas,
     :application_(application),driver_(application,settings),canvas_(canvas),presentation_(canvas),
     audio_(factory?std::move(factory):AudioOutputFactory([](audio::Mixer& mixer){return std::make_unique<SdlAudio>(mixer);})),submitted_(std::move(submitted)){
     if(!application.has_save_thumbnail())application.prepare_save_thumbnail([](game::Scene& scene){game::RenderFrame frame;frame.capture(scene);return save_thumbnail(frame);});
+    auto window=canvas.window_services();if(window.fullscreen)application.prepare_display(std::move(window.fullscreen));if(window.error)application.prepare_errors(std::move(window.error));
 }
 game::DriverFrame SdlApplication::pump(std::int64_t now,const InputSnapshot& events,const Clock& clock){
     const auto result=driver_.pump(now,{game_input(events),events.background || events.minimized || !events.focused,events.quit},clock);

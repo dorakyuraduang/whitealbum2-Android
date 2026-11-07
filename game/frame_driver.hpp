@@ -33,6 +33,7 @@ class FrameDriver {
     FrameInput pending_;
     std::int64_t observed_{};
     std::uint64_t logic_phase_{},present_phase_{};
+    std::uint64_t clock_revision_{};
     bool started_{},suspended_{};
 public:
     explicit FrameDriver(Application&,DriverSettings={});

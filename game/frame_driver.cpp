@@ -50,15 +50,15 @@ DriverFrame FrameDriver::pump(std::int64_t now,DriverInput input,const std::func
     if(input.quit){application_.close(now);pending_.clear();result.closed=true;return result;}
     // Validate input before advancing clocks or changing application state.
     auto pending=pending_;pending.add(input.game);
-    const bool first=!started_,resume=started_ && suspended_ && !input.background;
-    const auto elapsed=first?0:now-observed_;observed_=now;started_=true;
+    const bool first=!started_,resume=started_ && suspended_ && !input.background,recover=clock_revision_!=application_.clock_revision();
+    clock_revision_=application_.clock_revision();const auto elapsed=first || recover?0:now-observed_;observed_=now;started_=true;
     if(application_.background()!=input.background)application_.background(input.background,now);
     suspended_=input.background;
     if(suspended_){pending_.clear();logic_phase_=present_phase_=0;result.suspended=true;result.sleep_us=16000;return result;}
-    if(first || resume){pending_.clear();if(first)pending_=pending;}
+    if(first || resume || recover){pending_.clear();if(first)pending_=pending;if(recover)logic_phase_=present_phase_=0;}
     else pending_=pending;
-    auto due=first || resume?1:advance(logic_phase_,elapsed,60);
-    result.draw=first || resume || advance(present_phase_,elapsed,settings_.presentation_hz)!=0;
+    auto due=first || resume || recover?1:advance(logic_phase_,elapsed,60);
+    result.draw=first || resume || recover || advance(present_phase_,elapsed,settings_.presentation_hz)!=0;
     if(due>settings_.maximum_catch_up){result.dropped_updates=due-settings_.maximum_catch_up;due=settings_.maximum_catch_up;}
     if(due){
         auto previous=clock();if(previous<0)throw std::invalid_argument("Native frame driver budget clock is negative");const auto start=previous;
@@ -75,6 +75,7 @@ DriverFrame FrameDriver::pump(std::int64_t now,DriverInput input,const std::func
             const auto batch=application_.frame(now,game_input,budget_clock,budget);++result.updates;
             result.batch.state=batch.state;result.batch.ticks+=batch.ticks;result.batch.limit=batch.limit;game_input=game_input.continued();
             if(application_.page()==Page::closed){pending_.clear();result.closed=true;result.draw=false;break;}
+            if(clock_revision_!=application_.clock_revision()){pending_.clear();logic_phase_=present_phase_=0;break;}
         }
     }
     if(!result.closed)result.sleep_us=std::min(remaining(logic_phase_,60),remaining(present_phase_,settings_.presentation_hz));

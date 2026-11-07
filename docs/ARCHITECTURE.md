@@ -709,8 +709,8 @@ persists from its actual option cell, suspends story logic before processing tha
 click, and consumes the closing click before resuming. Missing settings services
 and missing save services (source policy 2) fail before changing story/navigation.
 Policy 2 now opens the common save view when its services are prepared. The full
-settings page is still incomplete. Display-mode changes and options over another
-modal page fail explicitly.
+settings page is still incomplete. Display-mode changes require the window
+adapter described below; options over another modal page fail explicitly.
 Skin/colour selection popup behavior, held-button repetition and the original captured
 parent-image zoom are pending. The current compositor retains the live parent
 scene beneath the options overlay. Persisting confirmation/window policies is
@@ -764,7 +764,8 @@ restoration. Opening it freezes story logic while retaining the same mixer;
 backgrounding also pauses the audio and menu clock. Successful loads prepare a
 complete new scene before releasing the active one. Failed writes/restores keep
 the current scene, navigation and slot data and expose their diagnostic. Slot
-errors still propagate to the host; an in-page recoverable error dialog is pending.
+errors use the host's operation-error adapter when attached, preserving the
+view for retry. A missing error adapter propagates the exception explicitly.
 Right-click save routing and one-shot PageUp/PageDown input use the same code on
 both hosts. A closing click is consumed before story logic resumes.
 
@@ -809,6 +810,22 @@ native per-speaker voice-control disabling remain unfinished. The view checks
 use constructed PAKs and deferred font geometry, not original glyph pixels,
 game playback, a screen or device input. No native game package is released by
 these checks.
+
+The common application now binds fullscreen edits through a reversible display
+adapter. A failed display switch leaves settings unchanged; a failed preference
+write restores the previous display mode before returning the error. Game and
+menu settings apply only after the file commit succeeds. The SDL implementation
+uses its own window's fullscreen/message-box services, separate from game logic,
+and captures only a weak renderer owner so a stale callback cannot keep or use a
+closed window. A software renderer with no window exposes neither service.
+
+Manual and quick slot failures can report their diagnostic without ending the
+application. The common recovery path freezes logical time before the host
+reports the error, releases stale input, and rebases the frame driver on return.
+Time spent in a blocking dialog cannot become a story timer jump or eight
+catch-up updates. Finite checks inject display/write failures and a simulated
+sixty-second dialog interval; no actual window, message box or game is opened.
+Real fullscreen switching and message-box appearance remain untested on devices.
 
 ## Current released implementation
 

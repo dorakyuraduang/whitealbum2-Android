@@ -14,7 +14,20 @@ void Application::replace_scene(std::unique_ptr<Scene> next,std::int64_t now){
     if(scene_revision_==std::numeric_limits<std::uint64_t>::max())throw std::overflow_error("Native scene revision exhausted");
     next->suspend(background_,background_,now);if(scene_)scene_->flush_progress();close_backlog();save_view_.reset();seed_=next->random_state();scene_=std::move(next);title_scene_.reset();options_view_.reset();extra_=-1;pages_.resize(1);pages_[0]=Page::story;release_input_=true;++scene_revision_;
 }
-bool Application::preferences(const Preferences& next){require_open();const auto state=options_view_?std::optional(options_state(next)):std::nullopt;if(!preferences_.replace(next))return false;if(scene_)scene_->preferences(preferences_.current());if(title_scene_)title_scene_->preferences(preferences_.current());if(state){options_view_->state(*state);options_view_->timing(options_timing(next));}return true;}
+bool Application::preferences(const Preferences& next){
+    require_open();next.validate();const auto state=options_view_?std::optional(options_state(next)):std::nullopt;const auto previous=preferences();const bool display_changed=display_ && next.fullscreen!=previous.fullscreen;
+    if(display_changed)display_(next.fullscreen);
+    try{if(!preferences_.replace(next))return false;}catch(const std::exception& original){
+        if(display_changed)try{display_(previous.fullscreen);}catch(const std::exception& rollback){throw std::runtime_error(std::string(original.what())+"; native display rollback failed: "+rollback.what());}throw;
+    }
+    if(scene_)scene_->preferences(preferences_.current());if(title_scene_)title_scene_->preferences(preferences_.current());if(state){options_view_->state(*state);options_view_->timing(options_timing(next));}return true;
+}
+void Application::prepare_display(std::function<void(bool)> display){require_open();if(!display)throw std::invalid_argument("Missing native display adapter");display(preferences().fullscreen);display_=std::move(display);}
+void Application::prepare_errors(std::function<void(std::string_view)> error){require_open();if(!error)throw std::invalid_argument("Missing native operation error adapter");error_=std::move(error);}
+void Application::report_error(std::string_view diagnostic,std::int64_t now){
+    if(clock_revision_==std::numeric_limits<std::uint64_t>::max())throw std::overflow_error("Native recovery clock revision exhausted");
+    if(scene_)scene_->suspend(true,background_,now);recover_clock_=release_input_=true;++clock_revision_;error_(diagnostic);
+}
 void Application::prepare_options(OptionsView::Loader loader,std::function<void(OptionsCommand)> commands,ConfirmationView::Text text){
     require_open();if(!loader)throw std::invalid_argument("Missing native options image loader");if(options_view_)throw std::logic_error("Cannot replace native options services while their view is open");options_loader_=std::move(loader);options_command_=std::move(commands);options_text_=std::move(text);
 }
@@ -70,7 +83,7 @@ void Application::open(Page page,std::int64_t now){
         if(options_view_ || (this->page()!=Page::story && this->page()!=Page::title))throw script::Unsupported("Native options over another modal page are not implemented");
         if(!scene_ && (!title_scene_ || title_scene_->stage()!=TitleStage::view))throw script::Unsupported("Native options require a prepared title view or story");
         next=std::make_unique<OptionsView>(options_loader_,[this](const OptionsState& state){const auto next=options_preferences(state,preferences());
-            if(next.fullscreen!=preferences().fullscreen)throw script::Unsupported("Native options display-mode adapter is not implemented");
+            if(next.fullscreen!=preferences().fullscreen && !display_)throw script::Unsupported("Native options display-mode adapter is not prepared");
             if(next.right_click!=preferences().right_click && next.right_click==2 && !save_services_.images)throw script::Unsupported("Native right-click save-page services are not prepared");preferences(next);},
             [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);});
         next->prepare(options_state(preferences()),0,options_timing(preferences()));
@@ -107,6 +120,7 @@ void Application::load(unsigned slot,std::int64_t now){
 }
 FrameBatch Application::frame(std::int64_t now,Input input,const std::function<std::int64_t()>& clock,FrameBudget budget){
     observe(now);
+    if(recover_clock_){suspend_scene(now);recover_clock_=false;input={};}
     if(input.cancel && pages_.size()>1 && !(page()==Page::options && options_view_) && !save_view_ && !backlog_view_){back(now);input={};}
     if(page()==Page::backlog && backlog_view_){
         scene_->ambient_update(now);if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}
@@ -130,7 +144,7 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
             else try{
                 if(command->kind==SaveCommand::Kind::load)load(command->slot,now);
                 else{auto document=save_document();saves_.write(command->slot,document);save_view_->succeeded(std::move(document.preview));}
-            }catch(const std::exception& error){if(save_view_)save_view_->failed(error.what());throw;}
+            }catch(const std::exception& error){if(save_view_)save_view_->failed(error.what());if(error_)report_error(error.what(),now);else throw;}
         }
         return {script::RunState::yielded,0};
     }
@@ -169,7 +183,9 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
     if(!scene_)return {script::RunState::yielded,0};
     if(background_ || page()!=Page::story){scene_->ambient_update(now);return {script::RunState::yielded,0};}
     if(release_input_){input={};release_input_=false;}
-    if(input.selection.pointer && input.selection.activate)if(auto action=scene_->control_at(input.selection.x,input.selection.y)){control(*action,now);return {script::RunState::yielded,0};}
+    if(input.selection.pointer && input.selection.activate)if(auto action=scene_->control_at(input.selection.x,input.selection.y)){
+        try{control(*action,now);}catch(const std::exception& error){if(error_)report_error(error.what(),now);else throw;}return {script::RunState::yielded,0};
+    }
     if(input.scroll>0 && backlog_loader_ && scene_->backlog().entries().size()>=2){open(Page::backlog,now);return {script::RunState::yielded,0};}
     if(input.toggle_window && preferences().right_click){
         if(preferences().right_click==2){if(!save_services_.images)throw script::Unsupported("Native right-click save-page services are not prepared");open(Page::save,now);return {script::RunState::yielded,0};}

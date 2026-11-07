@@ -43,12 +43,15 @@ class Application {
     std::vector<script::BacklogVoice> replay_;
     std::size_t replay_next_{};
     std::optional<std::size_t> replay_entry_;
+    std::function<void(bool)> display_;
+    std::function<void(std::string_view)> error_;
     std::int32_t extra_{-1};
     std::vector<Page> pages_{Page::title};
     std::int64_t observed_{};
-    bool clock_started_{},background_{},release_input_{true};
+    bool clock_started_{},background_{},release_input_{true},recover_clock_{};
     std::uint32_t seed_;
     std::uint64_t scene_revision_{};
+    std::uint64_t clock_revision_{};
     void observe(std::int64_t now);
     void require_open()const;
     void suspend_scene(std::int64_t now);
@@ -56,6 +59,7 @@ class Application {
     SaveDocument save_document();
     void close_backlog();
     void control(script::StoryControl,std::int64_t now);
+    void report_error(std::string_view,std::int64_t now);
 public:
     Application(resource::BankOpener,std::shared_ptr<progress::Store>,std::shared_ptr<PreferenceStorage>,std::shared_ptr<SaveStorage>,Scene::SavedImageResolver,std::uint32_t seed=1,SceneServices services={});
     Page page()const noexcept{return pages_.back();}
@@ -63,6 +67,7 @@ public:
     Scene* scene()noexcept{return scene_.get();}
     const Scene* scene()const noexcept{return scene_.get();}
     std::uint64_t scene_revision()const noexcept{return scene_revision_;}
+    std::uint64_t clock_revision()const noexcept{return clock_revision_;}
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return scene_?scene_->mixer():title_scene_?title_scene_->mixer():nullptr;}
     const TitleScene* title_scene()const noexcept{return title_scene_.get();}
     const OptionsView* options_view()const noexcept{return options_view_.get();}
@@ -73,6 +78,8 @@ public:
     bool background()const noexcept{return background_;}
     const Preferences& preferences()const noexcept{return preferences_.current();}
     bool preferences(const Preferences&);
+    void prepare_display(std::function<void(bool)>);
+    void prepare_errors(std::function<void(std::string_view)>);
     void prepare_title(TitleContent,TitleStartup={},TitleServices={});
     // Wiring is separate from opening: constructing the application does not
     // decode menu assets. Reset/preview owners remain explicit integration work.
