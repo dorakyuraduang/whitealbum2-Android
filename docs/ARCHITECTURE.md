@@ -67,6 +67,18 @@ system flags). Failed blocks remain dirty for retry. Whole-file/multi-block
 atomicity and a complete scene-save snapshot are not claimed. A scene without
 progress storage fails explicitly if it encounters a progress command.
 
+The common scene also records CGs when V/H backgrounds (including their scaled
+variants) or ordinary V/H-prefixed bitmap files are loaded. Normal backgrounds,
+animations and background reuse do not trigger this rule. Bitmap suffixes follow
+the cached source's decimal parser, including its optional minus and 32-bit
+wrapping, followed by native gallery bounds checks. After parameter validation,
+the seen flag is persisted before the asset request. A failed write retains the
+old visual owner and leaves progress retryable; a failed asset request retains
+the already-persisted flag. Continuations, repeated seen images and checkpoint
+restoration do not cause redundant gallery writes. Thirty-four synthetic cases
+and eighteen guards check this ordering, storage failures, native controller
+integration and scene restore without original assets or a rendering device.
+
 The LSCR runtime/session now has bounded versioned checkpoints for globals,
 locals, value/flow stacks, nested scene calls and suspended commands. Restore
 checks resource content identity, catalogue signatures and instruction

@@ -28,7 +28,7 @@ class SceneBitmaps {
 public:
     using Loader=std::function<std::shared_ptr<image::ImageRequest>(std::string_view,std::string_view,std::int32_t)>;
     using AnimationLoader=std::function<std::shared_ptr<const image::Animation>(std::string_view,std::string_view)>;
-    explicit SceneBitmaps(Loader loader,AnimationLoader animations={});
+    explicit SceneBitmaps(Loader loader,AnimationLoader animations={},std::function<void(std::string_view)> seen={});
     std::optional<CommandResult> dispatch(Command& command);
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     const BitmapSlot& slot(std::int32_t index)const;
@@ -42,6 +42,7 @@ public:
 private:
     Loader loader_;
     AnimationLoader animation_loader_;
+    std::function<void(std::string_view)> seen_;
     std::array<BitmapSlot,32> slots_;
     std::vector<BitmapSlot> retired_;
     std::vector<image::Sprite> sprites_;

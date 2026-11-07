@@ -79,6 +79,7 @@ def main():
     inputs += [ROOT/'tests/native_movie_input.cpp']
     inputs += [ROOT/'tests/native_legacy_script.cpp']
     inputs += [ROOT/'tests/native_legacy_save.cpp']
+    inputs += [ROOT/'tests/native_gallery_progress.cpp']
     inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
         ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
         ROOT/'platform/sdl_input.hpp',ROOT/'platform/sdl_input.cpp',ROOT/'platform/sdl_application.hpp',ROOT/'platform/sdl_application.cpp']
@@ -151,6 +152,7 @@ def main():
             if host=='windows':targets+=['wa2_native_movie_input_tests']
             if host=='windows':targets+=['wa2_native_legacy_script_tests']
             if host=='windows':targets+=['wa2_native_legacy_save_tests']
+            if host=='windows':targets+=['wa2_native_gallery_progress_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
             if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_loading_cache_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
             if host=='windows':targets+=['wa2_native_desktop_tests','wa2_native_audio_level_tests']
@@ -197,6 +199,7 @@ def main():
             allowed+=('tests/native_movie_input.cpp',)
             allowed+=('tests/native_legacy_script.cpp',)
             allowed+=('tests/native_legacy_save.cpp',)
+            allowed+=('tests/native_gallery_progress.cpp',)
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
             allowed+=('tests/native_image_wait.cpp','tests/native_loading_cache.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
@@ -315,6 +318,9 @@ def main():
                 run([directory/'wa2_native_legacy_save_tests.exe',directory/'native-legacy-save.json'],console,90)
                 legacy_save=json.loads((directory/'native-legacy-save.json').read_text())
                 if not legacy_save['passed'] or legacy_save['cases']<29 or legacy_save['guards']<39 or not all(legacy_save[key] for key in ('bounded_header_inspection','source_timestamp_and_description','source_audio_load_policy','one_shots_omitted','looping_channels_restored','music_fade_out_omitted','ambiguous_music_rejected','existing_preferences_applied','conversion_does_not_open_transports','malformed_data_preserves_live_state','fake_transports_only','synthetic_data_only')) or any(legacy_save[key] for key in ('manual_scene_import_complete','original_resources_opened','original_saves_opened','devices_opened','game_launched','screen_access')):raise ValueError('Original save header and audio conversion checks failed')
+                run([directory/'wa2_native_gallery_progress_tests.exe',directory/'native-gallery-progress.json'],console,90)
+                gallery_progress=json.loads((directory/'native-gallery-progress.json').read_text())
+                if not gallery_progress['passed'] or gallery_progress['cases']<34 or gallery_progress['guards']<18 or not all(gallery_progress[key] for key in ('source_background_and_bitmap_rules','source_decimal_prefix_rules','seen_before_asset_request','continuation_marks_once','repeated_seen_writes_avoided','failed_write_keeps_visual_owner','failed_provider_preserves_source_seen_flag','restore_does_not_replay_commands','real_common_scene_hooks','synthetic_resources_only')) or any(gallery_progress[key] for key in ('original_resources_opened','devices_opened','game_launched','screen_access')):raise ValueError('Native automatic CG progress checks failed')
                 catalogue=None
                 run([directory/'wa2_native_control_state_tests.exe',directory/'native-control-state.json'],console,90)
                 control_state=json.loads((directory/'native-control-state.json').read_text())
@@ -580,6 +586,7 @@ def main():
     report['movie_input']=movie_input
     report['legacy_script']=legacy_script
     report['legacy_save']=legacy_save
+    report['gallery_progress']=gallery_progress
     report['frame_driver']=frame_driver
     report['audio_binding']=audio_binding
     report['sdl_application']=sdl_application

@@ -32,8 +32,8 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     weather_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto name){return image::Animation::parse(resources_.data("grp",name));}),
     shake_([this]{return random_.next();}),
     backgrounds_([this](auto name){return resources_.image("bak",name,controls_.modes().background_chroma,controls_.modes().background_effect);},[this](bool keep_characters){bitmaps_.clear_retired();characters_.clear_retired();background_changing_=true;preserve_characters_=keep_characters;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
-        [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name,controls_.modes().background_chroma,controls_.modes().background_effect);}),
-    bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);},[this](auto name,auto group){return image::Animation::parse(resources_.data(group,name));}),
+        [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name,controls_.modes().background_chroma,controls_.modes().background_effect);},[this](auto bank,auto index){progress_.event_image(bank,index);}),
+    bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);},[this](auto name,auto group){return image::Animation::parse(resources_.data(group,name));},[this](auto name){progress_.image_file(name);}),
     characters_([this](auto name){return resources_.image("char",name,controls_.modes().character_chroma,controls_.modes().character_effect);}),
     dialogue_(fonts_,[this](auto name){return resources_.image("grp",name);},[this](auto line){
         reading_.seen(session_.active()?session_.active()->program().name():statistics_.scene,line);controls_.reset_message_timer();++statistics_.messages;},[this]{shake_.end_message();}),

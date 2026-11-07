@@ -7,8 +7,8 @@
 #include <cstdio>
 
 namespace wa2::script {
-SceneBackground::SceneBackground(Loader loader,std::function<void(bool)> changing,Loader masks,Loader events)
-    :loader_(std::move(loader)),mask_loader_(std::move(masks)),event_loader_(std::move(events)),changing_(std::move(changing)){
+SceneBackground::SceneBackground(Loader loader,std::function<void(bool)> changing,Loader masks,Loader events,std::function<void(unsigned,std::int32_t)> seen)
+    :loader_(std::move(loader)),mask_loader_(std::move(masks)),event_loader_(std::move(events)),changing_(std::move(changing)),seen_(std::move(seen)){
     if(!loader_)throw Error("missing native background loader");
 }
 void SceneBackground::begin(Command& command,std::int32_t time_mode){
@@ -38,6 +38,7 @@ void SceneBackground::begin(Command& command,std::int32_t time_mode){
     if(event)std::snprintf(name.data(),name.size(),"%c%06d.tga",command.index==148 || command.index==227?'v':'h',int(number*10+variant));
     else std::snprintf(name.data(),name.size(),"B%04d%d%d.tga",int(number),int(variant),int(time_mode));
     if(!reuse && event && !event_loader_)throw Unsupported("missing native event-image loader");
+    if(!reuse && event && seen_)seen_(command.index==149 || command.index==228,std::int32_t(number*10+variant));
     std::shared_ptr<image::ImageRequest> request;std::shared_ptr<const image::Raster> ready;
     if(reuse){if(!layers_[current_] || !layers_[current_]->image)throw Error("Cannot reuse a native background before its image is ready");ready=layers_[current_]->image;}
     else{request=(event?event_loader_:loader_)(name.data());if(!request)throw Error("native background loader returned no image request");}
@@ -148,7 +149,7 @@ std::vector<std::uint8_t> SceneBackground::checkpoint(const resource::Catalog& r
     return out.seal("LSBG");
 }
 void SceneBackground::restore(std::span<const std::uint8_t> bytes,resource::Catalog& resources,const Resolve& resolve){
-    if(!resolve)throw Error("Missing saved background image resolver");auto in=checkpoint::Reader::open("LSBG",bytes);SceneBackground next(loader_,changing_,mask_loader_,event_loader_);
+    if(!resolve)throw Error("Missing saved background image resolver");auto in=checkpoint::Reader::open("LSBG",bytes);SceneBackground next(loader_,changing_,mask_loader_,event_loader_,seen_);
     next.current_=in.u32();next.elapsed_=in.i32();next.duration_=in.i32();next.effective_duration_=in.i32();next.effect_=in.i32();next.mask_mode_=in.i32();next.x_=in.i32();next.y_=in.i32();
     const auto real=[&]{const auto value=std::bit_cast<float>(in.u32());if(!std::isfinite(value) || std::abs(value)>1.e9f)throw Error("Invalid saved background coordinate");return value;};
     next.width_=real();next.height_=real();next.angle_=real();next.extended_=in.boolean();next.loading_=in.boolean();next.active_=in.boolean();next.picture_=in.boolean();next.camera_.restore(in.blob(65536));

@@ -10,7 +10,7 @@ namespace {
 image::SpriteBlend sprite_blend(std::int32_t mode){switch(mode){case 1:return image::SpriteBlend::alpha;case 3:return image::SpriteBlend::add;
     case 4:return image::SpriteBlend::screen;case 6:return image::SpriteBlend::multiply;default:throw Unsupported("native bitmap blend mode "+std::to_string(mode));}}
 }
-SceneBitmaps::SceneBitmaps(Loader loader,AnimationLoader animations):loader_(std::move(loader)),animation_loader_(std::move(animations)){if(!loader_)throw Error("missing native bitmap loader");sprites_.reserve(slots_.size()*2);retired_.reserve(slots_.size());}
+SceneBitmaps::SceneBitmaps(Loader loader,AnimationLoader animations,std::function<void(std::string_view)> seen):loader_(std::move(loader)),animation_loader_(std::move(animations)),seen_(std::move(seen)){if(!loader_)throw Error("missing native bitmap loader");sprites_.reserve(slots_.size()*2);retired_.reserve(slots_.size());}
 BitmapSlot& SceneBitmaps::checked(std::int32_t index){if(index<0 || std::size_t(index)>=slots_.size())throw Error("native bitmap index out of range");return slots_[std::size_t(index)];}
 const BitmapSlot& SceneBitmaps::slot(std::int32_t index)const{return const_cast<SceneBitmaps*>(this)->checked(index);}
 void SceneBitmaps::clear(){slots_={};retired_.clear();sprites_.clear();}
@@ -28,6 +28,7 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
             if(!command.arguments[4].text().empty() || value(5)!=256)throw Unsupported("native bitmap custom palette conversion");
             if(value(3)<0 || value(3)>2)throw Unsupported("native bitmap image format "+std::to_string(value(3)));
             if(value(2)<0 || value(2)>255 || (value(7)!=0 && value(7)!=1))throw Unsupported("native bitmap drawing layer");
+            if(seen_)seen_(command.arguments[1].text());
             auto request=loader_(command.arguments[1].text(),command.arguments[6].text(),value(3));if(!request)throw Error("native bitmap loader returned no request");
             if(item.retiring){if(retired_.size()>=slots_.size())throw Error("Native retired bitmap bank is full");retired_.push_back(item);}
             item={};item.request=std::move(request);item.layer=value(2);item.order_index=value(0);item.independent=value(7)!=0;item.allocated=true;command.continuation=1;

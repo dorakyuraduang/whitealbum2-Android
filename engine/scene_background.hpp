@@ -35,7 +35,7 @@ class SceneBackground {
 public:
     using Loader=std::function<std::shared_ptr<image::ImageRequest>(std::string_view)>;
     using Resolve=std::function<std::shared_ptr<const image::Raster>(const image::Reference&)>;
-    explicit SceneBackground(Loader loader,std::function<void(bool)> changing={},Loader masks={},Loader events={});
+    explicit SceneBackground(Loader loader,std::function<void(bool)> changing={},Loader masks={},Loader events={},std::function<void(unsigned,std::int32_t)> seen={});
     std::optional<CommandResult> dispatch(Command& command,std::int32_t time_mode);
     void update(const std::function<std::int32_t(std::int32_t)>& duration={});
     BackgroundFrame frame()const;
@@ -52,6 +52,7 @@ private:
     Loader mask_loader_;
     Loader event_loader_;
     std::function<void(bool)> changing_;
+    std::function<void(unsigned,std::int32_t)> seen_;
     std::shared_ptr<image::ImageRequest> request_;
     std::shared_ptr<const image::Raster> ready_image_;
     std::shared_ptr<image::ImageRequest> mask_request_;
