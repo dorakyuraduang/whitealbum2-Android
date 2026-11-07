@@ -62,7 +62,8 @@ class Scene {
     Input input_;
     Statistics statistics_;
     Preferences preferences_;
-    bool background_changing_{},preserve_characters_{},window_visible_{true},title_requested_{},skip_read_only_{true},replay_mode_{};
+    bool background_changing_{},preserve_characters_{},window_visible_{true},title_requested_{},skip_read_only_{true};
+    std::int32_t replay_mode_{};
     script::SceneControls controls_;
     script::SceneProgress progress_;
     script::SceneChoices choices_;
@@ -130,7 +131,10 @@ public:
     text::PreparedText menu_text(std::string_view raw,const text::TextStyle& style){return fonts_.prepare(text::layout(raw,style));}
     std::uint32_t save_story_code()const;
     std::int32_t theme()const;
-    void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
+    // The original GetReplayMode returns the selected 1-based entry, not a
+    // boolean. The shared 9999 resource script chooses its scene from it.
+    void replay_mode(std::int32_t value){if(value<0 || value>24)throw script::Error("Native replay entry is out of range");replay_mode_=value;selection_.replay_mode(value!=0);}
+    std::int32_t replay_mode()const noexcept{return replay_mode_;}
     void flush_progress(){reading_.finish();}
     std::vector<std::uint8_t> checkpoint()const;
     using SavedImageResolver=std::function<image::Resolve(resource::Catalog&)>;

@@ -12,7 +12,7 @@ void Application::observe(std::int64_t now){require_open();if(now<0 || (clock_st
 void Application::suspend_scene(std::int64_t now){if(scene_)scene_->suspend(background_ || page()!=Page::story,background_,now);if(title_scene_)title_scene_->pause(background_,now);}
 void Application::replace_scene(std::unique_ptr<Scene> next,std::int64_t now){
     if(scene_revision_==std::numeric_limits<std::uint64_t>::max())throw std::overflow_error("Native scene revision exhausted");
-    next->suspend(background_,background_,now);if(scene_)scene_->flush_progress();close_backlog();save_view_.reset();music_view_.reset();seed_=next->random_state();scene_=std::move(next);title_scene_.reset();options_view_.reset();extra_=-1;pages_.resize(1);pages_[0]=Page::story;release_input_=true;++scene_revision_;
+    next->suspend(background_,background_,now);if(scene_)scene_->flush_progress();close_backlog();save_view_.reset();music_view_.reset();extra_grid_.reset();seed_=next->random_state();scene_=std::move(next);title_scene_.reset();options_view_.reset();extra_=-1;pages_.resize(1);pages_[0]=Page::story;release_input_=true;++scene_revision_;
 }
 bool Application::preferences(const Preferences& next){
     require_open();next.validate();const auto state=options_view_?std::optional(options_state(next)):std::nullopt;const auto previous=preferences();const bool display_changed=display_ && next.fullscreen!=previous.fullscreen;
@@ -69,9 +69,12 @@ void Application::prepare_title(TitleContent content,TitleStartup startup,TitleS
     title_setup_=TitleSetup{content,startup,std::move(services)};title_scene_=std::move(next);seed_=seed;extra_=-1;release_input_=true;
 }
 void Application::start(const StoryStart& start,std::int64_t now){
-    observe(now);if(start.scene.empty() || start.scene.size()>240 || start.label<0)throw std::invalid_argument("Invalid native story entry");
+    observe(now);if(start.scene.empty() || start.scene.size()>240 || start.label<0 || start.replay<0 || start.replay>24)throw std::invalid_argument("Invalid native story entry");if(scene_revision_==std::numeric_limits<std::uint64_t>::max())throw std::overflow_error("Native scene revision exhausted");
     // Prepare completely before releasing the active owner or navigation.
-    const auto seed=scene_?scene_->random_state():title_scene_?title_scene_->random_state():seed_;auto next=std::make_unique<Scene>(opener_,seed,progress_,services_);next->preferences(preferences_.current());next->replay_mode(start.replay);next->start(start.scene,start.label);replace_scene(std::move(next),now);
+    const auto seed=scene_?scene_->random_state():title_scene_?title_scene_->random_state():seed_;auto next=std::make_unique<Scene>(opener_,seed,progress_,services_);next->preferences(preferences_.current());next->replay_mode(start.replay);next->start(start.scene,start.label);
+    std::optional<ReplayReturn> returning;
+    if(start.replay && page()==Page::extras && extra_grid_ && extra_grid_->kind()==ExtraGridKind::replay){title_scene_->pause(true,now);returning=ReplayReturn{std::move(title_scene_),std::move(extra_grid_),extra_};}
+    replace_scene(std::move(next),now);replay_return_=std::move(returning);
 }
 void Application::open(Page page,std::int64_t now){
     observe(now);if(page!=Page::options && page!=Page::save && page!=Page::load && page!=Page::backlog && page!=Page::extras)throw std::invalid_argument("Invalid native menu destination");
@@ -110,26 +113,42 @@ void Application::open(Page page,std::int64_t now){
 }
 void Application::open_extra(std::int32_t extra,std::int64_t now){
     observe(now);if(page()!=Page::title || !title_scene_ || title_scene_->stage()!=TitleStage::view || !title_setup_)throw std::logic_error("Native extras require a prepared title page");
-    if(!extras_loader_)throw script::Unsupported("Native extras image services are not prepared");if(extra!=2)throw script::Unsupported("Native extra view is not implemented: "+std::to_string(extra));
-    auto next=std::make_unique<MusicView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});next->prepare(title_setup_->content,progress_->state());
-    if(progress_->state().flag(104) && progress_->state().flag(163)){progress_->state().set_flag(134,1);progress_->flush();}
-    open(Page::extras,now);title_scene_->music_preview({},120);extra_=extra;music_view_=std::move(next);
+    if(!extras_loader_)throw script::Unsupported("Native extras image services are not prepared");if(extra<1 || extra>3)throw script::Unsupported("Native extra view is not implemented: "+std::to_string(extra));
+    std::unique_ptr<MusicView> music;std::unique_ptr<ExtraGrid> grid;
+    if(extra==2){music=std::make_unique<MusicView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});music->prepare(title_setup_->content,progress_->state());
+        if(progress_->state().flag(104) && progress_->state().flag(163)){progress_->state().set_flag(134,1);progress_->flush();}title_scene_->music_preview({},120);
+    }else{grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});grid->prepare(extra==1?ExtraGridKind::gallery:ExtraGridKind::replay,title_setup_->content,progress_->state());title_scene_->music_preview(extra==1?41:15,extra==1?30:0);}
+    open(Page::extras,now);extra_=extra;music_view_=std::move(music);extra_grid_=std::move(grid);
 }
-bool Application::back(std::int64_t now){observe(now);if(pages_.size()==1)return false;const auto leaving=page();if(leaving==Page::extras && music_view_){title_scene_->music_preview({},120);music_view_.reset();extra_=-1;}pages_.pop_back();if(leaving==Page::options)options_view_.reset();if(leaving==Page::save || leaving==Page::load)save_view_.reset();if(leaving==Page::backlog)close_backlog();if(page()==Page::title && title_scene_ && title_scene_->view().phase()==TitlePhase::modal)title_scene_->resume();release_input_=true;suspend_scene(now);return true;}
+bool Application::back(std::int64_t now){observe(now);if(pages_.size()==1)return false;const auto leaving=page();if(leaving==Page::extras && (music_view_ || extra_grid_)){title_scene_->music_preview({},120);music_view_.reset();extra_grid_.reset();extra_=-1;}pages_.pop_back();if(leaving==Page::options)options_view_.reset();if(leaving==Page::save || leaving==Page::load)save_view_.reset();if(leaving==Page::backlog)close_backlog();if(page()==Page::title && title_scene_ && title_scene_->view().phase()==TitlePhase::modal)title_scene_->resume();release_input_=true;suspend_scene(now);return true;}
+void Application::return_replay(std::int64_t now){
+    if(!scene_ || !scene_->replay_mode() || !replay_return_)throw std::logic_error("Native replay has no retained extra owner");if(scene_revision_==std::numeric_limits<std::uint64_t>::max())throw std::overflow_error("Native scene revision exhausted");
+    auto& returning=*replay_return_;returning.title->preferences(preferences());returning.title->music_preview(15,0);scene_->flush_progress();returning.title->pause(background_,now);
+    close_backlog();save_view_.reset();options_view_.reset();scene_.reset();title_scene_=std::move(returning.title);extra_grid_=std::move(returning.grid);extra_=returning.extra;replay_return_.reset();
+    pages_={Page::title,Page::extras};release_input_=true;++scene_revision_;
+}
 void Application::title(std::int64_t now){
+    if(scene_ && scene_->replay_mode() && replay_return_){observe(now);return_replay(now);return;}
     observe(now);const auto seed=scene_?scene_->random_state():title_scene_?title_scene_->random_state():seed_;std::unique_ptr<TitleScene> next;
     if(title_setup_){next=std::make_unique<TitleScene>(opener_,progress_,preferences_.current(),title_setup_->content,title_setup_->startup,seed,title_setup_->services);next->pause(background_,now);}
-    if(scene_)scene_->flush_progress();close_backlog();save_view_.reset();music_view_.reset();scene_.reset();title_scene_=std::move(next);options_view_.reset();seed_=seed;extra_=-1;pages_.resize(1);pages_[0]=Page::title;release_input_=true;
+    if(scene_)scene_->flush_progress();close_backlog();save_view_.reset();music_view_.reset();extra_grid_.reset();replay_return_.reset();scene_.reset();title_scene_=std::move(next);options_view_.reset();seed_=seed;extra_=-1;pages_.resize(1);pages_[0]=Page::title;release_input_=true;
 }
 void Application::background(bool value,std::int64_t now){observe(now);if(background_==value)return;background_=value;release_input_=true;suspend_scene(now);if(value)progress_->flush();}
 void Application::save(unsigned slot){require_open();if(!scene_)throw std::logic_error("Native save requires an active story");saves_.write(slot,scene_->checkpoint());}
 void Application::load(unsigned slot,std::int64_t now){
-    observe(now);auto bytes=saves_.read(slot);if(!bytes)throw std::runtime_error("Native save slot is empty");auto next=Scene::restore(opener_,progress_,*bytes,now,resolver_,preferences_.current(),services_);replace_scene(std::move(next),now);
+    observe(now);auto bytes=saves_.read(slot);if(!bytes)throw std::runtime_error("Native save slot is empty");auto next=Scene::restore(opener_,progress_,*bytes,now,resolver_,preferences_.current(),services_);const bool replay=next->replay_mode()!=0;replace_scene(std::move(next),now);if(!replay)replay_return_.reset();
 }
 FrameBatch Application::frame(std::int64_t now,Input input,const std::function<std::int64_t()>& clock,FrameBudget budget){
     observe(now);
     if(recover_clock_){suspend_scene(now);recover_clock_=false;input={};}
-    if(input.cancel && pages_.size()>1 && !(page()==Page::options && options_view_) && !save_view_ && !backlog_view_ && !music_view_){back(now);input={};}
+    if(input.cancel && pages_.size()>1 && !(page()==Page::options && options_view_) && !save_view_ && !backlog_view_ && !music_view_ && !extra_grid_){back(now);input={};}
+    if(page()==Page::extras && extra_grid_){
+        title_scene_->update(now);if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}
+        try{extra_grid_->update({input.selection,input.cancel || input.toggle_window,input.page_delta});if(auto command=extra_grid_->take_command()){
+                if(command->kind==ExtraGridCommand::Kind::close)back(now);else start({"9999",0,std::int32_t(command->entry)},now);}}
+        catch(const std::exception& error){if(extra_grid_ && extra_grid_->phase()==ExtraGridPhase::idle)back(now);if(error_)report_error(error.what(),now);else throw;}
+        return {script::RunState::yielded,0};
+    }
     if(page()==Page::extras && music_view_){
         title_scene_->update(now);if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}
         music_view_->update({input.selection,input.cancel || input.toggle_window,input.page_delta});if(auto command=music_view_->take_command()){
@@ -209,5 +228,5 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
     }
     const auto batch=scene_->advance_frame(now,input,clock,budget);if(scene_->title_requested())title(now);else if(batch.state==script::RunState::stopped)throw script::Unsupported("Native story ended without a title transition");return batch;
 }
-void Application::close(std::int64_t now){observe(now);if(scene_)scene_->flush_progress();progress_->flush();close_backlog();save_view_.reset();music_view_.reset();scene_.reset();title_scene_.reset();options_view_.reset();pages_.resize(1);pages_[0]=Page::closed;release_input_=true;}
+void Application::close(std::int64_t now){observe(now);if(scene_)scene_->flush_progress();progress_->flush();close_backlog();save_view_.reset();music_view_.reset();extra_grid_.reset();replay_return_.reset();scene_.reset();title_scene_.reset();options_view_.reset();pages_.resize(1);pages_[0]=Page::closed;release_input_=true;}
 }

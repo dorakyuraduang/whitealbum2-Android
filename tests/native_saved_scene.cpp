@@ -16,6 +16,8 @@ int main(int argc,char** argv){try{
     const auto saved=value.encode();const auto restored=g::SavedScene::decode(saved);CHECK(restored.encode()==saved && restored.scene==value.scene && restored.random==value.random && restored.logical_us==value.logical_us && restored.ticks==value.ticks);++cases;
     for(unsigned n=0;n<restored.parts.size();++n){auto in=c::Reader::open(g::scene_part_tags[n],restored.parts[n]);CHECK(in.u32()==n);in.finish();++cases;}
     for(auto clock:{std::int64_t(0),std::numeric_limits<std::int64_t>::max()}){auto changed=value;changed.logical_us=clock;CHECK(g::SavedScene::decode(changed.encode()).logical_us==clock);++cases;}
+    for(unsigned entry:{0u,1u,24u}){auto changed=value;changed.replay=entry;CHECK(g::SavedScene::decode(changed.encode()).replay==entry);++cases;}
+    for(unsigned entry:{25u,std::numeric_limits<unsigned>::max()}){auto changed=value;changed.replay=entry;rejects([&]{changed.encode();});++guards;}
     auto corrupt=saved;corrupt.back()^=1;rejects([&]{g::SavedScene::decode(corrupt);});++guards;
     for(unsigned size:{0u,15u,unsigned(saved.size()-1)}){rejects([&]{g::SavedScene::decode(std::span(saved).first(size));});++guards;}
     const auto name=unsigned(value.scene.size());for(auto [at,data]:std::array<std::pair<unsigned,unsigned>,5>{{{16,0x80000000},{24,65536},{52,241},{56+name,2},{76+name,18}}}){rejects([&]{g::SavedScene::decode(patch(saved,at,data));});++guards;}

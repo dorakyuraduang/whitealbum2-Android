@@ -6,10 +6,11 @@
 #include "save_view.hpp"
 #include "backlog_view.hpp"
 #include "music_view.hpp"
+#include "extra_grid.hpp"
 
 namespace wa2::game {
 enum class Page {title,story,options,save,load,backlog,extras,closed};
-struct StoryStart {std::string scene{"1001"};std::int32_t label{};bool replay{};};
+struct StoryStart {std::string scene{"1001"};std::int32_t label{},replay{};};
 struct SaveStamp {SaveDate date;std::uint64_t milliseconds{};};
 struct SaveServices {
     SaveView::Loader images;
@@ -43,6 +44,9 @@ class Application {
     std::unique_ptr<BacklogView> backlog_view_;
     MusicView::Loader extras_loader_;
     std::unique_ptr<MusicView> music_view_;
+    std::unique_ptr<ExtraGrid> extra_grid_;
+    struct ReplayReturn {std::unique_ptr<TitleScene> title;std::unique_ptr<ExtraGrid> grid;std::int32_t extra;};
+    std::optional<ReplayReturn> replay_return_;
     std::vector<script::BacklogVoice> replay_;
     std::size_t replay_next_{};
     std::optional<std::size_t> replay_entry_;
@@ -63,6 +67,7 @@ class Application {
     void close_backlog();
     void control(script::StoryControl,std::int64_t now);
     void report_error(std::string_view,std::int64_t now);
+    void return_replay(std::int64_t now);
 public:
     Application(resource::BankOpener,std::shared_ptr<progress::Store>,std::shared_ptr<PreferenceStorage>,std::shared_ptr<SaveStorage>,Scene::SavedImageResolver,std::uint32_t seed=1,SceneServices services={});
     Page page()const noexcept{return pages_.back();}
@@ -77,6 +82,7 @@ public:
     const SaveView* save_view()const noexcept{return save_view_.get();}
     const BacklogView* backlog_view()const noexcept{return backlog_view_.get();}
     const MusicView* music_view()const noexcept{return music_view_.get();}
+    const ExtraGrid* extra_grid()const noexcept{return extra_grid_.get();}
     text::PreparedText menu_text(std::string_view,const text::TextStyle&);
     std::int32_t extra()const noexcept{return extra_;}
     bool background()const noexcept{return background_;}

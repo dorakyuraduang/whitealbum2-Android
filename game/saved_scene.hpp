@@ -15,7 +15,8 @@ struct SavedScene {
     std::uint32_t random{},command{};
     std::uint64_t ticks{},messages{},voices{};
     std::string scene;
-    bool background_changing{},preserve_characters{},window_visible{true},skip_read_only{true},replay{};
+    bool background_changing{},preserve_characters{},window_visible{true},skip_read_only{true};
+    std::uint32_t replay{};
     std::array<Bytes,unsigned(ScenePart::count)> parts;
     Bytes& part(ScenePart p){return parts.at(unsigned(p));}
     const Bytes& part(ScenePart p)const{return parts.at(unsigned(p));}

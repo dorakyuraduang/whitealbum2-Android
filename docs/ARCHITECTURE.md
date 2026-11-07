@@ -862,9 +862,31 @@ has one outstanding atlas request and starts at most two new requests per tick;
 it copies only needed flag booleans, not the multi-megabyte progress blocks.
 Synthetic atlas/input/voice tests cover the application route and retained-frame
 composition without opening a device. Animated transitions, level meters and
-device appearance remain unverified. CG/replay/voice-comment views are still
+device appearance remain unverified. The voice-comment view is still
 pending; cached source 0x42a6d0 is a voice-comment menu using `9500_...` speech,
 not a movie gallery. No native release or whole-game compatibility is claimed.
+
+`game/extra_grid.*` now shares native gallery/replay navigation, immutable visible
+images and presentation. Its content-only catalogue has 168 gallery groups and
+24 replay entries from the existing cached tables. Unlock tests use gallery
+bank zero and exact replay flags; unavailable IC cards cannot start a story.
+Visible `tv...` thumbnails and full `v...` variants come from the external `grp`
+catalogue, including its authorized IC fallback. Page loading commits only when
+all requested pictures are ready, retaining the previous visible page on a
+provider or decoder error. Full gallery display loads only seen variants and
+retains its current image on a failed replacement. There is one outstanding
+image request and at most two new page requests per update.
+
+Replay starts the common `9999` resource script with the original 1-based entry
+number. `GetReplayMode` and native aggregate snapshots preserve 0..24 instead of
+collapsing every entry to a boolean. The existing four-byte field keeps old 0/1
+snapshots byte-compatible; numbers above 24 remain errors. While a replay runs,
+its title/grid owner is retained with audio paused. Returning or loading within
+that session restores the same page/mixer without startup films or atlas
+reloads. Synthetic LSCR checks explicitly assign entry 24 to a global, round-trip
+its saved scene and return to the retained page. Importing original manual
+slots, reconstructing a replay's menu after application restart, full source
+page transitions/counters and visual/device verification remain pending.
 
 ## Current released implementation
 
