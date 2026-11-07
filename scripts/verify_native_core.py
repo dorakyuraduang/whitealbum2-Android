@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--zig-cache',type=Path,default=ROOT/'build/zig-cache')
     parser.add_argument('--resource-root',type=Path,help='Optionally parse external ck-gal.pak script records; never execute them')
     parser.add_argument('--sdl-archive',type=Path,help='Optional existing Windows SDL2 archive for finite owned-memory composition checks')
+    parser.add_argument('--android-sdl-library',type=Path,help='Optional existing Android SDL2 library for a native JNI/SDL entry link check; never loaded')
     parser.add_argument('--shader-compiler',type=Path,default=ROOT/'tools/glslang/16.6.0/bin/glslang.exe',help='Offline GLSL compiler; no GL context is created')
     args=parser.parse_args()
     if os.name!='nt':raise SystemExit('This local verifier requires the existing Windows Zig/Android NDK tools')
@@ -62,6 +63,12 @@ def main():
         ROOT/'platform/sdl_input.hpp',ROOT/'platform/sdl_input.cpp',ROOT/'platform/sdl_application.hpp',ROOT/'platform/sdl_application.cpp']
     inputs += [ROOT/'tests/native_image_wait.cpp',ROOT/'tests/native_bootstrap.cpp',ROOT/'platform/native_application.hpp',ROOT/'platform/native_application.cpp',ROOT/'platform/native_services.cmake',
         ROOT/'android/game/game_host.cpp',ROOT/'android/game/CMakeLists.txt',ROOT/'android/native/android_host.hpp',ROOT/'android/native/android_resources.hpp']
+    inputs += [ROOT/p for p in ('tests/android_jni_services.cpp','android/game/entry.cmake','android/game/game_jni.cpp',
+        'android/native/service_lifecycle.hpp','android/native/frame_hud_jni.hpp','android/native/frame_hud_jni.cpp',
+        'android/native/frame_metrics.hpp','android/native/frame_metrics.cpp','android/native/frame_metrics_jni.cpp',
+        'android/native/android_entry.cpp','android/native/android_resources.cpp','android/native/resource_jni.hpp',
+        'android/native/widgets_jni.hpp','android/native/shell_jni.hpp','platform/resource_fd.hpp','platform/resource_fd.cpp',
+        'hosts/CMakeLists.txt')]
     inputs += [ROOT/'tests/native_preference_storage.cpp',ROOT/'platform/private_file.cpp',ROOT/'platform/private_file.hpp',ROOT/'platform/preference_storage.cpp',ROOT/'platform/preference_storage.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
@@ -80,6 +87,8 @@ def main():
         return subprocess.run(list(map(str,command)),cwd=ROOT,env=env,creationflags=flags,capture_output=True,text=True,encoding='utf-8',errors='replace',check=True,timeout=60).stdout
     sources={};artifacts={};codec_bindings={};composition_state=None;composition_artifact=None;sdl_application=None;input_state=None
     composition_sdl_sha=digest(args.sdl_archive) if args.sdl_archive else None
+    android_sdl_sha=digest(args.android_sdl_library) if args.android_sdl_library else None
+    android_entry_artifact=None
     shader_compiler_sha=digest(args.shader_compiler);mask_shader_checks=[]
     with (ROOT/'logs/native-core-build.log').open('wb') as console:
         for host in ('windows','android'):
@@ -87,7 +96,8 @@ def main():
             configure=[cmake,'-S',ROOT/'native','-B',directory,'-G','Ninja','-DCMAKE_BUILD_TYPE=MinSizeRel',
                 '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DCMAKE_MAKE_PROGRAM='+str(ninja)]
             if host=='windows':configure+=['-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DWA2_NATIVE_SDL_ARCHIVE='+(str(args.sdl_archive.resolve()) if args.sdl_archive else '')]
-            else:configure+=['-DCMAKE_TOOLCHAIN_FILE='+str(ndk/'build/cmake/android.toolchain.cmake'),'-DANDROID_ABI=arm64-v8a','-DANDROID_PLATFORM=android-26','-DANDROID_STL=c++_shared']
+            else:configure+=['-DCMAKE_TOOLCHAIN_FILE='+str(ndk/'build/cmake/android.toolchain.cmake'),'-DANDROID_ABI=arm64-v8a','-DANDROID_PLATFORM=android-26','-DANDROID_STL=c++_shared',
+                '-DWA2_NATIVE_ANDROID_SDL_LIBRARY='+(str(args.android_sdl_library.resolve()) if args.android_sdl_library else '')]
             print('Configuring and building '+host+' native core; one hidden low-priority job.',flush=True)
             run(configure,console)
             targets=['wa2_native_link_check','wa2_native_presentation_check']+(['wa2_native_progress_tests','wa2_native_script_state_tests','wa2_native_control_state_tests','wa2_native_camera_state_tests','wa2_native_voice_state_tests','wa2_native_novel_state_tests','wa2_native_weather_state_tests','wa2_native_calendar_state_tests','wa2_native_animation_state_tests','wa2_native_scene_geometry_tests','wa2_native_shake_state_tests','wa2_native_world_state_tests','wa2_native_image_style_tests','wa2_native_caption_state_tests','wa2_native_selection_state_tests'] if host=='windows' else [])
@@ -105,8 +115,9 @@ def main():
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
-            if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_bootstrap_tests']
-            if host=='android':targets+=['wa2_native_android_host_check']
+            if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
+            if host=='android':targets+=['wa2_native_android_host_check','wa2_retained_android_jni_check']
+            if host=='android' and args.android_sdl_library:targets+=['wa2_native_android_entry_check']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows' and args.sdl_archive:targets+=['wa2_native_sdl_application_tests','wa2_native_input_tests']
@@ -131,7 +142,10 @@ def main():
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
             allowed+=('tests/native_image_wait.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
-            if host=='android':allowed+=('android/game/game_host.cpp',)
+            allowed+=('tests/android_jni_services.cpp',)
+            if host=='android':allowed+=('android/game/game_host.cpp','android/game/game_jni.cpp','android/native/android_entry.cpp',
+                'android/native/android_resources.cpp','android/native/frame_metrics.cpp','android/native/frame_hud_jni.cpp',
+                'android/native/frame_metrics_jni.cpp','platform/resource_fd.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -170,6 +184,28 @@ def main():
             if host=='android':
                 header=output([llvm/'llvm-readelf.exe','-h',library])
                 if 'AArch64' not in header:raise ValueError('Native Android component has wrong architecture')
+                if args.android_sdl_library:
+                    entry=directory/'libwa2_native_android_entry_check.so'
+                    entry_graph=output([ninja,'-C',directory,'-t','graph',entry.name]).replace('\\','/').lower()
+                    if any(token in entry_graph for token in forbidden):raise ValueError('Recompilation dependency in native Android entry link graph')
+                    entry_symbols=output([llvm/'llvm-nm.exe','--defined-only','--demangle',entry])
+                    for token in ('wr::','wa2::aot::','code_page_','native_backend_','initialize_widgets_jni','initialize_shell_jni','mount_compiled_resources'):
+                        if token in entry_symbols:raise ValueError('Legacy runtime service in native Android entry: '+token)
+                    for token in ('JNI_OnLoad','JNI_OnUnload','SDL_main','Java_org_wa2_port_Wa2Activity_nativeResetFrameMetrics',
+                            'wa2::android::run_game(','wa2::android::frame_presented(','wa2::android::open_resource_bank(',
+                            'wa2::platform::SdlApplication::run(','wa2::platform::SdlAudio::open(','wa2::game::Application::frame('):
+                        if token not in entry_symbols:raise ValueError('Missing native Android entry service: '+token)
+                    entry_header=output([llvm/'llvm-readelf.exe','-h',entry])
+                    if 'AArch64' not in entry_header:raise ValueError('Native Android entry has wrong architecture')
+                    entry_dynamic=output([llvm/'llvm-readelf.exe','-d',entry])
+                    if 'libSDL2.so' not in entry_dynamic or any(name in entry_dynamic for name in ('libwa2_android.so','libwinrecomp')):
+                        raise ValueError('Invalid native Android entry dynamic dependencies')
+                    entry_sources=sorted({Path(item['file']).resolve().relative_to(ROOT).as_posix() for item in commands
+                        if Path(item['output']).resolve().relative_to(directory.resolve()).as_posix().lower() in entry_graph})
+                    if not set(sources[host]).issubset(entry_sources):raise ValueError('Native Android entry does not use the complete common core')
+                    android_entry_artifact=dict(file=str(entry),sha256=digest(entry),bytes=entry.stat().st_size,
+                        native_link_graph_sha256=hashlib.sha256(entry_graph.encode()).hexdigest(),compiled_sources=entry_sources,
+                        symbol_and_dynamic_dependencies_audited=True,library_loaded=False,apk_created=False)
             artifacts[host]=dict(file=str(library),sha256=digest(library),bytes=library.stat().st_size,
                 native_archives_sha256={p.relative_to(directory).as_posix():digest(p) for p in archives},
                 symbol_audit_scope='PE exports and link-input archives' if host=='windows' else 'linked ELF symbols',
@@ -311,6 +347,11 @@ def main():
                 run([directory/'wa2_native_bootstrap_tests.exe',directory/'native-bootstrap.json',directory/'native-bootstrap-owned'],console,90)
                 bootstrap=json.loads((directory/'native-bootstrap.json').read_text())
                 if not bootstrap['passed'] or bootstrap['cases']<17 or bootstrap['guards']<11 or not bootstrap['source_ic_presence_rule'] or not bootstrap['title_story_storage_connected'] or not bootstrap['native_preferences_reopened'] or not bootstrap['saved_image_wait_not_polled'] or not bootstrap['test_mode_persisted_after_prepare'] or not bootstrap['failed_prepare_writes_nothing'] or not bootstrap['fake_movies_only'] or not bootstrap['synthetic_resources_only'] or bootstrap['original_resources_opened'] or bootstrap['devices_opened'] or bootstrap['game_launched'] or bootstrap['screen_access']:raise ValueError('Native shared bootstrap checks failed')
+                run([directory/'wa2_android_jni_service_tests.exe',directory/'android-jni-services.json'],console,90)
+                jni_services=json.loads((directory/'android-jni-services.json').read_text())
+                if not jni_services['passed'] or jni_services['cases']<21 or jni_services['guards']<6 or not all(jni_services[key] for key in
+                        ('native_and_retained_service_sets','partial_registration_unwound','reverse_release_order','retry_after_failure','fake_services_only')) or any(jni_services[key] for key in
+                        ('java_vm_created','devices_opened','game_launched','screen_access')):raise ValueError('Android JNI service lifecycle checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -341,6 +382,7 @@ def main():
     for name,sha in bindings.items():
         if digest(ROOT/name)!=sha:raise ValueError('Native verification source changed: '+name)
     if args.sdl_archive and digest(args.sdl_archive)!=composition_sdl_sha:raise ValueError('SDL archive changed during owned-memory verification')
+    if args.android_sdl_library and digest(args.android_sdl_library)!=android_sdl_sha:raise ValueError('Android SDL2 library changed during entry link verification')
     if digest(args.shader_compiler)!=shader_compiler_sha:raise ValueError('Offline shader compiler changed during verification')
     report=dict(schema='wa2.native-core.v1',source_sha256=bindings,codec_archives_sha256=codec_bindings,
         native_compiled_sources=sources['windows'],same_native_game_sources=True,artifacts=artifacts,progress=checks,script_state=script_state,control_state=control_state,camera_state=camera_state,voice_state=voice_state,novel_state=novel_state,weather_state=weather_state,calendar_state=calendar_state,animation_state=animation_state,geometry_state=geometry_state,shake_state=shake_state,world_state=world_state,image_styles=image_styles,caption_state=caption_state,selection_state=selection_state,composition_state=composition_state,composition_artifact=composition_artifact,composition_sdl_archive_sha256=composition_sdl_sha,mask_shader_checks=mask_shader_checks,shader_compiler_sha256=shader_compiler_sha,presentation_adapter_compiled=True,presentation_adapter_linked=composition_state is not None,resource_script_catalogue=catalogue,
@@ -377,7 +419,11 @@ def main():
     report['image_wait']=image_wait
     report['bootstrap']=bootstrap
     report['android_native_host_compiled']=True
-    report['android_native_host_linked']=False
+    report['android_native_host_linked']=android_entry_artifact is not None
+    report['android_native_entry']=android_entry_artifact
+    report['android_sdl_library_sha256']=android_sdl_sha
+    report['android_jni_services']=jni_services
+    report['retained_android_jni_compiled']=True
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

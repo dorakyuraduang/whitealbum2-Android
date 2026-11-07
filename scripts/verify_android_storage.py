@@ -18,7 +18,8 @@ def main():
     inputs=[ROOT/p for p in ('platform/resource_fd.hpp','platform/resource_fd.cpp','platform/file_io.cpp',
         'engine/resource_archive.hpp','engine/resource_archive.cpp','tests/resource_descriptors.cpp',
         'android/native/android_resources.hpp','android/native/android_resources.cpp','android/native/resource_jni.hpp',
-        'android/native/frame_metrics_jni.cpp','android/CMakeLists.txt','platform/portable.cmake',
+        'android/native/frame_metrics_jni.cpp','android/native/frame_hud_jni.cpp','android/native/frame_hud_jni.hpp',
+        'android/native/service_lifecycle.hpp','android/game/game_jni.cpp','android/CMakeLists.txt','platform/portable.cmake',
         'tests/android/org/wa2/port/ArchiveNamesTest.java','tests/android/org/wa2/port/ResourceLocationTest.java',
         'scripts/verify_android_storage.py')]
     inputs+=list((ROOT/'android/app/src/main/java/org/wa2/port').glob('*.java'))
@@ -38,7 +39,7 @@ def main():
                 cwd=ROOT,env=environment,creationflags=flags,stdout=console,stderr=subprocess.STDOUT,timeout=120,check=True)
         commands=[[*common,'-target','x86_64-windows-gnu',*map(str,objects),'-o',str(program)],
             [*common,'-target','aarch64-linux-musl','-c',str(ROOT/'platform/resource_fd.cpp'),'-o',str(arm)]]
-        for source in ('android_resources','frame_metrics_jni'):
+        for source in ('android_resources','frame_metrics_jni','frame_hud_jni'):
             commands.append([*common,'-target','x86_64-windows-gnu','-D__ANDROID__','-DSDL_STATIC',
                 '-I'+str(ROOT/'tools/SDL-release-2.32.10/include'),'-I'+str(jdk/'include'),'-I'+str(jdk/'include/win32'),
                 '-c',str(ROOT/'android/native'/f'{source}.cpp'),'-o',str(directory/f'{source}-jni-syntax.obj')])

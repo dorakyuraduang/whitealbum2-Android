@@ -33,6 +33,20 @@ if(ANDROID)
     add_library(wa2_native_android_host_check STATIC "${WA2_ROOT}/android/game/game_host.cpp")
     target_include_directories(wa2_native_android_host_check PRIVATE "${WA2_ROOT}/android/native" "${WA2_ROOT}/platform" "${WA2_ROOT}/tools/SDL-release-2.32.10/include")
     target_link_libraries(wa2_native_android_host_check PRIVATE wa2_native_application)
+    add_library(wa2_retained_android_jni_check STATIC "${WA2_ROOT}/android/native/frame_metrics_jni.cpp")
+    target_include_directories(wa2_retained_android_jni_check PRIVATE "${WA2_ROOT}/android/native")
+    set(WA2_NATIVE_ANDROID_SDL_LIBRARY "" CACHE FILEPATH "Existing Android SDL2 library for native entry link checks")
+    if(WA2_NATIVE_ANDROID_SDL_LIBRARY)
+        if(NOT EXISTS "${WA2_NATIVE_ANDROID_SDL_LIBRARY}")
+            message(FATAL_ERROR "The requested Android SDL2 library does not exist")
+        endif()
+        add_library(SDL2 SHARED IMPORTED)
+        set_target_properties(SDL2 PROPERTIES IMPORTED_LOCATION "${WA2_NATIVE_ANDROID_SDL_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${WA2_ROOT}/tools/SDL-release-2.32.10/include")
+        include("${WA2_ROOT}/android/game/entry.cmake")
+        # Full native JNI/SDL/resources/audio entry link; not loaded or packaged.
+        wa2_add_native_android_entry(wa2_native_android_entry_check)
+    endif()
 endif()
 add_executable(wa2_native_progress_tests "${WA2_ROOT}/tests/native_progress.cpp")
 target_link_libraries(wa2_native_progress_tests PRIVATE wa2_script wa2_native_progress_storage)
@@ -118,6 +132,8 @@ add_executable(wa2_native_image_wait_tests "${WA2_ROOT}/tests/native_image_wait.
 target_link_libraries(wa2_native_image_wait_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_bootstrap_tests "${WA2_ROOT}/tests/native_bootstrap.cpp")
 target_link_libraries(wa2_native_bootstrap_tests PRIVATE wa2_native_application)
+add_executable(wa2_android_jni_service_tests "${WA2_ROOT}/tests/android_jni_services.cpp")
+target_include_directories(wa2_android_jni_service_tests PRIVATE "${WA2_ROOT}/android/native")
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -201,6 +217,7 @@ if(NOT ANDROID)
     add_test(NAME native_audio_binding COMMAND wa2_native_audio_binding_tests "${CMAKE_BINARY_DIR}/native-audio-binding.json")
     add_test(NAME native_image_wait COMMAND wa2_native_image_wait_tests "${CMAKE_BINARY_DIR}/native-image-wait.json")
     add_test(NAME native_bootstrap COMMAND wa2_native_bootstrap_tests "${CMAKE_BINARY_DIR}/native-bootstrap.json" "${CMAKE_BINARY_DIR}/native-bootstrap-owned")
+    add_test(NAME android_jni_services COMMAND wa2_android_jni_service_tests "${CMAKE_BINARY_DIR}/android-jni-services.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

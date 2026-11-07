@@ -11,7 +11,9 @@ The current released APK still uses AOT; a linkable component is not a full port
 script engine, resource/media components and native progress adapter. It never
 includes `hosts/`, `recompiled/`, `generated/` or `port/`. Its link-check library
 forces all existing native scene dependencies to resolve on Windows x64 and
-Android ARM64. It has no launchable application and is never loaded by tests.
+Android ARM64. Check libraries are never loaded by tests. An optional Android
+SDL/JNI entry link uses an existing SDL2 dependency; it does not create an APK
+or replace the released application.
 The verification checks actual compile commands, Ninja link dependency closure
 and native symbols; the game does not fall back to AOT when a command is missing.
 
@@ -576,7 +578,7 @@ adapters and never creates a window or selects a platform-specific script engine
 exercise rendering, actual-present counting, cache reset, background suspension
 and scene/mixer replacement using fake device outputs and constructed events.
 The full loop is compiled, not run, during development; tests never poll an OS
-event queue. Complete modal pages and final application entry/JNI wiring remain
+event queue. Complete modal pages and final application packaging remain
 pending, so this is still not a launchable complete game release.
 
 `platform/native_application.*` supplies shared startup policy and private
@@ -604,9 +606,20 @@ bootstrap and SDL application loop. It creates the Android window/canvas,
 supplies authorized PAK descriptors, a separate `native-game` private directory,
 clock/wait adapters and the successful-present callback. It no longer owns
 another story scheduler, skip timer, manual draw ordering or raw mixer device.
-The NDK compiles this entry without launching it. Android's retained release
-root still selects the AOT host; native JNI/final APK wiring and remaining full
-views are not complete, and no new native APK is produced by these checks.
+The NDK compiles this entry without launching it. With an existing Android
+SDL2 library, the verifier also links the actual SDL_main/JNI entry, resource
+descriptor adapter, common SDL drawing/audio loop, native bootstrap and complete
+common scene into one ARM64 library. It checks the real link graph, defined
+symbols and dynamic dependencies, including the HUD-reset JNI export. The new
+entry does not initialize the Win32 widget/shell bridges or mount a compiled
+game image. Shared HUD registration and presentation counters serve both native
+and retained hosts. JNI service registration releases partially initialized
+owners in reverse order on failure; constructed service checks cover every
+failure position and retry for both service sets, without creating a JVM.
+The retained JNI entry is separately compiled with the NDK after this split.
+Android's retained release root still selects the AOT host; final APK selection,
+remaining full page views and device behavior remain migration work. The native
+entry library is linked but never loaded, started or copied into a release APK.
 
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate

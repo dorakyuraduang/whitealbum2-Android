@@ -22,6 +22,7 @@ if(ANDROID)
         "${WA2_ROOT}/android/native/android_resources.cpp"
         "${WA2_ROOT}/android/native/compiled_resources.cpp"
         "${WA2_ROOT}/android/native/frame_metrics.cpp"
+        "${WA2_ROOT}/android/native/frame_hud_jni.cpp"
         "${WA2_ROOT}/android/native/frame_metrics_jni.cpp")
     target_include_directories(wa2_android PRIVATE "${WA2_ROOT}/android/native" "${WA2_ROOT}/engine" "${WA2_ROOT}/platform")
     target_link_libraries(wa2_android PRIVATE wa2_shared_startup log android)

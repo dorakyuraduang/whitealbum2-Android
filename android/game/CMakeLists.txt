@@ -2,10 +2,7 @@ if(NOT TARGET wa2_game_scene)
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../game" native_scene EXCLUDE_FROM_ALL)
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/../../platform/native_services.cmake")
-add_library(wa2_game_arm64 STATIC game_host.cpp)
-target_sources(wa2_game_arm64 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../../platform/sdl_application.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../platform/sdl_presentation.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/../../platform/sdl_audio.cpp")
-target_compile_features(wa2_game_arm64 PUBLIC cxx_std_20)
-target_include_directories(wa2_game_arm64 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../native")
-target_link_libraries(wa2_game_arm64 PUBLIC wa2_game_scene wa2_native_application wa2_native_audio_binding wa2_canvas wa2_platform SDL2 PRIVATE log android)
-set_target_properties(wa2_game_arm64 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+include("${CMAKE_CURRENT_SOURCE_DIR}/entry.cmake")
+# This incomplete migration library is separate from the retained AOT release.
+# A complete native APK is not selected by android/CMakeLists.txt yet.
+wa2_add_native_android_entry(wa2_native_android)
