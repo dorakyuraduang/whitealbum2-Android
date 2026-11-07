@@ -1048,6 +1048,16 @@ without reading a device or screen. Explicit cache clearing releases its pixel
 owners while leaving active scene/request owners and their metadata intact;
 later requests or pending completions may warm it again.
 
+Replay grids include the original `sys_05300` description strip and
+`sys_05301` sixteen-pixel rows. Hover selects `page*12+ordinal` at logical
+position (104,608). The original hit selector excludes disabled rectangles, so
+locked rows receive neither pointer focus nor a scene description. Leaving the
+card or beginning a page change hides its row. The static strip sits at (104,624). Gallery pages do not
+request these replay-only pictures. A locked CODA replay uses `sys_05903` until
+clear flag 5 is set, then `sys_05902` for an unseen individual scene. Marker
+pixels and exact crop/input checks use constructed images; the three external
+atlas headers additionally enter the static metadata audit.
+
 The native script library reuses an immutable parsed LSCR Program while an
 existing scene/call owns it. The cache contains weak program references, never
 Runtime objects, locals, globals, flow stacks or an old scene kept alive for

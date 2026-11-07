@@ -33,6 +33,7 @@ private:
     struct PageData {unsigned page{};std::vector<ExtraGridRow> rows;std::vector<Asset> assets;};
     struct Pending {PageData data;unsigned next{};std::shared_ptr<image::ImageRequest> request;};
     Loader loader_;Sound sound_;ExtraGridKind kind_{ExtraGridKind::gallery};TitleContent content_;
+    bool coda_complete_{};
     std::array<std::array<bool,10>,168> gallery_{};std::array<bool,24> replay_{};
     std::vector<unsigned> pages_;PageData data_;std::optional<Pending> pending_;
     std::shared_ptr<const image::Raster> black_,full_,previous_full_;
