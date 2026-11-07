@@ -3,11 +3,14 @@
 #include "save_storage.hpp"
 #include "private_file.hpp"
 #include "checkpoint_codec.hpp"
+#include "save_catalog.hpp"
 #include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <condition_variable>
+#include <atomic>
 
 namespace g=wa2::game;namespace i=wa2::image;namespace c=wa2::checkpoint;namespace fs=std::filesystem;
 using Bytes=std::vector<std::uint8_t>;
@@ -39,6 +42,15 @@ int main(int argc,char** argv){try{
     for(auto date:std::array<g::SaveDate,10>{{{0,1,1},{10000,1,1},{2025,2,29},{2000,257,1},{2000,1,257},{2000,1,1,7},{2000,1,1,1,24},{2000,1,1,1,0,60},{2000,1,1,1,0,0,60},{2000,0,1}}}){rejects([&]{date.validate();});++guards;}++cases;
     for(unsigned n=0;n<7;++n){auto invalid=preview;if(n==0)invalid.scene="../escape";if(n==1)invalid.scene.clear();if(n==2)invalid.description=std::string(257,'a');if(n==3)invalid.description=std::string("a\0b",3);if(n==4)invalid.saved_ms=253402300800000ull;if(n==5)invalid.thumbnail=std::make_shared<i::Raster>(i::Raster{1,1,{1,2,3,4}});if(n==6)invalid.legacy=true;rejects([&]{invalid.encode();});++guards;}++cases;
     auto no_picture=preview;no_picture.thumbnail.reset();CHECK(!g::SavePreview::decode(no_picture.encode()).thumbnail);++cases;
+    auto classified=preview;classified.story_known=true;classified.story_code=122122;const auto classified_copy=g::SavePreview::decode(classified.encode());CHECK(classified_copy.story_known && classified_copy.story_code==122122);++cases;
+    classified.story_known=false;rejects([&]{classified.encode();});++guards;classified.story_known=true;classified.story_code=10000000;rejects([&]{classified.encode();});++guards;
+    {c::Writer old;for(auto v:{preview.date.year,preview.date.month,preview.date.day,preview.date.weekday,preview.date.hour,preview.date.minute,preview.date.second})old.i32(v);old.u64(preview.saved_ms);old.string(preview.scene);old.string(preview.description);old.boolean(false);const auto legacy=g::SavePreview::decode(old.seal("WASP"));CHECK(!legacy.story_known && !legacy.story_code && !legacy.thumbnail && legacy.date==preview.date);}++cases;
+    CHECK(g::save_description("\x81\x40" "ABC\\nDEF")=="ABC" && g::save_description("ABC\nDEF")=="ABC" && g::save_description(std::string(24,'a'))==std::string(24,'a'));++cases;
+    CHECK(g::save_description(std::string(25,'a'))==std::string(24,'a')+"\x81\x63");CHECK(g::save_description(std::string(23,'a')+"\x81\x40")==std::string(23,'a')+"\x81\x63");CHECK(g::save_description("<F20"+std::string(30,'a'))=="<F20"+std::string(20,'a')+">\x81\x63");rejects([&]{g::save_description("\x81");});++guards;++cases;
+    rejects([&]{g::SavePreviewRequest bad({});});++guards;
+    {std::mutex gate;std::condition_variable wake;bool released{};std::atomic<bool> entered{};g::SavePreviewRequest request([&]()->std::optional<g::SavePreview>{std::unique_lock lock(gate);entered=true;CHECK(wake.wait_for(lock,std::chrono::seconds(5),[&]{return released;}));return preview;});
+        const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);while(!entered){CHECK(std::chrono::steady_clock::now()<deadline);std::this_thread::sleep_for(std::chrono::milliseconds(1));}CHECK(!request.get());{std::lock_guard lock(gate);released=true;}wake.notify_all();while(!request.get()){CHECK(std::chrono::steady_clock::now()<deadline);std::this_thread::sleep_for(std::chrono::milliseconds(1));}CHECK(request.get()->value->description==preview.description && request.get()->diagnostic.empty());}++cases;
+    {g::SavePreviewRequest broken([]()->std::optional<g::SavePreview>{throw std::runtime_error("owned broken preview");});const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);while(!broken.get()){CHECK(std::chrono::steady_clock::now()<deadline);std::this_thread::sleep_for(std::chrono::milliseconds(1));}CHECK(!broken.get()->value && broken.get()->diagnostic=="owned broken preview");}++cases;
     auto storage=std::make_shared<Memory>();g::SaveSlots slots(storage);CHECK(!slots.preview(3) && !storage->full_reads);slots.write(3,document);CHECK(storage->writes==1 && storage->files[3]==bytes);++cases;
     const auto slot_preview=slots.preview(3);CHECK(slot_preview && slot_preview->description==preview.description && !storage->full_reads && storage->prefix_reads==2 && storage->largest_request==g::SaveDocument::prefix_bytes);CHECK(*slots.read(3)==document.snapshot && storage->full_reads==1);++cases;
     storage->fail=true;auto replacement=document;replacement.preview.description="replacement";rejects([&]{slots.write(3,replacement);});++guards;storage->fail=false;CHECK(storage->writes==1 && slots.preview(3)->description==preview.description && *slots.read(3)==document.snapshot);++cases;

@@ -2,6 +2,7 @@
 // the full native scene and storage adapter, including methods not used by the
 // synthetic progress test. They are not the released application's ABI.
 #include "scene.hpp"
+#include "save_view.hpp"
 #include "application.hpp"
 #include "title_view.hpp"
 #include "options_view.hpp"
@@ -61,6 +62,9 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_script_state(wa2::script::
 }
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_dialogue_state(wa2::script::SceneDialogue* dialogue,const std::uint8_t* data,std::size_t size){
     if(data)dialogue->restore({data,size});return dialogue->checkpoint().size();
+}
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_save_view(wa2::game::SaveView* view,const wa2::game::SaveInput* input){
+    view->update(input?*input:wa2::game::SaveInput{});return view->sprites().size();
 }
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_backlog_state(wa2::script::SceneBacklog* backlog,const std::uint8_t* data,std::size_t size){
     if(data)backlog->restore({data,size});return backlog->checkpoint().size();

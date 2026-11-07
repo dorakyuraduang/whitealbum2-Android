@@ -7,6 +7,7 @@ Application::Application(resource::BankOpener opener,std::shared_ptr<progress::S
     if(!opener_ || !progress_ || !resolver_)throw std::invalid_argument("Missing native application resources, progress or image resolver");
 }
 void Application::require_open()const{if(page()==Page::closed)throw std::logic_error("Native application is closed");}
+text::PreparedText Application::menu_text(std::string_view raw,const text::TextStyle& style){require_open();if(scene_)return scene_->menu_text(raw,style);if(title_scene_)return title_scene_->menu_text(raw,style);throw std::logic_error("Native menu text requires a prepared scene");}
 void Application::observe(std::int64_t now){require_open();if(now<0 || (clock_started_ && now<observed_))throw std::invalid_argument("Native application clock moved backwards");observed_=now;clock_started_=true;}
 void Application::suspend_scene(std::int64_t now){if(scene_)scene_->suspend(background_ || page()!=Page::story,background_,now);if(title_scene_)title_scene_->pause(background_,now);}
 void Application::replace_scene(std::unique_ptr<Scene> next,std::int64_t now){

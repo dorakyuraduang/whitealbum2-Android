@@ -722,7 +722,7 @@ claim follows from these component checks. Existing generated C++/CFG is a
 development reference, never a native-runtime dependency.
 
 The native manual-save browser now has a separate `game/save_document.*`
-storage boundary. Its small WASP preview (local date, ordering timestamp, raw
+storage boundary. Its small WSP2 preview (local date, ordering timestamp, raw
 font description and optional 128x72 RGBA thumbnail) and LSGS scene payload have
 independent checksums in a WASF container. `SaveSlots::preview` reads at most
 131084 bytes; the production private-file adapter reads only that prefix rather
@@ -733,7 +733,37 @@ as legacy entries without invented preview details. Slot I/O is serialized for
 the forthcoming asynchronous browser. Writes retain atomic publication and
 original-save isolation. The shared checkpoint CRC now uses a constant table
 with the same polynomial/output; finite reference/known-vector checks cover file
-compatibility. This storage work by itself is not the completed save/load view.
+compatibility. Earlier WASP previews remain readable; WSP2 additionally records
+the source calendar/chapter classification. Source descriptions retain their
+first-line, 24-byte character boundary, formatting-scope closure and ellipsis.
+
+`game/save_view.*` supplies the native save/load view component with the source
+two columns of five rows, ten wrapping page tabs, previous/next arrows, title
+badge, latest-slot marker, quick-load control and alternate-bank selector. The
+100 manual slots use 0..99, the quick slot uses 100, and the optional second
+read-only view uses native slots 200..299. Those are private native names, not a
+conversion of an original save directory. One joined `SavePreviewRequest` reads
+metadata at a time, while the displayed page retains its image owners until the
+incoming page is ready. Atlas preparation has one pending image and at most two
+new image requests per logic tick. Metadata/decoder failures remain explicit;
+invalid slots cannot emit a load command. Empty saves, overwrite confirmation,
+load confirmation, cancellation, pending-operation input gating, result display
+and failed-operation retry are shared game state. Newly saved empty slots remain
+discoverable when paging away and back.
+
+Menu numbers/dates use the cached sixteen-column ASCII bitmap grid in
+`sys_01013.tga` with 12x16 cells. The source's neutral brightness 128 maps to
+RGB 255, rather than changing alpha. Chapter badges retain the source type/sub
+rows and calendar month/day cells. Original atlas headers supply dimensions;
+view tests allocate blank pixels and deferred glyph metrics, so they verify
+geometry and state, not original font pixels, appearance or device compatibility.
+This component has not yet been connected to application save/load commands.
+
+The bootstrap now prepares menu descriptions through its current story/title
+owner. Story menus reuse the existing FontBook; the title creates a lazy one.
+An options confirmation no longer creates a second long-lived copy of the
+same source font pages alongside an active story. Glyph images still own their
+pixels independently and can outlive scene/view replacement in a retained frame.
 
 ## Current released implementation
 

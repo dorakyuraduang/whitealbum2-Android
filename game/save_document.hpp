@@ -14,6 +14,8 @@ struct SavePreview {
     std::uint64_t saved_ms{};
     std::string scene,description;
     std::shared_ptr<const image::Raster> thumbnail;
+    std::uint32_t story_code{};
+    bool story_known{};
     bool legacy{};
     void validate()const;
     std::vector<std::uint8_t> encode()const;
@@ -31,4 +33,5 @@ struct SaveDocument {
     static SavePreview inspect(std::span<const std::uint8_t> prefix);
     static bool wrapped(std::span<const std::uint8_t>)noexcept;
 };
+std::string save_description(std::string_view raw);
 }

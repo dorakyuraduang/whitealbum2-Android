@@ -36,6 +36,7 @@ class TitleScene {
     std::unique_ptr<movie::Playback> movie_;
     TitleServices services_;
     Preferences preferences_;
+    std::unique_ptr<text::FontBook> menu_fonts_;
     TitleContent content_;
     TitleStartup startup_;
     TitleStage stage_;
@@ -62,5 +63,6 @@ public:
     std::optional<TitleCommand> take_command(){return stage_==TitleStage::view?view_.take_command():std::optional<TitleCommand>{};}
     std::uint32_t random_state()const noexcept{return random_.state();}
     bool paused()const noexcept{return timeline_.paused();}
+    text::PreparedText menu_text(std::string_view,const text::TextStyle&);
 };
 }

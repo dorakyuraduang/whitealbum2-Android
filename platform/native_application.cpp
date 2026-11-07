@@ -24,9 +24,8 @@ std::unique_ptr<game::Application> native_application(resource::BankOpener opene
     application->prepare_title(content,startup.title,std::move(title));
     auto menu_resources=std::make_shared<resource::Catalog>(opener);
     application->prepare_options([menu_resources](std::string_view name){return menu_resources->image("grp",name);},{},
-        [menu_resources,fonts=std::shared_ptr<text::FontBook>{}](std::string_view prompt)mutable{
-            if(!fonts)fonts=std::make_shared<text::FontBook>(menu_resources->required("fon"));
-            text::TextStyle style;style.size=28;style.columns=15;style.rows=2;style.line_gap=0;return fonts->prepare(text::layout(prompt,style));});
+        [owner=application.get()](std::string_view prompt){
+            text::TextStyle style;style.size=28;style.columns=15;style.rows=2;style.line_gap=0;return owner->menu_text(prompt,style);});
     // A failed title/provider preparation must not persist test-mode changes.
     if(startup.test_mode)progress->flush();return application;
 }

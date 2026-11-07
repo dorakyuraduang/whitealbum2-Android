@@ -73,6 +73,12 @@ std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
 void Scene::options_preview_effects(){game::options_preview_effects(effects_,preferences_);}
 void Scene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
 void Scene::options_reset_sound(){game::options_reset_sound(effects_);}
+std::uint32_t Scene::save_story_code()const{
+    const auto flag=[&](std::string_view name){for(const auto& variable:library_.globals().variables())if(variable.name==name)return variable.value.integer();throw script::Error("Missing native save classification global");};
+    const auto& date=calendar_.date();const auto theme=flag("FLG_00"),sub=flag("FLG_\x8f\xcd\x8a\xc7\x97\x9d\x83T\x83u");
+    const auto code=std::int64_t(date.month*100+date.day)*100+std::int64_t(theme)*10+sub;
+    if(theme<0 || theme>6 || sub<0 || sub>9 || code<0 || code>9999999)throw script::Unsupported("Native save story classification is out of range");return std::uint32_t(code);
+}
 void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);reading_.enter(scene);choices_.clear();backlog_.clear();title_requested_=false;statistics_.scene=scene;}
 script::CommandResult Scene::command(script::Command& call){
     statistics_.command=call.index;

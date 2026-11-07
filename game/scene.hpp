@@ -122,6 +122,8 @@ public:
     void options_preview_voice();
     void options_reset_sound();
     const Preferences& preferences()const noexcept{return preferences_;}
+    text::PreparedText menu_text(std::string_view raw,const text::TextStyle& style){return fonts_.prepare(text::layout(raw,style));}
+    std::uint32_t save_story_code()const;
     void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
     void flush_progress(){reading_.finish();}
     std::vector<std::uint8_t> checkpoint()const;

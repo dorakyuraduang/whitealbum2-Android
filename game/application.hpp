@@ -45,6 +45,7 @@ public:
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return scene_?scene_->mixer():title_scene_?title_scene_->mixer():nullptr;}
     const TitleScene* title_scene()const noexcept{return title_scene_.get();}
     const OptionsView* options_view()const noexcept{return options_view_.get();}
+    text::PreparedText menu_text(std::string_view,const text::TextStyle&);
     std::int32_t extra()const noexcept{return extra_;}
     bool background()const noexcept{return background_;}
     const Preferences& preferences()const noexcept{return preferences_.current();}

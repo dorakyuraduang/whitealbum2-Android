@@ -93,6 +93,7 @@ public:
     explicit Library(resource::Archive archive);
     std::shared_ptr<const Program> load(std::string_view scene) const;
     Globals& globals() noexcept {return globals_;}
+    const Globals& globals() const noexcept {return globals_;}
     const Functions& functions() const noexcept {return functions_;}
 private:
     resource::Archive archive_;

@@ -28,6 +28,7 @@ void TitleScene::preferences(const Preferences& value){
 void TitleScene::options_preview_effects(){game::options_preview_effects(effects_,preferences_);}
 void TitleScene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
 void TitleScene::options_reset_sound(){game::options_reset_sound(effects_);}
+text::PreparedText TitleScene::menu_text(std::string_view raw,const text::TextStyle& style){if(!menu_fonts_)menu_fonts_=std::make_unique<text::FontBook>(resources_.required("fon"));return menu_fonts_->prepare(text::layout(raw,style));}
 void TitleScene::begin_movie(std::string_view stem){
     const auto name=std::string(stem)+char('0'+startup_.movie_suffix)+".pak";
     auto next=services_.movie?services_.movie(name):std::make_unique<movie::Player>(resources_.movie(name),mixer_);
