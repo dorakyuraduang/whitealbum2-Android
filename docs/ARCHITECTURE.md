@@ -858,6 +858,16 @@ reduces the history layout's portion count. Checks exercise actual common
 message commands and sequential replay, and render glyph sprites from
 uniform synthetic indexed font sheets. No original glyph pixels are read.
 
+The active script's reading context now follows cached 4187ab..4187dc before
+each unpaused story update. Waiting for the next dialogue callback left a
+replacement's prelude or a returning caller on the previous script's read
+row. Read-only fast-forward could then use an unrelated chapter's next-line
+bit. This sync also records the departing line marker before entering another
+catalogue row, including child-return paths with no immediate parent dialogue.
+An unchanged name returns before searching the catalogue. Paused logic does
+not move this state. Constructed scene-load/call/return scripts check the
+read flags, persisted end markers and unread waits, without game playback.
+
 The nine bottom controls now share their cached hit rectangles with the
 dialogue renderer. Their quick-save/load, settings, save/load, history, skip,
 auto and window actions are processed before story advancement. Input is

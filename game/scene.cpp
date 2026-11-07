@@ -140,6 +140,9 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     timeline_.sample(monotonic_us);
     if(title_requested_)return script::RunState::stopped;
     if(timeline_.paused())return script::RunState::yielded;
+    // Cached 4187ab..4187dc follows the active script before running it.
+    // Prelude waits/read-only skip must not retain the previous chapter's row.
+    if(const auto active=session_.active())reading_.enter(active->program().name());
     if(dialogue_.speaker()==-1)backlog_.clear_voice();
     selection_.sync(choices_);if(input.choice>=0){if(replay_mode_ && !choices_.previously_chosen(std::uint32_t(input.choice)))system_sounds_.play(audio::SystemCue::reject);else choose(std::uint32_t(input.choice));}
     else if(auto selected=selection_.input(input.selection))choose(*selected);

@@ -13,6 +13,7 @@ std::uint32_t row(std::string_view scene){const auto found=std::find(catalogue.b
 }
 void SceneReadHistory::enter(std::string_view scene){
     if(!progress_)throw Error("Missing native reading-history storage");
+    if(scene_==scene)return;
     const auto next=row(scene);
     if(next!=index_){
         if(last_line_!=0 || index_==29 || index_==30 || index_==31){

@@ -54,6 +54,8 @@ add_executable(wa2_native_script_state_tests "${WA2_ROOT}/tests/native_script_st
 target_link_libraries(wa2_native_script_state_tests PRIVATE wa2_script)
 add_executable(wa2_native_control_state_tests "${WA2_ROOT}/tests/native_control_state.cpp")
 target_link_libraries(wa2_native_control_state_tests PRIVATE wa2_script)
+add_executable(wa2_native_scene_context_tests "${WA2_ROOT}/tests/native_scene_context.cpp")
+target_link_libraries(wa2_native_scene_context_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_camera_state_tests "${WA2_ROOT}/tests/native_camera_state.cpp")
 target_link_libraries(wa2_native_camera_state_tests PRIVATE wa2_script)
 add_executable(wa2_native_voice_state_tests "${WA2_ROOT}/tests/native_voices.cpp")
