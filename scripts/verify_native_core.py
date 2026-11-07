@@ -62,7 +62,7 @@ def main():
     inputs += [ROOT/p for p in ('platform/native_user_menu.hpp','platform/sdl_user_command.hpp','android/game/user_menu_jni.hpp','android/game/user_menu_jni.cpp','hosts/native-android/CMakeLists.txt')]
     inputs += [ROOT/p for p in ('tests/native_desktop.cpp','platform/native_desktop.hpp','platform/native_desktop.cpp',
         'platform/native_host.hpp','platform/native_host.cpp','platform/native_host.cmake','hosts/native/CMakeLists.txt',
-        'hosts/native/entry.cmake','hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')]
+        'hosts/native/entry.cmake','hosts/native/windows_main.cpp','hosts/app.rc.in','icon.ico','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')]
     inputs += [ROOT/'tests/native_preferences.cpp']
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']

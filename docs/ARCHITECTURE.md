@@ -9,7 +9,8 @@ The current released APK still uses AOT; a linkable component is not a full port
 
 `native/CMakeLists.txt` is an independent build root for the common native scene,
 script engine, resource/media components and native progress adapter. It never
-includes `hosts/`, `recompiled/`, `generated/` or `port/`. Its link-check library
+includes the retained `hosts/CMakeLists.txt`, `recompiled/`, `generated/` or
+`port/` runtime. Its link-check library
 forces all existing native scene dependencies to resolve on Windows x64 and
 Android ARM64. Check libraries are never loaded by tests. An optional Android
 SDL/JNI entry link uses an existing SDL2 dependency; it does not create an APK
@@ -946,11 +947,17 @@ the current decoder is not restarted when that preference changes. Title and
 story owners both apply it to the next external clip. An explicit bootstrap
 suffix is reserved for controlled integrations. Missing selected movie files
 remain resource errors, rather than silently changing a user's selection.
-`WAP3` preferences retain `WAPR` and `WAP2` decoding, with high quality as their
+`WAP4` preferences retain `WAPR`, `WAP2` and `WAP3` decoding, with high quality as their
 compatible default. The original window-management dialog contains four
 opacity sliders and a visibility switch, already covered by the common native
-options view; it is not a separate skin/colour picker. Window-size and renderer
-menus, information pages and exact extra-page animation remain migration work.
+options view; it is not a separate skin/colour picker. The three original
+windowed sizes now share application policy and transaction rollback with
+fullscreen. Android does not enable desktop resizing. Version/environment
+information uses common command policy and an SDL presentation service, pausing
+the active owner and rebasing its clock/input after a blocking native dialog.
+The desktop entry embeds the provided root icon. Legacy D3D-only renderer
+options, desktop menu chrome and exact extra-page animation remain migration
+work; this does not establish full-story or physical presentation compatibility.
 
 ## Current released implementation
 

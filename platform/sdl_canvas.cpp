@@ -95,6 +95,24 @@ CanvasWindowServices SdlCanvas::window_services(){
         const auto state=weak.lock();if(!state)throw std::runtime_error("Native display adapter is closed");state->enter();auto* window=SDL_RenderGetWindow(state->renderer);
         if(!window)throw std::runtime_error("Native display adapter has no window");if(SDL_SetWindowFullscreen(window,enabled?SDL_WINDOW_FULLSCREEN_DESKTOP:0))fail("change native display mode");
     };
+#ifndef __ANDROID__
+    services.resize=[weak](std::int32_t size){
+        const auto state=weak.lock();if(!state)throw std::runtime_error("Native display adapter is closed");state->enter();auto* window=SDL_RenderGetWindow(state->renderer);
+        if(!window)throw std::runtime_error("Native display adapter has no window");constexpr std::array<int,3> widths{1280,1024,800};
+        if(size<0 || size>=int(widths.size()))throw std::invalid_argument("Invalid native window-size choice");SDL_SetWindowSize(window,widths[unsigned(size)],widths[unsigned(size)]*9/16);
+    };
+#endif
+    services.information=[weak](std::string_view title,std::string_view text){
+        const auto state=weak.lock();if(!state)throw std::runtime_error("Native information adapter is closed");state->enter();auto* window=SDL_RenderGetWindow(state->renderer);
+        if(!window)throw std::runtime_error("Native information adapter has no window");const auto heading=std::string(title),body=std::string(text);
+        if(SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,heading.c_str(),body.c_str(),window))fail("show native information");
+    };
+    services.environment=[weak]{
+        const auto state=weak.lock();if(!state)throw std::runtime_error("Native information adapter is closed");state->enter();SDL_RendererInfo renderer{};SDL_version version{};SDL_GetVersion(&version);
+        if(SDL_GetRendererInfo(state->renderer,&renderer))fail("query native renderer");int width{},height{};if(SDL_GetRendererOutputSize(state->renderer,&width,&height))fail("query native output size");
+        return std::string("Platform: ")+SDL_GetPlatform()+"\nSDL: "+std::to_string(version.major)+"."+std::to_string(version.minor)+"."+std::to_string(version.patch)+
+            "\nRenderer: "+(renderer.name?renderer.name:"unknown")+"\nOutput: "+std::to_string(width)+"x"+std::to_string(height)+"\nGame coordinates: 1280x720";
+    };
     services.error=[weak](std::string_view diagnostic){
         const auto state=weak.lock();if(!state)throw std::runtime_error("Native error adapter is closed");state->enter();auto* window=SDL_RenderGetWindow(state->renderer);
         if(!window)throw std::runtime_error("Native error adapter has no window");const auto message=std::string(diagnostic.substr(0,8192));

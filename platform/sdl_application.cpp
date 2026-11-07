@@ -32,7 +32,14 @@ game::Input game_input(const InputSnapshot& events){
     constexpr std::array shortcuts{std::pair{SDL_SCANCODE_F1,game::UserCommand::settings},std::pair{SDL_SCANCODE_F2,game::UserCommand::save},std::pair{SDL_SCANCODE_F3,game::UserCommand::load},
         std::pair{SDL_SCANCODE_F5,game::UserCommand::quick_save},std::pair{SDL_SCANCODE_F6,game::UserCommand::quick_load},std::pair{SDL_SCANCODE_F7,game::UserCommand::backlog},std::pair{SDL_SCANCODE_F8,game::UserCommand::hide},
         std::pair{SDL_SCANCODE_F9,game::UserCommand::automatic},std::pair{SDL_SCANCODE_F10,game::UserCommand::skip},std::pair{SDL_SCANCODE_F11,game::UserCommand::fullscreen}};
-    for(const auto& [key,command]:shortcuts)if(events.pressed_keys[key]){if(input.commands.size()==game::maximum_user_commands)throw std::invalid_argument("Native menu input exceeds its limit");input.commands.push_back(command);}
+    const auto command=[&](game::UserCommand value){if(input.commands.size()==game::maximum_user_commands)throw std::invalid_argument("Native menu input exceeds its limit");input.commands.push_back(value);};
+    for(const auto& [key,value]:shortcuts)if(events.pressed_keys[key])command(value);
+    if(events.pressed_keys[SDL_SCANCODE_F12])command(events.keys[SDL_SCANCODE_LSHIFT] || events.keys[SDL_SCANCODE_RSHIFT]?game::UserCommand::environment:game::UserCommand::about);
+    if(events.keys[SDL_SCANCODE_LALT] || events.keys[SDL_SCANCODE_RALT]){
+        constexpr std::array window_keys{SDL_SCANCODE_1,SDL_SCANCODE_2,SDL_SCANCODE_3};
+        for(unsigned n=0;n<window_keys.size();++n)if(events.pressed_keys[window_keys[n]])command(game::UserCommand(unsigned(game::UserCommand::window_hd)+n));
+        if(events.pressed_keys[SDL_SCANCODE_H])command(game::UserCommand::movie_high);if(events.pressed_keys[SDL_SCANCODE_L])command(game::UserCommand::movie_low);
+    }
     return input;
 }
 SdlApplication::SdlApplication(game::Application& application,SdlCanvas& canvas,game::DriverSettings settings,AudioOutputFactory factory,std::function<void()> submitted)
@@ -40,6 +47,7 @@ SdlApplication::SdlApplication(game::Application& application,SdlCanvas& canvas,
     audio_(factory?std::move(factory):AudioOutputFactory([](audio::Mixer& mixer){return std::make_unique<SdlAudio>(mixer);})),submitted_(std::move(submitted)){
     if(!application.has_save_thumbnail())application.prepare_save_thumbnail([](game::Scene& scene){game::RenderFrame frame;frame.capture(scene);return save_thumbnail(frame);});
     auto window=canvas.window_services();if(window.fullscreen)application.prepare_display(std::move(window.fullscreen));if(window.error)application.prepare_errors(std::move(window.error));
+    if(window.resize)application.prepare_window_sizes(std::move(window.resize));if(window.information)application.prepare_information(std::move(window.information),std::move(window.environment));
 }
 game::DriverFrame SdlApplication::pump(std::int64_t now,const InputSnapshot& events,const Clock& clock){
     const auto result=driver_.pump(now,{game_input(events),events.background || events.minimized || !events.focused,events.quit},clock);

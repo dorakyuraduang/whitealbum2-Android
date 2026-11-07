@@ -33,7 +33,7 @@ Preferences options_preferences(const OptionsState& state,const Preferences& pre
 }
 OptionsTiming options_timing(const Preferences& prefs){prefs.validate();return {unsigned(prefs.transition_frames(15)),unsigned(prefs.transition_frames(7)),unsigned(prefs.transition_frames(15))};}
 Preferences options_defaults(const Preferences& previous){
-    previous.validate();Preferences next;next.fullscreen=previous.fullscreen;next.captions=previous.captions;next.movie_quality=previous.movie_quality;
+    previous.validate();Preferences next;next.fullscreen=previous.fullscreen;next.captions=previous.captions;next.movie_quality=previous.movie_quality;next.window_size=previous.window_size;
     // Cached 0x41a2f0 keeps the display mode and restores speech to 256,
     // unlike its 195 static initialization value. Host window size is separate.
     next.speech=256;return next;

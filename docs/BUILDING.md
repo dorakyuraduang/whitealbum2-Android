@@ -356,6 +356,13 @@ Resource discovery uses external PAKs beside the program or in a `res` child
 before checking the working directory. Settings/native slots use SDL's separate
 private data path; no PAK is extracted or embedded.
 
+The native desktop input adapter exposes F1 settings, F2/F3 save/load,
+F5/F6 quick save/load, F7 backlog, F8 hide, F9 auto, F10 skip and F11 fullscreen.
+F12 opens version information; Shift+F12 opens environment information.
+Alt+1/2/3 choose the three windowed sizes, and Alt+H/L choose next-clip video
+quality. These submit the same typed commands as the native Android menu;
+none execute game policy in a platform-specific implementation.
+
 `verify_native_core.py --sdl-archive <existing software-reference SDL archive>`
 also links `wa2_native_windows_entry_check.exe`. This is an unlaunched GUI/x64
 link artifact against a reference dependency without production device drivers.

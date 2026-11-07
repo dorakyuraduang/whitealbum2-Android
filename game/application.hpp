@@ -53,6 +53,9 @@ class Application {
     std::size_t replay_next_{};
     std::optional<std::size_t> replay_entry_;
     std::function<void(bool)> display_;
+    std::function<void(std::int32_t)> resize_;
+    std::function<void(std::string_view,std::string_view)> information_;
+    std::function<std::string()> environment_;
     std::function<void(std::string_view)> error_;
     std::int32_t extra_{-1};
     std::vector<Page> pages_{Page::title};
@@ -70,6 +73,7 @@ class Application {
     void control(script::StoryControl,std::int64_t now);
     void report_error(std::string_view,std::int64_t now);
     void return_replay(std::int64_t now);
+    void information(bool environment,std::int64_t now);
 public:
     Application(resource::BankOpener,std::shared_ptr<progress::Store>,std::shared_ptr<PreferenceStorage>,std::shared_ptr<SaveStorage>,Scene::SavedImageResolver,std::uint32_t seed=1,SceneServices services={});
     Page page()const noexcept{return pages_.back();}
@@ -92,6 +96,8 @@ public:
     const Preferences& preferences()const noexcept{return preferences_.current();}
     bool preferences(const Preferences&);
     void prepare_display(std::function<void(bool)>);
+    void prepare_window_sizes(std::function<void(std::int32_t)>);
+    void prepare_information(std::function<void(std::string_view,std::string_view)>,std::function<std::string()> = {});
     void prepare_errors(std::function<void(std::string_view)>);
     void prepare_title(TitleContent,TitleStartup={},TitleServices={});
     // Wiring is separate from opening: constructing the application does not

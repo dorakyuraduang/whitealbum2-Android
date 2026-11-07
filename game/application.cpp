@@ -15,14 +15,30 @@ void Application::replace_scene(std::unique_ptr<Scene> next,std::int64_t now){
     next->suspend(background_,background_,now);if(scene_)scene_->flush_progress();close_backlog();save_view_.reset();music_view_.reset();extra_grid_.reset();commentary_view_.reset();seed_=next->random_state();scene_=std::move(next);title_scene_.reset();options_view_.reset();extra_=-1;pages_.resize(1);pages_[0]=Page::story;release_input_=true;++scene_revision_;
 }
 bool Application::preferences(const Preferences& next){
-    require_open();next.validate();const auto state=options_view_?std::optional(options_state(next)):std::nullopt;const auto previous=preferences();const bool display_changed=display_ && next.fullscreen!=previous.fullscreen;
-    if(display_changed)display_(next.fullscreen);
-    try{if(!preferences_.replace(next))return false;}catch(const std::exception& original){
-        if(display_changed)try{display_(previous.fullscreen);}catch(const std::exception& rollback){throw std::runtime_error(std::string(original.what())+"; native display rollback failed: "+rollback.what());}throw;
+    require_open();next.validate();const auto state=options_view_?std::optional(options_state(next)):std::nullopt;const auto previous=preferences();
+    bool display_changed{},size_changed{};
+    try{
+        if(display_ && next.fullscreen!=previous.fullscreen){display_(next.fullscreen);display_changed=true;}
+        if(resize_ && next.window_size!=previous.window_size){resize_(next.window_size);size_changed=true;}
+        if(!preferences_.replace(next))return false;
+    }catch(const std::exception& original){
+        std::string rollback;
+        if(size_changed)try{resize_(previous.window_size);}catch(const std::exception& error){rollback+="; native window-size rollback failed: "+std::string(error.what());}
+        if(display_changed)try{display_(previous.fullscreen);}catch(const std::exception& error){rollback+="; native display rollback failed: "+std::string(error.what());}
+        if(!rollback.empty())throw std::runtime_error(std::string(original.what())+rollback);throw;
     }
     if(scene_)scene_->preferences(preferences_.current());if(title_scene_)title_scene_->preferences(preferences_.current());if(state){options_view_->state(*state);options_view_->timing(options_timing(next));}return true;
 }
 void Application::prepare_display(std::function<void(bool)> display){require_open();if(!display)throw std::invalid_argument("Missing native display adapter");display(preferences().fullscreen);display_=std::move(display);}
+void Application::prepare_window_sizes(std::function<void(std::int32_t)> resize){require_open();if(!resize)throw std::invalid_argument("Missing native window-size adapter");resize(preferences().window_size);resize_=std::move(resize);}
+void Application::prepare_information(std::function<void(std::string_view,std::string_view)> show,std::function<std::string()> environment){require_open();if(!show)throw std::invalid_argument("Missing native information adapter");information_=std::move(show);environment_=std::move(environment);}
+void Application::information(bool environment,std::int64_t now){
+    const auto message=environment?environment_():std::string("WHITE ALBUM2 ver.1.01\n(C) 2009,2011 Leaf/AQUAPLUS\nShared native engine");
+    if(message.empty() || message.size()>8192 || message.find('\0')!=std::string::npos)throw std::runtime_error("Invalid native information text");
+    if(clock_revision_==std::numeric_limits<std::uint64_t>::max())throw std::overflow_error("Native information clock revision exhausted");
+    if(scene_)scene_->suspend(true,true,now);if(title_scene_)title_scene_->pause(true,now);
+    recover_clock_=release_input_=true;++clock_revision_;information_(environment?"WA2 environment":"WHITE ALBUM2",message);
+}
 void Application::prepare_errors(std::function<void(std::string_view)> error){require_open();if(!error)throw std::invalid_argument("Missing native operation error adapter");error_=std::move(error);}
 void Application::report_error(std::string_view diagnostic,std::int64_t now){
     if(clock_revision_==std::numeric_limits<std::uint64_t>::max())throw std::overflow_error("Native recovery clock revision exhausted");

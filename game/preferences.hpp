@@ -26,6 +26,9 @@ struct Preferences {
     // Cached high/low movie modes select external suffixes 0/1 respectively.
     // Changing quality affects the next clip, never restarts an active clip.
     std::int32_t movie_quality{};
+    // Original windowed choices: 1280x720, 1024x576 and 800x450. Hosts without
+    // resizable windows do not expose these commands; game coordinates stay HD.
+    std::int32_t window_size{};
     bool operator==(const Preferences&)const=default;
     void validate()const;
     float movie_amplitude()const;

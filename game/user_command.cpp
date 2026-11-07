@@ -9,6 +9,8 @@ UserMenuState Application::user_menu()const{
     enable(UserCommand::quit,true);enable(UserCommand::title,bool(scene_));enable(UserCommand::fullscreen,bool(display_));
     enable(UserCommand::settings,(story || title) && bool(options_loader_));
     enable(UserCommand::movie_high,true);enable(UserCommand::movie_low,true);
+    for(auto command:{UserCommand::window_hd,UserCommand::window_medium,UserCommand::window_small})enable(command,bool(resize_) && bool(display_));
+    enable(UserCommand::about,bool(information_));enable(UserCommand::environment,bool(information_) && bool(environment_));
     enable(UserCommand::save,story && bool(save_services_.images));enable(UserCommand::load,(story || title) && bool(save_services_.images));
     enable(UserCommand::quick_save,story && bool(save_services_.images) && bool(save_services_.stamp) && bool(save_services_.thumbnail));
     enable(UserCommand::quick_load,story && bool(save_services_.images));
@@ -16,6 +18,7 @@ UserMenuState Application::user_menu()const{
     for(auto command:{UserCommand::hide,UserCommand::automatic,UserCommand::skip})enable(command,story);
     if(preferences().fullscreen)state.checked|=command_bit(UserCommand::fullscreen);
     state.checked|=command_bit(preferences().movie_quality?UserCommand::movie_low:UserCommand::movie_high);
+    if(!preferences().fullscreen)state.checked|=command_bit(UserCommand(unsigned(UserCommand::window_hd)+unsigned(preferences().window_size)));
     if(scene_){if(!scene_->window_visible())state.checked|=command_bit(UserCommand::hide);if(scene_->modes().auto_mode)state.checked|=command_bit(UserCommand::automatic);if(scene_->modes().latched_skip)state.checked|=command_bit(UserCommand::skip);}
     return state;
 }
@@ -34,6 +37,8 @@ bool Application::user_command(UserCommand command,std::int64_t now){
     case UserCommand::skip:control(script::StoryControl::skip,now);break;
     case UserCommand::fullscreen:{auto next=preferences();next.fullscreen=!next.fullscreen;preferences(next);break;}
     case UserCommand::movie_high:case UserCommand::movie_low:{auto next=preferences();next.movie_quality=command==UserCommand::movie_low?1:0;preferences(next);break;}
+    case UserCommand::window_hd:case UserCommand::window_medium:case UserCommand::window_small:{auto next=preferences();next.fullscreen=false;next.window_size=int(command)-int(UserCommand::window_hd);preferences(next);break;}
+    case UserCommand::about:case UserCommand::environment:information(command==UserCommand::environment,now);break;
     case UserCommand::title:title(now);break;
     case UserCommand::quit:close(now);break;
     default:throw std::invalid_argument("Unknown native user command");

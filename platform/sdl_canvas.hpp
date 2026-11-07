@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 
 struct SDL_Renderer;
@@ -30,7 +31,10 @@ public:
 struct CanvasStatistics {std::uint64_t presents{},draws{},vertices{},uploads{};};
 struct CanvasWindowServices {
     std::function<void(bool)> fullscreen;
+    std::function<void(std::int32_t)> resize;
     std::function<void(std::string_view)> error;
+    std::function<void(std::string_view,std::string_view)> information;
+    std::function<std::string()> environment;
 };
 // Renderer/window ownership stays on the creating thread. Worker threads can
 // release texture handles: destruction is deferred to the rendering thread.
