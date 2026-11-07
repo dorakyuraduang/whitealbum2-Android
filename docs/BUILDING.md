@@ -392,3 +392,43 @@ the actual native-entry menu registration signatures and existing SDL JNI
 exports, then configures/audits the full production Android root. Reports are
 `logs/native-android-ui.json` and `logs/native-android-definition.json`. These
 artifacts are verification components; no native game APK is released yet.
+
+The real device-backend targets can also be built without launching them:
+
+```powershell
+python scripts/build_native_hosts.py --check-only
+python scripts/build_native_hosts.py --host windows
+python scripts/build_native_hosts.py --host android
+```
+
+This requires fresh native-core, desktop/Android definition and native-Java
+reports. Each build checks source and imported-codec hashes before/after the
+operation, uses one hidden below-normal job on one CPU, and audits the actual
+production source/link closure. Its SDL window/OpenGL or GLES/audio/HID sources
+are distinct from the software-reference dependency used in memory tests.
+Reports are `logs/native-production-windows.json` and
+`logs/native-production-android.json`. No resulting binary is started.
+
+`scripts/package_native_preview.py` assembles separately named migration
+artifacts under `out/native-development`, using these production libraries and
+the verified native-only DEX. The development application ID is
+`org.wa2.port.nativeengine`; it neither overwrites the retained AOT APK nor
+shares its private saves. Its manifest uses fully qualified common Java entry
+classes, ARM64/API 26 and GLES 2, with no legacy widget/file-dialog adapters.
+Install-table alignment, signing, native load alignment and exact packaged
+library/DEX bytes are checked without installing an app. Original PAKs remain
+external and are selected in the existing launcher.
+
+The assembler also supplies `WA2-native-development-relink.zip`, containing
+the actual native application objects/archive order and corresponding FFmpeg
+source, build configuration and license. Both standalone linker recipes are
+checked without running their outputs. If disposable codec configurations were
+lost, only named configuration files may be recovered from the retained relink
+archive after checking its manifest and the unchanged codec-library proof;
+no retained AOT application object enters the native materials. The existing
+private development key is required, and no signing identity is created.
+
+These separately labelled development artifacts are unlaunched migration
+builds. Packaging does not establish whole-story, display/device compatibility
+or performance, and does not change the current released backend/completion
+flags in `config/porting_contract.json`.

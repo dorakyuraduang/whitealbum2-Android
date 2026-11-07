@@ -24,6 +24,16 @@ and application link materials for relinking with a modified LGPL library.
 `scripts/package_shared_hosts.py` checks the matching `WA2-shared-relink.zip`;
 publishing an APK or EXE alone is not the project's complete release procedure.
 
+The separate native-engine development assembler,
+`scripts/package_native_preview.py`, supplies
+`WA2-native-development-relink.zip` beside its unlaunched development APK and
+desktop archive. Its link materials come from the real native host targets,
+with corresponding FFmpeg source/configuration and independently checked
+native linker recipes. It does not include WinRecomp, MojoShader, generated
+game functions or retained AOT application objects. The WinRecomp/MojoShader
+entries above describe the retained AOT reference only. Packaging development
+artifacts does not establish complete gameplay or real-device compatibility.
+
 Original game resources and game-derived private build inputs have separate
 rights. They are not third-party open-source dependencies and must not be added
 to this repository or described as MIT-licensed assets.

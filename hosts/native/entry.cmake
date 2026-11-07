@@ -14,12 +14,12 @@ function(wa2_add_native_desktop_entry target)
         DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/${target}.rc" "${WA2_ROOT}/icon.ico" VERBATIM)
     set_source_files_properties("${icon_resource}" PROPERTIES GENERATED TRUE EXTERNAL_OBJECT TRUE)
     target_sources(${target} PRIVATE "${icon_resource}")
-    if(TARGET SDL2main)
-        target_link_libraries(${target} PRIVATE SDL2main)
-    else()
-        target_sources(${target} PRIVATE "${WA2_NATIVE_DESKTOP_ROOT}/tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c")
-        target_link_libraries(${target} PRIVATE shell32)
-    endif()
+    # Keep SDL's UTF-8 argument shim as a direct object. SDL2main's MinGW
+    # interface adds --undefined=WinMain, which Zig's COFF linker rejects.
+    # A direct WinMain object also prevents archive dead-stripping without
+    # requiring a toolchain-specific forced-symbol linker option.
+    target_sources(${target} PRIVATE "${WA2_NATIVE_DESKTOP_ROOT}/tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c")
+    target_link_libraries(${target} PRIVATE shell32)
     target_compile_features(${target} PRIVATE cxx_std_20)
     if(NOT MSVC)
         target_link_options(${target} PRIVATE "-Wl,--subsystem,windows")
