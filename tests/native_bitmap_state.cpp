@@ -28,6 +28,13 @@ int main(int argc,char** argv){try{
     invoke(bitmaps,176,{s::Value(3),s::Value(std::string("atlas.tga")),s::Value(14),s::Value(1),s::Value(std::string()),s::Value(256),s::Value(std::string("grp")),s::Value(0)});
     const auto pending=bitmaps.checkpoint(resources);chroma=0;const auto count=loads;restored.restore(pending,resources,resolve);CHECK(restored.loading() && restored.checkpoint(resources)==pending && loads==count);await(resources.image("grp","atlas.tga",256));bitmaps.update();restored.update();CHECK(bitmaps.checkpoint(resources)==restored.checkpoint(resources));++cases;
     const auto compare=[&](unsigned ticks){const auto saved=bitmaps.checkpoint(resources);const auto reads=loads;restored.restore(saved,resources,resolve);CHECK(restored.checkpoint(resources)==saved && reads==loads);compare_sprites(bitmaps.sprites(),restored.sprites());for(unsigned n=0;n<ticks;++n){bitmaps.update();restored.update();CHECK(bitmaps.checkpoint(resources)==restored.checkpoint(resources));compare_sprites(bitmaps.sprites(),restored.sprites());}};
+    invoke(bitmaps,191,{s::Value(3),s::Value(10),s::Value(20),s::Value(2.f)});
+    invoke(bitmaps,188,{s::Value(3),s::Value(30),s::Value(40)});CHECK(bitmaps.slot(3).pivot_x==10 && bitmaps.slot(3).pivot_y==20);
+    CHECK(bitmaps.sprites()[0].x==50 && bitmaps.sprites()[0].y==60);compare(0);++cases;
+    invoke(bitmaps,189,{s::Value(3),s::Value(65539),s::Value(-65543),s::Value(1),s::Value(2),s::Value(16),s::Value(12)});
+    CHECK(bitmaps.slot(3).x==65539 && bitmaps.slot(3).y==-65543 && bitmaps.slot(3).pivot_x==10 && bitmaps.slot(3).pivot_y==20);compare(0);++cases;
+    invoke(bitmaps,190,{s::Value(3),s::Value(13),s::Value(17),s::Value(65537),s::Value(-65539)});
+    CHECK(bitmaps.slot(3).width==65537 && bitmaps.slot(3).height==-65539 && bitmaps.slot(3).pivot_x==10 && bitmaps.slot(3).pivot_y==20);compare(0);++cases;
     invoke(bitmaps,189,{s::Value(3),s::Value(-12),s::Value(7),s::Value(1),s::Value(2),s::Value(16),s::Value(12)});invoke(bitmaps,190,{s::Value(3),s::Value(-8),s::Value(13),s::Value(32),s::Value(24)});
     invoke(bitmaps,186,{s::Value(3),s::Value(3)});invoke(bitmaps,187,{s::Value(3),s::Value(88),s::Value(111),s::Value(128)});invoke(bitmaps,191,{s::Value(3),s::Value(640),s::Value(360),s::Value(2.5f)});invoke(bitmaps,192,{s::Value(3),s::Value(640),s::Value(360),s::Value(512)});invoke(bitmaps,185,{s::Value(3),s::Value(3),s::Value(20),s::Value(12)});bitmaps.update();compare(15);++cases;
     for(int mode:{1,3,4,6}){invoke(bitmaps,185,{s::Value(3),s::Value(mode),s::Value(0),s::Value(0)});compare(1);CHECK(bitmaps.sprites().size()==unsigned(mode==4 || mode==6));++cases;}
@@ -35,6 +42,16 @@ int main(int argc,char** argv){try{
     bitmaps.retire_background();invoke(bitmaps,176,{s::Value(3),s::Value(std::string("atlas.tga")),s::Value(14),s::Value(1),s::Value(std::string()),s::Value(256),s::Value(std::string("grp")),s::Value(0)});await(resources.image("grp","atlas.tga",chroma));bitmaps.update();compare(2);CHECK(bitmaps.sprites().size()==2);++cases;
     bitmaps.clear_retired();restored.clear_retired();CHECK(bitmaps.checkpoint(resources)==restored.checkpoint(resources) && bitmaps.sprites().size()==1);++cases;
     invoke(bitmaps,177,{s::Value(7),s::Value(std::string("animation.ani")),s::Value(16),s::Value(std::string()),s::Value(256),s::Value(std::string("grp")),s::Value(1)});compare(0);CHECK(bitmaps.loading());++cases;bitmaps.update();compare(15);CHECK(bitmaps.sprites().size()==2 && bitmaps.slot(7).animation_validated);++cases;
+    invoke(bitmaps,190,{s::Value(7),s::Value(100),s::Value(200),s::Value(640),s::Value(360)});compare(0);
+    {const auto& draw=bitmaps.sprites().back();CHECK(draw.x==92 && draw.y==192 && draw.width==16 && draw.height==16 && draw.pivot_x==100 && draw.pivot_y==200 && draw.source_width==16 && draw.source_height==16);}++cases;
+    invoke(bitmaps,189,{s::Value(7),s::Value(-20),s::Value(30),s::Value(999),s::Value(-777),s::Value(0),s::Value(-10)});compare(2);
+    {const auto& draw=bitmaps.sprites().back();CHECK(draw.x==-28 && draw.y==22 && draw.width==16 && draw.height==16 && draw.source_y==0 && draw.source_width==16 && draw.source_height==16);}++cases;
+    invoke(bitmaps,191,{s::Value(7),s::Value(0),s::Value(0),s::Value(2.f)});compare(0);
+    {const auto& draw=bitmaps.sprites().back();CHECK(draw.x==-56 && draw.y==44 && draw.width==32 && draw.height==32 && draw.pivot_x==0 && draw.pivot_y==0);}++cases;
+    invoke(bitmaps,188,{s::Value(7),s::Value(65539),s::Value(-65543)});compare(0);
+    {const auto& draw=bitmaps.sprites().back();CHECK(draw.x==65523 && draw.y==-65559 && draw.width==32 && draw.height==32 && draw.pivot_x==65539 && draw.pivot_y==-65543);}++cases;
+    invoke(bitmaps,192,{s::Value(7),s::Value(65537),s::Value(-65539),s::Value(1073741824)});compare(0);
+    {const auto& draw=bitmaps.sprites().back();CHECK(draw.angle==0 && draw.pivot_x==65537 && draw.pivot_y==-65539);}++cases;
     bitmaps.retire_background();compare(3);CHECK(!bitmaps.slot(7).retiring && bitmaps.slot(3).retiring);++cases;
     bitmaps.clear_retired();restored.clear_retired();compare(0);CHECK(bitmaps.sprites().size()==1);const auto stable=bitmaps.checkpoint(resources);++cases;
     auto corrupt=stable;corrupt.back()^=1;rejects([&]{bitmaps.restore(corrupt,resources,resolve);});CHECK(bitmaps.checkpoint(resources)==stable);++guards;

@@ -61,13 +61,16 @@ std::optional<CommandResult> SceneBitmaps::dispatch(Command& command){
     }
     case 186:count(2);if((value(1)&~3)!=0)throw Unsupported("native bitmap reverse flags");checked(value(0)).flip=std::uint32_t(value(1));return done();
     case 187:{count(4);auto& item=checked(value(0));for(std::size_t n=0;n<3;++n){if(value(n+1)>128)throw Unsupported("native bitmap additive brightness");item.colour[n]=std::max(0,value(n+1));}return done();}
-    case 188:{count(3);auto& item=checked(value(0));item.pivot_x=item.x=short_value(1);item.pivot_y=item.y=short_value(2);return done();}
-    case 189:{count(7);auto& item=checked(value(0));if(item.animation)throw Unsupported("Native animated bitmap destination rectangles are not implemented");item.x=short_value(1);item.y=short_value(2);item.source_x=short_value(3);item.source_y=short_value(4);
-        item.pivot_x=item.x;item.pivot_y=item.y;item.width=item.source_width=short_value(5);item.height=item.source_height=short_value(6);return done();}
-    case 190:{count(5);auto& item=checked(value(0));if(item.animation)throw Unsupported("Native animated bitmap destination rectangles are not implemented");item.pivot_x=item.x=short_value(1);item.pivot_y=item.y=short_value(2);item.width=short_value(3);item.height=short_value(4);return done();}
+    // Cached setters 4249b0/424a60/424b80 pass full integer coordinates to
+    // the sprite layer. Only animation sprites (type 1) move their automatic
+    // pivot; ordinary images retain the explicitly assigned pivot.
+    case 188:{count(3);auto& item=checked(value(0));item.x=float(value(1));item.y=float(value(2));if(item.animation){item.pivot_x=item.x;item.pivot_y=item.y;}return done();}
+    case 189:{count(7);auto& item=checked(value(0));item.x=float(value(1));item.y=float(value(2));item.source_x=float(value(3));item.source_y=float(value(4));
+        if(item.animation){item.pivot_x=item.x;item.pivot_y=item.y;}item.width=item.source_width=float(value(5));item.height=item.source_height=float(value(6));return done();}
+    case 190:{count(5);auto& item=checked(value(0));item.x=float(value(1));item.y=float(value(2));if(item.animation){item.pivot_x=item.x;item.pivot_y=item.y;}item.width=float(value(3));item.height=float(value(4));return done();}
     case 191:{count(4);auto& item=checked(value(0));const auto scale=command.arguments[3].real();if(!std::isfinite(scale) || scale<0 || scale>100)throw Unsupported("native bitmap zoom");
-        item.pivot_x=short_value(1);item.pivot_y=short_value(2);item.scale=scale;return done();}
-    case 192:{count(4);auto& item=checked(value(0));item.pivot_x=short_value(1);item.pivot_y=short_value(2);item.angle=float(double(value(3))*360/4096);return done();}
+        item.pivot_x=float(value(1));item.pivot_y=float(value(2));item.scale=scale;return done();}
+    case 192:{count(4);auto& item=checked(value(0));item.pivot_x=float(value(1));item.pivot_y=float(value(2));item.angle=float(double(std::bit_cast<std::int32_t>(std::uint32_t(value(3))*360u))/4096);return done();}
     default:return std::nullopt;
     }
 }
@@ -92,6 +95,10 @@ std::span<const image::Sprite> SceneBitmaps::sprites(std::int32_t first_layer,st
         (independent!=-1 && item.independent!=bool(independent)))continue;
         if(item.animation){
             if(item.loading() || !item.player || !item.player->frame())continue;
+            // The cached INAS piece draw (447b40) takes the sprite's first
+            // destination point and its pivot/scale. Each piece supplies its
+            // own size and texture crop; the outer rectangle is not a scale
+            // or clipping canvas, even after SetBmpPos/SetBmpZoom.
             for(const auto& piece:item.animation->frames()[*item.player->frame()].pieces){if(piece.empty())continue;
                 const auto x=item.pivot_x+(item.x+piece.x-item.pivot_x)*item.scale,y=item.pivot_y+(item.y+piece.y-item.pivot_y)*item.scale;
                 sprites_.push_back({item.textures.at(piece.texture),x,y,piece.width*item.scale,piece.height*item.scale,float(piece.source_x),float(piece.source_y),float(piece.width),float(piece.height),
@@ -125,7 +132,7 @@ std::vector<std::uint8_t> SceneBitmaps::checkpoint(const resource::Catalog& reso
 void SceneBitmaps::restore(std::span<const std::uint8_t> bytes,resource::Catalog& resources,const image::Resolve& resolve){
     if(!resolve)throw Error("Missing saved bitmap image resolver");auto in=checkpoint::Reader::open("LSBM",bytes);const auto count=in.u32();if(count>32)throw Error("Saved retired bitmap count exceeds thirty-two");
     const auto pixels=[&](auto& request,auto& image){if(in.boolean())request=resources.image(image::restore_reference(in.blob(2048)));if(in.boolean())image=image::restore_image(in.blob(4096),resources,resolve);if(request && image)throw Error("Saved bitmap is both pending and loaded");};
-    const auto slot=[&]{BitmapSlot value;for(auto* v:{&value.x,&value.y,&value.width,&value.height,&value.source_x,&value.source_y,&value.source_width,&value.source_height,&value.scale,&value.angle,&value.pivot_x,&value.pivot_y}){*v=std::bit_cast<float>(in.u32());if(!std::isfinite(*v) || std::abs(*v)>1.e9f)throw Error("Invalid saved bitmap geometry");}
+    const auto slot=[&]{BitmapSlot value;for(auto* v:{&value.x,&value.y,&value.width,&value.height,&value.source_x,&value.source_y,&value.source_width,&value.source_height,&value.scale,&value.angle,&value.pivot_x,&value.pivot_y}){*v=std::bit_cast<float>(in.u32());if(!std::isfinite(*v) || std::abs(*v)>2147483648.f)throw Error("Invalid saved bitmap geometry");}
         for(auto* v:{&value.layer,&value.blend,&value.alpha,&value.from,&value.target,&value.elapsed,&value.duration,&value.order_index})*v=in.i32();for(auto& v:value.colour)v=in.i32();value.flip=in.u32();
         if(value.scale<0 || value.scale>100 || value.layer<0 || value.layer>255 || value.alpha<0 || value.alpha>255 || value.from<0 || value.from>255 || value.target<0 || value.target>255 || value.duration<0 || value.duration>32767 || value.elapsed<0 || value.elapsed>32767 || value.order_index<0 || value.order_index>31 || (value.flip&~3u))throw Error("Invalid saved bitmap transition");sprite_blend(value.blend);for(auto v:value.colour)if(v<0 || v>128)throw Error("Invalid saved bitmap colour");
         value.allocated=in.boolean();value.visible=in.boolean();value.independent=in.boolean();value.retiring=in.boolean();pixels(value.request,value.image);

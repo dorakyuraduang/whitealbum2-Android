@@ -62,7 +62,9 @@ int main(int argc,char** argv){try{
     for(auto mode:{4,6}){blend[1]=s::Value(mode);blend[2]=s::Value(0);call={185,blend};bitmaps.dispatch(call);CHECK(bitmaps.sprites().size()==1 && bitmaps.sprites()[0].alpha==0 && bitmaps.sprites()[0].blend==(mode==4?i::SpriteBlend::screen:i::SpriteBlend::multiply));++cases;}
     blend[1]=s::Value(1);call={185,blend};bitmaps.dispatch(call);CHECK(bitmaps.sprites().empty());blend[2]=s::Value(48);call={185,blend};bitmaps.dispatch(call);++cases;
     const auto saved_blend=bitmaps.slot(0).blend;blend[1]=s::Value(5);call={185,blend};rejects([&]{bitmaps.dispatch(call);});CHECK(bitmaps.slot(0).blend==saved_blend);++guards;
-    std::array<s::Value,5> rectangle{s::Value(0),s::Value(1),s::Value(2),s::Value(3),s::Value(4)};call={190,rectangle};rejects([&]{bitmaps.dispatch(call);});CHECK(bitmaps.sprites()[0].x==568);++guards;
+    std::array<s::Value,5> rectangle{s::Value(0),s::Value(1),s::Value(2),s::Value(3),s::Value(4)};call={190,rectangle};CHECK(bitmaps.dispatch(call)->complete);
+    CHECK(bitmaps.sprites()[0].x==-63 && bitmaps.sprites()[0].y==-62 && bitmaps.sprites()[0].width==128 && bitmaps.sprites()[0].source_width==16);++cases;
+    call={190,std::span(rectangle).first(4)};rejects([&]{bitmaps.dispatch(call);});CHECK(bitmaps.sprites()[0].x==-63);++guards;
     bitmaps.retire_background();bitmaps.clear_retired();CHECK(bitmaps.slot(0).allocated);bitmaps.clear();CHECK(bitmaps.sprites().empty());++cases;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-animation-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"synthetic_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native INAS parsing, sequence loops and playback checkpoints.\n";return 0;

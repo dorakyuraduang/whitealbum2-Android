@@ -125,11 +125,18 @@ blend overrides and events fail explicitly. Static checks parse the eight local
 animation definitions and their texture headers; only synthetic sequences run.
 LoadBmpAnime now owns native players/textures inside the common bitmap slots,
 with asynchronous texture readiness, source-bound checks, placement, uniform
-zoom, alpha/additive fades and independent-layer lifetime. Arbitrary destination
-rectangle edits on animated slots still fail explicitly. Rain now uses the same
+zoom, alpha/additive fades and independent-layer lifetime. SetBmpPos and
+SetBmpZoom retain the source's animation semantics: the first destination point
+positions the INAS pieces and moves their automatic pivot, while each piece
+keeps its own dimensions and texture crop. The outer rectangle does not stretch
+or clip the animation. Ordinary bitmap edits retain an explicitly assigned
+pivot; coordinates reach the renderer as full integers rather than truncated
+16-bit save-record fields. Synthetic checks cover these edits together with
+checkpoint restoration, negative/large coordinates and subsequent zoom/rotation.
+Rain now uses the same
 player, original trimmed frame offsets, a scale of two about the screen centre
-and a foreground layer independent of its scope flag. Bitmap moves update the
-source's automatic pivot before subsequent scale/rotation commands. Complete
+and a foreground layer independent of its scope flag. Animated bitmap moves
+update the source's automatic pivot before subsequent scale/rotation commands. Complete
 scene playback and device presentation are not verified.
 Background completion clears weather only for a normal background in scope 0;
 CG transitions and foreground scopes retain their weather, including scope 2.
