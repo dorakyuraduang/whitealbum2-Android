@@ -10,6 +10,7 @@
 namespace wa2::image {
 struct ImageRequest::State {
     mutable std::mutex mutex;
+    std::condition_variable ready;
     std::shared_ptr<const Raster> image;
     std::string error;
     std::size_t member{};
@@ -19,6 +20,11 @@ struct ImageRequest::State {
 ImageRequest::ImageRequest(std::shared_ptr<State> state):state_(std::move(state)){}
 std::shared_ptr<const Raster> ImageRequest::get()const{
     std::lock_guard lock(state_->mutex);if(!state_->error.empty())throw Error(state_->error);return state_->image;
+}
+std::shared_ptr<const Raster> ImageRequest::wait_for(std::chrono::milliseconds timeout)const{
+    if(timeout.count()<0 || timeout.count()>60000)throw std::invalid_argument("Native image wait timeout is out of range");
+    std::unique_lock lock(state_->mutex);state_->ready.wait_for(lock,timeout,[&]{return bool(state_->image) || !state_->error.empty();});
+    if(!state_->error.empty())throw Error(state_->error);return state_->image;
 }
 struct ImageStore::Impl {
     resource::Archive archive;
@@ -51,13 +57,14 @@ struct ImageStore::Impl {
                 }catch(const std::exception& failure){error=failure.what();}
                 catch(...){error="native image loading failed";}
                 if(result){std::lock_guard lock(mutex);decoded[{request->member,request->style.chroma,request->style.colours}]=result;}
-                std::lock_guard lock(request->mutex);request->image=std::move(result);request->error=std::move(error);
+                {std::lock_guard lock(request->mutex);request->image=std::move(result);request->error=std::move(error);}
+                request->ready.notify_all();
             }
         });
     }
     ~Impl(){
         {std::lock_guard lock(mutex);stop=true;
-            for(const auto& item:pending){std::lock_guard state_lock(item->mutex);item->error="native image loader closed";}
+            for(const auto& item:pending){{std::lock_guard state_lock(item->mutex);item->error="native image loader closed";}item->ready.notify_all();}
             pending.clear();}
         wake.notify_all();if(worker.joinable())worker.join();
     }

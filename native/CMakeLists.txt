@@ -14,30 +14,25 @@ add_subdirectory("${WA2_ROOT}/engine" engine EXCLUDE_FROM_ALL)
 target_link_libraries(wa2_engine PUBLIC Threads::Threads)
 include("${WA2_ROOT}/engine/movie.cmake")
 add_subdirectory("${WA2_ROOT}/game" game EXCLUDE_FROM_ALL)
-add_library(wa2_native_private_file STATIC "${WA2_ROOT}/platform/private_file.cpp")
-target_include_directories(wa2_native_private_file PUBLIC "${WA2_ROOT}/platform")
-add_library(wa2_native_preference_storage STATIC "${WA2_ROOT}/platform/preference_storage.cpp")
-target_link_libraries(wa2_native_preference_storage PUBLIC wa2_game_scene wa2_native_private_file)
-target_include_directories(wa2_native_preference_storage PUBLIC "${WA2_ROOT}/platform")
-add_library(wa2_native_progress_storage STATIC "${WA2_ROOT}/platform/progress_storage.cpp")
-target_link_libraries(wa2_native_progress_storage PUBLIC wa2_progress)
-target_include_directories(wa2_native_progress_storage PUBLIC "${WA2_ROOT}/platform")
-add_library(wa2_native_save_storage STATIC "${WA2_ROOT}/platform/save_storage.cpp")
-target_link_libraries(wa2_native_save_storage PUBLIC wa2_game_scene wa2_native_private_file)
-target_include_directories(wa2_native_save_storage PUBLIC "${WA2_ROOT}/platform")
-add_library(wa2_native_audio_binding STATIC "${WA2_ROOT}/platform/audio_binding.cpp")
-target_link_libraries(wa2_native_audio_binding PUBLIC wa2_engine)
-target_include_directories(wa2_native_audio_binding PUBLIC "${WA2_ROOT}/platform")
+include("${WA2_ROOT}/platform/native_services.cmake")
 
 # Link the complete existing native scene to catch unresolved dependencies on
 # either host. This is a link-check library, not a launchable game or APK.
 add_library(wa2_native_link_check SHARED "${WA2_ROOT}/tests/native_core_link.cpp")
-target_link_libraries(wa2_native_link_check PRIVATE wa2_game_scene wa2_native_progress_storage wa2_native_save_storage wa2_native_preference_storage wa2_native_audio_binding)
+target_link_libraries(wa2_native_link_check PRIVATE wa2_game_scene wa2_native_progress_storage wa2_native_save_storage wa2_native_preference_storage wa2_native_audio_binding wa2_native_application)
 if(ANDROID)
     # The existing ARM64 codec assembly binds its internal tables locally,
     # using the same static-codec visibility contract as the retained host.
     target_link_options(wa2_native_link_check PRIVATE "-Wl,--no-undefined" "-Wl,-z,max-page-size=16384"
         "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
+endif()
+if(ANDROID)
+    # Compile the thin Android migration entry with the actual NDK. It is not
+    # linked into an APK or launched; complete modal views/JNI entry wiring
+    # remain explicit migration work.
+    add_library(wa2_native_android_host_check STATIC "${WA2_ROOT}/android/game/game_host.cpp")
+    target_include_directories(wa2_native_android_host_check PRIVATE "${WA2_ROOT}/android/native" "${WA2_ROOT}/platform" "${WA2_ROOT}/tools/SDL-release-2.32.10/include")
+    target_link_libraries(wa2_native_android_host_check PRIVATE wa2_native_application)
 endif()
 add_executable(wa2_native_progress_tests "${WA2_ROOT}/tests/native_progress.cpp")
 target_link_libraries(wa2_native_progress_tests PRIVATE wa2_script wa2_native_progress_storage)
@@ -119,6 +114,10 @@ add_executable(wa2_native_frame_driver_tests "${WA2_ROOT}/tests/native_frame_dri
 target_link_libraries(wa2_native_frame_driver_tests PRIVATE wa2_game_scene)
 add_executable(wa2_native_audio_binding_tests "${WA2_ROOT}/tests/native_audio_binding.cpp")
 target_link_libraries(wa2_native_audio_binding_tests PRIVATE wa2_native_audio_binding)
+add_executable(wa2_native_image_wait_tests "${WA2_ROOT}/tests/native_image_wait.cpp")
+target_link_libraries(wa2_native_image_wait_tests PRIVATE wa2_game_scene)
+add_executable(wa2_native_bootstrap_tests "${WA2_ROOT}/tests/native_bootstrap.cpp")
+target_link_libraries(wa2_native_bootstrap_tests PRIVATE wa2_native_application)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -200,6 +199,8 @@ if(NOT ANDROID)
     add_test(NAME native_movie_state COMMAND wa2_native_movie_state_tests "${CMAKE_BINARY_DIR}/native-movie-state.json")
     add_test(NAME native_frame_driver COMMAND wa2_native_frame_driver_tests "${CMAKE_BINARY_DIR}/native-frame-driver.json")
     add_test(NAME native_audio_binding COMMAND wa2_native_audio_binding_tests "${CMAKE_BINARY_DIR}/native-audio-binding.json")
+    add_test(NAME native_image_wait COMMAND wa2_native_image_wait_tests "${CMAKE_BINARY_DIR}/native-image-wait.json")
+    add_test(NAME native_bootstrap COMMAND wa2_native_bootstrap_tests "${CMAKE_BINARY_DIR}/native-bootstrap.json" "${CMAKE_BINARY_DIR}/native-bootstrap-owned")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

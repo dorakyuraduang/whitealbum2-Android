@@ -3,6 +3,10 @@
 #include <algorithm>
 
 namespace wa2::game {
+TitleContent installed_title_content(const resource::BankOpener& opener){
+    if(!opener)throw std::invalid_argument("Missing native installation resource opener");
+    return {bool(opener("IC/bak.pak")),false,true};
+}
 TitleScene::TitleScene(resource::BankOpener opener,std::shared_ptr<progress::Store> progress,const Preferences& settings,TitleContent content,TitleStartup startup,std::uint32_t seed,TitleServices services)
     :resources_(std::move(opener)),mixer_(std::make_shared<audio::Mixer>()),progress_(std::move(progress)),
     sounds_(*mixer_,[this](auto id){return audio::effect_resource(resources_,id);}),

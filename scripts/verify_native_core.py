@@ -60,6 +60,8 @@ def main():
     inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
         ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
         ROOT/'platform/sdl_input.hpp',ROOT/'platform/sdl_input.cpp',ROOT/'platform/sdl_application.hpp',ROOT/'platform/sdl_application.cpp']
+    inputs += [ROOT/'tests/native_image_wait.cpp',ROOT/'tests/native_bootstrap.cpp',ROOT/'platform/native_application.hpp',ROOT/'platform/native_application.cpp',ROOT/'platform/native_services.cmake',
+        ROOT/'android/game/game_host.cpp',ROOT/'android/game/CMakeLists.txt',ROOT/'android/native/android_host.hpp',ROOT/'android/native/android_resources.hpp']
     inputs += [ROOT/'tests/native_preference_storage.cpp',ROOT/'platform/private_file.cpp',ROOT/'platform/private_file.hpp',ROOT/'platform/preference_storage.cpp',ROOT/'platform/preference_storage.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
@@ -103,6 +105,8 @@ def main():
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
+            if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_bootstrap_tests']
+            if host=='android':targets+=['wa2_native_android_host_check']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows' and args.sdl_archive:targets+=['wa2_native_sdl_application_tests','wa2_native_input_tests']
@@ -126,6 +130,8 @@ def main():
             allowed+=('tests/native_movie_state.cpp',)
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
+            allowed+=('tests/native_image_wait.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
+            if host=='android':allowed+=('android/game/game_host.cpp',)
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -299,6 +305,12 @@ def main():
                 run([directory/'wa2_native_audio_binding_tests.exe',directory/'native-audio-binding.json'],console,90)
                 audio_binding=json.loads((directory/'native-audio-binding.json').read_text())
                 if not audio_binding['passed'] or audio_binding['cases']<14 or audio_binding['guards']<5 or audio_binding['peak_live_outputs']!=1 or not audio_binding['mixer_alive_until_detach'] or not audio_binding['unchanged_owner_keeps_output'] or not audio_binding['fake_outputs_only'] or audio_binding['devices_opened'] or audio_binding['game_launched'] or audio_binding['screen_access']:raise ValueError('Native audio binding checks failed')
+                run([directory/'wa2_native_image_wait_tests.exe',directory/'native-image-wait.json'],console,90)
+                image_wait=json.loads((directory/'native-image-wait.json').read_text())
+                if not image_wait['passed'] or image_wait['cases']<13 or image_wait['guards']<7 or not image_wait['completion_notification'] or not image_wait['multiple_waiters_same_owner'] or not image_wait['pending_shutdown_notifies'] or not image_wait['synthetic_resources_only'] or image_wait['original_resources_opened'] or image_wait['devices_opened'] or image_wait['game_launched'] or image_wait['screen_access']:raise ValueError('Native image completion wait checks failed')
+                run([directory/'wa2_native_bootstrap_tests.exe',directory/'native-bootstrap.json',directory/'native-bootstrap-owned'],console,90)
+                bootstrap=json.loads((directory/'native-bootstrap.json').read_text())
+                if not bootstrap['passed'] or bootstrap['cases']<17 or bootstrap['guards']<11 or not bootstrap['source_ic_presence_rule'] or not bootstrap['title_story_storage_connected'] or not bootstrap['native_preferences_reopened'] or not bootstrap['saved_image_wait_not_polled'] or not bootstrap['test_mode_persisted_after_prepare'] or not bootstrap['failed_prepare_writes_nothing'] or not bootstrap['fake_movies_only'] or not bootstrap['synthetic_resources_only'] or bootstrap['original_resources_opened'] or bootstrap['devices_opened'] or bootstrap['game_launched'] or bootstrap['screen_access']:raise ValueError('Native shared bootstrap checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -362,6 +374,10 @@ def main():
     report['audio_binding']=audio_binding
     report['sdl_application']=sdl_application
     report['input_state']=input_state
+    report['image_wait']=image_wait
+    report['bootstrap']=bootstrap
+    report['android_native_host_compiled']=True
+    report['android_native_host_linked']=False
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

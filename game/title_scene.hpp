@@ -7,6 +7,10 @@
 #include "timeline.hpp"
 
 namespace wa2::game {
+// The authorized resource namespace replaces the original installation
+// registry. The cached local-IC test is existence of IC/bak.pak (0x432ab1).
+// A provider failure must propagate rather than be treated as missing content.
+TitleContent installed_title_content(const resource::BankOpener&);
 struct TitleStartup {bool movies{true};unsigned movie_suffix{};};
 enum class TitleStage {company_movie,opening_delay,opening_movie,view};
 struct TitleServices {

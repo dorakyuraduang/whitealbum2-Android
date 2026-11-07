@@ -2,6 +2,7 @@
 #include "raster_image.hpp"
 #include "image_colours.hpp"
 #include "resource_archive.hpp"
+#include <chrono>
 #include <functional>
 #include <memory>
 
@@ -15,6 +16,9 @@ public:
     // Null while loading, a complete immutable image on success, or an error.
     // A partially decoded image is never exposed to rendering.
     std::shared_ptr<const Raster> get()const;
+    // Resource restoration can wait for publication without polling. A
+    // timeout returns null; decoder/worker/shutdown errors remain errors.
+    std::shared_ptr<const Raster> wait_for(std::chrono::milliseconds timeout)const;
 };
 class ImageStore {
     struct Impl;

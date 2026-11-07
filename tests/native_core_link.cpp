@@ -7,6 +7,7 @@
 #include "render_frame.hpp"
 #include "frame_driver.hpp"
 #include "audio_binding.hpp"
+#include "native_application.hpp"
 #include "progress_storage.hpp"
 #include "save_storage.hpp"
 #include "preference_storage.hpp"
@@ -34,6 +35,7 @@ extern "C" WA2_LINK_CHECK bool wa2_native_link_preference_file(const std::filesy
 extern "C" WA2_LINK_CHECK void* wa2_native_link_application_create(wa2::resource::BankOpener* opener,const std::filesystem::path* directory,const wa2::game::Scene::SavedImageResolver* resolver){return new wa2::game::Application(*opener,std::make_shared<wa2::progress::Store>(wa2::platform::progress_storage(*directory)),wa2::platform::preference_storage(*directory),wa2::platform::save_storage(*directory),*resolver);}
 extern "C" WA2_LINK_CHECK unsigned wa2_native_link_application_update(void* pointer,std::int64_t now,unsigned mode,unsigned slot){auto& app=*static_cast<wa2::game::Application*>(pointer);switch(mode){case 0:app.start({},now);break;case 1:app.open(wa2::game::Page::save,now);app.save(slot);break;case 2:app.load(slot,now);break;case 3:app.background(true,now);break;case 4:app.background(false,now);app.back(now);break;case 5:app.title(now);break;case 6:app.close(now);break;default:throw std::invalid_argument("Unsupported application link-check operation");}if(app.page()!=wa2::game::Page::closed)app.frame(now,{},[now]{return now;});return unsigned(app.page());}
 extern "C" WA2_LINK_CHECK void wa2_native_link_application_destroy(void* pointer){delete static_cast<wa2::game::Application*>(pointer);}
+extern "C" WA2_LINK_CHECK void* wa2_native_link_application_bootstrap(wa2::resource::BankOpener* opener,const std::filesystem::path* directory){return wa2::platform::native_application(*opener,*directory).release();}
 extern "C" WA2_LINK_CHECK void* wa2_native_link_driver_create(void* application){return new wa2::game::FrameDriver(*static_cast<wa2::game::Application*>(application));}
 extern "C" WA2_LINK_CHECK unsigned wa2_native_link_driver_pump(void* pointer,std::int64_t now){return static_cast<wa2::game::FrameDriver*>(pointer)->pump(now,{},[now]{return now;}).updates;}
 extern "C" WA2_LINK_CHECK void wa2_native_link_driver_destroy(void* pointer){delete static_cast<wa2::game::FrameDriver*>(pointer);}

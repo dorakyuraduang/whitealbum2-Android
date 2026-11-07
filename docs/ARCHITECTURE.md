@@ -576,8 +576,37 @@ adapters and never creates a window or selects a platform-specific script engine
 exercise rendering, actual-present counting, cache reset, background suspension
 and scene/mixer replacement using fake device outputs and constructed events.
 The full loop is compiled, not run, during development; tests never poll an OS
-event queue. Native entry/storage integration and complete modal pages remain
+event queue. Complete modal pages and final application entry/JNI wiring remain
 pending, so this is still not a launchable complete game release.
+
+`platform/native_application.*` supplies shared startup policy and private
+storage integration. It prepares the title instead of jumping straight into
+1001, reopens native preferences/slots, applies test-mode progress before title
+construction and persists that profile only after preparation succeeds. The
+default content probe uses the cached `IC/bak.pak` existence rule, not the
+presence of story scripts or a platform installation registry. The resource
+opener returns null only for absence; authorization/provider errors propagate.
+An explicit content descriptor can be supplied by another installation adapter.
+Unknown/duplicate startup arguments and invalid timeouts fail explicitly.
+
+Saved-image restoration now waits on `ImageRequest` publication notifications.
+Completed requests and decoded-image cache hits return the same immutable
+owner immediately; multiple waiters share publication, timeout returns no
+partial image, and decoding/worker/shutdown errors retain their diagnostics.
+Closing a loader wakes its queued requests even while its current request is
+finishing. Ordinary asynchronous rendering continues to use nonblocking get().
+Constructed gated sources check these cases without original data or pixels.
+Bootstrap checks reopen private preferences and a complete native scene slot
+using constructed scripts, fake movies and owned temporary files.
+
+`android/game/game_host.cpp` is now a thin migration entry around the same
+bootstrap and SDL application loop. It creates the Android window/canvas,
+supplies authorized PAK descriptors, a separate `native-game` private directory,
+clock/wait adapters and the successful-present callback. It no longer owns
+another story scheduler, skip timer, manual draw ordering or raw mixer device.
+The NDK compiles this entry without launching it. Android's retained release
+root still selects the AOT host; native JNI/final APK wiring and remaining full
+views are not complete, and no new native APK is produced by these checks.
 
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate

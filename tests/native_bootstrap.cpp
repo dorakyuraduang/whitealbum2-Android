@@ -1,0 +1,38 @@
+#include "native_application.hpp"
+#include "progress_storage.hpp"
+#include "native_scene_fixture.hpp"
+#include <filesystem>
+
+namespace platform=wa2::platform;namespace fs=std::filesystem;
+struct MovieState {bool stopped{},paused{};float gain{};std::string name;};
+struct Movie:wa2::movie::Playback {
+    std::shared_ptr<MovieState> state;explicit Movie(std::shared_ptr<MovieState> value):state(std::move(value)){}bool finished()const override{return state->stopped;}void stop()override{state->stopped=true;}void update(std::int64_t)override{}void pause(bool value,std::int64_t)override{state->paused=value;}void gain(float value)override{state->gain=value;}std::optional<wa2::movie::VideoFrame> frame()const override{return {};}
+};
+int main(int argc,char** argv){try{
+    CHECK(argc==3);unsigned cases{},guards{};CHECK(!platform::native_startup({}).test_mode);const std::array<std::string_view,1> test_mode{"--test-mode"};CHECK(platform::native_startup(test_mode).test_mode);++cases;
+    const std::array<std::string_view,2> duplicate{"--test-mode","--test-mode"};rejects([&]{platform::native_startup(duplicate);});const std::array<std::string_view,1> unknown{"--unknown"};rejects([&]{platform::native_startup(unknown);});std::array<std::string_view,33> excessive;rejects([&]{platform::native_startup(excessive);});guards+=3;++cases;
+    rejects([]{g::installed_title_content({});});++guards;std::vector<std::string> probes;auto content=g::installed_title_content([&](auto name)->std::shared_ptr<r::Source>{probes.emplace_back(name);return {};});CHECK(!content.local_introductory && !content.external_introductory && content.perspective_snow && probes==std::vector<std::string>{"IC/bak.pak"});++cases;
+    content=g::installed_title_content([](auto)->std::shared_ptr<r::Source>{return bank({});});CHECK(content.local_introductory && !content.external_introductory);++cases;
+    rejects([]{g::installed_title_content([](auto)->std::shared_ptr<r::Source>{throw r::Error("injected authorized provider failure");});});++guards;++cases;
+    auto banks=memory_banks();banks["IC/bak.pak"]=bank({});Script script;script.call(146,{s::Value(1),s::Value(1),s::Value(0),s::Value(8),s::Value(0),s::Value(0),s::Value(0),s::Value(1280.f),s::Value(720.f)});script.call(194,{s::Value(1000000000),s::Value(0),s::Value(1)});script.finish();
+    banks["ck-gal.pak"]=bank({{"Global.vrb",text("3,FLG_00,0\r\n")},{"LFScriptFunc.fnc",functions(0,200)},{"LFScriptFuncEx.fnc",functions(200,239)},{"1001.bnr",script.code},{"1001.txt",text(script.strings)}});
+    const r::BankOpener opener=[&](auto name)->std::shared_ptr<r::Source>{const auto found=banks.find(std::string(name));return found==banks.end()?nullptr:found->second;};
+    const auto parent=fs::absolute(fs::path(argv[2]));fs::create_directories(parent);const auto root=parent/("owned-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(fs::create_directory(root));
+    const auto directory=[&](std::string_view name){const auto value=root/fs::path(name);CHECK(fs::create_directory(value));return value;};const auto normal=directory("normal"),unlocked=directory("test"),failed=directory("failed");
+    std::vector<std::shared_ptr<MovieState>> movies;g::TitleServices title;title.movie=[&](auto name)->std::unique_ptr<wa2::movie::Playback>{auto state=std::make_shared<MovieState>();state->name=name;movies.push_back(state);return std::make_unique<Movie>(state);};platform::NativeStartup startup;startup.seed=17;
+    rejects([&]{platform::native_application({},normal);});++guards;
+    for(auto timeout:{0,60001}){auto invalid=startup;invalid.image_timeout=std::chrono::milliseconds(timeout);rejects([&]{platform::native_application(opener,normal,invalid,{},title);});++guards;}
+    auto invalid=startup;invalid.title.movie_suffix=3;rejects([&]{platform::native_application(opener,normal,invalid,{},title);});++guards;++cases;
+    auto app=platform::native_application(opener,normal,startup,{},title);CHECK(app->page()==g::Page::title && app->title_scene() && app->title_scene()->stage()==g::TitleStage::company_movie && movies.size()==1 && movies[0]->name=="mv000.pak" && movies[0]->gain==102/255.f && !fs::exists(normal/"Sys.sav") && !fs::exists(normal/"native-settings.wa2cfg"));++cases;
+    auto prefs=app->preferences();prefs.master=64;prefs.music=128;prefs.window_alpha=42;CHECK(app->preferences(prefs) && fs::is_regular_file(normal/"native-settings.wa2cfg") && movies[0]->gain==32/255.f);++cases;
+    app->start({},0);CHECK(movies[0]->stopped && app->scene());std::int64_t now{};const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);while(app->scene()->statistics().command!=194){CHECK(std::chrono::steady_clock::now()<deadline);now+=16667;app->frame(now,{},[&]{return now;});std::this_thread::sleep_for(std::chrono::milliseconds(1));}CHECK(app->scene()->background().current);++cases;
+    app->save(2);CHECK(app->slots().size()==1 && app->slots()[0].slot==2);const auto saved_image=app->scene()->background().current->image;app->close(now);app.reset();++cases;
+    app=platform::native_application(opener,normal,startup,{},title);CHECK(app->preferences()==prefs && movies.size()==2 && movies.back()->gain==32/255.f && app->slots().size()==1);++cases;
+    app->load(2,0);CHECK(app->page()==g::Page::story && app->scene()->preferences()==prefs && app->scene()->background().current && app->scene()->background().current->image->rgba==saved_image->rgba && movies[1]->stopped);++cases;
+    app->title(1);CHECK(app->page()==g::Page::title && app->title_scene() && movies.size()==3);app->close(2);app.reset();++cases;
+    startup.test_mode=true;app=platform::native_application(opener,unlocked,startup,{},title);auto progress=std::make_shared<p::Store>(platform::progress_storage(unlocked));CHECK(fs::file_size(unlocked/"Sys.sav")==p::layout::system_save_bytes && progress->state().flag(0)==1 && progress->state().flag(3)==1 && progress->state().flag(5)==1 && progress->state().flag(99)==0 && progress->state().flag(220)==1);app->close(0);app.reset();++cases;
+    startup.test_mode=false;app=platform::native_application(opener,unlocked,startup,{},title);CHECK(app->page()==g::Page::title);app->close(0);CHECK(std::make_shared<p::Store>(platform::progress_storage(unlocked))->state().flag(5)==1);app.reset();++cases;
+    startup.test_mode=true;g::TitleServices failure;failure.movie=[](auto)->std::unique_ptr<wa2::movie::Playback>{throw r::Error("injected title provider failure");};rejects([&]{platform::native_application(opener,failed,startup,{},failure);});CHECK(!fs::exists(failed/"Sys.sav") && !fs::exists(failed/"native-settings.wa2cfg") && fs::is_empty(failed));++guards;++cases;
+    const auto missing=root/"missing";rejects([&]{platform::native_application(opener,missing,{}, {},title);});CHECK(!fs::exists(missing));++guards;++cases;
+    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-bootstrap.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"source_ic_presence_rule\":true,\"title_story_storage_connected\":true,\"native_preferences_reopened\":true,\"saved_image_wait_not_polled\":true,\"test_mode_persisted_after_prepare\":true,\"failed_prepare_writes_nothing\":true,\"fake_movies_only\":true,\"synthetic_resources_only\":true,\"original_resources_opened\":false,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);std::cout<<"PASS common native bootstrap, title/content selection, private persistence and notified image restore.\n";return 0;
+}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}
