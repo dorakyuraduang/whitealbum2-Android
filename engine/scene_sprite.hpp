@@ -9,6 +9,10 @@ enum class SpriteBlend {alpha,add,screen,multiply};
 constexpr bool contributes(SpriteBlend blend,std::uint8_t alpha)noexcept{return alpha || blend==SpriteBlend::screen || blend==SpriteBlend::multiply;}
 enum class SpriteWorld {both,previous,current};
 constexpr bool in_world(SpriteWorld world,bool previous)noexcept{return world==SpriteWorld::both || world==(previous?SpriteWorld::previous:SpriteWorld::current);}
+// Screen overlays and the independently shaken message window share one
+// layer order. Keeping the space on each item lets a foreground image pass
+// between them without transforming fixed UI or splitting the game by host.
+enum class SpriteSpace {screen,dialogue};
 struct Sprite {
     std::shared_ptr<const Raster> image;
     float x{},y{},width{},height{};
@@ -19,5 +23,6 @@ struct Sprite {
     SpriteBlend blend{SpriteBlend::alpha};
     std::int32_t layer{},order{};
     SpriteWorld world{SpriteWorld::both};
+    SpriteSpace space{SpriteSpace::screen};
 };
 }

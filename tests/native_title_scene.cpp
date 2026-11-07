@@ -1,4 +1,5 @@
 #include "application.hpp"
+#include "render_frame.hpp"
 #include "audio_resources.hpp"
 #include "native_scene_fixture.hpp"
 #include <cmath>
@@ -39,9 +40,11 @@ int main(int argc,char** argv){try{
     {
         g::TitleScene title(open,progress,g::Preferences{}, {true,false,true},{},23,services);CHECK(title.stage()==g::TitleStage::company_movie && movies.back()->name=="mv000.pak" && std::abs(movies.back()->gain-.4f)<1e-7f && title.sprites().empty());++cases;
         tick(title);const auto frame=movies.back()->updates;title.pause(true,now);CHECK(title.mixer()->paused() && movies.back()->paused);tick(title);CHECK(movies.back()->updates==frame);title.pause(false,now);tick(title);CHECK(!title.mixer()->paused() && !movies.back()->paused && movies.back()->updates==frame+1);++cases;
+        g::RenderFrame movie_frame;movie_frame.capture(title);CHECK(movie_frame.movie_active() && !movie_frame.movie() && movie_frame.overlays().empty());++cases;
         movies.back()->done=true;tick(title);CHECK(title.stage()==g::TitleStage::view && title.view().loading());++cases;
         until(title,[&]{return title.view().phase()==g::TitlePhase::logo_in;});tick(title);CHECK(voices.back()->song==31 && !voices.back()->loop && voices.back()->gain==101 && progress->state().flag(131)==1 && storage->writes>0);++cases;
         g::TitleInput skip;skip.selection.confirm=true;tick(title,skip);CHECK(title.view().phase()==g::TitlePhase::menu && !title.take_command());tick(title);const auto elapsed=title.view().elapsed(),seed=title.random_state();title.pause(true,now);for(unsigned n=0;n<3;++n)tick(title);CHECK(title.view().elapsed()==elapsed && title.random_state()==seed);title.pause(false,now);tick(title);++cases;
+        g::RenderFrame title_frame;title_frame.capture(title);CHECK(!title_frame.movie_active() && title_frame.overlays().size()==title.sprites().size() && !title_frame.overlays().empty() && title_frame.overlays()[0].image==title.sprites()[0].image);++cases;
         g::Preferences muted;muted.music=0;title.preferences(muted);CHECK(voices.back()->gain==0);++cases;
         rejects([&]{title.update(now-1);});++guards;
     }

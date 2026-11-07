@@ -149,7 +149,8 @@ are retained. Random direction selection shares the engine RNG and preserves
 its two-frame phase across new effects. Other effect codes fail explicitly.
 Background-only, dialogue-only and combined scopes have separate typed
 transforms. Presentation composites the world into one bounded reusable target
-when needed; hosts pass `Scene::dialogue_transform()` to dialogue sprite draws.
+when needed; the shared frame below assigns dialogue transforms per sprite,
+while leaving novel backing and the fixed bottom strip in screen space.
 The shake checkpoint contains its parameters, counter and scopes; the common
 RNG state remains the enclosing scene's responsibility. Constructed state and
 vertex checks do not verify whole-scene rendering or device performance.
@@ -299,7 +300,9 @@ visible message is materialized once and reuses its immutable pixels on later
 frames. Resource failures preserve the logical text state. Synthetic checks
 now resume nonempty dialogue without reading a font atlas and check that a
 failed first materialization does not change its checkpoint. Actual restored
-font pixels still require presentation validation.
+font pixels still require original-resource/device presentation validation.
+Constructed constant-coverage font atlases additionally exercise visible
+body/name layer tagging and mid-name-transition checkpoint continuation.
 
 Visible glyphs now copy palette-blue coverage directly from the cached indexed
 font source into their final white-RGB/coverage-alpha tiles. The former temporary
@@ -491,12 +494,41 @@ carry the one native RNG state forward instead of reseeding each scene. New
 owners are prepared before replacing the old owner; failed loads retain the
 title, navigation and mixer. A device adapter must compare the returned shared
 mixer when ownership changes and retain the old mixer until detaching output.
-Eighteen synthetic cases, thirteen guards and twelve archive-lookup cases cover
+Twenty synthetic cases, thirteen guards and twelve archive-lookup cases cover
 these transitions, startup branches and audio/resource policy. Music/movie
 services are fakes; system cue PCM and all scripts/images/PAKs are constructed
 in memory. This does not verify a movie decoder on a device or visual parity.
 The remaining full options/save/load/extras/backlog page views and production
 host loop still need completion before this is a complete native game.
+
+`game/render_frame.*` assembles an owned shared presentation snapshot for title
+and story. Background/environment membership remains separate from overlays;
+foreground bitmaps, dialogue, selection, calendar and captions merge by the
+source layer and sprite slot. Equal keys retain piece/glyph/pass ordering.
+Copies retain immutable image and YUV owners without copying their pixels,
+so a completed frame remains valid after the application replaces its scene.
+Twenty-three synthetic cases and three guards check this assembly, including
+visible generated-font metadata and name-slot restore. Capturing a frame does
+not advance logic, typewriter fades, audio or RNG.
+Unsupported modal views and an unprepared title fail explicitly.
+
+Dialogue now supplies the source backing/frame/button/text/name priorities.
+Its alternating name slots are saved in LSDI payload version 2; earlier native
+component snapshots fail explicitly rather than losing fade ordering. This is
+an unreleased native checkpoint change, not an original manual-save conversion
+or a change to the retained AOT application. Choice passes now retain their
+source slot numbers as well, so panels sharing the body-text layer sort after
+the body. INAS pieces remain stable through bitmap and environment sorting.
+
+`platform/sdl_presentation.*` consumes the same frame on both toolchains and
+groups only adjacent sprites with equal transforms. It routes the movie path
+through the common YUV presenter, clears to black before the first decoded
+frame, preserves display aspect ratio, retains post-video captions and resets
+both image/movie uploads after renderer reset. Hosts still own window/input,
+device audio and the final present. Finite software composition checks use a
+64x36 owned memory surface, generated solid colours and small constructed YUV
+planes in forty-five cases; they create no window or SDL video/audio/event device. These checks do
+not validate the original game's full visual output or hardware performance.
 
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
@@ -506,13 +538,12 @@ on both toolchains; generated shader pairs are compiled/linked offline for
 both profiles. A software reference still checks owned-memory pixel equations.
 No actual GL context, window or hardware rendering is exercised by these checks.
 
-The native story engine remains incomplete: the full title/option UI,
-backlog presentation, application save/load and lifecycle integration, and
-unsupported render/animation/weather modes still need native implementations
-or integration. Reading-history APIs exist but are not yet connected to every
-dialogue transition. No whole-game or device/performance claim follows from
-these component checks. Existing generated C++/CFG is a development reference,
-never a native-runtime dependency.
+The native story engine remains incomplete: full options/save/load/extras/
+backlog views, production host integration and unsupported render/animation/
+weather modes still need native implementations or integration. Source manual
+save and INI conversion are also unfinished. No whole-game or device/performance
+claim follows from these component checks. Existing generated C++/CFG is a
+development reference, never a native-runtime dependency.
 
 ## Current released implementation
 

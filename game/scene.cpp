@@ -155,7 +155,7 @@ std::span<const image::Sprite> Scene::environment(){
     for(auto item:weather_.sprites())if(item.layer<0x1000){if(background_changing_ && !backgrounds_.picture() && weather_.scope()==0)item.world=image::SpriteWorld::previous;environment_.push_back(std::move(item));}
     add(bitmaps_.sprites(0,255,0));for(auto item:characters_.sprites()){
         if(background_changing_ && !preserve_characters_ && item.world!=image::SpriteWorld::previous)item.world=image::SpriteWorld::current;environment_.push_back(std::move(item));}
-    std::sort(environment_.begin(),environment_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});
+    std::stable_sort(environment_.begin(),environment_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});
     const auto colour=colour_.channels();for(auto& item:environment_){item.red=std::uint8_t(unsigned(item.red)*unsigned(std::min(colour[0]*2,255))/255);
         item.green=std::uint8_t(unsigned(item.green)*unsigned(std::min(colour[1]*2,255))/255);item.blue=std::uint8_t(unsigned(item.blue)*unsigned(std::min(colour[2]*2,255))/255);}
     return environment_;
@@ -163,6 +163,6 @@ std::span<const image::Sprite> Scene::environment(){
 std::span<const image::Sprite> Scene::foreground(){
     foreground_.clear();const auto add=[this](auto items){foreground_.insert(foreground_.end(),items.begin(),items.end());};
     for(const auto& item:weather_.sprites())if(item.layer>=0x1000)foreground_.push_back(item);add(bitmaps_.sprites(0,255,1));
-    std::sort(foreground_.begin(),foreground_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return foreground_;
+    std::stable_sort(foreground_.begin(),foreground_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return foreground_;
 }
 }

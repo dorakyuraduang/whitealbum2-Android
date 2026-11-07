@@ -55,6 +55,7 @@ def main():
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
     inputs += [ROOT/'tests/native_title_scene.cpp']
+    inputs += [ROOT/'tests/native_render_frame.cpp',ROOT/'platform/sdl_movie.cpp',ROOT/'platform/sdl_movie.hpp',ROOT/'platform/sdl_presentation.cpp',ROOT/'platform/sdl_presentation.hpp']
     inputs += [ROOT/'tests/native_preference_storage.cpp',ROOT/'platform/private_file.cpp',ROOT/'platform/private_file.hpp',ROOT/'platform/preference_storage.cpp',ROOT/'platform/preference_storage.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
@@ -95,6 +96,7 @@ def main():
             if host=='windows':targets+=['wa2_native_application_tests']
             if host=='windows':targets+=['wa2_native_title_view_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
+            if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -113,6 +115,7 @@ def main():
             allowed+=('tests/native_application.cpp',)
             allowed+=('tests/native_title_view.cpp',)
             allowed+=('tests/native_title_scene.cpp',)
+            allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -183,7 +186,7 @@ def main():
                 if not voice_state['passed'] or voice_state['cases']<17 or voice_state['maximum_voice_slots']!=4 or voice_state['audio_devices_opened'] or voice_state['screen_access']:raise ValueError('Native speech state checks failed')
                 run([directory/'wa2_native_novel_state_tests.exe',directory/'native-novel-state.json'],console,90)
                 novel_state=json.loads((directory/'native-novel-state.json').read_text())
-                if not novel_state['passed'] or novel_state['cases']<10 or novel_state['guards']<5 or novel_state['game_launched'] or novel_state['screen_access']:raise ValueError('Native novel state checks failed')
+                if not novel_state['passed'] or novel_state['cases']<11 or novel_state['guards']<5 or novel_state['game_launched'] or novel_state['screen_access']:raise ValueError('Native novel state checks failed')
                 run([directory/'wa2_native_weather_state_tests.exe',directory/'native-weather-state.json'],console,90)
                 weather_state=json.loads((directory/'native-weather-state.json').read_text())
                 if not weather_state['passed'] or weather_state['cases']<28 or weather_state['guards']<3 or weather_state['game_launched'] or weather_state['screen_access']:raise ValueError('Native weather state checks failed')
@@ -210,7 +213,7 @@ def main():
                 if not caption_state['passed'] or caption_state['cases']<60 or caption_state['guards']<4 or caption_state['embedded_tracks']!=46 or not caption_state['synthetic_audio_only'] or caption_state['devices_opened'] or caption_state['game_launched'] or caption_state['screen_access']:raise ValueError('Native caption state checks failed')
                 run([directory/'wa2_native_selection_state_tests.exe',directory/'native-selection-state.json'],console,90)
                 selection_state=json.loads((directory/'native-selection-state.json').read_text())
-                if not selection_state['passed'] or selection_state['cases']<24 or selection_state['guards']<15 or not selection_state['font_preparation_stubbed'] or selection_state['devices_opened'] or selection_state['game_launched'] or selection_state['screen_access']:raise ValueError('Native selection state checks failed')
+                if not selection_state['passed'] or selection_state['cases']<25 or selection_state['guards']<15 or not selection_state['font_preparation_stubbed'] or selection_state['devices_opened'] or selection_state['game_launched'] or selection_state['screen_access']:raise ValueError('Native selection state checks failed')
                 run([directory/'wa2_native_system_sound_tests.exe',directory/'native-system-sounds.json'],console,90)
                 system_sound_state=json.loads((directory/'native-system-sounds.json').read_text())
                 if not system_sound_state['passed'] or system_sound_state['cases']<15 or system_sound_state['guards']<12 or system_sound_state['cue_buffers']!=5 or system_sound_state['playback_resource_reads'] or not system_sound_state['synthetic_pcm_only'] or system_sound_state['devices_opened'] or system_sound_state['game_launched'] or system_sound_state['screen_access']:raise ValueError('Native system sound checks failed')
@@ -222,7 +225,7 @@ def main():
                 if not stream_voice_state['passed'] or stream_voice_state['cases']<13 or stream_voice_state['guards']<1 or stream_voice_state['caller_source_accesses'] or not stream_voice_state['synthetic_pcm_only'] or stream_voice_state['devices_opened'] or stream_voice_state['game_launched'] or stream_voice_state['screen_access']:raise ValueError('Native asynchronous voice checks failed')
                 run([directory/'wa2_native_dialogue_state_tests.exe',directory/'native-dialogue-state.json'],console,90)
                 dialogue_state=json.loads((directory/'native-dialogue-state.json').read_text())
-                if not dialogue_state['passed'] or dialogue_state['cases']<20 or dialogue_state['guards']<14 or dialogue_state['metadata_text_layouts']!=6 or dialogue_state['glyph_pixels_decoded'] or not dialogue_state['synthetic_only'] or dialogue_state['devices_opened'] or dialogue_state['game_launched'] or dialogue_state['screen_access']:raise ValueError('Native dialogue state checks failed')
+                if not dialogue_state['passed'] or dialogue_state['cases']<20 or dialogue_state['guards']<16 or dialogue_state['metadata_text_layouts']!=6 or dialogue_state['glyph_pixels_decoded'] or not dialogue_state['synthetic_only'] or dialogue_state['devices_opened'] or dialogue_state['game_launched'] or dialogue_state['screen_access']:raise ValueError('Native dialogue state checks failed')
                 run([directory/'wa2_native_sprite_atlas_tests.exe',directory/'native-sprite-atlas.json'],console,90)
                 sprite_atlas_state=json.loads((directory/'native-sprite-atlas.json').read_text())
                 if not sprite_atlas_state['passed'] or sprite_atlas_state['cases']<9 or sprite_atlas_state['guards']<5 or not sprite_atlas_state['replicated_gutters_verified'] or not sprite_atlas_state['input_pixels_unchanged'] or sprite_atlas_state['devices_opened'] or sprite_atlas_state['game_launched'] or sprite_atlas_state['screen_access']:raise ValueError('Native sprite atlas checks failed')
@@ -243,7 +246,7 @@ def main():
                 if not character_state['passed'] or character_state['cases']<13 or character_state['guards']<10 or not character_state['pending_style_preserved'] or not character_state['retired_layers_restored'] or not character_state['synthetic_only'] or character_state['devices_opened'] or character_state['game_launched'] or character_state['screen_access']:raise ValueError('Native character state checks failed')
                 run([directory/'wa2_native_bitmap_state_tests.exe',directory/'native-bitmap-state.json'],console,90)
                 bitmap_state=json.loads((directory/'native-bitmap-state.json').read_text())
-                if not bitmap_state['passed'] or bitmap_state['cases']<23 or bitmap_state['guards']<14 or not bitmap_state['animation_progress_restored'] or not bitmap_state['pending_styles_preserved'] or not bitmap_state['retired_layers_restored'] or not bitmap_state['synthetic_only'] or bitmap_state['devices_opened'] or bitmap_state['game_launched'] or bitmap_state['screen_access']:raise ValueError('Native bitmap state checks failed')
+                if not bitmap_state['passed'] or bitmap_state['cases']<24 or bitmap_state['guards']<14 or not bitmap_state['animation_progress_restored'] or not bitmap_state['pending_styles_preserved'] or not bitmap_state['retired_layers_restored'] or not bitmap_state['synthetic_only'] or bitmap_state['devices_opened'] or bitmap_state['game_launched'] or bitmap_state['screen_access']:raise ValueError('Native bitmap state checks failed')
                 run([directory/'wa2_native_weather_checkpoint_tests.exe',directory/'native-weather-checkpoint.json'],console,90)
                 weather_checkpoint=json.loads((directory/'native-weather-checkpoint.json').read_text())
                 if not weather_checkpoint['passed'] or weather_checkpoint['cases']<18 or weather_checkpoint['guards']<13 or weather_checkpoint['restore_random_calls'] or not weather_checkpoint['same_frame_geometry'] or not weather_checkpoint['atlas_regenerated'] or not weather_checkpoint['synthetic_only'] or weather_checkpoint['devices_opened'] or weather_checkpoint['game_launched'] or weather_checkpoint['screen_access']:raise ValueError('Native weather checkpoint checks failed')
@@ -273,7 +276,10 @@ def main():
                 if not title_view['passed'] or title_view['cases']<21 or title_view['guards']<6 or not title_view['synthetic_images_only'] or title_view['original_resources_opened'] or title_view['devices_opened'] or title_view['game_launched'] or title_view['screen_access']:raise ValueError('Native title view checks failed')
                 run([directory/'wa2_native_title_scene_tests.exe',directory/'native-title-scene.json'],console,90)
                 title_scene=json.loads((directory/'native-title-scene.json').read_text())
-                if not title_scene['passed'] or title_scene['cases']<18 or title_scene['guards']<13 or title_scene['audio_lookup_cases']<12 or not title_scene['synthetic_resources_only'] or not title_scene['fake_music_and_movies'] or not title_scene['title_story_handoff'] or title_scene['devices_opened'] or title_scene['game_launched'] or title_scene['screen_access']:raise ValueError('Native title/application integration checks failed')
+                if not title_scene['passed'] or title_scene['cases']<20 or title_scene['guards']<13 or title_scene['audio_lookup_cases']<12 or not title_scene['synthetic_resources_only'] or not title_scene['fake_music_and_movies'] or not title_scene['title_story_handoff'] or title_scene['devices_opened'] or title_scene['game_launched'] or title_scene['screen_access']:raise ValueError('Native title/application integration checks failed')
+                run([directory/'wa2_native_render_frame_tests.exe',directory/'native-render-frame.json'],console,90)
+                render_frame=json.loads((directory/'native-render-frame.json').read_text())
+                if not render_frame['passed'] or render_frame['cases']<23 or render_frame['guards']<3 or not render_frame['source_layer_order'] or not render_frame['equal_keys_stable'] or not render_frame['owned_snapshot'] or not render_frame['capture_does_not_advance_logic'] or not render_frame['synthetic_resources_only'] or render_frame['original_resources_opened'] or render_frame['devices_opened'] or render_frame['game_launched'] or render_frame['screen_access']:raise ValueError('Native frame assembly checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -283,7 +289,7 @@ def main():
                 if args.sdl_archive:
                     run([directory/'wa2_native_scene_composition_tests.exe',directory/'native-scene-composition.json'],console,90)
                     composition_state=json.loads((directory/'native-scene-composition.json').read_text())
-                    if not composition_state['passed'] or composition_state['cases']<26 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
+                    if not composition_state['passed'] or composition_state['cases']<45 or not composition_state['owned_memory_only'] or composition_state['windows_created'] or composition_state['devices_opened'] or composition_state['game_launched'] or composition_state['screen_access']:raise ValueError('Native owned-memory composition checks failed')
                     composition_graph=output([ninja,'-C',directory,'-t','graph','wa2_native_scene_composition_tests.exe']).replace('\\','/').lower()
                     if any(token in composition_graph for token in forbidden):raise ValueError('AOT dependency in owned-memory composition test')
                     composition_artifact=dict(sha256=digest(directory/'wa2_native_scene_composition_tests.exe'),
@@ -323,6 +329,7 @@ def main():
     report['application']=application
     report['title_view']=title_view
     report['title_scene']=title_scene
+    report['render_frame']=render_frame
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

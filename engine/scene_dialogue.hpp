@@ -52,6 +52,7 @@ private:
     std::string raw_,name_;
     DialoguePhase phase_{DialoguePhase::closed};
     std::uint32_t budget_{},open_elapsed_{},name_elapsed_{},idle_elapsed_{};
+    std::uint32_t name_slot_{};
     std::uint32_t close_ticks_{};
     std::size_t page_{};
     std::int32_t speaker_{-1},message_{-1};

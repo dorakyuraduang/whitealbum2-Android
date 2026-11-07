@@ -29,6 +29,7 @@ int main(int argc,char** argv){try{
     t::FontBook fonts({});s::SceneDialogue dialogue(fonts,[](auto)->std::shared_ptr<wa2::image::ImageRequest>{throw std::runtime_error("Unexpected asset load");});
     s::DialogueSettings settings;settings.novel_alpha=127;dialogue.settings(settings);mode[0]=s::Value(1);enable={220,mode};dialogue.dispatch(enable);
     const auto sprites=dialogue.sprites();CHECK(sprites.size()==1 && sprites[0].width==1280 && sprites[0].height==720 && sprites[0].alpha==127 && sprites[0].image->rgba==std::vector<std::uint8_t>({0,0,0,255}));++cases;
+    CHECK(sprites[0].layer==0x104c && sprites[0].order==0x41d && sprites[0].space==wa2::image::SpriteSpace::screen);++cases;
     auto invalid=settings;invalid.novel_alpha=256;rejects([&]{dialogue.settings(invalid);});CHECK(dialogue.novel().opacity()==127);++guards;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-novel-state.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"synthetic_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);
     std::cout<<"PASS native novel backing, text geometry and fade continuation.\n";return 0;

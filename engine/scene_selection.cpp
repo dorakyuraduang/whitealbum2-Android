@@ -51,14 +51,14 @@ std::optional<std::uint32_t> SceneSelection::input(SelectionInput input){
 std::span<const image::Sprite> SceneSelection::sprites(){
     sprites_.clear();if(!active_ || loading() || !opacity_)return sprites_;
     for(const auto& row:rows_){const auto append=[&](float source_y,image::SpriteBlend blend){sprites_.push_back({images_[0],248,row.y-14,784,72,0,source_y,784,72,255,255,255,opacity_});
-            auto& sprite=sprites_.back();sprite.blend=blend;sprite.layer=0x1057;sprite.order=int(row.ordinal)*4;};
+            auto& sprite=sprites_.back();sprite.blend=blend;sprite.layer=0x1057;sprite.order=0x454+int(row.ordinal)*4+(source_y==144?0:source_y==0?1:2);};
         append(144,image::SpriteBlend::add);append(0,image::SpriteBlend::alpha);
         if(focused_ && *focused_==row.ordinal && row.enabled && (!settings_.replay || row.chosen))append(72,image::SpriteBlend::add);
     }
-    for(const auto& row:rows_)if(row.chosen){sprites_.push_back({images_[1],328,row.y,40,40,208,64,40,40,255,255,255,opacity_});sprites_.back().layer=0x1058;sprites_.back().order=int(row.ordinal)*4+3;}
+    for(const auto& row:rows_)if(row.chosen){sprites_.push_back({images_[1],328,row.y,40,40,208,64,40,40,255,255,255,opacity_});sprites_.back().layer=0x1058;sprites_.back().order=0x454+int(row.ordinal)*4+3;}
     for(unsigned n=0;n<rows_.size();++n){const auto& row=rows_[n];const auto colour=!row.enabled || (settings_.replay && !row.chosen)?settings_.disabled:focused_ && *focused_==row.ordinal?settings_.highlight:settings_.normal;
         const auto first=sprites_.size();labels_[n].append(sprites_,0,std::numeric_limits<std::uint32_t>::max()/16,358,row.y,opacity_,colour);
-        for(auto at=first;at<sprites_.size();++at){sprites_[at].layer=0x1059;sprites_[at].order=int(row.ordinal);}}
+        for(auto at=first;at<sprites_.size();++at){sprites_[at].layer=0x1059;sprites_[at].order=0x474+int(row.ordinal);}}
     return sprites_;
 }
 }

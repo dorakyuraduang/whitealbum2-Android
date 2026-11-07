@@ -38,6 +38,7 @@ int main(int argc,char** argv){try{
     for(unsigned tick=2;tick<=30;++tick){view.update();CHECK(view.opacity()==(tick==30?255:tick*255/30) && view.ready()==(tick==30));}++cases;
     const auto count=prepared;view.sync(choices);view.sync(choices);CHECK(prepared==count);++cases;
     auto sprites=view.sprites();CHECK(sprites.size()==7 && sprites[0].x==248 && sprites[0].y==194 && sprites[0].source_y==144 && sprites[0].blend==i::SpriteBlend::add && sprites[1].source_y==0 && sprites.back().x==328 && sprites.back().source_x==208 && sprites.back().layer==0x1058);++cases;
+    CHECK(sprites[0].order==0x454 && sprites[1].order==0x455 && sprites[2].order==0x45c && sprites.back().order==0x457);++cases;
     CHECK(!view.input({true,false,false,400,300,0}) && view.focused()==2 && sounds[0]==0);CHECK(!view.input({true,false,false,248,220,0}) && !view.focused());++cases;
     CHECK(view.input({true,true,false,400,390,0})==3 && view.focused()==3);++cases;
     sprites=view.sprites();CHECK(sprites.size()==8);++cases;

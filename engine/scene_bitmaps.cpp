@@ -115,7 +115,7 @@ std::span<const image::Sprite> SceneBitmaps::sprites(std::int32_t first_layer,st
         sprites_.back().layer=item.layer+(item.independent?0x1035:0);sprites_.back().order=0x11+item.order_index;
         sprites_.back().world=item.retiring?image::SpriteWorld::previous:image::SpriteWorld::current;
     }};append_bank(retired_);append_bank(slots_);
-    std::sort(sprites_.begin(),sprites_.end(),[](const auto& a,const auto& b){if(a.layer!=b.layer)return a.layer<b.layer;if(a.order!=b.order)return a.order<b.order;return a.world<b.world;});
+    std::stable_sort(sprites_.begin(),sprites_.end(),[](const auto& a,const auto& b){if(a.layer!=b.layer)return a.layer<b.layer;if(a.order!=b.order)return a.order<b.order;return a.world<b.world;});
     return sprites_;
 }
 std::vector<std::uint8_t> SceneBitmaps::checkpoint(const resource::Catalog& resources)const{

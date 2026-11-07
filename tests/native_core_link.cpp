@@ -4,6 +4,7 @@
 #include "scene.hpp"
 #include "application.hpp"
 #include "title_view.hpp"
+#include "render_frame.hpp"
 #include "progress_storage.hpp"
 #include "save_storage.hpp"
 #include "preference_storage.hpp"
@@ -31,6 +32,7 @@ extern "C" WA2_LINK_CHECK bool wa2_native_link_preference_file(const std::filesy
 extern "C" WA2_LINK_CHECK void* wa2_native_link_application_create(wa2::resource::BankOpener* opener,const std::filesystem::path* directory,const wa2::game::Scene::SavedImageResolver* resolver){return new wa2::game::Application(*opener,std::make_shared<wa2::progress::Store>(wa2::platform::progress_storage(*directory)),wa2::platform::preference_storage(*directory),wa2::platform::save_storage(*directory),*resolver);}
 extern "C" WA2_LINK_CHECK unsigned wa2_native_link_application_update(void* pointer,std::int64_t now,unsigned mode,unsigned slot){auto& app=*static_cast<wa2::game::Application*>(pointer);switch(mode){case 0:app.start({},now);break;case 1:app.open(wa2::game::Page::save,now);app.save(slot);break;case 2:app.load(slot,now);break;case 3:app.background(true,now);break;case 4:app.background(false,now);app.back(now);break;case 5:app.title(now);break;case 6:app.close(now);break;default:throw std::invalid_argument("Unsupported application link-check operation");}if(app.page()!=wa2::game::Page::closed)app.frame(now,{},[now]{return now;});return unsigned(app.page());}
 extern "C" WA2_LINK_CHECK void wa2_native_link_application_destroy(void* pointer){delete static_cast<wa2::game::Application*>(pointer);}
+extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_render_frame(void* pointer){wa2::game::RenderFrame frame;frame.capture(*static_cast<wa2::game::Application*>(pointer));return frame.environment().size()+frame.overlays().size()+frame.movie().has_value();}
 extern "C" WA2_LINK_CHECK void* wa2_native_link_title_create(wa2::game::TitleView::Loader* loader,wa2::game::TitleView::Random* random,const wa2::progress::State* progress){auto view=std::make_unique<wa2::game::TitleView>(*loader,*random);view->prepare({true,false,true},*progress);return view.release();}
 extern "C" WA2_LINK_CHECK unsigned wa2_native_link_title_update(void* pointer,const wa2::progress::State* progress){auto& view=*static_cast<wa2::game::TitleView*>(pointer);view.update();if(auto command=view.take_command();command && view.phase()==wa2::game::TitlePhase::modal)view.resume(*progress);return unsigned(view.sprites().size());}
 extern "C" WA2_LINK_CHECK void wa2_native_link_title_destroy(void* pointer){delete static_cast<wa2::game::TitleView*>(pointer);}

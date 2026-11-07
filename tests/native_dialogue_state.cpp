@@ -51,7 +51,7 @@ int main(int argc,char** argv){try{
     CHECK(dialogue.phase()==s::DialoguePhase::closed && dialogue.raw_text().empty() && !fonts.source_bytes());++cases;
     const auto stable=dialogue.checkpoint();auto broken=stable;broken.back()^=4;rejects([&]{dialogue.restore(broken);});CHECK(dialogue.checkpoint()==stable);++guards;
     const auto idle_loads=loads;restored.restore(stable);restored.update();CHECK(restored.checkpoint()==stable && loads==idle_loads);++cases;
-    for(const auto [at,value]:std::array<std::pair<std::size_t,unsigned>,4>{{{12,10},{stable.size()-60,6},{stable.size()-36,4096},{stable.size()-24,2}}}){
+    for(const auto [at,value]:std::array<std::pair<std::size_t,unsigned>,6>{{{12,3},{16,10},{stable.size()-64,6},{stable.size()-40,4096},{stable.size()-28,2},{stable.size()-8,2}}}){
         rejects([&]{dialogue.restore(patch(stable,at,value));});CHECK(dialogue.checkpoint()==stable);++guards;
     }
     CHECK(seen==1 && !fonts.source_bytes());++cases;
