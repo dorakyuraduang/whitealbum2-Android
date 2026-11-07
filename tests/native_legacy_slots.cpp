@@ -1,0 +1,53 @@
+#include "native_legacy_fixture.hpp"
+#include "legacy_slots.hpp"
+#include "legacy_save.hpp"
+#include "application.hpp"
+#include "native_desktop.hpp"
+#include "save_storage.hpp"
+#include <algorithm>
+#include <filesystem>
+#include <limits>
+#include <set>
+
+namespace fs=std::filesystem;
+struct Memory:g::SaveStorage {
+    std::map<unsigned,Bytes> slots;unsigned writes{};bool failing{};
+    std::optional<Bytes> read(unsigned slot)override{auto found=slots.find(slot);return found==slots.end()?std::optional<Bytes>{}:found->second;}
+    std::optional<Bytes> prefix(unsigned slot,std::size_t count)override{auto found=slots.find(slot);if(found==slots.end())return {};return Bytes(found->second.begin(),found->second.begin()+std::min(found->second.size(),count));}
+    void replace(unsigned slot,std::span<const std::uint8_t> bytes)override{if(failing)throw std::runtime_error("owned native write failure");slots[slot]=Bytes(bytes.begin(),bytes.end());++writes;}
+    std::vector<g::SaveSlotInfo> list()override{std::vector<g::SaveSlotInfo> out;for(const auto& [slot,bytes]:slots)out.push_back({slot,bytes.size(),0,{}});return out;}
+};
+struct Preferences:g::PreferenceStorage {std::optional<Bytes> read()override{return {};}void replace(std::span<const std::uint8_t>)override{}};
+struct Counted:Source {unsigned reads{};std::size_t requested{};std::optional<std::uint64_t> forced_size;std::uint64_t size()const override{return forced_size.value_or(b.size());}void read_at(std::uint64_t at,std::span<std::uint8_t> out)override{++reads;requested+=out.size();Source::read_at(at,out);}};
+void owned_file(const fs::path& path,std::span<const std::uint8_t> bytes){std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));out.close();CHECK(out);}
+Bytes owned_file(const fs::path& path){std::ifstream in(path,std::ios::binary);CHECK(in);return Bytes(std::istreambuf_iterator<char>(in),{});}
+int main(int argc,char** argv){try{
+    CHECK(argc==2);unsigned cases{},guards{},scans{},opens{};auto banks=memory_banks();Script message;message.call(131,{s::Value(std::string("OWNED")),s::Value(7),s::Value(1)});message.call(194,{s::Value(10000),s::Value(0),s::Value(1)});message.finish();const auto program=s::Program::parse("1001",message.code,text(message.strings));auto saved=file({frame(program,131)});
+    saved[88]=1;saved[89]=2;saved[90]=3;saved[91]=4;for(unsigned n=0;n<4;++n)saved[88+65532+n]=std::uint8_t(11+n);
+    banks["ck-gal.pak"]=bank({{"Global.vrb",text("3,FLG_00,0\r\n")},{"LFScriptFunc.fnc",functions(0,200)},{"LFScriptFuncEx.fnc",functions(200,239)},{"1001.bnr",message.code},{"1001.txt",text(message.strings)}});const r::BankOpener opener=[&](auto name)->std::shared_ptr<r::Source>{auto found=banks.find(std::string(name));return found==banks.end()?nullptr:found->second;};
+    for(unsigned directory=0;directory<4;++directory){for(unsigned slot:{0u,9u,99u,100u}){const auto name=slot==100?std::string("save_Q.sav"):std::string("save_")+char('0'+slot/10)+char('0'+slot%10)+".sav";const auto path=r::legacy_save_path(std::string(r::legacy_save_directories[directory])+name);CHECK(path && path->directory==directory && path->slot==slot);++cases;}}
+    CHECK(r::legacy_save_path("SAVE_99.SAV")->slot==99 && r::legacy_save_path("SaVe_q.SaV")->slot==100);++cases;
+    for(auto name:{"", "save_0.sav", "save_000.sav", "save_0x.sav", "save_00.sav/", "../save_00.sav", "/save_00.sav", "IC/save_00.sav", "Documents/Leaf/OTHER/save_00.sav", "save_00.sav.bak", "save_00.sav\\x", "game.exe", "Sys.sav", "grp.pak"}){CHECK(!r::legacy_save_path(name));++guards;}++cases;
+    auto source=std::make_shared<Counted>();source->b=saved;std::vector<g::LegacySaveFile> files{{"save_00.sav",saved.size(),1,{}},{"save_07.SAV",saved.size(),2,{}},{"save_Q.sav",saved.size(),3,{}},{"Documents/Leaf/WHITE ALBUM2/save_01.sav",saved.size(),4,{}},{"Documents/Leaf/WHITE ALBUM2 -introductory chapter-/save_04.sav",saved.size(),5,{}}};
+    g::LegacySaveSources sources;sources.list=[&]{++scans;return files;};bool gone{};sources.open=[&](auto name)->std::shared_ptr<r::Source>{CHECK(r::legacy_save_path(name));++opens;return gone?nullptr:source;};auto native=std::make_shared<Memory>();auto layered=g::legacy_save_storage(native,sources,true);g::SaveSlots slots(layered);
+    const auto inventory=slots.list();CHECK(inventory.size()==4 && inventory[0].slot==0 && inventory[1].slot==7 && inventory[2].slot==100 && inventory[3].slot==204 && scans==1 && !opens && !source->reads);++cases;
+    const auto preview=slots.preview(0);CHECK(preview && preview->original && !preview->legacy && preview->date.year==2024 && preview->description=="OWNED SAVE" && preview->story_code==1001001 && preview->thumbnail->width==128 && preview->thumbnail->height==128 && preview->thumbnail->rgba[0]==3 && preview->thumbnail->rgba[1]==2 && preview->thumbnail->rgba[2]==1 && preview->thumbnail->rgba[3]==4 && preview->thumbnail->rgba[65532]==13 && preview->thumbnail->rgba[65534]==11 && source->requested==88+65536);++cases;
+    rejects([&]{preview->encode();});++guards;CHECK(*slots.read(100)==saved && source->reads==2 && !slots.read(2));++cases;
+    auto progress=std::make_shared<p::Store>(std::make_shared<Storage>());auto scene=g::Scene::restore_legacy(opener,progress,saved,0,memory_resolver());const auto snapshot=scene->checkpoint();slots.write(0,snapshot);const auto reads=source->reads;CHECK(*slots.read(0)==snapshot && source->reads==reads && source->b==saved && native->writes==1);++cases;
+    native->slots[7]={0,1,2,3};rejects([&]{slots.read(7);});++guards;CHECK(source->reads==reads);native->slots.erase(7);++cases;
+    const auto original_files=files;files.erase(files.begin(),files.begin()+3);auto combined=g::legacy_save_storage(std::make_shared<Memory>(),sources,true);CHECK(combined->list().size()==2 && combined->read(1));CHECK(!combined->read(0));++cases;
+    files.push_back({"Documents/Leaf/WHITE ALBUM2 -closing chapter-/save_02.sav",saved.size(),6,{}});auto closing=g::legacy_save_storage(std::make_shared<Memory>(),sources,false);const auto closing_slots=closing->list();CHECK(closing_slots.size()==1 && closing_slots[0].slot==2 && closing->read(2));++cases;
+    files=original_files;auto app_native=std::make_shared<Memory>();g::Application app(opener,progress,std::make_shared<Preferences>(),g::legacy_save_storage(app_native,sources,true),memory_resolver(),31);app.load(100,1);CHECK(app.page()==g::Page::story && app.scene()->statistics().command==131 && app.scene()->dialogue_state().raw_text()=="ABC\\kDEF" && app.scene()->random_state()==31);app.save(3);CHECK(app_native->writes==1 && !g::original_manual_save(app_native->slots[3]) && source->b==saved);++cases;
+    const auto old=app.scene();const auto old_state=old->checkpoint();source->b[scene_at+0x21a]=127;rejects([&]{app.load(100,2);});++guards;CHECK(app.scene()==old && old->checkpoint()==old_state && source->b[scene_at+0x21a]==127 && app_native->writes==1);source->b=saved;++cases;
+    gone=true;rejects([&]{slots.read(100);});++guards;gone=false;source->forced_size=std::numeric_limits<std::uint64_t>::max();rejects([&]{slots.read(100);});++guards;source->forced_size.reset();++cases;
+    files.push_back(files.front());rejects([&]{layered->list();});++guards;files=original_files;files.push_back({"SAVE_00.SAV",saved.size(),1,{}});rejects([&]{layered->list();});++guards;files=original_files;files.push_back({"../save_01.sav",saved.size(),1,{}});rejects([&]{layered->list();});++guards;files=original_files;++cases;
+    for(unsigned count:{0u,87u,65535u,65536u+87}){rejects([&]{g::inspect_legacy_save_preview(std::span(saved).first(count));});++guards;}++cases;
+    {auto version=saved;put(version,0,1);rejects([&]{g::inspect_legacy_save_preview(version);});CHECK(g::original_manual_save(version));++guards;put(version,0,3);CHECK(!g::original_manual_save(version));}++cases;
+    g::LegacySaveSources incomplete;incomplete.open=sources.open;rejects([&]{g::legacy_save_storage(native,incomplete,true);});rejects([&]{g::legacy_save_storage({},sources,true);});guards+=2;CHECK(g::legacy_save_storage(native,{},true)==native);++cases;
+    // Only this uniquely created fixture directory is removed at the end.
+    const auto parent=fs::absolute(fs::path(argv[1])).parent_path();const auto root=parent/("native-legacy-slots-fixture-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(root.parent_path()==parent && fs::create_directory(root));
+    owned_file(root/"save_00.sav",saved);owned_file(root/"save_Q.sav",saved);owned_file(root/"unrelated.dat",Bytes{1,2,3});fs::create_directory(root/"save_10.sav");const auto nested=root/"Documents"/"Leaf"/"WHITE ALBUM2";fs::create_directories(nested);owned_file(nested/"save_02.sav",saved);
+    auto desktop=wa2::platform::native_desktop_legacy_saves(root);auto disk_entries=desktop.list();CHECK(disk_entries.size()==4 && std::count_if(disk_entries.begin(),disk_entries.end(),[](const auto& file){return !file.diagnostic.empty();})==1);auto read_only=g::legacy_save_storage(wa2::platform::save_storage(root),desktop,true);g::SaveSlots disk(read_only);CHECK(disk.preview(0)->thumbnail->height==128 && *disk.read(100)==saved);disk.write(0,snapshot);CHECK(owned_file(root/"save_00.sav")==saved && owned_file(root/"save_Q.sav")==saved && owned_file(root/"unrelated.dat")==Bytes({1,2,3}) && *disk.read(0)==snapshot);++cases;
+    for(auto name:{"../save_00.sav","/save_00.sav","Documents/Leaf/OTHER/save_00.sav","unrelated.dat"}){rejects([&]{desktop.open(name);});++guards;}rejects([&]{wa2::platform::native_desktop_legacy_saves("relative");});++guards;CHECK(root.parent_path()==parent && root.filename().string().starts_with("native-legacy-slots-fixture-") && fs::remove_all(root)>0);++cases;
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-legacy-slots.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"source_names_and_directory_precedence\":true,\"native_corruption_never_falls_back\":true,\"read_only_original_files\":true,\"bounded_preview_without_scene_read\":true,\"bgra_thumbnail_keeps_all_rows\":true,\"actual_application_load_and_native_save\":true,\"failed_load_preserves_live_owner\":true,\"owned_desktop_files_only\":true,\"synthetic_data_only\":true,\"original_resources_opened\":false,\"original_saves_opened\":false,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out);std::cout<<"PASS read-only original slots, bounded thumbnails and common application load; own files only.\n";return 0;
+}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

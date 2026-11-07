@@ -11,4 +11,5 @@ std::filesystem::path native_desktop_directory(const std::filesystem::path& exec
     const std::filesystem::path& working_directory,const std::optional<std::filesystem::path>& selected={});
 resource::BankOpener native_desktop_banks(const std::filesystem::path&);
 LegacySettingsOpener native_desktop_legacy_settings(const std::filesystem::path&);
+game::LegacySaveSources native_desktop_legacy_saves(const std::filesystem::path&);
 }

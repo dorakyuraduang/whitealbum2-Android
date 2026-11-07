@@ -25,7 +25,7 @@ def main():
     if digest(api)!=official['android_jar_sha256']:raise ValueError('Android API stubs changed')
     source_sets={backend:java_sources(backend) for backend in ('shared-aot','native')}
     sdl=sorted((ROOT/'tools/SDL-release-2.32.10/android-project/app/src/main/java').rglob('*.java'))
-    tests=[ROOT/'tests/android/org/wa2/port'/name for name in ('TouchGesturesTest.java','ResourceLocationTest.java','LegacySettingsPathTest.java')]
+    tests=[ROOT/'tests/android/org/wa2/port'/name for name in ('TouchGesturesTest.java','ResourceLocationTest.java','LegacySettingsPathTest.java','LegacySavePathTest.java')]
     inputs={path.relative_to(ROOT).as_posix():digest(path) for path in {*sdl,*tests,*[path for sources in source_sets.values() for path in sources],Path(__file__),ROOT/'scripts/android_source_sets.py',ROOT/'android/app/src/main/AndroidManifest.xml'}}
     identity=hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()[:16];directory=ROOT/'build/native-android-ui'/identity;directory.mkdir(parents=True,exist_ok=True)
     flags=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS;records={}
@@ -54,6 +54,8 @@ def main():
         for test in tests:
             path=directory/(test.stem+'.json');run([jdk/'bin/java.exe','-XX:ActiveProcessorCount=1','-XX:+UseSerialGC','-Xmx128m','-cp',native,'org.wa2.port.'+test.stem,path]);reports[test.stem]=json.loads(path.read_text())
             if not reports[test.stem]['passed']:raise ValueError('Native UI pure state test failed: '+test.stem)
+        saves=reports['LegacySavePathTest']
+        if saves['cases']<406 or saves['guards']<17 or saves['source_files_opened'] or saves['android_device_verified']:raise ValueError('Incomplete read-only original-save path checks')
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Android UI input changed during verification: '+name)
     report=dict(schema='wa2.native-android-ui.v1',source_sha256=inputs,source_sets=records,api_jar_sha256=digest(api),javac_sha256=digest(jdk/'bin/javac.exe'),d8_sha256=digest(bt/'lib/d8.jar'),

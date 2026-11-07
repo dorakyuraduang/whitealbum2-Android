@@ -17,6 +17,7 @@ struct SavePreview {
     std::uint32_t story_code{};
     bool story_known{};
     bool legacy{};
+    bool original{};
     void validate()const;
     std::vector<std::uint8_t> encode()const;
     static SavePreview decode(std::span<const std::uint8_t>);

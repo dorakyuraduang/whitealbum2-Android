@@ -2,6 +2,8 @@
 #include "resource_jni.hpp"
 #include "resource_fd.hpp"
 #include "legacy_settings_path.hpp"
+#include "legacy_save_path.hpp"
+#include <charconv>
 #include <SDL_system.h>
 #include <string>
 
@@ -13,6 +15,7 @@ jmethodID optional_method{};
 jmethodID settings_method{};
 jmethodID failure_method{};
 jmethodID list_method{},metadata_method{};
+jmethodID save_open_method{},save_list_method{};
 
 std::string consume_error(JNIEnv* env) {
     auto error=env->ExceptionOccurred();
@@ -50,13 +53,16 @@ bool initialize_resource_jni(JNIEnv* env) noexcept {
     if(settings_method)failure_method=env->GetStaticMethodID(directory_class,"reportFailure","(Ljava/lang/String;)V");
     if(failure_method)list_method=env->GetStaticMethodID(directory_class,"listPaks","()[Ljava/lang/String;");
     if(list_method)metadata_method=env->GetStaticMethodID(directory_class,"pakMetadata","(Ljava/lang/String;)[J");
-    if(!open_method || !optional_method || !settings_method || !failure_method || !list_method || !metadata_method){release_resource_jni(env);return false;}
+    if(metadata_method)save_open_method=env->GetStaticMethodID(directory_class,"openLegacySave","(Ljava/lang/String;)I");
+    if(save_open_method)save_list_method=env->GetStaticMethodID(directory_class,"legacySaveMetadata","()[Ljava/lang/String;");
+    if(!open_method || !optional_method || !settings_method || !failure_method || !list_method || !metadata_method || !save_open_method || !save_list_method){release_resource_jni(env);return false;}
     return true;
 }
 void release_resource_jni(JNIEnv* env) noexcept {
     if(directory_class)env->DeleteGlobalRef(directory_class);
     directory_class=nullptr;open_method=nullptr;optional_method=nullptr;settings_method=nullptr;failure_method=nullptr;
     list_method=nullptr;metadata_method=nullptr;
+    save_open_method=nullptr;save_list_method=nullptr;
 }
 static int open_descriptor(std::string_view filename,jmethodID method,bool optional) {
     if(!directory_class || !open_method)throw resource::Error("Android resource directory bridge is unavailable");
@@ -79,6 +85,18 @@ std::shared_ptr<resource::Source> try_open_resource_bank(std::string_view filena
 std::shared_ptr<resource::Source> try_open_legacy_settings(std::string_view filename){
     if(!platform::legacy_settings_path(filename))throw resource::Error("Invalid original settings filename");
     const auto fd=open_descriptor(filename,settings_method,true);return fd<0?nullptr:platform::adopt_resource_fd(fd);
+}
+std::shared_ptr<resource::Source> try_open_legacy_save(std::string_view filename){
+    if(!resource::legacy_save_path(filename))throw resource::Error("Invalid original manual-save filename");const auto fd=open_descriptor(filename,save_open_method,true);return fd<0?nullptr:platform::adopt_resource_fd(fd);
+}
+std::vector<ArchiveMetadata> legacy_save_metadata(){
+    if(!directory_class || !save_list_method)throw resource::Error("Android original-save metadata bridge is unavailable");auto* env=static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());if(!env)throw resource::Error("Android save thread has no JNI environment");
+    auto array=static_cast<jobjectArray>(env->CallStaticObjectMethod(directory_class,save_list_method));if(env->ExceptionCheck())throw resource::Error(consume_error(env));if(!array)throw resource::Error("Android returned no original-save inventory");std::vector<ArchiveMetadata> result;
+    try{const auto count=env->GetArrayLength(array);if(count<0 || count>404*3 || count%3)throw resource::Error("Invalid Android original-save inventory length");result.reserve(std::size_t(count/3));
+        const auto string=[&](jsize at){auto item=static_cast<jstring>(env->GetObjectArrayElement(array,at));if(!item || env->ExceptionCheck())throw resource::Error(consume_error(env));if(env->GetStringUTFLength(item)>128)throw resource::Error("Android original-save metadata field exceeds its bound");const auto* text=env->GetStringUTFChars(item,nullptr);if(!text)throw resource::Error(consume_error(env));std::string value;try{value=text;}catch(...){env->ReleaseStringUTFChars(item,text);throw;}env->ReleaseStringUTFChars(item,text);return value;};
+        const auto number=[](const std::string& text){std::uint64_t value{};const auto parsed=std::from_chars(text.data(),text.data()+text.size(),value);if(parsed.ec!=std::errc{} || parsed.ptr!=text.data()+text.size() || text.empty())throw resource::Error("Invalid Android original-save size or timestamp");return value;};
+        for(jsize at=0;at<count;at+=3){if(env->PushLocalFrame(4)<0)throw resource::Error(consume_error(env));try{ArchiveMetadata entry;entry.name=string(at);if(!resource::legacy_save_path(entry.name))throw resource::Error("Unknown Android original-save path");entry.size=number(string(at+1));entry.modified_millis=number(string(at+2));result.push_back(std::move(entry));}catch(...){env->PopLocalFrame(nullptr);throw;}env->PopLocalFrame(nullptr);}
+    }catch(...){env->DeleteLocalRef(array);throw;}env->DeleteLocalRef(array);return result;
 }
 std::vector<ArchiveMetadata> resource_metadata(){
     if(!directory_class || !list_method || !metadata_method)throw resource::Error("Android resource metadata bridge is unavailable");

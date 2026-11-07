@@ -35,14 +35,30 @@ it initializes no device and executes no original script or game.
 against owned format records and LSCR programs. It validates globals, locals,
 flow/call stacks, suspended command text policy and conversion failure guards.
 Only constructed continuations are executed after conversion; original saves
-and scripts are not opened. This check does not make original manual slots
-loadable: whole-scene conversion and a read-only file adapter remain required.
+and scripts are not opened. The aggregate scene and slot checks below exercise
+the separate common application integration.
 
 `native-legacy-save.json` additionally checks the bounded original header and
 version-2 scene audio converter. It uses constructed byte records and fake
 transports to verify loop restoration, omitted one-shots/fading-out music,
 current preferences and transactional failure. It opens no original save,
 audio device or game; this report is not whole-scene save compatibility.
+
+`native-legacy-scene.json` additionally checks version-2 visual, dialogue,
+selection, nested-call, weather and audio reconstruction into native scene
+owners. `native-legacy-slots.json` covers read-only original directory layers,
+bounded full-thumbnail previews, native precedence and actual application
+load/native-save/failure routes using constructed saves and uniquely owned
+temporary directories. `native-save-view.json` checks both original-square and
+native-wide thumbnail crops. These tests do not open user saves or execute an
+original story. Version-1 scene records and unrecoverable pending command data
+remain explicitly unsupported; this is not whole-game compatibility proof.
+
+`verify_native_android_ui.py` also compiles and runs the finite
+`LegacySavePathTest` without Android services. The native Android definition
+check matches the actual Java descriptors for original-save metadata/open calls
+with the linked JNI literals. Original PAKs and manual saves stay external;
+the Android provider itself is not run by these checks.
 
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional

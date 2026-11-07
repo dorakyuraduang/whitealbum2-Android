@@ -130,4 +130,10 @@ void SceneCharacters::restore(std::span<const std::uint8_t> bytes,resource::Cata
     std::vector<Slot> retired;retired.reserve(8);for(unsigned n=0;n<retired_count;++n)retired.push_back(slot());in.finish();
     slots_=std::move(next);retired_=std::move(retired);style_generation_=generation;sprites_.clear();
 }
+void SceneCharacters::prepare_restored_assets(resource::Catalog& resources,const image::Resolve& resolve){
+    std::vector<std::pair<Slot*,std::shared_ptr<const image::Raster>>> ready;ready.reserve(16);
+    const auto prepare=[&](auto& slots){for(auto& slot:slots)if(slot.request)ready.emplace_back(&slot,image::resolve_reference(resources.reference(slot.request),resources,resolve));};
+    prepare(slots_);prepare(retired_);
+    for(auto& [slot,pixels]:ready){slot->current.image=std::move(pixels);slot->request.reset();}
+}
 }

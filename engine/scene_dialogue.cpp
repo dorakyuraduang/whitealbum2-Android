@@ -66,6 +66,19 @@ std::uint32_t SceneDialogue::duration()const {
     if(page_>=body_.metrics().pages.size())return 0;
     return body_.metrics().pages[page_].duration+160;
 }
+void SceneDialogue::restore_content(const DialogueContent& content){
+    if(content.raw.size()>4095 || content.name.size()>4095 || content.raw.find('\0')!=std::string::npos || content.name.find('\0')!=std::string::npos || content.speaker< -1 || content.speaker>100 || content.line< -1 || content.page<0 || content.budget<0)
+        throw Error("Invalid saved dialogue content");
+    SceneDialogue next(fonts_,loader_);next.settings(settings_);next.picture_=content.picture;
+    const std::array<Value,1> novel{Value(int(content.novel))};Command mode{220,novel};next.novel_.dispatch(mode);
+    if(content.open){
+        next.name(content.name,content.speaker);next.message(content.raw,content.line,true);
+        if(std::size_t(content.page)>=next.body_.metrics().pages.size())throw Error("Saved dialogue page is outside its text");
+        next.page_=std::size_t(content.page);next.budget_=std::min(std::uint32_t(content.budget),next.duration());next.phase_=next.budget_>=next.duration()?DialoguePhase::waiting:DialoguePhase::typing;
+        next.open_elapsed_=std::uint32_t(settings_.open_ticks);next.name_elapsed_=10;
+    }
+    restore(next.checkpoint());
+}
 void SceneDialogue::update(bool fast_forward,bool transitions){
     fast_=fast_forward;
     novel_.update([&](auto ticks){return fast_forward || !transitions?0:ticks==-1?15:ticks==-2?30:ticks;});

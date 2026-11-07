@@ -15,7 +15,7 @@ int main(int argc,char** argv){
         SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON,"101");SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL,"101");
         std::unique_ptr<char,decltype(&SDL_free)> base(SDL_GetBasePath(),SDL_free);if(!base)throw std::runtime_error("Native executable directory is unavailable");
         const auto directory=wa2::platform::native_desktop_directory(wa2::platform::native_utf8_path(base.get()),std::filesystem::current_path(),startup.resources);
-        wa2::platform::NativeHost host;host.resources=wa2::platform::native_desktop_banks(directory);host.legacy_settings=wa2::platform::native_desktop_legacy_settings(directory);host.startup=startup.game;host.startup.seed=std::uint32_t(SDL_GetPerformanceCounter());
+        wa2::platform::NativeHost host;host.resources=wa2::platform::native_desktop_banks(directory);host.legacy_settings=wa2::platform::native_desktop_legacy_settings(directory);host.legacy_saves=wa2::platform::native_desktop_legacy_saves(directory);host.startup=startup.game;host.startup.seed=std::uint32_t(SDL_GetPerformanceCounter());
         host.private_directory=[]{std::unique_ptr<char,decltype(&SDL_free)> path(SDL_GetPrefPath("wa2","native-engine"),SDL_free);if(!path)throw std::runtime_error("Native private directory is unavailable");return wa2::platform::native_utf8_path(path.get());};
         return wa2::platform::run_native_host(std::move(host));
     }catch(const std::exception& error){SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,"WA2 native startup failed",error.what(),nullptr);return 1;}

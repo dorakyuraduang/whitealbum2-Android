@@ -1,4 +1,5 @@
 #include "application.hpp"
+#include "legacy_save.hpp"
 #include <limits>
 
 namespace wa2::game {
@@ -170,7 +171,9 @@ void Application::title(std::int64_t now){
 void Application::background(bool value,std::int64_t now){observe(now);if(background_==value)return;background_=value;release_input_=true;suspend_scene(now);if(value)progress_->flush();}
 void Application::save(unsigned slot){require_open();if(!scene_)throw std::logic_error("Native save requires an active story");saves_.write(slot,scene_->checkpoint());}
 void Application::load(unsigned slot,std::int64_t now){
-    observe(now);auto bytes=saves_.read(slot);if(!bytes)throw std::runtime_error("Native save slot is empty");auto next=Scene::restore(opener_,progress_,*bytes,now,resolver_,preferences_.current(),services_);const bool replay=next->replay_mode()!=0;replace_scene(std::move(next),now);if(!replay)replay_return_.reset();
+    observe(now);auto bytes=saves_.read(slot);if(!bytes)throw std::runtime_error("Native save slot is empty");
+    const auto seed=scene_?scene_->random_state():title_scene_?title_scene_->random_state():seed_;
+    auto next=original_manual_save(*bytes)?Scene::restore_legacy(opener_,progress_,*bytes,now,resolver_,preferences_.current(),services_,seed):Scene::restore(opener_,progress_,*bytes,now,resolver_,preferences_.current(),services_);const bool replay=next->replay_mode()!=0;replace_scene(std::move(next),now);if(!replay)replay_return_.reset();
 }
 FrameBatch Application::frame(std::int64_t now,Input input,const std::function<std::int64_t()>& clock,FrameBudget budget){
     observe(now);

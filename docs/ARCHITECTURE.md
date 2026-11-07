@@ -8,7 +8,7 @@ CPU state, checked source-address memory, or the Windows compatibility runtime.
 The current released APK still uses AOT; a linkable component is not a full port.
 
 The current native application targets are `hosts/native` (Windows x64) and
-`hosts/native-android` (Android ARM64). Both link the same 87 common game/engine
+`hosts/native-android` (Android ARM64). Both link the same 89 common game/engine
 sources through `platform/native_host.cpp`; OS paths, input, resources, device
 audio and SDL presentation stay outside game policy. Actual production builds
 include window/render/audio backends, and Android includes its native-only Java
@@ -17,7 +17,7 @@ runtime rather than falling back to it for an unsupported command. Separate
 unlaunched development packages and matching LGPL link materials can be made
 with the source-bound build/package tools documented in `BUILDING.md`.
 
-Original manual-save import, remaining source-specific UI/renderer options
+Version-1 manual-save conversion, remaining source-specific UI/renderer options
 and complete story/device compatibility are not established. The retained AOT
 release and contract completion flags stay unchanged. The component notes
 below record migration increments; later integration sections supersede the
@@ -98,9 +98,9 @@ not advance a script, publish globals or replace the current session.
 
 The original format omits suspended command string contents. Translation
 therefore requires an explicit scene-state resolver for each such parameter;
-it rejects unrecoverable heap text rather than guessing. The current native
-save menus still use native documents only: this script-data converter is not
-yet an original manual-scene importer. Thirty-one constructed-data cases and
+it rejects unrecoverable heap text rather than guessing. The aggregate scene
+factory described below supplies this resolver; the script-data converter is
+not a scene loader on its own. Thirty-one constructed-data cases and
 seventy-seven guards exercise native resumption, exact real bits, call ownership,
 reference remapping, malformed files and conversion without execution or
 mutation. No original save, original script or device is used in those checks.
@@ -116,9 +116,43 @@ Ambiguous simultaneous music owners and unsupported phases fail explicitly.
 Conversion does not open transports or mutate a current scene. The common
 audio restorers continue to apply current volume, mute and speaker preferences.
 Twenty-nine constructed-data cases and thirty-nine guards check these records
-with fake playback. Complete original scene conversion, thumbnail conversion
-and the read-only legacy slot adapter are still required before exposing an
-original manual save as loadable in the native menus.
+with fake playback. This audio/header converter alone does not establish
+complete original scene or device compatibility.
+
+`Scene::restore_legacy` translates version-2 manual scenes into ordinary native
+owners. It restores script/global/call state, settled background/camera and
+character views, static/INAS bitmap state, dialogue text/page/reveal, source
+choice-history identity, calendar, continuous shake, prefilled weather and
+retained loop audio. Construction resolves assets through the new owner's
+catalogue without replaying LSCR, reading or gallery callbacks. Current
+preferences apply before playback creation; the unsaved RNG continues from the
+application. The existing application swap publishes the candidate only after
+successful preparation. Source load quirks are isolated to this converter:
+ordinary backgrounds reapply source centering, while bitmap rotation and the
+stored destination rectangle are omitted by the original loader. Native
+checkpoints retain their full geometry. Twenty-seven constructed-data cases
+and forty-three guards cover native checkpoint round trips, page continuation,
+nested return, choice history and failed replacement with fake transports.
+Version 1, unrecoverable saved text/heap values, pending commands other than
+message/selection waits and ambiguous simultaneous music remain explicit errors.
+
+`game/legacy_slots.*` adds a read-only source layer below native slots. Native
+files, including damaged ones, take precedence. Original `save_00.sav` through
+`save_99.sav` and `save_Q.sav` can be read from the selected resource directory;
+if absent as a bank, the known Documents/Leaf combined/closing directory is
+selected. The separate introductory directory supplies the alternate bank.
+Directories are never merged piecemeal. Every replacement writes a native file,
+leaving original saves untouched. Browsing reads at most 65,624 bytes per source
+slot: header plus its top-to-bottom 128-square BGRA thumbnail. The menu scales
+the full thumbnail into its 16:9 slot, including quick previews. It does not
+crop it to native thumbnail dimensions or reserialize an original preview as a
+native document. Thirty-four own-file/memory cases and thirty-four guards cover
+the actual application load/save route, precedence, limits and failed loads.
+Both hosts supply metadata/open adapters for this same policy. Android uses
+the authorized Wa2Res tree and one bounded directory scan, with no payload copy;
+406 pure Java path cases and seventeen guards accompany compiled JNI-signature
+checks. These checks do not exercise an Android document provider or establish
+compatibility with user-created original saves or an entire original story.
 
 Selection commands 208/209 now retain original insertion ordinals, conditional
 hidden/disabled entries, eight-entry limits, and persistent choice-history

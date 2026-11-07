@@ -13,6 +13,8 @@ struct LegacySaveHeader {
 inline constexpr std::size_t original_save_header_bytes=88;
 inline constexpr std::size_t original_scene_v2_bytes=0x2434;
 LegacySaveHeader inspect_legacy_save_header(std::span<const std::uint8_t>);
+bool original_manual_save(std::span<const std::uint8_t>)noexcept;
+SavePreview inspect_legacy_save_preview(std::span<const std::uint8_t>);
 struct LegacyAudioSave {SavedScene::Bytes music,effects,voices;};
 LegacyAudioSave import_legacy_scene_audio(std::span<const std::uint8_t>);
 }

@@ -22,6 +22,7 @@ public:
     std::size_t count()const noexcept;
     std::vector<std::uint8_t> checkpoint(const resource::Catalog&)const;
     void restore(std::span<const std::uint8_t>,resource::Catalog&,const image::Resolve&);
+    void prepare_restored_assets(resource::Catalog&,const image::Resolve&);
 private:
     struct Pose {
         std::shared_ptr<const image::Raster> image;

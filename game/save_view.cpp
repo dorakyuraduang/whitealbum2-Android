@@ -125,7 +125,7 @@ void SaveView::draw(){
     for(unsigned n=0;n<10;++n){const auto row_first=sprites_.size();const auto& row=current_.rows[n];const auto x=float(n/5*632),y=float(n%5*96);const auto alpha=opacity(256*body);
         item(2,x+8,y+112,632,96,row.occupied?632:0,float(bank_*96),0x1063,0x4ae + int(n),256*body,scale);
         if(focus_==n)item(3,x+8,y+112,632,96,0,0,0x1064,0x4a9,256*body,scale);
-        if(row.preview && row.preview->thumbnail){push(row.preview->thumbnail,x+64,y+122,128,72,0,0,0x1064,0x4b8+int(n),alpha,scale);}
+        if(row.preview && row.preview->thumbnail){push(row.preview->thumbnail,x+64,y+122,128,72,0,0,0x1064,0x4b8+int(n),alpha,scale);sprites_.back().source_width=float(row.preview->thumbnail->width);sprites_.back().source_height=float(row.preview->thumbnail->height);}
         const auto first=sprites_.size();menu_digits(sprites_,images_[7],row.preview && !row.preview->legacy?date(row.slot,*row.preview):number(row.slot),x+20,y+132,alpha,0x1065,0x4cc+int(n));
         current_.labels[n].append(sprites_,0,100000,x+196,y+146,alpha);for(auto i=first;i<sprites_.size();++i){auto& sprite=sprites_[i];if(i>=first && sprite.order==0){sprite.layer=0x1064;sprite.order=0x4d6+int(n);}sprite.x=640+(sprite.x-640)*scale;sprite.y=360+(sprite.y-360)*scale;sprite.width*=scale;sprite.height*=scale;}
         if(row.preview && row.preview->story_known){const auto code=row.preview->story_code,type=code/10%10,sub=code%10;
@@ -146,7 +146,7 @@ void SaveView::draw(){
     if(context_.mode==SaveMode::load){const auto& quick=current_.rows[10];const bool enabled=quick.occupied && quick.diagnostic.empty();
         item(17,16,608,320,56,0,enabled?232:176,0x1063,0x4f4,256*whole);item(15,16,592,112,16,0,0,0x1063,0x4f5,256*whole);
         if(focus_==23)item(14,16,608,320,56,0,0,0x1064,0x4f6,256*whole);
-        if(quick.preview){const auto& preview=*quick.preview;if(preview.thumbnail)push(preview.thumbnail,40,614,64,36,0,0,0x1064,0x4f9,(enabled?256:64)*whole);if(!preview.legacy){menu_digits(sprites_,images_[7],date(quick_slot,preview).substr(15),112,616,opacity((enabled?256:64)*whole),0x1064,0x4f7);const auto first=sprites_.size();current_.labels[10].append(sprites_,0,100000,106,628,opacity((enabled?256:64)*whole));for(auto n=first;n<sprites_.size();++n){sprites_[n].layer=0x1064;sprites_[n].order=0x4f8;}}}
+        if(quick.preview){const auto& preview=*quick.preview;if(preview.thumbnail){push(preview.thumbnail,40,614,64,36,0,0,0x1064,0x4f9,(enabled?256:64)*whole);sprites_.back().source_width=float(preview.thumbnail->width);sprites_.back().source_height=float(preview.thumbnail->height);}if(!preview.legacy){menu_digits(sprites_,images_[7],date(quick_slot,preview).substr(15),112,616,opacity((enabled?256:64)*whole),0x1064,0x4f7);const auto first=sprites_.size();current_.labels[10].append(sprites_,0,100000,106,628,opacity((enabled?256:64)*whole));for(auto n=first;n<sprites_.size();++n){sprites_[n].layer=0x1064;sprites_[n].order=0x4f8;}}}
         if(context_.alternate){item(16,896,600,368,40,0,float((1-bank_)*120+status(24)*40),0x1063,0x4fa,256*whole);if(focus_==24)item(16,832,640,432,16,0,280,0x1063,0x4fb,256*whole);}
     }
     if(current_music_ && phase_!=SavePhase::opening && phase_!=SavePhase::closing){int order=0x43f;append_music_caption(sprites_,images_[18],images_[19],current_music_(),0x1063,order);}

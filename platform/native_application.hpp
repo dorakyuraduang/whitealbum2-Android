@@ -1,6 +1,7 @@
 #pragma once
 #include "application.hpp"
 #include "preference_storage.hpp"
+#include "legacy_slots.hpp"
 #include <chrono>
 #include <filesystem>
 
@@ -17,5 +18,5 @@ NativeStartup native_startup(std::span<const std::string_view> arguments);
 // The host supplies an existing private directory, separate from external
 // resources and the retained AOT application's files. No PAK is copied.
 std::unique_ptr<game::Application> native_application(resource::BankOpener,const std::filesystem::path& private_directory,
-    NativeStartup={},game::SceneServices={},game::TitleServices={},LegacySettingsOpener={});
+    NativeStartup={},game::SceneServices={},game::TitleServices={},LegacySettingsOpener={},game::LegacySaveSources={});
 }

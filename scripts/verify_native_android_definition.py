@@ -52,7 +52,8 @@ def main():
         if value.encode() not in data:raise ValueError('Linked native JNI service lacks registration data: '+value)
     declarations=output([jdk/'bin/javap.exe','-p','-s',classes/'org/wa2/port/ResourceDirectory.class'])
     resource_expected={'openPak':'(Ljava/lang/String;)I','openOptionalPak':'(Ljava/lang/String;)I',
-        'openLegacySettings':'(Ljava/lang/String;)I','listPaks':'()[Ljava/lang/String;','pakMetadata':'(Ljava/lang/String;)[J','reportFailure':'(Ljava/lang/String;)V'}
+        'openLegacySettings':'(Ljava/lang/String;)I','openLegacySave':'(Ljava/lang/String;)I','legacySaveMetadata':'()[Ljava/lang/String;',
+        'listPaks':'()[Ljava/lang/String;','pakMetadata':'(Ljava/lang/String;)[J','reportFailure':'(Ljava/lang/String;)V'}
     resource_methods={};pending=None
     for line in declarations.splitlines():
         found=re.search(r'\bpublic static\b.*\s(\w+)\(',line)

@@ -18,6 +18,11 @@ struct DialogueSettings {
     bool window{true};
     int novel_alpha{};
 };
+struct DialogueContent {
+    std::string raw,name;
+    std::int32_t speaker{-1},line{-1},page{},budget{};
+    bool open{},picture{},novel{};
+};
 class SceneDialogue {
 public:
     using Loader=std::function<std::shared_ptr<image::ImageRequest>(std::string_view)>;
@@ -46,6 +51,8 @@ public:
     bool toolbar(StoryToolbar);
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t>);
+    // Rebuild a saved text view without invoking history or message callbacks.
+    void restore_content(const DialogueContent&);
     void prepare_restored_assets(resource::Catalog&,const image::Resolve&);
 private:
     text::FontBook& fonts_;

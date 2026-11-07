@@ -8,5 +8,6 @@ namespace wa2::android {
 std::shared_ptr<resource::Source> open_resource_bank(std::string_view filename);
 std::shared_ptr<resource::Source> try_open_resource_bank(std::string_view filename);
 std::shared_ptr<resource::Source> try_open_legacy_settings(std::string_view filename);
+std::shared_ptr<resource::Source> try_open_legacy_save(std::string_view filename);
 void report_game_failure(std::string_view message) noexcept;
 }

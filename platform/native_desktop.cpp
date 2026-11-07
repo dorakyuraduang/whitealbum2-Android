@@ -37,4 +37,14 @@ LegacySettingsOpener native_desktop_legacy_settings(const std::filesystem::path&
         try{return open_resource_file(directory/native_utf8_path(name));}catch(const resource::NotFound&){return {};}
     };
 }
+game::LegacySaveSources native_desktop_legacy_saves(const std::filesystem::path& directory){
+    if(directory.empty() || !directory.is_absolute())throw std::invalid_argument("Native original-save directory must be absolute");const auto root=directory.lexically_normal();game::LegacySaveSources result;
+    result.open=[root](std::string_view name)->std::shared_ptr<resource::Source>{if(!resource::legacy_save_path(name))throw resource::Error("Invalid original manual-save filename");try{return open_resource_file(root/native_utf8_path(name));}catch(const resource::NotFound&){return {};}};
+    result.list=[root]{std::vector<game::LegacySaveFile> files;
+        for(const auto prefix:resource::legacy_save_directories){const auto directory=prefix.empty()?root:root/native_utf8_path(prefix);std::error_code error;const bool exists=std::filesystem::exists(directory,error);if(error)throw std::filesystem::filesystem_error("Cannot inspect original save directory",directory,error);if(!exists)continue;if(!std::filesystem::is_directory(directory))throw resource::Error("Original save directory has the wrong file type");unsigned count{};
+            for(const auto& item:std::filesystem::directory_iterator(directory)){if(++count>10000)throw resource::Error("Original save directory has too many entries");const auto utf8=item.path().filename().u8string();std::string name(utf8.begin(),utf8.end());name=std::string(prefix)+name;if(!resource::legacy_save_path(name))continue;game::LegacySaveFile file;file.name=std::move(name);
+                try{if(!item.is_regular_file())throw resource::Error("Original manual save is not an ordinary file");file.bytes=item.file_size();const auto stamp=item.last_write_time();const auto modified=std::chrono::duration_cast<std::chrono::milliseconds>(stamp-decltype(stamp)::clock::now()+std::chrono::system_clock::now().time_since_epoch()).count();file.modified_ms=modified<0?0:std::uint64_t(modified);}catch(const std::exception& error){file.diagnostic=error.what();}files.push_back(std::move(file));}
+        }return files;
+    };return result;
+}
 }

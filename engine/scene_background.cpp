@@ -11,6 +11,13 @@ SceneBackground::SceneBackground(Loader loader,std::function<void(bool)> changin
     :loader_(std::move(loader)),mask_loader_(std::move(masks)),event_loader_(std::move(events)),changing_(std::move(changing)),seen_(std::move(seen)){
     if(!loader_)throw Error("missing native background loader");
 }
+void SceneBackground::restore_still(std::shared_ptr<const image::Raster> raster,CameraPose pose,bool picture){
+    if(!raster || !raster->width || !raster->height || std::uint64_t(raster->width)*raster->height*4!=raster->rgba.size())throw Error("Invalid settled background pixels");
+    SceneCamera camera;camera.bind(0,raster->width,raster->height,pose);
+    BackgroundLayer layer{raster,float((1280-std::int64_t(raster->width))/2),float((720-std::int64_t(raster->height))/2),float(raster->width),float(raster->height),255};
+    layers_={};layers_[0]=std::move(layer);camera_=std::move(camera);current_=0;elapsed_=0;duration_=effective_duration_=1;effect_=1;mask_mode_=x_=y_=0;width_=1280;height_=720;angle_=pose.angle;extended_=true;picture_=picture;loading_=active_=false;
+    request_.reset();ready_image_.reset();mask_request_.reset();mask_.reset();
+}
 void SceneBackground::begin(Command& command,std::int32_t time_mode){
     const bool extended=command.index>=225;
     if(command.arguments.size()!=(extended?11u:9u))throw Error("invalid native background parameters");

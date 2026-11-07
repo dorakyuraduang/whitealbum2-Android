@@ -9,7 +9,7 @@ void SaveDate::validate()const{
         throw std::runtime_error("Invalid native save date");
 }
 void SavePreview::validate()const{
-    date.validate();if(legacy || scene.empty() || scene.size()>240 || description.size()>256 || saved_ms>253402300799999ull)throw std::runtime_error("Invalid native save preview metadata");
+    date.validate();if(legacy || original || scene.empty() || scene.size()>240 || description.size()>256 || saved_ms>253402300799999ull)throw std::runtime_error("Invalid native save preview metadata");
     for(unsigned char c:scene)if(!((c>='A' && c<='Z') || (c>='a' && c<='z') || (c>='0' && c<='9') || c=='_' || c=='-'))throw std::runtime_error("Invalid native preview scene name");
     if(description.find('\0')!=std::string::npos)throw std::runtime_error("Invalid native save description");
     if(story_code>9999999 || (!story_known && story_code))throw std::runtime_error("Invalid native save story classification");

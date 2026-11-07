@@ -25,6 +25,13 @@ LegacySaveHeader inspect_legacy_save_header(std::span<const std::uint8_t> bytes)
     const auto field=bytes.subspan(24,64);const auto end=std::find(field.begin(),field.end(),std::uint8_t(0));if(end==field.end())throw std::runtime_error("Unterminated original save description");
     result.description.assign(reinterpret_cast<const char*>(field.data()),std::size_t(end-field.begin()));return result;
 }
+bool original_manual_save(std::span<const std::uint8_t> bytes)noexcept{return bytes.size()>=4 && (bytes[0]==1 || bytes[0]==2) && !bytes[1] && !bytes[2] && !bytes[3];}
+SavePreview inspect_legacy_save_preview(std::span<const std::uint8_t> bytes){
+    const auto header=inspect_legacy_save_header(bytes);if(header.version!=2)throw std::runtime_error("Original version-1 manual scene conversion is not established");
+    if(bytes.size()<original_save_header_bytes+65536)throw std::runtime_error("Truncated original manual-save thumbnail");SavePreview result;result.date=header.date;result.description=header.description;result.story_code=header.story_code;result.story_known=true;result.original=true;result.scene="original";
+    auto image=std::make_shared<image::Raster>();image->width=image->height=128;image->rgba.resize(65536);const auto pixels=bytes.subspan(original_save_header_bytes,65536);
+    for(unsigned n=0;n<65536;n+=4){image->rgba[n]=pixels[n+2];image->rgba[n+1]=pixels[n+1];image->rgba[n+2]=pixels[n];image->rgba[n+3]=pixels[n+3];}result.thumbnail=std::move(image);return result;
+}
 LegacyAudioSave import_legacy_scene_audio(std::span<const std::uint8_t> bytes){
     if(bytes.size()!=original_scene_v2_bytes)throw std::runtime_error("Original audio conversion requires one complete version-2 scene record");const Fields data(bytes);LegacyAudioSave result;
     // The original loader skips idle and fading-out banks. It restarts each

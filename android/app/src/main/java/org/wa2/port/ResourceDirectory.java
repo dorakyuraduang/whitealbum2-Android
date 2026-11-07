@@ -14,6 +14,7 @@ import android.os.Process;
 import android.provider.DocumentsContract;
 import java.io.IOException;
 import java.util.Locale;
+import java.util.ArrayList;
 
 /** Original PAKs stay in the selected local Wa2Res folder; no resource imports. */
 final class ResourceDirectory {
@@ -297,10 +298,18 @@ final class ResourceDirectory {
     // can be read, and native policy decides whether an import is needed.
     public static int openLegacySettings(String name) throws IOException {
         final String[] parts = LegacySettingsPath.parts(name);
+        return openLegacyFile(parts);
+    }
+
+    public static int openLegacySave(String name) throws IOException {
+        return openLegacyFile(LegacySavePath.parts(name));
+    }
+
+    private static int openLegacyFile(String[] parts) throws IOException {
         final Context application;
         final Uri tree;
         synchronized (LOCK) { awaitArchives(); application = context; tree = activeTree; }
-        if (tree == null) throw new IOException("Original settings need the authorized Wa2Res directory");
+        if (tree == null) throw new IOException("Original files need the authorized Wa2Res directory");
         final ContentResolver resolver = application.getContentResolver();
         String parent = DocumentsContract.getTreeDocumentId(tree);
         for (int n = 0; n < parts.length; ++n) {
@@ -309,9 +318,45 @@ final class ResourceDirectory {
         }
         Uri file = DocumentsContract.buildDocumentUriUsingTree(tree, parent);
         try (ParcelFileDescriptor descriptor = resolver.openFileDescriptor(file, "r")) {
-            if (descriptor == null) throw new IOException("Cannot open original settings: " + name);
+            if (descriptor == null) throw new IOException("Cannot open original read-only file");
             return descriptor.detachFd();
         }
+    }
+
+    // One bounded metadata scan, never a hundred opens or any payload copies.
+    // Triples are canonical relative path, byte size and modification millis.
+    public static String[] legacySaveMetadata() throws IOException {
+        final Context application; final Uri tree;
+        synchronized (LOCK) { awaitArchives(); application = context; tree = activeTree; }
+        if (tree == null) throw new IOException("Original saves need the authorized Wa2Res directory");
+        final ContentResolver resolver = application.getContentResolver();
+        final ArrayList<String> result = new ArrayList<>();
+        for (String prefix : LegacySavePath.DIRECTORIES) {
+            String parent = DocumentsContract.getTreeDocumentId(tree);
+            if (!prefix.isEmpty()) for (String component : prefix.split("/")) {
+                parent = settingsChild(resolver, tree, parent, component, true);
+                if (parent == null) break;
+            }
+            if (parent == null) continue;
+            Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parent);
+            String[] fields = { DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE, DocumentsContract.Document.COLUMN_SIZE,
+                DocumentsContract.Document.COLUMN_LAST_MODIFIED };
+            try (Cursor cursor = resolver.query(children, fields, null, null, null)) {
+                if (cursor == null) throw new IOException("Cannot inspect original manual-save directory");
+                int rows = 0;
+                while (cursor.moveToNext()) {
+                    if (++rows > 10000) throw new IOException("Original manual-save directory has too many entries");
+                    String name = cursor.getString(0);
+                    if (name == null || !LegacySavePath.valid(prefix + name)) continue;
+                    long size = DocumentsContract.Document.MIME_TYPE_DIR.equals(cursor.getString(1)) || cursor.isNull(2) ? 0 : Math.max(0, cursor.getLong(2));
+                    long modified = cursor.isNull(3) ? 0 : Math.max(0, cursor.getLong(3));
+                    if (result.size() >= 404 * 3) throw new IOException("Original manual-save inventory exceeds its limit");
+                    result.add(prefix + name); result.add(Long.toString(size)); result.add(Long.toString(modified));
+                }
+            }
+        }
+        return result.toArray(new String[0]);
     }
 
     private static String settingsChild(ContentResolver resolver, Uri tree,

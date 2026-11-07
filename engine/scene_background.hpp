@@ -44,6 +44,9 @@ public:
     bool picture()const noexcept{return picture_;}
     const SceneCamera& camera()const noexcept{return camera_;}
     std::vector<std::uint8_t> checkpoint(const resource::Catalog&)const;
+    // Reconstruct a settled view from typed native values, without a scene
+    // change notification, command continuation or progress callback.
+    void restore_still(std::shared_ptr<const image::Raster>,CameraPose,bool picture);
     // A restore worker resolves immutable pixels; no GPU/window operation is
     // performed here. Failed parsing/resolution leaves this controller intact.
     void restore(std::span<const std::uint8_t>,resource::Catalog&,const Resolve&);

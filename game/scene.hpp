@@ -149,6 +149,7 @@ public:
     std::vector<std::uint8_t> checkpoint()const;
     using SavedImageResolver=std::function<image::Resolve(resource::Catalog&)>;
     static std::unique_ptr<Scene> restore(resource::BankOpener,std::shared_ptr<progress::Store>,std::span<const std::uint8_t>,std::int64_t monotonic_us,const SavedImageResolver&,const Preferences& preferences={},SceneServices services={});
+    static std::unique_ptr<Scene> restore_legacy(resource::BankOpener,std::shared_ptr<progress::Store>,std::span<const std::uint8_t>,std::int64_t monotonic_us,const SavedImageResolver&,const Preferences& preferences={},SceneServices services={},std::uint32_t seed=1);
 private:
     bool can_accelerate()const;
 };
