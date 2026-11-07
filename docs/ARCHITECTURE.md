@@ -847,8 +847,15 @@ unprojected through the dialogue transform before hit testing. The scroll and
 page edges are queued once by the shared frame driver; held pointer state is
 reserved for scrollbar dragging. Quick-save currently writes the isolated
 native quick slot directly; its source confirmation/result presentation, menu
-entry/exit capture/zoom, held-arrow repetition, live replay-level meter and
-native per-speaker voice-control disabling remain unfinished. The view checks
+entry/exit capture/zoom remain unfinished. Cached source 41247c..41250d gates
+each recorded voice control using its first speaker and the existing ten
+character switches (406410); master/global speech mute does not disable that
+control. Its icon atlas rows are disabled 0, ordinary 28 and hovered 56. The
+source consumes single-click edges for arrows and held input for dragging,
+without a separate playing-state icon or replay-level meter. Scrolling clears
+remaining replay descriptors before a same-tick next-line decision, lets the
+current voice finish and retains its owner for closing the page. Permission
+changes refresh visible controls without rebuilding text. The view checks
 use constructed PAKs and deferred font geometry, not original glyph pixels,
 game playback, a screen or device input. No native game package is released by
 these checks.

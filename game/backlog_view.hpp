@@ -15,7 +15,8 @@ public:
     using Loader=script::SceneSelection::Loader;
     using Text=std::function<text::PreparedText(std::string_view,const text::TextStyle&)>;
     using Sound=std::function<void(audio::SystemCue)>;
-    BacklogView(Loader,Text,Sound={},CurrentMusic={});
+    using VoiceAllowed=std::function<bool(std::int32_t)>;
+    BacklogView(Loader,Text,Sound={},CurrentMusic={},VoiceAllowed={});
     void prepare(BacklogContext,const script::SceneBacklog&);
     void update(BacklogInput={});
     void clear();
@@ -26,10 +27,9 @@ public:
     std::span<const BacklogHit> hits()const noexcept{return hits_;}
     const std::deque<script::BacklogEntry>& entries()const noexcept{return entries_;}
     std::optional<BacklogCommand> take_command();
-    void playing(std::optional<std::size_t> entry){playing_=entry;}
 private:
-    struct Row {std::size_t entry{};text::PreparedText name,body;std::uint32_t page{};};
-    Loader loader_;Text text_;Sound sound_;CurrentMusic current_music_;
+    struct Row {std::size_t entry{};text::PreparedText name,body;std::uint32_t page{};bool replayable{};};
+    Loader loader_;Text text_;Sound sound_;CurrentMusic current_music_;VoiceAllowed voice_allowed_;
     BacklogContext context_;
     std::deque<script::BacklogEntry> entries_;
     std::vector<Row> rows_;
@@ -39,7 +39,6 @@ private:
     std::vector<image::Sprite> sprites_;
     std::vector<BacklogHit> hits_;
     std::optional<unsigned> focus_;
-    std::optional<std::size_t> playing_;
     std::optional<BacklogCommand> command_;
     BacklogPhase phase_{BacklogPhase::idle};
     std::size_t position_{};unsigned image_next_{};bool dragging_{};
@@ -48,6 +47,8 @@ private:
     void move(std::size_t);
     bool images();
     void regions();
+    bool replayable(const script::BacklogEntry&)const;
+    void refresh_replay_flags();
     void activate(unsigned);
     void draw();
 };

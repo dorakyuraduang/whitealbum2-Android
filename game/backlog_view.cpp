@@ -4,10 +4,10 @@
 #include <limits>
 
 namespace wa2::game {
-BacklogView::BacklogView(Loader images,Text text,Sound sound,CurrentMusic music):loader_(std::move(images)),text_(std::move(text)),sound_(std::move(sound)),current_music_(std::move(music)){
+BacklogView::BacklogView(Loader images,Text text,Sound sound,CurrentMusic music,VoiceAllowed allowed):loader_(std::move(images)),text_(std::move(text)),sound_(std::move(sound)),current_music_(std::move(music)),voice_allowed_(std::move(allowed)){
     if(!loader_ || !text_)throw script::Error("Missing native backlog services");black_=std::make_shared<const image::Raster>(image::Raster{1,1,{0,0,0,255}});sprites_.reserve(2048);hits_.reserve(8);
 }
-void BacklogView::clear(){context_={};entries_.clear();rows_.clear();images_={};request_.reset();sprites_.clear();hits_.clear();focus_.reset();playing_.reset();command_.reset();phase_=BacklogPhase::idle;position_=image_next_=0;dragging_=false;}
+void BacklogView::clear(){context_={};entries_.clear();rows_.clear();images_={};request_.reset();sprites_.clear();hits_.clear();focus_.reset();command_.reset();phase_=BacklogPhase::idle;position_=image_next_=0;dragging_=false;}
 std::string BacklogView::name(unsigned index)const{
     if(index==6)return "sys_00301.tga";if(index==7)return "sys_00300.tga";
     constexpr std::array<std::string_view,6> suffix{"0030","0031","0032","0033","9000","9100"};if(index>=suffix.size())throw script::Error("Unknown native backlog atlas");return "sys_"+std::to_string(context_.skin)+std::string(suffix[index])+".tga";
@@ -17,7 +17,7 @@ std::vector<BacklogView::Row> BacklogView::rows(std::size_t position,const std::
     for(std::size_t n=0;n<count;++n){Row row;row.entry=position+count-1-n;const auto& entry=entries.at(row.entry);text::TextStyle body;body.colour=text::speaker_colour(text::speaker_style(entry.speaker,entry.name));
         if(context.novel){body.columns=40;body.rows=15;}row.body=text_(entry.text,body);row.page=row.entry==0?context.current_page:0;
         if(row.page>=row.body.metrics().pages.size())throw script::Error("Native backlog page is outside its text");
-        if(!context.novel && !entry.name.empty()){auto label=body;label.size=28;label.columns=36;label.rows=1;label.line_gap=0;label.spacing=2;label.colour={255,255,255};row.name=text_(entry.name,label);}result.push_back(std::move(row));
+        row.replayable=replayable(entry);if(!context.novel && !entry.name.empty()){auto label=body;label.size=28;label.columns=36;label.rows=1;label.line_gap=0;label.spacing=2;label.colour={255,255,255};row.name=text_(entry.name,label);}result.push_back(std::move(row));
     }return result;
 }
 void BacklogView::prepare(BacklogContext context,const script::SceneBacklog& history){
@@ -37,22 +37,33 @@ bool BacklogView::images(){
 }
 void BacklogView::regions(){
     const float x=context_.novel?1228.f:1032.f;hits_={{0,x,32,32,48,position_<maximum()},{1,x,624,32,48,position_>0},{2,x+8,86,16,532,maximum()!=0},{3,1164,688,56,24}};
-    if(!context_.novel)for(unsigned n=0;n<rows_.size();++n)hits_.push_back({4+n,236.f,32.f+n*160,28,28,!entries_[rows_[n].entry].voices.empty()});
+    if(!context_.novel)for(unsigned n=0;n<rows_.size();++n)hits_.push_back({4+n,236.f,32.f+n*160,28,28,rows_[n].replayable});
+}
+bool BacklogView::replayable(const script::BacklogEntry& entry)const{
+    // Cached 41247c..41250d tests the first recorded speaker using 406410.
+    // Global mute/volume do not disable this source control.
+    return !entry.voices.empty() && (!voice_allowed_ || voice_allowed_(entry.voices.front().speaker));
+}
+void BacklogView::refresh_replay_flags(){
+    std::array<bool,4> next{};bool changed{};for(unsigned n=0;n<rows_.size();++n){next[n]=replayable(entries_[rows_[n].entry]);changed|=next[n]!=rows_[n].replayable;}
+    if(!changed)return;for(unsigned n=0;n<rows_.size();++n)rows_[n].replayable=next[n];
+    if(focus_ && *focus_>=4 && !rows_.at(*focus_-4).replayable)focus_.reset();regions();
 }
 void BacklogView::activate(unsigned id){
     if(id==0){if(position_<maximum())move(position_+1);return;}if(id==1){if(position_)move(position_-1);return;}if(id==2)return;
     if(id==3){phase_=BacklogPhase::closed;request_.reset();command_=BacklogCommand{BacklogCommand::Kind::close};if(sound_)sound_(audio::SystemCue::cancel);return;}
     if(id<4 || id-4>=rows_.size())throw script::Error("Unknown native backlog control");const auto entry=rows_[id-4].entry;
-    if(entries_[entry].voices.empty()){if(sound_)sound_(audio::SystemCue::reject);return;}command_=BacklogCommand{BacklogCommand::Kind::replay,entry};if(sound_)sound_(audio::SystemCue::accept);
+    if(!rows_[id-4].replayable)return;command_=BacklogCommand{BacklogCommand::Kind::replay,entry};if(sound_)sound_(audio::SystemCue::accept);
 }
 std::optional<BacklogCommand> BacklogView::take_command(){auto result=command_;command_.reset();return result;}
 void BacklogView::update(BacklogInput input){
     const auto& selection=input.selection;if(!std::isfinite(selection.x) || !std::isfinite(selection.y) || std::abs(std::int64_t(selection.navigation))>1 || std::abs(std::int64_t(input.page_delta))>1 || std::abs(std::int64_t(input.scroll))>1)throw script::Error("Native backlog input is out of range");
     if(phase_==BacklogPhase::idle)throw script::Error("Native backlog is not prepared");if(phase_==BacklogPhase::closed || command_)return;
-    if(input.cancel){activate(3);return;}if(phase_==BacklogPhase::loading){if(!images())return;phase_=BacklogPhase::active;regions();draw();return;}
+    if(input.cancel){activate(3);return;}if(phase_==BacklogPhase::loading){if(!images())return;phase_=BacklogPhase::active;refresh_replay_flags();regions();draw();return;}
+    refresh_replay_flags();
     const auto step=input.page_delta*(context_.novel?1:4)+input.scroll-selection.navigation;
     if(step)move(std::size_t(std::clamp(std::int64_t(position_)+step,std::int64_t(0),std::int64_t(maximum()))));
-    const auto previous=focus_;if(selection.pointer && !dragging_){focus_.reset();for(const auto& hit:hits_)if(selection.x>=hit.x && selection.x<hit.x+hit.width && selection.y>=hit.y && selection.y<hit.y+hit.height){focus_=hit.id;break;}}
+    const auto previous=focus_;if(selection.pointer && !dragging_){focus_.reset();for(const auto& hit:hits_)if(hit.enabled && selection.x>=hit.x && selection.x<hit.x+hit.width && selection.y>=hit.y && selection.y<hit.y+hit.height){focus_=hit.id;break;}}
     if(!input.held)dragging_=false;
     if(selection.pointer && input.held && (dragging_ || (selection.activate && focus_==2)) && maximum()){
         dragging_=true;const auto fraction=std::clamp((530.f-selection.y)/444.f,0.f,1.f);move(std::size_t(std::lround(fraction*maximum())));focus_=2;
@@ -75,7 +86,7 @@ void BacklogView::draw(){
         for(auto at=start;at<sprites_.size();++at){sprites_[at].layer=0x1065;sprites_[at].order=0x446+int(n);}
         if(context_.novel)continue;const auto name_start=sprites_.size();row.name.append(sprites_,0,100000,274,28.f+n*160);
         for(auto at=name_start;at<sprites_.size();++at){sprites_[at].layer=0x1065;sprites_[at].order=0x44a+int(n);}
-        if(!entries_[row.entry].voices.empty())add(1,236,32.f+n*160,28,28,0,playing_==row.entry?0:28,28,28,0x1065,0x435+int(n));
+        if(!entries_[row.entry].voices.empty())add(1,236,32.f+n*160,28,28,0,!row.replayable?0:focus_==4+n?56:28,28,28,0x1065,0x435+int(n));
     }
 }
 }

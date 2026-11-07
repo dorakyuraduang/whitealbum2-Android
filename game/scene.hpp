@@ -120,6 +120,7 @@ public:
     MusicCaption music_caption()const{return music_caption_state(music_,effects_,mixer_->paused());}
     bool window_visible()const noexcept{return window_visible_;}
     void replay_voice(const script::BacklogVoice& line){voices_.replay({line.speaker,line.chapter,line.line,false},line.volume);}
+    bool replay_voice_permitted(std::int32_t speaker)const{return voices_.replay_permitted(speaker);}
     bool replay_playing()const{return voices_.playing();}
     void stop_replay(){voices_.stop(0);}
     std::span<const image::Sprite> selection(){return selection_.sprites();}

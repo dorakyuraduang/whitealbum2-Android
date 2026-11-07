@@ -119,7 +119,7 @@ void Application::open(Page page,std::int64_t now){
     }
     if(page==Page::backlog && backlog_loader_){
         if(this->page()!=Page::story || backlog_view_)throw script::Unsupported("Native backlog over another modal page is not implemented");
-        next_backlog=std::make_unique<BacklogView>(backlog_loader_,backlog_text_,[this](audio::SystemCue cue){scene_->cue(cue);},[this]{return audio_caption();});
+        next_backlog=std::make_unique<BacklogView>(backlog_loader_,backlog_text_,[this](audio::SystemCue cue){scene_->cue(cue);},[this]{return audio_caption();},[this](auto speaker){return scene_->replay_voice_permitted(speaker);});
         next_backlog->prepare({preferences().skin,scene_->dialogue_state().novel().enabled(),std::uint32_t(scene_->dialogue_state().page())},scene_->backlog());
     }
     pages_.push_back(page);release_input_=true;suspend_scene(now);
@@ -193,14 +193,17 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
     }
     if(page()==Page::backlog && backlog_view_){
         scene_->ambient_update(now);if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}
-        if(replay_entry_ && !scene_->replay_playing()){
-            if(replay_next_<replay_.size())scene_->replay_voice(replay_[replay_next_++]);else{replay_entry_.reset();replay_.clear();}
-        }
-        backlog_view_->playing(replay_entry_);backlog_view_->update({input.selection,input.cancel || input.toggle_window,input.pointer_held,input.page_delta,input.scroll});
+        const auto position=backlog_view_->position();backlog_view_->update({input.selection,input.cancel || input.toggle_window,input.pointer_held,input.page_delta,input.scroll});
         if(auto command=backlog_view_->take_command()){
             if(command->kind==BacklogCommand::Kind::close)back(now);
             else{auto lines=backlog_view_->entries().at(command->entry).voices;if(lines.empty())throw script::Error("Native backlog replay has no recorded voice");
                 scene_->stop_replay();scene_->replay_voice(lines.front());replay_=std::move(lines);replay_next_=1;replay_entry_=command->entry;}
+        }else if(backlog_view_->position()!=position){
+            // Source scrolling clears its pending replay ordinal. The current
+            // PCM voice can finish, but no remaining line from that row starts.
+            replay_.clear();replay_next_=0;
+        }else if(replay_entry_ && !scene_->replay_playing()){
+            if(replay_next_<replay_.size())scene_->replay_voice(replay_[replay_next_++]);else{replay_entry_.reset();replay_.clear();replay_next_=0;}
         }
         return {script::RunState::yielded,0};
     }

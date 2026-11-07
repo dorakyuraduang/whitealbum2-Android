@@ -18,6 +18,7 @@ public:
     // Source settings use channel zero without adding a story/backlog entry.
     void preview(const SpokenLine&);
     void replay(const SpokenLine&,std::int32_t volume);
+    bool replay_permitted(std::int32_t speaker)const{if(speaker<0 || speaker>99)throw Error("Native replay speaker is out of range");return permitted(speaker);}
     bool playing(std::int32_t channel=0)const;
     std::size_t active()const noexcept;
     bool loading()const;
