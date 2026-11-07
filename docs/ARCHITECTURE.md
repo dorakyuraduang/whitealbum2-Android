@@ -868,6 +868,16 @@ An unchanged name returns before searching the catalogue. Paused logic does
 not move this state. Constructed scene-load/call/return scripts check the
 read flags, persisted end markers and unread waits, without game playback.
 
+Native movie lookup also adapts to installations containing one quality only.
+For the known mvNN1/mvNN2 PAK names, root and IC locations for the requested
+variant both take priority; only their explicit absence permits the matching
+mvNN0 default. Both names then share the same owned source cache entry. This
+is a native resource-availability policy, rather than a claim that the old
+loader made that fallback. It serves title and story movies through the same
+catalogue. Permission/provider errors and an existing but corrupt movie are
+never hidden by switching variants. Other filename conventions and a missing
+default remain explicit errors; original PAKs stay external and unmodified.
+
 The nine bottom controls now share their cached hit rectangles with the
 dialogue renderer. Their quick-save/load, settings, save/load, history, skip,
 auto and window actions are processed before story advancement. Input is
@@ -1034,8 +1044,9 @@ The shared user menu now exposes source high/low video quality. Cached movie
 name selection maps high quality to suffix `0.pak` and low quality to `1.pak`;
 the current decoder is not restarted when that preference changes. Title and
 story owners both apply it to the next external clip. An explicit bootstrap
-suffix is reserved for controlled integrations. Missing selected movie files
-remain resource errors, rather than silently changing a user's selection.
+suffix is reserved for controlled integrations. Missing quality variants now
+follow the explicitly bounded default-file policy described above; an existing
+variant with a provider or decoder failure remains an error.
 `WAP4` preferences retain `WAPR`, `WAP2` and `WAP3` decoding, with high quality as their
 compatible default. The original window-management dialog contains four
 opacity sliders and a visibility switch, already covered by the common native

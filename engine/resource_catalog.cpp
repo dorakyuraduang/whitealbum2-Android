@@ -81,8 +81,18 @@ std::vector<std::uint8_t> Catalog::data(std::string_view group,std::string_view 
 std::shared_ptr<Source> Catalog::movie(std::string_view name){
     filename(name);std::string folded(name);for(auto& ch:folded)if(ch>='A' && ch<='Z')ch+=32;
     if(folded.size()<5 || folded.substr(folded.size()-4)!=".pak")throw Error("original movie must be a PAK file");
-    if(auto found=movies_.find(folded);found!=movies_.end())return found->second;
-    for(const auto& path:std::array<std::string,2>{folded,"IC/"+folded})if(auto source=opener_(path)){movies_[folded]=source;return source;}
+    const auto exact=[&](const std::string& candidate)->std::shared_ptr<Source>{
+        if(auto found=movies_.find(candidate);found!=movies_.end())return found->second;
+        for(const auto& path:std::array<std::string,2>{candidate,"IC/"+candidate})if(auto source=opener_(path)){movies_[candidate]=source;return source;}
+        return {};
+    };
+    if(auto source=exact(folded))return source;
+    // Some installations ship only the default movie quality. Adapt only
+    // the known mvNN[012].pak naming convention, after both exact locations
+    // are absent. Permission/provider/read errors never reach this fallback.
+    if(folded.size()==9 && folded.starts_with("mv") && folded[2]>='0' && folded[2]<='9' && folded[3]>='0' && folded[3]<='9' && (folded[4]=='1' || folded[4]=='2')){
+        auto standard=folded;standard[4]='0';if(auto source=exact(standard)){movies_[folded]=source;return source;}
+    }
     throw Error("missing original movie "+folded);
 }
 std::size_t Catalog::open_banks()const noexcept {return std::count_if(banks_.begin(),banks_.end(),[](const auto& item){return item.second.archive.has_value();});}
