@@ -7,6 +7,7 @@
 #include "backlog_view.hpp"
 #include "music_view.hpp"
 #include "extra_grid.hpp"
+#include "commentary_view.hpp"
 
 namespace wa2::game {
 enum class Page {title,story,options,save,load,backlog,extras,closed};
@@ -45,6 +46,7 @@ class Application {
     MusicView::Loader extras_loader_;
     std::unique_ptr<MusicView> music_view_;
     std::unique_ptr<ExtraGrid> extra_grid_;
+    std::unique_ptr<CommentaryView> commentary_view_;
     struct ReplayReturn {std::unique_ptr<TitleScene> title;std::unique_ptr<ExtraGrid> grid;std::int32_t extra;};
     std::optional<ReplayReturn> replay_return_;
     std::vector<script::BacklogVoice> replay_;
@@ -83,6 +85,7 @@ public:
     const BacklogView* backlog_view()const noexcept{return backlog_view_.get();}
     const MusicView* music_view()const noexcept{return music_view_.get();}
     const ExtraGrid* extra_grid()const noexcept{return extra_grid_.get();}
+    const CommentaryView* commentary_view()const noexcept{return commentary_view_.get();}
     text::PreparedText menu_text(std::string_view,const text::TextStyle&);
     std::int32_t extra()const noexcept{return extra_;}
     bool background()const noexcept{return background_;}

@@ -19,19 +19,27 @@ TitleScene::TitleScene(resource::BankOpener opener,std::shared_ptr<progress::Sto
     if(!progress_)throw std::invalid_argument("Missing native title progress storage");if(startup_.movie_suffix>2)throw std::invalid_argument("Invalid native title movie suffix");
     preferences(settings);sounds_.prepare();if(startup_.movies)begin_movie("mv00");else begin_view();
 }
-TitleScene::~TitleScene(){if(movie_)movie_->stop();}
+TitleScene::~TitleScene(){commentary_stop();if(movie_)movie_->stop();}
 void TitleScene::preferences(const Preferences& value){
     value.validate();preferences_=value;music_.settings(value.effective_master(),value.effective_music());sounds_.settings(value.effective_master(),value.effective_effects());
     effects_.settings(value.effective_master(),value.effective_effects());voices_.settings(value.effective_master(),value.speech,value.mute_adult);voices_.enabled(value.voice_enabled);voices_.character_switches(value.character_voice);
     if(movie_)movie_->gain(value.movie_amplitude());
+    if(commentary_)commentary_->gain(std::uint8_t(std::clamp(std::int64_t(255)*value.effective_master()*value.speech/65536,std::int64_t(0),std::int64_t(255))));
 }
 void TitleScene::options_preview_effects(){game::options_preview_effects(effects_,preferences_);}
 void TitleScene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
 void TitleScene::options_reset_sound(){game::options_reset_sound(effects_);}
+void TitleScene::resume(){if(!view_.modal_parent())throw script::Error("Native title has no modal parent");music_.play(31,0,1,255);view_.resume(progress_->state());}
 void TitleScene::music_preview(std::optional<std::int32_t> song,std::int32_t fade){
     if(stage_!=TitleStage::view || fade<0 || fade>120 || (song && std::uint32_t(*song)>=200))throw std::invalid_argument("Invalid native title music preview");
     if(song)music_.play(*song,fade,1,255);else music_.stop(fade);
 }
+void TitleScene::commentary_play(unsigned speaker){
+    if(stage_!=TitleStage::view || speaker<1 || speaker>5)throw std::invalid_argument("Invalid native commentary speaker");
+    const script::SpokenLine line{int(speaker),9500,int(speaker)-1,false};auto next=services_.speech?services_.speech(line):audio::play_ogg(*mixer_,{audio::speech_resource(resources_,line.chapter,line.line,line.speaker),{}});
+    if(!next)throw script::Error("Native commentary factory returned no voice");next->gain(std::uint8_t(std::clamp(std::int64_t(255)*preferences_.effective_master()*preferences_.speech/65536,std::int64_t(0),std::int64_t(255))));commentary_stop();commentary_=std::move(next);
+}
+bool TitleScene::commentary_playing()const{if(!commentary_)return false;if(const auto error=commentary_->failure();!error.empty())throw script::Error("Native commentary playback failed: "+error);return !commentary_->finished();}
 text::PreparedText TitleScene::menu_text(std::string_view raw,const text::TextStyle& style){if(!menu_fonts_)menu_fonts_=std::make_unique<text::FontBook>(resources_.required("fon"));return menu_fonts_->prepare(text::layout(raw,style));}
 void TitleScene::begin_movie(std::string_view stem){
     const auto name=std::string(stem)+char('0'+startup_.movie_suffix)+".pak";

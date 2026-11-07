@@ -1,6 +1,7 @@
 #include "native_application.hpp"
 #include "progress_storage.hpp"
 #include "native_scene_fixture.hpp"
+#include "native_title_atlases.hpp"
 #include <filesystem>
 
 namespace platform=wa2::platform;namespace fs=std::filesystem;
@@ -14,7 +15,8 @@ int main(int argc,char** argv){try{
     rejects([]{g::installed_title_content({});});++guards;std::vector<std::string> probes;auto content=g::installed_title_content([&](auto name)->std::shared_ptr<r::Source>{probes.emplace_back(name);return {};});CHECK(!content.local_introductory && !content.external_introductory && content.perspective_snow && probes==std::vector<std::string>{"IC/bak.pak"});++cases;
     content=g::installed_title_content([](auto)->std::shared_ptr<r::Source>{return bank({});});CHECK(content.local_introductory && !content.external_introductory);++cases;
     rejects([]{g::installed_title_content([](auto)->std::shared_ptr<r::Source>{throw r::Error("injected authorized provider failure");});});++guards;++cases;
-    auto banks=memory_banks();banks["IC/bak.pak"]=bank({});Script script;script.call(146,{s::Value(1),s::Value(1),s::Value(0),s::Value(8),s::Value(0),s::Value(0),s::Value(0),s::Value(1280.f),s::Value(720.f)});script.call(194,{s::Value(1000000000),s::Value(0),s::Value(1)});script.finish();
+    auto banks=memory_banks();banks["IC/bak.pak"]=bank({});const auto old=r::Archive::open(banks.at("grp.pak"));std::map<std::string,Bytes> pictures;for(unsigned n=0;n<old.members().size();++n)pictures[old.members()[n].name]=old.load(n);for(const auto& atlas:wa2::test::title_atlases)pictures[atlas.name]=raster(atlas.w,atlas.h);banks["grp.pak"]=bank(std::move(pictures));
+    Script script;script.call(146,{s::Value(1),s::Value(1),s::Value(0),s::Value(8),s::Value(0),s::Value(0),s::Value(0),s::Value(1280.f),s::Value(720.f)});script.call(194,{s::Value(1000000000),s::Value(0),s::Value(1)});script.finish();
     banks["ck-gal.pak"]=bank({{"Global.vrb",text("3,FLG_00,0\r\n")},{"LFScriptFunc.fnc",functions(0,200)},{"LFScriptFuncEx.fnc",functions(200,239)},{"1001.bnr",script.code},{"1001.txt",text(script.strings)}});
     const r::BankOpener opener=[&](auto name)->std::shared_ptr<r::Source>{const auto found=banks.find(std::string(name));return found==banks.end()?nullptr:found->second;};
     const auto parent=fs::absolute(fs::path(argv[2]));fs::create_directories(parent);const auto root=parent/("owned-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(fs::create_directory(root));
@@ -29,7 +31,7 @@ int main(int argc,char** argv){try{
     app->save(2);CHECK(app->slots().size()==1 && app->slots()[0].slot==2);const auto saved_image=app->scene()->background().current->image;app->close(now);app.reset();++cases;
     app=platform::native_application(opener,normal,startup,{},title);CHECK(app->preferences()==prefs && movies.size()==2 && movies.back()->gain==32/255.f && app->slots().size()==1);++cases;
     app->load(2,0);CHECK(app->page()==g::Page::story && app->scene()->preferences()==prefs && app->scene()->background().current && app->scene()->background().current->image->rgba==saved_image->rgba && movies[1]->stopped);++cases;
-    app->title(1);CHECK(app->page()==g::Page::title && app->title_scene() && movies.size()==3);app->close(2);app.reset();++cases;
+    app->title(1);CHECK(app->page()==g::Page::title && app->title_scene() && app->title_scene()->stage()==g::TitleStage::view && movies.size()==2);app->close(2);app.reset();++cases;
     startup.test_mode=true;app=platform::native_application(opener,unlocked,startup,{},title);auto progress=std::make_shared<p::Store>(platform::progress_storage(unlocked));CHECK(fs::file_size(unlocked/"Sys.sav")==p::layout::system_save_bytes && progress->state().flag(0)==1 && progress->state().flag(3)==1 && progress->state().flag(5)==1 && progress->state().flag(99)==0 && progress->state().flag(220)==1);app->close(0);app.reset();++cases;
     startup.test_mode=false;app=platform::native_application(opener,unlocked,startup,{},title);CHECK(app->page()==g::Page::title);app->close(0);CHECK(std::make_shared<p::Store>(platform::progress_storage(unlocked))->state().flag(5)==1);app.reset();++cases;
     startup.test_mode=true;g::TitleServices failure;failure.movie=[](auto)->std::unique_ptr<wa2::movie::Playback>{throw r::Error("injected title provider failure");};rejects([&]{platform::native_application(opener,failed,startup,{},failure);});CHECK(!fs::exists(failed/"Sys.sav") && !fs::exists(failed/"native-settings.wa2cfg") && fs::is_empty(failed));++guards;++cases;

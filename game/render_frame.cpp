@@ -46,8 +46,8 @@ void RenderFrame::capture(Application& application){
         capture(*application.scene(),false);overlays_.insert(overlays_.end(),application.backlog_view()->sprites().begin(),application.backlog_view()->sprites().end());
         std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return;
     case Page::extras:
-        if((!application.music_view() && !application.extra_grid()) || !application.title_scene() || application.navigation().size()!=2)throw script::Unsupported("Native extras presentation has not been prepared");
-        capture(*application.title_scene());{const auto sprites=application.music_view()?application.music_view()->sprites():application.extra_grid()->sprites();overlays_.insert(overlays_.end(),sprites.begin(),sprites.end());}
+        if((!application.music_view() && !application.extra_grid() && !application.commentary_view()) || !application.title_scene() || application.navigation().size()!=2)throw script::Unsupported("Native extras presentation has not been prepared");
+        capture(*application.title_scene());{const auto sprites=application.music_view()?application.music_view()->sprites():application.extra_grid()?application.extra_grid()->sprites():application.commentary_view()->sprites();overlays_.insert(overlays_.end(),sprites.begin(),sprites.end());}
         std::stable_sort(overlays_.begin(),overlays_.end(),[](const auto& a,const auto& b){return a.layer==b.layer?a.order<b.order:a.layer<b.layer;});return;
     }
     throw script::Unsupported("Unknown native presentation page");

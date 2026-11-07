@@ -15,7 +15,7 @@ TitleView::TitleView(Loader loader,Random random,Sound sound,Music music)
 }
 void TitleView::clear(){
     weather_.stop(true);requests_={};images_={};rows_.clear();sprites_.clear();focus_.reset();command_.reset();leaving_.reset();
-    elapsed_=0;pan_=0;phase_=TitlePhase::finished;section_=TitleSection::root;music_started_=prepared_=false;
+    elapsed_=0;pan_=0;phase_=TitlePhase::finished;section_=TitleSection::root;music_started_=prepared_=restored_extras_=restored_modal_=false;
 }
 void TitleView::access(const progress::State& state){
     introductory_clear_=state.flag(0)!=0;closing_clear_=state.flag(3)!=0;coda_unlocked_=state.flag(5)!=0;
@@ -99,7 +99,7 @@ void TitleView::snow(){
 void TitleView::update(TitleInput in){
     const auto& selected=in.selection;if(!std::isfinite(selected.x) || !std::isfinite(selected.y) || selected.navigation<-1 || selected.navigation>1)throw script::Error("Native title input is out of range");
     if(!prepared_)throw script::Error("Native title is not prepared");
-    if(phase_==TitlePhase::loading){if(!poll())return;phase_=TitlePhase::background_in;}
+    if(phase_==TitlePhase::loading){if(!poll())return;if(restored_extras_){const auto modal=restored_modal_;pan_=136;music_started_=true;menu(TitleSection::extras,64);if(modal)phase_=TitlePhase::modal;restored_extras_=restored_modal_=false;snow();}else phase_=TitlePhase::background_in;}
     switch(phase_){
     case TitlePhase::background_in:
         ++elapsed_;pan_=float(double(pan_)+double(1.2f));if(elapsed_>30){phase_=TitlePhase::logo_in;elapsed_=0;}break;
@@ -120,8 +120,10 @@ void TitleView::update(TitleInput in){
     weather_.update();draw();
 }
 void TitleView::resume(const progress::State& progress){
+    if(prepared_ && phase_==TitlePhase::loading && restored_extras_ && restored_modal_){access(progress);restored_modal_=false;return;}
     if(!prepared_ || phase_!=TitlePhase::modal || command_)throw script::Error("Native title has no consumed modal command to resume");access(progress);menu(section_,64);draw();
 }
+void TitleView::restore_extras_parent(){if(!prepared_ || phase_!=TitlePhase::loading)throw script::Error("Native extra parent must be prepared before title images finish loading");restored_extras_=restored_modal_=true;}
 std::optional<TitleCommand> TitleView::take_command(){auto result=std::move(command_);command_.reset();return result;}
 void TitleView::draw(){
     sprites_.clear();if(!images_[0] || phase_==TitlePhase::finished)return;

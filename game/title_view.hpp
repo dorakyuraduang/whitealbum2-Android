@@ -29,6 +29,8 @@ public:
     void prepare(TitleContent,const progress::State&);
     void update(TitleInput={});
     void resume(const progress::State&);
+    void restore_extras_parent();
+    bool modal_parent()const noexcept{return phase_==TitlePhase::modal || (phase_==TitlePhase::loading && restored_extras_ && restored_modal_);}
     void clear();
     std::optional<TitleCommand> take_command();
     std::span<const image::Sprite> sprites()const noexcept{return sprites_;}
@@ -53,7 +55,7 @@ private:
     std::optional<TitleCommand> command_,leaving_;
     std::uint32_t elapsed_{};float pan_{};
     bool introductory_clear_{},closing_clear_{},coda_unlocked_{},all_clear_{};
-    bool music_started_{},prepared_{};
+    bool music_started_{},prepared_{},restored_extras_{},restored_modal_{};
     void access(const progress::State&);
     bool poll();
     void menu(TitleSection,std::uint32_t elapsed=0);

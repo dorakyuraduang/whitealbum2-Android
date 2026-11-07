@@ -34,6 +34,7 @@ class TitleScene {
     wa2::Random random_;
     TitleView view_;
     std::unique_ptr<movie::Playback> movie_;
+    std::unique_ptr<audio::Voice> commentary_;
     TitleServices services_;
     Preferences preferences_;
     std::unique_ptr<text::FontBook> menu_fonts_;
@@ -50,12 +51,16 @@ public:
     void update(std::int64_t now,TitleInput={});
     void pause(bool,std::int64_t now);
     void preferences(const Preferences&);
-    void resume(){view_.resume(progress_->state());}
+    void resume();
+    void restore_extras_parent(){if(stage_!=TitleStage::view)throw script::Error("Native extra parent cannot play startup movies");view_.restore_extras_parent();}
     void cue(audio::SystemCue value){sounds_.play(value);}
     void options_preview_effects();
     void options_preview_voice();
     void options_reset_sound();
     void music_preview(std::optional<std::int32_t> song,std::int32_t fade);
+    void commentary_play(unsigned speaker);
+    void commentary_stop(){if(commentary_)commentary_->stop();commentary_.reset();}
+    bool commentary_playing()const;
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
     TitleStage stage()const noexcept{return stage_;}
     const TitleView& view()const noexcept{return view_;}

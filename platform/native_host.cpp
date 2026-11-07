@@ -19,6 +19,7 @@ int run_native_host(NativeHost host){
     std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)> window(SDL_CreateWindow("WHITE ALBUM2",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
         1280,720,SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|(host.fullscreen?SDL_WINDOW_FULLSCREEN_DESKTOP:0)),SDL_DestroyWindow);
     if(!window)throw std::runtime_error(std::string("Create native game window: ")+SDL_GetError());
+    SDL_StopTextInput();
     auto canvas=SdlCanvas::create(window.get(),true);canvas->logical_size(1280,720);
     auto application=native_application(std::move(host.resources),directory,host.startup);
     SdlInput input(SDL_GetWindowID(window.get()));input.logical_size(1280,720);

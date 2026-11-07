@@ -862,8 +862,8 @@ has one outstanding atlas request and starts at most two new requests per tick;
 it copies only needed flag booleans, not the multi-megabyte progress blocks.
 Synthetic atlas/input/voice tests cover the application route and retained-frame
 composition without opening a device. Animated transitions, level meters and
-device appearance remain unverified. The voice-comment view is still
-pending; cached source 0x42a6d0 is a voice-comment menu using `9500_...` speech,
+device appearance remain unverified. Cached source 0x42a6d0 is a voice-comment
+menu using `9500_...` speech,
 not a movie gallery. No native release or whole-game compatibility is claimed.
 
 `game/extra_grid.*` now shares native gallery/replay navigation, immutable visible
@@ -885,7 +885,7 @@ its title/grid owner is retained with audio paused. Returning or loading within
 that session restores the same page/mixer without startup films or atlas
 reloads. Synthetic LSCR checks explicitly assign entry 24 to a global, round-trip
 its saved scene and return to the retained page. Importing original manual
-slots, reconstructing a replay's menu after application restart, full source
+slots, full source
 page transitions/counters and visual/device verification remain pending.
 
 Native host menus use `game/user_command.*`: one bounded action set and one
@@ -918,7 +918,27 @@ Java signatures with actual linked registration literals, verify all SDL Java
 native exports against the existing SDL library, and audit the production
 source closure. This is a configuration/interface check, not an Android game
 session, production-SDL build or native APK publication. Remaining original UI
-behavior and voice comments still prevent a complete-game claim.
+behavior and unverified full-story compatibility prevent a complete-game claim.
+
+The voice-comment extra now uses `game/commentary_view.*` and a dedicated native
+title audio transport. Its five source columns map to speakers 4,2,1,3,5 and
+external clips `9500_%04d_%02d.ogg` with `(speaker-1, speaker)` fields;
+`sys_07200`..`sys_07204` remain
+external page images. The cached raw-comment path uses master/speech gain,
+independently of dialogue/character voice switches. Cancellation, natural finish,
+factory/decoder failure, backgrounding and leaving the owner release or pause
+the correct transport. One pending image and at most two new atlas requests per
+update bound loading. Finite synthetic tests cover all five identities, exact
+gain, late-load cancellation and recovery without playing device audio.
+
+An imported native replay snapshot can now reconstruct its title/extra owner
+and selected page on exit, including closing the extra while its title pictures
+are still loading. Startup movies run only for application startup, not every
+return from a story. Returning from extras restores title music through the
+shared owner. The common SDL entry explicitly stops text input because no game
+page requests an OS edit field; startup must not raise an unsolicited IME.
+Source transitions/meters/counters and remaining original settings UI still
+need completion, and physical presentation remains unverified.
 
 ## Current released implementation
 

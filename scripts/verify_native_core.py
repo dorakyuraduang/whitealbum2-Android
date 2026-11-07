@@ -58,6 +58,7 @@ def main():
     inputs += [ROOT/'tests/native_backlog_view.cpp']
     inputs += [ROOT/'tests/native_music_view.cpp']
     inputs += [ROOT/'tests/native_extra_grid.cpp']
+    inputs += [ROOT/'tests/native_commentary.cpp',ROOT/'tests/native_title_atlases.hpp']
     inputs += [ROOT/p for p in ('platform/native_user_menu.hpp','platform/sdl_user_command.hpp','android/game/user_menu_jni.hpp','android/game/user_menu_jni.cpp','hosts/native-android/CMakeLists.txt')]
     inputs += [ROOT/p for p in ('tests/native_desktop.cpp','platform/native_desktop.hpp','platform/native_desktop.cpp',
         'platform/native_host.hpp','platform/native_host.cpp','platform/native_host.cmake','hosts/native/CMakeLists.txt',
@@ -134,6 +135,7 @@ def main():
             if host=='windows':targets+=['wa2_native_backlog_view_tests']
             if host=='windows':targets+=['wa2_native_music_view_tests']
             if host=='windows':targets+=['wa2_native_extra_grid_tests']
+            if host=='windows':targets+=['wa2_native_commentary_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
@@ -171,6 +173,7 @@ def main():
             allowed+=('tests/native_backlog_view.cpp',)
             allowed+=('tests/native_music_view.cpp',)
             allowed+=('tests/native_extra_grid.cpp',)
+            allowed+=('tests/native_commentary.cpp',)
             allowed+=('tests/native_desktop.cpp','platform/native_desktop.cpp','platform/native_host.cpp',
                 'hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')
             allowed+=('tests/native_title_scene.cpp',)
@@ -392,6 +395,9 @@ def main():
                 run([directory/'wa2_native_extra_grid_tests.exe',directory/'native-extra-grid.json'],console,90)
                 extra_grid=json.loads((directory/'native-extra-grid.json').read_text())
                 if not extra_grid['passed'] or extra_grid['cases']<28 or extra_grid['guards']<12 or extra_grid['gallery_groups']!=168 or extra_grid['replay_entries']!=24 or extra_grid['maximum_pending_images']>1 or extra_grid['maximum_new_images_per_tick']>2 or not extra_grid['failed_page_keeps_previous'] or not extra_grid['gallery_variants_only_seen'] or not extra_grid['replay_script_receives_entry_number'] or not extra_grid['replay_entry_save_roundtrip'] or not extra_grid['replay_returns_to_retained_page'] or not extra_grid['shared_application_bound'] or not extra_grid['synthetic_resources_only'] or not extra_grid['fake_audio_only'] or extra_grid['original_resources_opened'] or extra_grid['devices_opened'] or extra_grid['game_launched'] or extra_grid['screen_access']:raise ValueError('Native gallery/replay/application checks failed')
+                run([directory/'wa2_native_commentary_tests.exe',directory/'native-commentary.json'],console,90)
+                commentary=json.loads((directory/'native-commentary.json').read_text())
+                if not commentary['passed'] or commentary['cases']<24 or commentary['guards']<9 or commentary['speakers']!=[4,2,1,3,5] or commentary['maximum_new_images_per_tick']>2 or commentary['maximum_pending_images']>1 or not commentary['same_application_and_mixer'] or not commentary['raw_commentary_gain_rules'] or not commentary['failures_return_to_menu'] or not commentary['synthetic_resources_only'] or not commentary['fake_audio_only'] or commentary['original_resources_opened'] or commentary['devices_opened'] or commentary['game_launched'] or commentary['screen_access']:raise ValueError('Native commentary/application checks failed')
                 run([directory/'wa2_native_save_application_tests.exe',directory/'native-save-application.json'],console,90)
                 save_application=json.loads((directory/'native-save-application.json').read_text())
                 if not save_application['passed'] or save_application['cases']<18 or save_application['guards']<12 or not save_application['common_save_view_bound'] or not save_application['failed_load_preserves_scene'] or not save_application['metadata_and_thumbnail_written'] or not save_application['recoverable_operation_errors'] or not save_application['bounded_preview_reads'] or not save_application['right_click_save_route'] or not save_application['same_mixer_on_return'] or not save_application['synthetic_resources_only'] or save_application['devices_opened'] or save_application['game_launched'] or save_application['screen_access']:raise ValueError('Native save/application checks failed')
@@ -506,6 +512,7 @@ def main():
     report['backlog_view']=backlog_view
     report['music_view']=music_view
     report['extra_grid']=extra_grid
+    report['commentary']=commentary
     report['preferences']=preferences
     report['preference_storage']=preference_storage
     report['application']=application
