@@ -54,6 +54,7 @@ def main():
     inputs += [ROOT/'tests/native_preferences.cpp']
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
+    inputs += [ROOT/'tests/native_title_scene.cpp']
     inputs += [ROOT/'tests/native_preference_storage.cpp',ROOT/'platform/private_file.cpp',ROOT/'platform/private_file.hpp',ROOT/'platform/preference_storage.cpp',ROOT/'platform/preference_storage.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
@@ -93,6 +94,7 @@ def main():
             if host=='windows':targets+=['wa2_native_preference_storage_tests']
             if host=='windows':targets+=['wa2_native_application_tests']
             if host=='windows':targets+=['wa2_native_title_view_tests']
+            if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -110,6 +112,7 @@ def main():
             allowed+=('tests/native_preference_storage.cpp','platform/private_file.cpp','platform/preference_storage.cpp')
             allowed+=('tests/native_application.cpp',)
             allowed+=('tests/native_title_view.cpp',)
+            allowed+=('tests/native_title_scene.cpp',)
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -268,6 +271,9 @@ def main():
                 run([directory/'wa2_native_title_view_tests.exe',directory/'native-title-view.json'],console,90)
                 title_view=json.loads((directory/'native-title-view.json').read_text())
                 if not title_view['passed'] or title_view['cases']<21 or title_view['guards']<6 or not title_view['synthetic_images_only'] or title_view['original_resources_opened'] or title_view['devices_opened'] or title_view['game_launched'] or title_view['screen_access']:raise ValueError('Native title view checks failed')
+                run([directory/'wa2_native_title_scene_tests.exe',directory/'native-title-scene.json'],console,90)
+                title_scene=json.loads((directory/'native-title-scene.json').read_text())
+                if not title_scene['passed'] or title_scene['cases']<18 or title_scene['guards']<13 or title_scene['audio_lookup_cases']<12 or not title_scene['synthetic_resources_only'] or not title_scene['fake_music_and_movies'] or not title_scene['title_story_handoff'] or title_scene['devices_opened'] or title_scene['game_launched'] or title_scene['screen_access']:raise ValueError('Native title/application integration checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -316,6 +322,7 @@ def main():
     report['preference_storage']=preference_storage
     report['application']=application
     report['title_view']=title_view
+    report['title_scene']=title_scene
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

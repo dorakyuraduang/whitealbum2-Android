@@ -29,7 +29,8 @@
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;
-    Input continued()const{auto next=*this;next.advance=next.toggle_window=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=0;return next;}
+    bool cancel{};
+    Input continued()const{auto next=*this;next.advance=next.toggle_window=next.cancel=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=0;return next;}
 };
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
 // Shared native migration core; not yet the released app's game entry.
@@ -96,6 +97,7 @@ public:
     std::optional<movie::VideoFrame> movie()const{return movies_.frame();}
     bool movie_active()const{return movies_.active();}
     const Statistics& statistics()const noexcept{return statistics_;}
+    std::uint32_t random_state()const noexcept{return random_.state();}
     const script::SceneDialogue& dialogue_state()const noexcept{return dialogue_;}
     const script::SceneChoices& choices()const noexcept{return choices_;}
     const script::SceneBacklog& backlog()const noexcept{return backlog_;}

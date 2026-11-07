@@ -1,4 +1,5 @@
 #include "scene.hpp"
+#include "audio_resources.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -52,34 +53,13 @@ std::unique_ptr<audio::Voice> Scene::sound(std::int32_t id,bool loop,bool paused
     return audio::play_wave(*mixer_,std::move(resource.source),loop,{},paused);
 }
 audio::SoundResource Scene::sound_resource(std::int32_t id){
-    std::array<char,32> name{};
-    // Existing 0x4058f0 tries root Ogg, root WAV, then IC Ogg/IC WAV.
-    for(bool introductory:{false,true})if(const auto* bank=resources_.optional("se",introductory)){
-        std::snprintf(name.data(),name.size(),"SE_%04d.ogg",int(id));auto index=bank->find_first(name.data());
-        if(index!=resource::Archive::missing)return {bank->open_member(index),true};
-        std::snprintf(name.data(),name.size(),"SE_%04d.wav",int(id));index=bank->find_first(name.data());
-        if(index!=resource::Archive::missing)return {bank->open_member(index),false};
-    }
-    throw resource::Error("missing original sound effect "+std::to_string(id));
+    return audio::effect_resource(resources_,id);
 }
 std::unique_ptr<audio::Voice> Scene::music(std::int32_t id,bool loop){
-    std::array<char,32> name{};
-    // Existing 0x461090 resolves single/intro inside a bank before falling back
-    // to IC. An I/O failure is propagated, never treated as an absent member.
-    for(bool introductory:{false,true})if(const auto* bank=resources_.optional("bgm",introductory)){
-        std::snprintf(name.data(),name.size(),"BGM_%03d.ogg",int(id));const auto full=bank->find_first(name.data());
-        std::snprintf(name.data(),name.size(),"BGM_%03d_a.ogg",int(id));
-        if(full!=resource::Archive::missing || bank->find_first(name.data())!=resource::Archive::missing)
-            return audio::play_ogg(*mixer_,audio::music_playlist(*bank,id,loop));
-    }
-    throw resource::Error("missing original background music "+std::to_string(id));
+    return audio::play_ogg(*mixer_,audio::music_resources(resources_,id,loop));
 }
 std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
-    std::array<char,32> name{};std::snprintf(name.data(),name.size(),"%04d_%04d_%02d.ogg",int(line.chapter),int(line.line),int(line.speaker));
-    for(bool introductory:{false,true})if(const auto* bank=resources_.optional("voice",introductory)){
-        const auto index=bank->find_first(name.data());if(index!=resource::Archive::missing){auto source=bank->open_member(index);return audio::play_ogg(*mixer_,{source,line.loop?source:nullptr});}
-    }
-    throw resource::Error("missing original speech "+std::string(name.data()));
+    auto source=audio::speech_resource(resources_,line.chapter,line.line,line.speaker);return audio::play_ogg(*mixer_,{source,line.loop?source:nullptr});
 }
 void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);reading_.enter(scene);choices_.clear();backlog_.clear();title_requested_=false;statistics_.scene=scene;}
 script::CommandResult Scene::command(script::Command& call){

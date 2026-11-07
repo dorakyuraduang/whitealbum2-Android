@@ -1,6 +1,7 @@
 #pragma once
 #include "scene.hpp"
 #include "save_slots.hpp"
+#include "title_scene.hpp"
 
 namespace wa2::game {
 enum class Page {title,story,options,save,load,backlog,extras,closed};
@@ -15,6 +16,10 @@ class Application {
     SaveSlots saves_;
     Scene::SavedImageResolver resolver_;
     std::unique_ptr<Scene> scene_;
+    struct TitleSetup {TitleContent content;TitleStartup startup;TitleServices services;};
+    std::optional<TitleSetup> title_setup_;
+    std::unique_ptr<TitleScene> title_scene_;
+    std::int32_t extra_{-1};
     std::vector<Page> pages_{Page::title};
     std::int64_t observed_{};
     bool clock_started_{},background_{},release_input_{true};
@@ -31,10 +36,13 @@ public:
     Scene* scene()noexcept{return scene_.get();}
     const Scene* scene()const noexcept{return scene_.get();}
     std::uint64_t scene_revision()const noexcept{return scene_revision_;}
-    std::shared_ptr<audio::Mixer> mixer()const noexcept{return scene_?scene_->mixer():nullptr;}
+    std::shared_ptr<audio::Mixer> mixer()const noexcept{return scene_?scene_->mixer():title_scene_?title_scene_->mixer():nullptr;}
+    const TitleScene* title_scene()const noexcept{return title_scene_.get();}
+    std::int32_t extra()const noexcept{return extra_;}
     bool background()const noexcept{return background_;}
     const Preferences& preferences()const noexcept{return preferences_.current();}
     bool preferences(const Preferences&);
+    void prepare_title(TitleContent,TitleStartup={},TitleServices={});
     void start(const StoryStart&,std::int64_t now);
     void open(Page,std::int64_t now);
     bool back(std::int64_t now);

@@ -466,9 +466,30 @@ commands keep device audio and application navigation outside the view.
 Twenty-one constructed-image cases and six guards check the fades, boundary
 hits, modal resume, chapter gating, menu back paths and delayed scene/quit
 commands. These are owned-memory component checks, without original pixels,
-game/window launch or visual verification. Startup movies, the title's
-application/audio integration, and the remaining full menu views still need
-completion before this can be a complete native game.
+game/window launch or visual verification.
+
+`game/title_scene.*` connects that view to a native mixer, the persistent five
+UI cues, common music controller, system progress and bounded movie player.
+Its startup states preserve the cached company/opening movie selection, three
+delay ticks, movie-quality suffix and IC opening music flag. Preferences apply
+to menu music/cues and movie gain; background suspension freezes title logic,
+PCM consumption and movie time. `engine/audio_resources.*` now supplies the
+same root/IC naming and fallback rules to title audio and story audio. A failed
+archive/provider access propagates instead of selecting another bank.
+
+`Application::prepare_title` opts the host into this owner. Typed title actions
+open common menus, enter the selected original LSCR scene, return from a modal
+page or close the application after the source fade. Title and story handoffs
+carry the one native RNG state forward instead of reseeding each scene. New
+owners are prepared before replacing the old owner; failed loads retain the
+title, navigation and mixer. A device adapter must compare the returned shared
+mixer when ownership changes and retain the old mixer until detaching output.
+Eighteen synthetic cases, thirteen guards and twelve archive-lookup cases cover
+these transitions, startup branches and audio/resource policy. Music/movie
+services are fakes; system cue PCM and all scripts/images/PAKs are constructed
+in memory. This does not verify a movie decoder on a device or visual parity.
+The remaining full options/save/load/extras/backlog page views and production
+host loop still need completion before this is a complete native game.
 
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
