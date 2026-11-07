@@ -18,6 +18,16 @@ void SceneBacklog::message(std::string_view scene,std::int32_t line,std::string_
     BacklogEntry entry{std::string(scene),std::string(text),choice?std::string{}:std::string(name),line,choice || name.empty()?-1:speaker,novel,choice,{}};
     if(voice_log && recent_voice_){entry.voices.push_back(*recent_voice_);entry.speaker=recent_voice_->speaker;}push(std::move(entry));
 }
+void SceneBacklog::append(std::string_view text){
+    if(entries_.empty())throw Error("Native dialogue append has no current history entry");
+    if(text.size()>4095-entries_.front().text.size() || text.find('\0')!=std::string_view::npos)throw Error("Native appended history text exceeds its bound");
+    // Cached 40e680..40e72e appends without the live window's inserted \\k,
+    // retaining the entry's first name/identity and distinct adjacent voices.
+    // Unlike a fresh row, this source branch does not test log_output.
+    auto next=entries_.front();next.text.append(text);
+    if(recent_voice_ && (next.voices.empty() || next.voices.back()!=*recent_voice_))next.voices.push_back(*recent_voice_);
+    validate(next);entries_.front()=std::move(next);
+}
 std::vector<std::uint8_t> SceneBacklog::checkpoint()const{
     checkpoint::Writer out;out.u32(std::uint32_t(entries_.size()));out.boolean(bool(recent_voice_));if(recent_voice_)voice(out,*recent_voice_);
     for(const auto& entry:entries_){out.string(entry.scene);out.string(entry.text);out.string(entry.name);out.i32(entry.line);out.i32(entry.speaker);out.boolean(entry.novel);out.boolean(entry.choice);out.u32(std::uint32_t(entry.voices.size()));for(const auto& item:entry.voices)voice(out,item);}

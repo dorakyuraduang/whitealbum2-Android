@@ -23,6 +23,7 @@ public:
     void clear_voice()noexcept{recent_voice_.reset();}
     void push(BacklogEntry);
     void message(std::string_view scene,std::int32_t line,std::string_view text,std::string_view name,std::int32_t speaker,bool novel,bool voice_log=true,bool choice=false);
+    void append(std::string_view text);
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t>);
 };

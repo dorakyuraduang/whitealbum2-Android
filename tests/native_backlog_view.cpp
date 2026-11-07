@@ -5,6 +5,7 @@
 #include "native_scene_fixture.hpp"
 #include "native_save_atlases.hpp"
 #include "native_options_atlases.hpp"
+#include "font_glyphs.hpp"
 #include "../platform/native_user_menu.hpp"
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,16 @@ struct Settings:g::PreferenceStorage {std::optional<Bytes> bytes;std::optional<B
 struct Saves:g::SaveStorage {std::map<unsigned,Bytes> entries;bool fail{};std::optional<Bytes> read(unsigned slot)override{const auto it=entries.find(slot);return it==entries.end()?std::optional<Bytes>{}:it->second;}void replace(unsigned slot,std::span<const std::uint8_t> data)override{if(fail)throw std::runtime_error("owned quick-save write failure");entries[slot]=Bytes(data.begin(),data.end());}std::vector<g::SaveSlotInfo> list()override{std::vector<g::SaveSlotInfo> result;for(const auto& [slot,data]:entries)result.push_back({slot,data.size(),1000});return result;}};
 struct VoiceState {s::SpokenLine line;wa2::audio::Levels levels{};bool done{};unsigned gain{};};
 struct Voice:wa2::audio::Voice {std::shared_ptr<VoiceState> state;explicit Voice(std::shared_ptr<VoiceState> value):state(std::move(value)){}bool ready()const override{return true;}bool finished()const override{return state->done;}std::string failure()const override{return {};}void gain(std::uint8_t value)override{state->gain=value;}void stop()override{state->done=true;}wa2::audio::Levels levels()const override{return state->levels;}};
+// Uniform synthetic indexed font sheets. Only their headers are stored here;
+// reads synthesize zero palette indices, with no original glyph/file pixels.
+struct UniformFonts:r::Source {
+    Bytes prefix,font;std::array<std::uint64_t,2> starts{};std::uint64_t length{};
+    UniformFonts(){const auto width=3200u,height=40u*(wa2::text::glyph_count(true)/80+1),bytes=21+width*height;CHECK(bytes<=16u*1024*1024);prefix.resize(104);std::memcpy(prefix.data(),"KCAP",4);put(prefix,12,2);
+        const std::array<std::string,2> names{"\x96\x7b\x91\xcc" "80.tga","\x91\xdc\x89\x65" "80.tga"};for(unsigned n=0;n<2;++n){starts[n]=prefix.size()+std::uint64_t(n)*bytes;std::memcpy(prefix.data()+20+n*44,names[n].data(),names[n].size());put(prefix,52+n*44,unsigned(starts[n]));put(prefix,56+n*44,bytes);}length=starts[1]+bytes;
+        font.resize(21);font[1]=font[2]=font[5]=1;font[7]=24;font[12]=std::uint8_t(width);font[13]=std::uint8_t(width>>8);font[14]=std::uint8_t(height);font[15]=std::uint8_t(height>>8);font[16]=8;font[17]=32;font[18]=font[19]=font[20]=255;}
+    std::uint64_t size()const override{return length;}
+    void read_at(std::uint64_t at,std::span<std::uint8_t> out)override{CHECK(at<=length && out.size()<=length-at);std::fill(out.begin(),out.end(),0);const auto copy=[&](std::uint64_t start,const Bytes& data){const auto first=std::max(at,start),last=std::min(at+out.size(),start+data.size());if(first<last)std::copy_n(data.data()+std::size_t(first-start),std::size_t(last-first),out.data()+std::size_t(first-at));};copy(0,prefix);for(auto start:starts)copy(start,font);}
+};
 int main(int argc,char** argv){try{
     CHECK(argc==2);unsigned cases{},guards{},image_requests{},texts{},maximum_new_images{},maximum_pending{};bool missing{},text_failure{};
     std::map<std::string,Bytes> assets;for(const auto& atlas:wa2::test::save_atlases)assets[atlas.name]=raster(atlas.w,atlas.h);for(const auto& atlas:wa2::test::options_atlases)assets[atlas.name]=raster(atlas.w,atlas.h);
@@ -41,7 +52,8 @@ int main(int argc,char** argv){try{
     g::BacklogInput drag;drag.held=true;drag.selection={true,true,false,1041,531,0};view.update(drag);CHECK(view.position()==0);drag.selection={true,false,false,1041,86,0};view.update(drag);CHECK(view.position()==2);drag.held=false;view.update(drag);++cases;
     const auto position=view.position();text_failure=true;rejects([&]{click(1);});++guards;text_failure=false;CHECK(view.position()==position && view.phase()==g::BacklogPhase::active && !view.sprites().empty());++cases;
     missing=true;rejects([&]{view.prepare({1,false,0},history);});++guards;missing=false;CHECK(view.position()==position && view.phase()==g::BacklogPhase::active);++cases;
-    for(const auto context:{g::BacklogContext{-1},g::BacklogContext{10},g::BacklogContext{0,false,4096},g::BacklogContext{0,false,2}}){rejects([&]{view.prepare(context,history);});++guards;}++cases;
+    for(const auto context:{g::BacklogContext{-1},g::BacklogContext{10},g::BacklogContext{0,false,4096}}){rejects([&]{view.prepare(context,history);});++guards;}++cases;
+    view.prepare({0,false,2},history);active();CHECK(view.phase()==g::BacklogPhase::active && view.hits().size()==8);++cases;
     for(auto input:{g::BacklogInput{.page_delta=2},g::BacklogInput{.scroll=-2}}){rejects([&]{view.update(input);});++guards;}g::BacklogInput invalid;invalid.selection.x=std::numeric_limits<float>::quiet_NaN();rejects([&]{view.update(invalid);});++guards;++cases;
     view.prepare({1,true,1},history);active();CHECK(view.hits().size()==4 && view.maximum()==5);CHECK(std::any_of(view.sprites().begin(),view.sprites().end(),[](const auto& sprite){return sprite.order==0x431 && sprite.x==20 && sprite.width==1240;}));wheel={};wheel.scroll=1;view.update(wheel);CHECK(view.position()==1);++cases;
     g::BacklogInput cancel;cancel.cancel=true;view.update(cancel);CHECK(view.phase()==g::BacklogPhase::closed && view.take_command()->kind==g::BacklogCommand::Kind::close && !retained.empty() && retained.front().image);++cases;
@@ -95,17 +107,22 @@ int main(int argc,char** argv){try{
     muted.character_voice[2]=true;muted.audio_muted[0]=true;app.preferences(muted);tick();CHECK(app.backlog_view()->hits()[4].enabled);tick(replay_click);CHECK(voices.size()==before_muted+1 && voices.back()->gain==0);++cases;
     rejects([&]{app.prepare_backlog(loader,text_loader);});++guards;app.title(now);CHECK(!app.backlog_view() && app.page()==g::Page::title);++cases;
     {
-        Script multiple;for(int n=0;n<6;++n){multiple.call(138,{s::Value(1),s::Value(128),s::Value(0),s::Value(0),s::Value(10+n)});multiple.call(138,{s::Value(2),s::Value(200),s::Value(0),s::Value(0),s::Value(20+n)});multiple.call(131,{s::Value(std::string()),s::Value(n),s::Value(1)});}multiple.call(194,{s::Value(1000000),s::Value(0),s::Value(1)});multiple.finish();
+        Script multiple;for(int n=0;n<6;++n){multiple.call(138,{s::Value(1),s::Value(128),s::Value(0),s::Value(0),s::Value(10+n)});multiple.call(133,{s::Value(std::string("A")),s::Value(n*2),s::Value(1)});multiple.call(138,{s::Value(2),s::Value(200),s::Value(0),s::Value(0),s::Value(20+n)});multiple.call(131,{s::Value(std::string("B")),s::Value(n*2+1),s::Value(0)});}multiple.call(194,{s::Value(1000000),s::Value(0),s::Value(1)});multiple.finish();
         banks["ck-gal.pak"]=bank({{"Global.vrb",text("3,FLG_00,0\r\n3,FLG_\x8f\xcd\x8a\xc7\x97\x9d\x83T\x83u,0\r\n")},{"LFScriptFunc.fnc",functions(0,200)},{"LFScriptFuncEx.fnc",functions(200,239)},{"1001.bnr",multiple.code},{"1001.txt",text(multiple.strings)}});
         auto queued_saves=std::make_shared<Saves>();g::Application queued([&](auto name)->std::shared_ptr<r::Source>{const auto it=banks.find(std::string(name));return it==banks.end()?nullptr:it->second;},std::make_shared<p::Store>(std::make_shared<Storage>()),std::make_shared<Settings>(),queued_saves,memory_resolver(),1,transport);queued.prepare_backlog(app_loader,text_loader);queued.start({},0);std::int64_t clock{};const auto step=[&](g::Input input={}){clock+=16667;return queued.frame(clock,input,[&]{return clock;});};
         for(unsigned n=1;n<=6;++n){until([&]{return queued.scene()->backlog().entries().size()==n && queued.scene()->dialogue_state().phase()==s::DialoguePhase::waiting;},[&]{step();});if(n<6)step(advance);}
-        // Restore a constructed two-descriptor history using the public native
-        // save format; ordinary message commands retain their latest voice.
-        s::SceneBacklog recorded;const auto& entries=queued.scene()->backlog().entries();for(auto it=entries.rbegin();it!=entries.rend();++it){auto entry=*it;entry.voices={{1,1001,10+entry.line,128},{2,1001,20+entry.line,200}};recorded.push(std::move(entry));}auto snapshot=g::SavedScene::decode(queued.scene()->checkpoint());snapshot.part(g::ScenePart::backlog)=recorded.checkpoint();queued_saves->entries[0]=snapshot.encode();queued.load(0,clock);
+        CHECK(queued.scene()->backlog().entries().front().text=="AB" && queued.scene()->backlog().entries().front().voices.size()==2);CHECK(queued.scene()->dialogue_state().raw_text()=="A\\kB");++cases;
         queued.open(g::Page::backlog,clock);until([&]{return queued.backlog_view()->phase()==g::BacklogPhase::active;},[&]{step();});CHECK(queued.backlog_view()->maximum()==2);step(replay_click);CHECK(voices.back()->line.line==12);auto first=voices.back();first->done=true;const auto before_next=voices.size();step();CHECK(voices.size()==before_next+1 && voices.back()->line.line==22);++cases;
         step(replay_click);first=voices.back();const auto before_scroll=voices.size();g::Input scroll;scroll.scroll=1;step(scroll);CHECK(queued.backlog_view()->position()==1 && !first->done && voices.size()==before_scroll);first->done=true;step();CHECK(voices.size()==before_scroll);++cases;
         step(replay_click);CHECK(voices.back()->line.line==11);first=voices.back();first->done=true;const auto before_same_tick=voices.size();step(scroll);CHECK(queued.backlog_view()->position()==2 && voices.size()==before_same_tick);step();CHECK(voices.size()==before_same_tick);++cases;
         step(replay_click);first=voices.back();scroll.scroll=-1;step(scroll);CHECK(!first->done);queued.back(clock);CHECK(first->done && queued.page()==g::Page::story);++cases;queued.close(clock);
     }
-    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-backlog-view.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"maximum_pending_images\":"<<maximum_pending<<",\"maximum_new_images_per_tick\":"<<maximum_new_images<<",\"four_normal_rows\":true,\"novel_page_and_scroll\":true,\"shared_application_bound\":true,\"voice_replay_keeps_history\":true,\"source_speaker_controls\":true,\"scroll_cancels_queued_replay\":true,\"toolbar_does_not_advance_story\":true,\"error_resume_rebases_driver\":true,\"deferred_font_geometry_only\":true,\"synthetic_resources_only\":true,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out);std::cout<<"PASS common backlog layout, bounded images, input, replay ownership and story toolbar.\n";return 0;
+    {
+        wa2::text::FontBook fonts(r::Archive::open(std::make_shared<UniformFonts>()));g::BacklogView glyphs(loader,[&](auto raw,const auto& style){return fonts.prepare(wa2::text::layout(raw,style));});s::SceneBacklog history;history.message("fixture",0,"A\\kB","",1,false);
+        const auto ready=[&]{until([&]{return glyphs.phase()==g::BacklogPhase::active;},[&]{glyphs.update();});};const auto letters=[&]{return std::count_if(glyphs.sprites().begin(),glyphs.sprites().end(),[](const auto& item){return item.order==0x446;});};
+        glyphs.prepare({0,false,0},history);ready();CHECK(letters()==4);glyphs.prepare({0,false,5},history);ready();CHECK(letters()==4);++cases;
+        glyphs.prepare({0,true,0},history);ready();CHECK(letters()==2);glyphs.prepare({0,true,1},history);ready();CHECK(letters()==4);glyphs.prepare({0,true,5},history);ready();CHECK(letters()==4);++cases;
+        history.note_voice({1,1001,1,255});history.append("C");glyphs.prepare({0,true,5},history);ready();CHECK(letters()==6 && glyphs.entries().size()==1);++cases;
+    }
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-backlog-view.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"maximum_pending_images\":"<<maximum_pending<<",\"maximum_new_images_per_tick\":"<<maximum_new_images<<",\"four_normal_rows\":true,\"novel_page_and_scroll\":true,\"shared_application_bound\":true,\"voice_replay_keeps_history\":true,\"source_speaker_controls\":true,\"scroll_cancels_queued_replay\":true,\"appended_dialogue_replays_in_order\":true,\"history_reveals_prior_text_pages\":true,\"toolbar_does_not_advance_story\":true,\"error_resume_rebases_driver\":true,\"synthetic_font_pixels_only\":true,\"synthetic_resources_only\":true,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out);std::cout<<"PASS common backlog layout, bounded images, input, replay ownership and story toolbar.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

@@ -15,8 +15,11 @@ std::string BacklogView::name(unsigned index)const{
 std::vector<BacklogView::Row> BacklogView::rows(std::size_t position,const std::deque<script::BacklogEntry>& entries,BacklogContext context)const{
     std::vector<Row> result;if(entries.empty())return result;const auto count=std::min<std::size_t>(context.novel?1:4,entries.size());result.reserve(count);
     for(std::size_t n=0;n<count;++n){Row row;row.entry=position+count-1-n;const auto& entry=entries.at(row.entry);text::TextStyle body;body.colour=text::speaker_colour(text::speaker_style(entry.speaker,entry.name));
-        if(context.novel){body.columns=40;body.rows=15;}row.body=text_(entry.text,body);row.page=row.entry==0?context.current_page:0;
-        if(row.page>=row.body.metrics().pages.size())throw script::Error("Native backlog page is outside its text");
+        if(context.novel){body.columns=40;body.rows=15;}row.body=text_(entry.text,body);
+        const auto pages=row.body.metrics().pages.size();if(!pages)throw script::Error("Native backlog text has no layout pages");
+        // Normal history is fully revealed. The current novel row retains
+        // its reveal ordinal; removed append pauses can reduce its page count.
+        row.page=context.novel && row.entry==0?std::min<std::uint32_t>(context.current_page,std::uint32_t(pages-1)):std::uint32_t(pages-1);
         row.replayable=replayable(entry);if(!context.novel && !entry.name.empty()){auto label=body;label.size=28;label.columns=36;label.rows=1;label.line_gap=0;label.spacing=2;label.colour={255,255,255};row.name=text_(entry.name,label);}result.push_back(std::move(row));
     }return result;
 }
@@ -82,7 +85,7 @@ void BacklogView::draw(){
     add(0,x,624,32,48,focus_==1?64:0,592,32,48,0x1065,0x42c);add(0,x,80,32,544,focus_==2?48:0,48,32,544,0x1065,0x42d);
     const float knob=530.f-(maximum()?float(position_)*444.f/float(maximum()):0);add(0,x+8,knob,16,88,dragging_?80:64,48,16,88,0x1066,0x42e);
     for(unsigned n=0;n<rows_.size();++n){const auto& row=rows_[n];const auto start=sprites_.size();const auto y=context_.novel?26.f:56.f+n*160;
-        row.body.append(sprites_,row.page,std::numeric_limits<std::uint32_t>::max()/32,context_.novel?75.f:274.f,y,255,focus_==4+n?std::optional(text::speaker_colour(10)):std::nullopt);
+        for(unsigned page=0;page<=row.page;++page)row.body.append(sprites_,page,std::numeric_limits<std::uint32_t>::max()/32,context_.novel?75.f:274.f,y,255,focus_==4+n?std::optional(text::speaker_colour(10)):std::nullopt);
         for(auto at=start;at<sprites_.size();++at){sprites_[at].layer=0x1065;sprites_[at].order=0x446+int(n);}
         if(context_.novel)continue;const auto name_start=sprites_.size();row.name.append(sprites_,0,100000,274,28.f+n*160);
         for(auto at=name_start;at<sprites_.size();++at){sprites_[at].layer=0x1065;sprites_[at].order=0x44a+int(n);}

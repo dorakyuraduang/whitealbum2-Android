@@ -840,6 +840,20 @@ new history event. Recorded line numbers are absolute: replay does not add the
 current script's speech offset again. Closing or replacing the view releases its
 replay owner before replacing the scene.
 
+Continued message commands now follow cached 40e680..40e72e instead of
+creating another history row. The live dialogue inserts its pause marker,
+while the existing history text concatenates the continuation directly.
+The first name/identity stays attached and each changed adjacent voice
+descriptor joins its bounded replay sequence. Append does not apply the
+fresh-row log-output filter, matching that separate source branch. Overlong
+text or an eleventh distinct descriptor fails before publishing history.
+Native checkpoints retain the combined row and pending latest voice. Normal
+history reveals all pause portions; the current novel row includes every
+portion through its reveal ordinal, clamped when removing appended pauses
+reduces the history layout's portion count. Checks exercise actual common
+message commands and sequential replay, and render glyph sprites from
+uniform synthetic indexed font sheets. No original glyph pixels are read.
+
 The nine bottom controls now share their cached hit rectangles with the
 dialogue renderer. Their quick-save/load, settings, save/load, history, skip,
 auto and window actions are processed before story advancement. Input is

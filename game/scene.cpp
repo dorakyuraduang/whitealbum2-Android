@@ -117,7 +117,8 @@ script::CommandResult Scene::command(script::Command& call){
     if(auto value=weather_.dispatch(call))return *value;
     if(auto value=shake_.dispatch(call))return *value;
     {const bool message=!call.continuation && (call.index==130 || call.index==131 || call.index==133);
-        if(auto value=dialogue_.dispatch(call)){if(message)backlog_.message(session_.active()?session_.active()->program().name():statistics_.scene,call.arguments[1].integer(),call.arguments[0].text(),dialogue_.name(),dialogue_.speaker(),dialogue_.novel().enabled(),controls_.modes().log_output==0);return *value;}}
+        const bool append=message && call.arguments.size()==3 && call.arguments[2].integer()==0 && !dialogue_.raw_text().empty();
+        if(auto value=dialogue_.dispatch(call)){if(message){if(append)backlog_.append(call.arguments[0].text());else backlog_.message(session_.active()?session_.active()->program().name():statistics_.scene,call.arguments[1].integer(),call.arguments[0].text(),dialogue_.name(),dialogue_.speaker(),dialogue_.novel().enabled(),controls_.modes().log_output==0);}return *value;}}
     if(auto value=colour_.dispatch(call))return *value;
     if(auto value=bitmaps_.dispatch(call))return *value;
     if(auto value=characters_.dispatch(call))return *value;
