@@ -2,6 +2,7 @@
 // the full native scene and storage adapter, including methods not used by the
 // synthetic progress test. They are not the released application's ABI.
 #include "scene.hpp"
+#include "application.hpp"
 #include "progress_storage.hpp"
 #include "save_storage.hpp"
 #include "preference_storage.hpp"
@@ -26,6 +27,9 @@ extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_tick(void* pointer,std::in
 extern "C" WA2_LINK_CHECK void wa2_native_link_start(void* pointer){static_cast<wa2::game::Scene*>(pointer)->start();}
 extern "C" WA2_LINK_CHECK bool wa2_native_link_preferences(void* pointer,wa2::game::PreferenceStorage* storage,const wa2::game::Preferences* value){wa2::game::PreferenceStore preferences(std::shared_ptr<wa2::game::PreferenceStorage>(storage,[](auto*){}));if(value)preferences.replace(*value);static_cast<wa2::game::Scene*>(pointer)->preferences(preferences.current());return value && preferences.current()==*value;}
 extern "C" WA2_LINK_CHECK bool wa2_native_link_preference_file(const std::filesystem::path* directory,const wa2::game::Preferences* value){wa2::game::PreferenceStore settings(wa2::platform::preference_storage(*directory));return value && settings.replace(*value);}
+extern "C" WA2_LINK_CHECK void* wa2_native_link_application_create(wa2::resource::BankOpener* opener,const std::filesystem::path* directory,const wa2::game::Scene::SavedImageResolver* resolver){return new wa2::game::Application(*opener,std::make_shared<wa2::progress::Store>(wa2::platform::progress_storage(*directory)),wa2::platform::preference_storage(*directory),wa2::platform::save_storage(*directory),*resolver);}
+extern "C" WA2_LINK_CHECK unsigned wa2_native_link_application_update(void* pointer,std::int64_t now,unsigned mode,unsigned slot){auto& app=*static_cast<wa2::game::Application*>(pointer);switch(mode){case 0:app.start({},now);break;case 1:app.open(wa2::game::Page::save,now);app.save(slot);break;case 2:app.load(slot,now);break;case 3:app.background(true,now);break;case 4:app.background(false,now);app.back(now);break;case 5:app.title(now);break;case 6:app.close(now);break;default:throw std::invalid_argument("Unsupported application link-check operation");}if(app.page()!=wa2::game::Page::closed)app.frame(now,{},[now]{return now;});return unsigned(app.page());}
+extern "C" WA2_LINK_CHECK void wa2_native_link_application_destroy(void* pointer){delete static_cast<wa2::game::Application*>(pointer);}
 extern "C" WA2_LINK_CHECK std::uint32_t wa2_native_link_frame(void* pointer,std::int64_t now){return static_cast<wa2::game::Scene*>(pointer)->advance_frame(now,{},[now]{return now;}).ticks;}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_save_scene(void* pointer){return static_cast<wa2::game::Scene*>(pointer)->checkpoint().size();}
 extern "C" WA2_LINK_CHECK void* wa2_native_link_restore_scene(wa2::resource::BankOpener* opener,std::shared_ptr<wa2::progress::Store>* progress,const std::uint8_t* data,std::size_t size,std::int64_t now,const wa2::game::Scene::SavedImageResolver* resolve){return wa2::game::Scene::restore(*opener,*progress,{data,size},now,*resolve).release();}

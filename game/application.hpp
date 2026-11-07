@@ -1,0 +1,49 @@
+#pragma once
+#include "scene.hpp"
+#include "save_slots.hpp"
+
+namespace wa2::game {
+enum class Page {title,story,options,save,load,backlog,extras,closed};
+struct StoryStart {std::string scene{"1001"};std::int32_t label{};bool replay{};};
+// Shared application ownership/navigation. Hosts provide resources, storage,
+// input, clocks, presentation and device audio; they do not implement another
+// version of the story/save/menu transition rules. Page views are separate.
+class Application {
+    resource::BankOpener opener_;
+    std::shared_ptr<progress::Store> progress_;
+    PreferenceStore preferences_;
+    SaveSlots saves_;
+    Scene::SavedImageResolver resolver_;
+    std::unique_ptr<Scene> scene_;
+    std::vector<Page> pages_{Page::title};
+    std::int64_t observed_{};
+    bool clock_started_{},background_{},release_input_{true};
+    std::uint32_t seed_;
+    std::uint64_t scene_revision_{};
+    void observe(std::int64_t now);
+    void require_open()const;
+    void suspend_scene(std::int64_t now);
+    void replace_scene(std::unique_ptr<Scene>,std::int64_t now);
+public:
+    Application(resource::BankOpener,std::shared_ptr<progress::Store>,std::shared_ptr<PreferenceStorage>,std::shared_ptr<SaveStorage>,Scene::SavedImageResolver,std::uint32_t seed=1);
+    Page page()const noexcept{return pages_.back();}
+    std::span<const Page> navigation()const noexcept{return pages_;}
+    Scene* scene()noexcept{return scene_.get();}
+    const Scene* scene()const noexcept{return scene_.get();}
+    std::uint64_t scene_revision()const noexcept{return scene_revision_;}
+    std::shared_ptr<audio::Mixer> mixer()const noexcept{return scene_?scene_->mixer():nullptr;}
+    bool background()const noexcept{return background_;}
+    const Preferences& preferences()const noexcept{return preferences_.current();}
+    bool preferences(const Preferences&);
+    void start(const StoryStart&,std::int64_t now);
+    void open(Page,std::int64_t now);
+    bool back(std::int64_t now);
+    void title(std::int64_t now);
+    void background(bool,std::int64_t now);
+    void save(unsigned slot);
+    void load(unsigned slot,std::int64_t now);
+    std::vector<SaveSlotInfo> slots(){require_open();return saves_.list();}
+    FrameBatch frame(std::int64_t now,Input,const std::function<std::int64_t()>& budget_clock,FrameBudget budget={});
+    void close(std::int64_t now);
+};
+}

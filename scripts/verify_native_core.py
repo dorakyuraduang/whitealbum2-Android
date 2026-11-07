@@ -52,6 +52,7 @@ def main():
     inputs += [ROOT/'tests/native_saved_scene.cpp',ROOT/'tests/native_scene_checkpoint.cpp']
     inputs += [ROOT/'tests/native_save_slots.cpp',ROOT/'platform/save_storage.cpp',ROOT/'platform/save_storage.hpp']
     inputs += [ROOT/'tests/native_preferences.cpp']
+    inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_preference_storage.cpp',ROOT/'platform/private_file.cpp',ROOT/'platform/private_file.hpp',ROOT/'platform/preference_storage.cpp',ROOT/'platform/preference_storage.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
@@ -89,6 +90,7 @@ def main():
             if host=='windows':targets+=['wa2_native_save_slot_tests']
             if host=='windows':targets+=['wa2_native_preference_tests']
             if host=='windows':targets+=['wa2_native_preference_storage_tests']
+            if host=='windows':targets+=['wa2_native_application_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
             if host=='windows':targets.append('wa2_native_mask_source_tests')
@@ -104,6 +106,7 @@ def main():
             allowed+=('tests/native_save_slots.cpp','platform/save_storage.cpp')
             allowed+=('tests/native_preferences.cpp',)
             allowed+=('tests/native_preference_storage.cpp','platform/private_file.cpp','platform/preference_storage.cpp')
+            allowed+=('tests/native_application.cpp',)
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -256,6 +259,9 @@ def main():
                 run([directory/'wa2_native_preference_storage_tests.exe',directory/'native-preference-storage.json'],console,90)
                 preference_storage=json.loads((directory/'native-preference-storage.json').read_text())
                 if not preference_storage['passed'] or preference_storage['cases']<8 or preference_storage['guards']<13 or not preference_storage['synthetic_files_only'] or preference_storage['original_settings_opened'] or preference_storage['game_launched'] or preference_storage['screen_access']:raise ValueError('Native preference file checks failed')
+                run([directory/'wa2_native_application_tests.exe',directory/'native-application.json'],console,90)
+                application=json.loads((directory/'native-application.json').read_text())
+                if not application['passed'] or application['cases']<15 or application['guards']<15 or not application['synthetic_script_only'] or not application['failed_load_preserves_scene'] or not application['menu_keeps_audio'] or not application['background_freezes_audio'] or application['original_resources_opened'] or application['devices_opened'] or application['game_launched'] or application['screen_access']:raise ValueError('Native application state checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -302,6 +308,7 @@ def main():
     report['save_slots']=save_slots
     report['preferences']=preferences
     report['preference_storage']=preference_storage
+    report['application']=application
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

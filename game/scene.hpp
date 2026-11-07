@@ -84,6 +84,8 @@ public:
     script::RunState update(std::int64_t monotonic_us,Input input={});
     FrameBatch advance_frame(std::int64_t monotonic_us,Input input,const std::function<std::int64_t()>& budget_clock,FrameBudget budget={});
     void pause(bool paused,std::int64_t monotonic_us);
+    void suspend(bool logic_paused,bool audio_paused,std::int64_t monotonic_us);
+    void ambient_update(std::int64_t monotonic_us);
     void stop_movie(){movies_.stop();}
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
     script::BackgroundFrame background()const;

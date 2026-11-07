@@ -428,6 +428,20 @@ modifies original settings or system/manual saves. Separate synthetic-directory
 checks cover reopen, unchanged edits, damaged files and wide Windows paths.
 Application option controls still need integration.
 
+`game/application.*` now owns one shared native scene, current preferences,
+native slots and bounded page navigation. New stories and loads prepare a new
+owner before replacing the old one; failed loads retain the old scene, mixer,
+preferences and menu path. Menu suspension freezes script/visual logic while
+audio continues; background suspension also freezes PCM transport, movie and
+caption clocks. Returning from a menu/load clears the first transient story
+input so the selecting click cannot also advance dialogue. The application uses
+the bounded skip scheduler and reports unsupported modal movie use or a script
+ending without a title request. Its synthetic integration checks use constructed
+PAKs/scripts and memory PCM/storage, with no window, device or original story.
+Hosts must retain a shared mixer owner until their old audio output is detached.
+These navigation transitions do not yet provide the missing title/options,
+save/load, extras or backlog page views, nor a launchable native application.
+
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
 precision declarations. This makes native mask transitions available through

@@ -142,10 +142,15 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     controls_.take_draw_request();return title_requested_?script::RunState::stopped:state;
 }
 void Scene::pause(bool value,std::int64_t monotonic_us){
-    if(!timeline_.pause(value,monotonic_us))return;
-    if(value)mixer_->pause(true);
-    movies_.pause(value,monotonic_us);captions_.pause(value,std::uint64_t(monotonic_us)/1000);
-    if(!value)mixer_->pause(false);
+    suspend(value,value,monotonic_us);
+}
+void Scene::suspend(bool logic,bool audio,std::int64_t now){
+    if(audio && !logic)throw std::invalid_argument("Native audio suspension requires logic suspension");timeline_.pause(logic,now);
+    if(audio)mixer_->pause(true);movies_.pause(audio,now);captions_.pause(audio,std::uint64_t(now)/1000);if(!audio)mixer_->pause(false);
+}
+void Scene::ambient_update(std::int64_t now){
+    if(!timeline_.paused())throw std::logic_error("Native ambient update requires suspended story logic");timeline_.sample(now);if(mixer_->paused())return;
+    music_.update();effects_.update();voices_.update();movies_.update(now);captions_.update(std::uint64_t(now)/1000);
 }
 void Scene::choose(std::uint32_t ordinal){
     if(ordinal>=choices_.items().size())throw script::Error("Native choice ordinal is out of range");const auto text=choices_.items()[ordinal].text;
