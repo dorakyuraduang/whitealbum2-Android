@@ -1,6 +1,7 @@
 #pragma once
 #include "scene_selection.hpp"
 #include "system_sounds.hpp"
+#include "confirmation_view.hpp"
 
 namespace wa2::game {
 enum class Option : unsigned {
@@ -30,7 +31,7 @@ struct OptionsHit {
     std::optional<Option> option;
     float x{},y{},width{},height{};
 };
-struct OptionsCommand {enum class Kind {close,reset,preview_effects,preview_voice};Kind kind;};
+struct OptionsCommand {enum class Kind {close,reset,preview_effects,preview_voice,reset_confirmed};Kind kind;};
 // Common source-resource settings presentation and input. No device/window
 // calls or guest addresses. Commands which require confirmation/audio are
 // delivered to the owner; unsupported owner behavior must remain explicit.
@@ -45,6 +46,8 @@ public:
     void update(OptionsInput={});
     void state(const OptionsState&);
     void timing(OptionsTiming);
+    void confirm_reset(int skin,ConfirmationView::Text);
+    const ConfirmationView* confirmation()const noexcept{return confirmation_.get();}
     const OptionsState& state()const noexcept{return state_;}
     OptionsPhase phase()const noexcept{return phase_;}
     unsigned page()const noexcept{return page_;}
@@ -63,6 +66,7 @@ private:
     std::vector<image::Sprite> sprites_;
     std::optional<unsigned> focus_,drag_,pressed_;
     std::optional<OptionsCommand> command_;
+    std::unique_ptr<ConfirmationView> confirmation_;
     OptionsPhase phase_{OptionsPhase::idle};unsigned page_{},elapsed_{};
     bool poll();
     void regions();

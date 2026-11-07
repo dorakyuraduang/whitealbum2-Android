@@ -1,5 +1,6 @@
 #include "scene.hpp"
 #include "audio_resources.hpp"
+#include "options_audio.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdio>
@@ -69,6 +70,9 @@ std::unique_ptr<audio::Voice> Scene::speech(const script::SpokenLine& line){
     if(services_.speech)return services_.speech(line);
     auto source=audio::speech_resource(resources_,line.chapter,line.line,line.speaker);return audio::play_ogg(*mixer_,{source,line.loop?source:nullptr});
 }
+void Scene::options_preview_effects(){game::options_preview_effects(effects_,preferences_);}
+void Scene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
+void Scene::options_reset_sound(){game::options_reset_sound(effects_);}
 void Scene::start(std::string_view scene,std::int32_t label){session_.start(scene,label);reading_.enter(scene);choices_.clear();backlog_.clear();title_requested_=false;statistics_.scene=scene;}
 script::CommandResult Scene::command(script::Command& call){
     statistics_.command=call.index;

@@ -35,11 +35,12 @@ bool SceneVoices::permitted(std::int32_t speaker)const noexcept{
     constexpr std::array<std::int32_t,10> groups{0,2,1,3,4,5,10,11,99,98};
     for(unsigned n=0;n<groups.size();++n)if(groups[n]==speaker)return characters_[n];return true;
 }
-void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop){
+void SceneVoices::preview(const SpokenLine& line){play(0,line.speaker,line.chapter,line.line,255,0,false);}
+void SceneVoices::play(std::int32_t channel,std::int32_t speaker,std::int32_t chapter,std::int32_t line,std::int32_t volume,std::int32_t loop,bool record){
     auto& item=checked(channel);if(speaker==-1)speaker=speaker_();if(chapter==-1)chapter=chapter_();
     const auto adjusted=std::int64_t(line)+(offset_?offset_():0);
     if(chapter<0 || chapter>9999 || speaker<0 || speaker>99 || adjusted<0 || adjusted>9999)throw Error("native voice identity out of range");
-    const SpokenLine line_info{speaker,chapter,std::int32_t(adjusted),loop!=0};if(events_.issued)events_.issued(std::uint32_t(channel),line_info,std::clamp(volume,0,255));
+    const SpokenLine line_info{speaker,chapter,std::int32_t(adjusted),loop!=0};if(record && events_.issued)events_.issued(std::uint32_t(channel),line_info,std::clamp(volume,0,255));
     // 0x461400 passes (mode == 0) as the repeat count. Both -1 and 1
     // therefore select continuous playback; scripts use -1 for ambient voice.
     // The original skips ordinary speech while fast-forward is held. A looped

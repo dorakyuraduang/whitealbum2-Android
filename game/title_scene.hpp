@@ -1,6 +1,8 @@
 #pragma once
 #include "title_view.hpp"
 #include "scene_music.hpp"
+#include "scene_effects.hpp"
+#include "scene_voices.hpp"
 #include "movie_player.hpp"
 #include "preferences.hpp"
 #include "resource_catalog.hpp"
@@ -16,6 +18,8 @@ enum class TitleStage {company_movie,opening_delay,opening_movie,view};
 struct TitleServices {
     script::SceneMusic::Factory music;
     std::function<std::unique_ptr<movie::Playback>(std::string_view)> movie;
+    script::SceneEffects::Factory effects;
+    script::SceneVoices::Factory speech;
 };
 // Shared title ownership, startup movies and audio. Device output may keep a
 // shared mixer alive while switching owners; no OS or device API is used here.
@@ -25,6 +29,8 @@ class TitleScene {
     std::shared_ptr<progress::Store> progress_;
     audio::SystemSounds sounds_;
     script::SceneMusic music_;
+    script::SceneEffects effects_;
+    script::SceneVoices voices_;
     wa2::Random random_;
     TitleView view_;
     std::unique_ptr<movie::Playback> movie_;
@@ -45,6 +51,9 @@ public:
     void preferences(const Preferences&);
     void resume(){view_.resume(progress_->state());}
     void cue(audio::SystemCue value){sounds_.play(value);}
+    void options_preview_effects();
+    void options_preview_voice();
+    void options_reset_sound();
     std::shared_ptr<audio::Mixer> mixer()const noexcept{return mixer_;}
     TitleStage stage()const noexcept{return stage_;}
     const TitleView& view()const noexcept{return view_;}

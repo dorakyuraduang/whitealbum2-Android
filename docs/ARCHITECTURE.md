@@ -676,11 +676,35 @@ Constructed application checks cover those ownership/persistence boundaries,
 including failed page preparation and failed settings writes. The Android
 native entry now actually links these view paths through the shared bootstrap.
 
+The common default owner now handles reset and audio preview commands. Reset
+uses `game/confirmation_view.*`, the original theme/background and two-button
+atlas, original font indices, logical hit rectangles and bounded asynchronous
+image loading. It accepts keyboard/pointer input after opening, consumes its
+answer once, and blocks edits underneath it during the closing fade. Disabling
+confirmation applies defaults directly. Persistence occurs before publishing
+defaults to the scene/view. Source reset restores speech volume to 256 (its
+static initialization was 195), theme zero and all ten character switches;
+display mode and the native caption preference are retained. Host window-size
+reset is not implemented. The bootstrap lazily prepares prompt glyphs with the
+same native FontBook; the constructed action checks use deferred glyph metrics
+and verify geometry/state, not font pixels or appearance on a device.
+
+`game/options_audio.*` shares the five source voice samples, random selection
+and reserved effect channel between story/title owners. Effect preview replaces
+channel 15 with sound 8101; speech preview replaces channel zero, plays once,
+and does not append a story/backlog voice descriptor. Their existing mixers,
+gain/mute/character policies, pause and lifetime remain in force. Repeated
+previews keep the channel count bounded and do not restart music. Speech retains
+the source voice offset and ordinary skip policy; suspending story logic disables
+story acceleration, so a stale held-skip input cannot suppress a menu preview. The title
+owner now also services its native effects and speech while a menu is open.
+Reset's confirmation sound uses the existing ordinary effect pool. Fake voice
+checks cover replacement, muting, cleanup and the common application route;
+no decoder or audio device is opened by those checks.
+
 The full settings page is still incomplete. Display-mode changes, alternative
 right-click actions and options over another modal page fail explicitly.
-Reset/preview commands require an owner handler; the production native entry
-does not yet supply their views/transports and reports unsupported actions.
-Skin/colour popup behavior, held-button repetition and the original captured
+Skin/colour selection popup behavior, held-button repetition and the original captured
 parent-image zoom are pending. The current compositor retains the live parent
 scene beneath the options overlay. Persisting confirmation/window policies is
 not a claim that every action using them has been implemented.

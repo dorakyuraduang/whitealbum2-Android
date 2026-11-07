@@ -88,7 +88,7 @@ class Scene {
     std::unique_ptr<audio::Voice> speech(const script::SpokenLine& line);
     script::CommandResult command(script::Command& command);
     void choose(std::uint32_t ordinal);
-    bool skipping()const{return (input_.skip || controls_.modes().latched_skip) && !controls_.modes().demo_mode && !choices_.active() && (!skip_read_only_ || reading_.status(replay_mode_)!=0);}
+    bool skipping()const{return !timeline_.paused() && (input_.skip || controls_.modes().latched_skip) && !controls_.modes().demo_mode && !choices_.active() && (!skip_read_only_ || reading_.status(replay_mode_)!=0);}
 public:
     explicit Scene(resource::BankOpener opener,std::uint32_t seed=1,std::shared_ptr<progress::Store> progress={},SceneServices services={});
     void start(std::string_view scene="1001",std::int32_t label=0);
@@ -118,6 +118,9 @@ public:
     void skip_read_only(bool value){skip_read_only_=preferences_.skip_read_only=value;}
     void preferences(const Preferences&);
     void cue(audio::SystemCue value){system_sounds_.play(value);}
+    void options_preview_effects();
+    void options_preview_voice();
+    void options_reset_sound();
     const Preferences& preferences()const noexcept{return preferences_;}
     void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
     void flush_progress(){reading_.finish();}

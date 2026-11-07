@@ -23,6 +23,7 @@ class Application {
     std::unique_ptr<TitleScene> title_scene_;
     OptionsView::Loader options_loader_;
     std::function<void(OptionsCommand)> options_command_;
+    ConfirmationView::Text options_text_;
     std::unique_ptr<OptionsView> options_view_;
     std::int32_t extra_{-1};
     std::vector<Page> pages_{Page::title};
@@ -51,7 +52,7 @@ public:
     void prepare_title(TitleContent,TitleStartup={},TitleServices={});
     // Wiring is separate from opening: constructing the application does not
     // decode menu assets. Reset/preview owners remain explicit integration work.
-    void prepare_options(OptionsView::Loader,std::function<void(OptionsCommand)> = {});
+    void prepare_options(OptionsView::Loader,std::function<void(OptionsCommand)> = {},ConfirmationView::Text = {});
     void start(const StoryStart&,std::int64_t now);
     void open(Page,std::int64_t now);
     bool back(std::int64_t now);

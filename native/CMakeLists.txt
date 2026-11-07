@@ -227,6 +227,9 @@ if(NOT ANDROID)
     add_test(NAME native_options_view COMMAND wa2_native_options_view_tests "${CMAKE_BINARY_DIR}/native-options-view.json")
     add_test(NAME native_options_preferences COMMAND wa2_native_options_preference_tests "${CMAKE_BINARY_DIR}/native-options-preferences.json")
     add_test(NAME native_options_application COMMAND wa2_native_options_application_tests "${CMAKE_BINARY_DIR}/native-options-application.json")
+    add_executable(wa2_native_options_action_tests "${WA2_ROOT}/tests/native_options_actions.cpp")
+    target_link_libraries(wa2_native_options_action_tests PRIVATE wa2_game_scene)
+    add_test(NAME native_options_actions COMMAND wa2_native_options_action_tests "${CMAKE_BINARY_DIR}/native-options-actions.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.

@@ -8,4 +8,5 @@ namespace wa2::game {
 OptionsState options_state(const Preferences&);
 Preferences options_preferences(const OptionsState&,const Preferences& previous);
 OptionsTiming options_timing(const Preferences&);
+Preferences options_defaults(const Preferences& previous);
 }

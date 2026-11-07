@@ -1,5 +1,6 @@
 #include "title_scene.hpp"
 #include "audio_resources.hpp"
+#include "options_audio.hpp"
 #include <algorithm>
 
 namespace wa2::game {
@@ -11,6 +12,8 @@ TitleScene::TitleScene(resource::BankOpener opener,std::shared_ptr<progress::Sto
     :resources_(std::move(opener)),mixer_(std::make_shared<audio::Mixer>()),progress_(std::move(progress)),
     sounds_(*mixer_,[this](auto id){return audio::effect_resource(resources_,id);}),
     music_([this](auto id,bool loop){return services_.music?services_.music(id,loop):audio::play_ogg(*mixer_,audio::music_resources(resources_,id,loop));},[this](auto id){progress_->state().set_flag(std::uint32_t(100+id),1);progress_->flush();}),
+    effects_([this](auto id,bool loop){if(services_.effects)return services_.effects(id,loop);auto resource=audio::effect_resource(resources_,id);return resource.ogg?audio::play_ogg(*mixer_,{resource.source,loop?resource.source:nullptr}):audio::play_wave(*mixer_,resource.source,loop);}),
+    voices_([this](const auto& line){if(services_.speech)return services_.speech(line);auto source=audio::speech_resource(resources_,line.chapter,line.line,line.speaker);return audio::play_ogg(*mixer_,{source,line.loop?source:nullptr});},[]{return -1;},[]{return -1;}),
     random_(seed),view_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto cue){sounds_.play(cue);},[this](auto song,auto fade){if(song)music_.play(*song,fade,1,255);else music_.stop(fade);}),
     services_(std::move(services)),content_(content),startup_(startup),stage_(startup.movies?TitleStage::company_movie:TitleStage::view){
     if(!progress_)throw std::invalid_argument("Missing native title progress storage");if(startup_.movie_suffix>2)throw std::invalid_argument("Invalid native title movie suffix");
@@ -19,8 +22,12 @@ TitleScene::TitleScene(resource::BankOpener opener,std::shared_ptr<progress::Sto
 TitleScene::~TitleScene(){if(movie_)movie_->stop();}
 void TitleScene::preferences(const Preferences& value){
     value.validate();preferences_=value;music_.settings(value.effective_master(),value.effective_music());sounds_.settings(value.effective_master(),value.effective_effects());
+    effects_.settings(value.effective_master(),value.effective_effects());voices_.settings(value.effective_master(),value.speech,value.mute_adult);voices_.enabled(value.voice_enabled);voices_.character_switches(value.character_voice);
     if(movie_)movie_->gain(value.movie_amplitude());
 }
+void TitleScene::options_preview_effects(){game::options_preview_effects(effects_,preferences_);}
+void TitleScene::options_preview_voice(){game::options_preview_voice(voices_,random_,preferences_);}
+void TitleScene::options_reset_sound(){game::options_reset_sound(effects_);}
 void TitleScene::begin_movie(std::string_view stem){
     const auto name=std::string(stem)+char('0'+startup_.movie_suffix)+".pak";
     auto next=services_.movie?services_.movie(name):std::make_unique<movie::Player>(resources_.movie(name),mixer_);
@@ -44,6 +51,6 @@ void TitleScene::update(std::int64_t now,TitleInput input){
         }else ++delay_;break;
     case TitleStage::view:view_.update(input);break;
     }
-    music_.update();
+    music_.update();effects_.update();voices_.update();
 }
 }

@@ -67,7 +67,7 @@ OptionsView::OptionsView(Loader loader,Apply apply,Sound sound):loader_(std::mov
     if(!loader_)throw script::Error("Missing native settings image loader");
     black_=std::make_shared<const image::Raster>(image::Raster{1,1,{0,0,0,255}});hits_.reserve(48);sprites_.reserve(64);
 }
-void OptionsView::clear(){assets_={};pending_.reset();hits_.clear();sprites_.clear();focus_.reset();drag_.reset();pressed_.reset();command_.reset();phase_=OptionsPhase::idle;page_=elapsed_=0;}
+void OptionsView::clear(){assets_={};pending_.reset();hits_.clear();sprites_.clear();focus_.reset();drag_.reset();pressed_.reset();command_.reset();confirmation_.reset();phase_=OptionsPhase::idle;page_=elapsed_=0;}
 void OptionsView::prepare(const OptionsState& state,unsigned page,OptionsTiming timing){
     state.validate();if(page>=3 || timing.open>600 || timing.page>600 || timing.close>600)throw script::Error("Native settings page or timing is out of range");
     Bundle next;next.page=page;next.request=loader_(common[0]);if(!next.request)throw script::Error("Missing native settings image request");
@@ -104,6 +104,11 @@ void OptionsView::change_page(unsigned page){
 }
 void OptionsView::emit(OptionsCommand::Kind kind){if(command_)throw script::Error("Native settings command was not consumed");command_=OptionsCommand{kind};}
 std::optional<OptionsCommand> OptionsView::take_command(){auto result=command_;command_.reset();return result;}
+void OptionsView::confirm_reset(int skin,ConfirmationView::Text text){
+    if(phase_!=OptionsPhase::active || confirmation_)throw script::Error("Native settings cannot open another confirmation");
+    auto next=std::make_unique<ConfirmationView>(loader_,std::move(text),sound_);next->prepare(options_reset_prompt(),skin,timing_.open,timing_.close);
+    focus_.reset();drag_.reset();pressed_.reset();confirmation_=std::move(next);draw();
+}
 void OptionsView::activate(const OptionsHit& hit,float x){
     if(!hit.option){if(hit.id<3)change_page(hit.id);else if(hit.id==7 || hit.id==8)change_page((page_+(hit.id==7?2u:1u))%3);else if(hit.id==9){phase_=OptionsPhase::closing;elapsed_=0;focus_.reset();drag_.reset();if(sound_)sound_(audio::SystemCue::cancel);}else if(hit.id==3){emit(OptionsCommand::Kind::reset);if(sound_)sound_(audio::SystemCue::accept);}return;}
     const auto option=*hit.option;const auto& row=rows[page_*10+hit.row];
@@ -130,6 +135,11 @@ void OptionsView::update(OptionsInput in){
     if(!std::isfinite(in.selection.x) || !std::isfinite(in.selection.y) || std::abs(std::int64_t(in.selection.navigation))>1 || std::abs(std::int64_t(in.page_delta))>1)throw script::Error("Native settings input is out of range");
     if(phase_==OptionsPhase::idle)throw script::Error("Native settings view is not prepared");pressed_.reset();
     if(command_ || phase_==OptionsPhase::closed)return;
+    if(confirmation_){
+        confirmation_->update({in.selection,in.cancel});
+        if(auto answer=confirmation_->take_answer();answer && *answer)emit(OptionsCommand::Kind::reset_confirmed);
+        if(confirmation_->phase()==ConfirmationPhase::closed)confirmation_.reset();draw();return;
+    }
     if(phase_==OptionsPhase::loading){if(!poll())return;assets_=std::move(*pending_);pending_.reset();regions();elapsed_=0;phase_=OptionsPhase::opening;}
     if(phase_==OptionsPhase::page_loading){if(!poll()){draw();return;}elapsed_=0;phase_=OptionsPhase::page_out;}
     switch(phase_){
@@ -175,6 +185,7 @@ void OptionsView::draw(){
     if(focus_ && *focus_>=10){const auto row=(*focus_-10)/10;const auto help=page_==0?row:page_==1?row<2?row:row<6?2:row-3:0;
         // The last first-page row intentionally lies beyond its hint atlas.
         if(help*24<assets_.images[10]->height)item(10,168,552,994,24,0,float(help*24),0x1064,0x4ac,256*whole,chrome_scale);}
+    if(confirmation_)sprites_.insert(sprites_.end(),confirmation_->sprites().begin(),confirmation_->sprites().end());
     std::stable_sort(sprites_.begin(),sprites_.end(),[](const auto& a,const auto& b){return a.layer!=b.layer?a.layer<b.layer:a.order<b.order;});
 }
 }

@@ -14,8 +14,8 @@ void Application::replace_scene(std::unique_ptr<Scene> next,std::int64_t now){
     next->suspend(background_,background_,now);if(scene_)scene_->flush_progress();seed_=next->random_state();scene_=std::move(next);title_scene_.reset();options_view_.reset();extra_=-1;pages_.resize(1);pages_[0]=Page::story;release_input_=true;++scene_revision_;
 }
 bool Application::preferences(const Preferences& next){require_open();const auto state=options_view_?std::optional(options_state(next)):std::nullopt;if(!preferences_.replace(next))return false;if(scene_)scene_->preferences(preferences_.current());if(title_scene_)title_scene_->preferences(preferences_.current());if(state){options_view_->state(*state);options_view_->timing(options_timing(next));}return true;}
-void Application::prepare_options(OptionsView::Loader loader,std::function<void(OptionsCommand)> commands){
-    require_open();if(!loader)throw std::invalid_argument("Missing native options image loader");if(options_view_)throw std::logic_error("Cannot replace native options services while their view is open");options_loader_=std::move(loader);options_command_=std::move(commands);
+void Application::prepare_options(OptionsView::Loader loader,std::function<void(OptionsCommand)> commands,ConfirmationView::Text text){
+    require_open();if(!loader)throw std::invalid_argument("Missing native options image loader");if(options_view_)throw std::logic_error("Cannot replace native options services while their view is open");options_loader_=std::move(loader);options_command_=std::move(commands);options_text_=std::move(text);
 }
 void Application::prepare_title(TitleContent content,TitleStartup startup,TitleServices services){
     require_open();if(page()!=Page::title || scene_)throw std::logic_error("Native title preparation requires the title page");
@@ -67,7 +67,16 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
         if(auto command=options_view_->take_command()){
             if(command->kind==OptionsCommand::Kind::close)back(now);
             else if(options_command_)options_command_(*command);
-            else throw script::Unsupported("Native options command owner is not implemented: "+std::to_string(unsigned(command->kind)));
+            else switch(command->kind){
+            case OptionsCommand::Kind::reset:
+                if(preferences().confirmation){if(!options_text_)throw script::Unsupported("Native options confirmation text loader is not prepared");options_view_->confirm_reset(preferences().skin,options_text_);break;}
+                [[fallthrough]];
+            case OptionsCommand::Kind::reset_confirmed:
+                preferences(options_defaults(preferences()));if(scene_)scene_->options_reset_sound();else title_scene_->options_reset_sound();break;
+            case OptionsCommand::Kind::preview_effects:if(scene_)scene_->options_preview_effects();else title_scene_->options_preview_effects();break;
+            case OptionsCommand::Kind::preview_voice:if(scene_)scene_->options_preview_voice();else title_scene_->options_preview_voice();break;
+            default:throw script::Unsupported("Unknown native options owner command");
+            }
         }
         return {script::RunState::yielded,0};
     }
