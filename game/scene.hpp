@@ -29,7 +29,7 @@
 
 namespace wa2::game {
 struct Input {bool advance{},skip{},toggle_window{};std::int32_t choice{-1};script::SelectionInput selection;
-    bool cancel{};
+    bool cancel{},pointer_held{};
     Input continued()const{auto next=*this;next.advance=next.toggle_window=next.cancel=false;next.choice=-1;next.selection.activate=next.selection.confirm=false;next.selection.navigation=0;return next;}
 };
 struct Statistics {std::uint64_t ticks{},messages{},voices{};std::uint32_t command{};std::string scene;};
@@ -117,6 +117,7 @@ public:
     bool title_requested()const noexcept{return title_requested_;}
     void skip_read_only(bool value){skip_read_only_=preferences_.skip_read_only=value;}
     void preferences(const Preferences&);
+    void cue(audio::SystemCue value){system_sounds_.play(value);}
     const Preferences& preferences()const noexcept{return preferences_;}
     void replay_mode(bool value){replay_mode_=value;selection_.replay_mode(value);}
     void flush_progress(){reading_.finish();}

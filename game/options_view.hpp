@@ -44,6 +44,7 @@ public:
     void clear();
     void update(OptionsInput={});
     void state(const OptionsState&);
+    void timing(OptionsTiming);
     const OptionsState& state()const noexcept{return state_;}
     OptionsPhase phase()const noexcept{return phase_;}
     unsigned page()const noexcept{return page_;}

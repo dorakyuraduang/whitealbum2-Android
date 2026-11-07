@@ -32,11 +32,11 @@ int main(int argc,char** argv){try{
         now+=50000000;runner.pump(now,events,[]{return 0;});CHECK(app.scene()->statistics().ticks==ticks && canvas->statistics().presents==draws);++cases;
         events.focused=true;now+=1;frame=runner.pump(now,events,[]{return 0;});CHECK(frame.updates==1 && frame.draw && !frame.dropped_updates && !outputs[1]->paused && !app.mixer()->paused());++cases;
         platform::SdlInput input(9);input.logical_size(1280,720);SDL_Event event{};event.type=SDL_MOUSEBUTTONDOWN;event.button.windowID=9;event.button.button=SDL_BUTTON_LEFT;event.button.x=700;event.button.y=400;input.consume(event);
-        auto game=platform::game_input(input.snapshot());CHECK(game.advance && game.selection.pointer && game.selection.activate && game.selection.x==700 && game.selection.y==400);++cases;
-        input.begin_frame();game=platform::game_input(input.snapshot());CHECK(!game.advance && !game.selection.activate && game.selection.pointer);++cases;
+        auto game=platform::game_input(input.snapshot());CHECK(game.advance && game.pointer_held && game.selection.pointer && game.selection.activate && game.selection.x==700 && game.selection.y==400);++cases;
+        input.begin_frame();game=platform::game_input(input.snapshot());CHECK(!game.advance && !game.selection.activate && game.selection.pointer && game.pointer_held);++cases;
         event={};event.type=SDL_KEYDOWN;event.key.windowID=9;event.key.keysym.scancode=SDL_SCANCODE_LCTRL;input.consume(event);CHECK(platform::game_input(input.snapshot()).skip);event.key.keysym.scancode=SDL_SCANCODE_DOWN;input.consume(event);CHECK(platform::game_input(input.snapshot()).selection.navigation==1);++cases;
         event.key.keysym.scancode=SDL_SCANCODE_RETURN;input.consume(event);game=platform::game_input(input.snapshot());CHECK(game.advance && game.selection.confirm);++cases;
-        event={};event.type=SDL_WINDOWEVENT;event.window.windowID=9;event.window.event=SDL_WINDOWEVENT_FOCUS_LOST;input.consume(event);game=platform::game_input(input.snapshot());CHECK(!game.skip && !game.selection.pointer && !input.snapshot().buttons.any());++cases;
+        event={};event.type=SDL_WINDOWEVENT;event.window.windowID=9;event.window.event=SDL_WINDOWEVENT_FOCUS_LOST;input.consume(event);game=platform::game_input(input.snapshot());CHECK(!game.skip && !game.selection.pointer && !game.pointer_held && !input.snapshot().buttons.any());++cases;
         rejects([&]{runner.run(input,{},{});});rejects([&]{runner.run(input,[]{return 0;},{});});guards+=2;++cases;
         const auto presents=canvas->statistics().presents;events.quit=true;now+=1;frame=runner.pump(now,events,[]{return 0;});CHECK(frame.closed && !frame.draw && app.page()==g::Page::closed && !app.mixer() && outputs[1]->closes==1 && outputs[1]->destroyed==1 && !outputs[1]->bad_owner && canvas->statistics().presents==presents);++cases;
     }

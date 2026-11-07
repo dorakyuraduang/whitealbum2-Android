@@ -57,6 +57,7 @@ def main():
     inputs += [ROOT/'tests/native_title_view.cpp']
     inputs += [ROOT/'tests/native_options_view.cpp']
     inputs += [ROOT/'tests/native_options_preferences.cpp']
+    inputs += [ROOT/'tests/native_options_application.cpp',ROOT/'tests/native_options_atlases.hpp']
     inputs += [ROOT/'tests/native_title_scene.cpp']
     inputs += [ROOT/'tests/native_render_frame.cpp',ROOT/'platform/sdl_movie.cpp',ROOT/'platform/sdl_movie.hpp',ROOT/'platform/sdl_presentation.cpp',ROOT/'platform/sdl_presentation.hpp']
     inputs += [ROOT/'tests/native_movie_state.cpp']
@@ -115,6 +116,7 @@ def main():
             if host=='windows':targets+=['wa2_native_title_view_tests']
             if host=='windows':targets+=['wa2_native_options_view_tests']
             if host=='windows':targets+=['wa2_native_options_preference_tests']
+            if host=='windows':targets+=['wa2_native_options_application_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
@@ -142,6 +144,7 @@ def main():
             allowed+=('tests/native_title_view.cpp',)
             allowed+=('tests/native_options_view.cpp',)
             allowed+=('tests/native_options_preferences.cpp',)
+            allowed+=('tests/native_options_application.cpp',)
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
@@ -338,6 +341,9 @@ def main():
                 run([directory/'wa2_native_options_preference_tests.exe',directory/'native-options-preferences.json'],console,90)
                 options_preferences=json.loads((directory/'native-options-preferences.json').read_text())
                 if not options_preferences['passed'] or options_preferences['cases']<34 or options_preferences['guards']<15 or not options_preferences['legacy_preferences_preserved'] or not options_preferences['all_visible_cells_mapped'] or not options_preferences['opacity_256_saturates'] or not options_preferences['mute_keeps_live_voice'] or options_preferences['source_text_budget_steps']!=[0,4,2,1] or not options_preferences['synthetic_resources_only'] or not options_preferences['fake_voices_only'] or options_preferences['original_resources_opened'] or options_preferences['devices_opened'] or options_preferences['game_launched'] or options_preferences['screen_access']:raise ValueError('Native options preferences checks failed')
+                run([directory/'wa2_native_options_application_tests.exe',directory/'native-options-application.json'],console,90)
+                options_application=json.loads((directory/'native-options-application.json').read_text())
+                if not options_application['passed'] or options_application['cases']<19 or options_application['guards']<9 or not options_application['source_backends_shared'] or not options_application['modal_story_frozen'] or not options_application['same_mixer_on_return'] or not options_application['preferences_persisted_before_apply'] or not options_application['held_slider_input_bound'] or not options_application['unsupported_actions_explicit'] or not options_application['synthetic_resources_only'] or options_application['original_resources_opened'] or options_application['devices_opened'] or options_application['game_launched'] or options_application['screen_access']:raise ValueError('Native options/application checks failed')
                 run([directory/'wa2_native_title_scene_tests.exe',directory/'native-title-scene.json'],console,90)
                 title_scene=json.loads((directory/'native-title-scene.json').read_text())
                 if not title_scene['passed'] or title_scene['cases']<20 or title_scene['guards']<13 or title_scene['audio_lookup_cases']<12 or not title_scene['synthetic_resources_only'] or not title_scene['fake_music_and_movies'] or not title_scene['title_story_handoff'] or title_scene['devices_opened'] or title_scene['game_launched'] or title_scene['screen_access']:raise ValueError('Native title/application integration checks failed')
@@ -423,6 +429,7 @@ def main():
     report['title_view']=title_view
     report['options_view']=options_view
     report['options_preferences']=options_preferences
+    report['options_application']=options_application
     report['title_scene']=title_scene
     report['render_frame']=render_frame
     report['movie_state']=movie_state

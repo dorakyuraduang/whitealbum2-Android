@@ -662,11 +662,28 @@ completed message is manually advanced, preserving other channels and a voice
 whose text is still being revealed. Constructed scene/voice checks exercise
 these bindings and failed preference writes without opening a device.
 
-The view still needs ownership by the application's modal presentation and
-platform window services; storing display/right-click/confirmation policies
-does not by itself implement those actions. Reset confirmation, skin/colour
-popup behavior and held-button repetition are also pending. These components
-are not completion of the settings page.
+`Application` now owns this options view when the common bootstrap wires its
+loader. It prepares the incoming model/images before changing navigation,
+suspends story logic, keeps the same mixer and ambient audio, applies/persists
+edits, and returns after the closing transition without forwarding that click
+to the story. Background suspension freezes the view as well as device audio;
+input release clears slider capture on return. SDL's held-pointer state passes
+through the common input queue, so a captured slider can keep moving outside
+its hit rectangle. `RenderFrame` composes the same parent scene and options
+sprites in their common layer order, retaining immutable image owners through
+closure. Leaving for a title/story replacement or shutdown releases the view.
+Constructed application checks cover those ownership/persistence boundaries,
+including failed page preparation and failed settings writes. The Android
+native entry now actually links these view paths through the shared bootstrap.
+
+The full settings page is still incomplete. Display-mode changes, alternative
+right-click actions and options over another modal page fail explicitly.
+Reset/preview commands require an owner handler; the production native entry
+does not yet supply their views/transports and reports unsupported actions.
+Skin/colour popup behavior, held-button repetition and the original captured
+parent-image zoom are pending. The current compositor retains the live parent
+scene beneath the options overlay. Persisting confirmation/window policies is
+not a claim that every action using them has been implemented.
 
 The native story engine remains incomplete: full options/save/load/extras/
 backlog views, production host integration and unsupported render/animation/

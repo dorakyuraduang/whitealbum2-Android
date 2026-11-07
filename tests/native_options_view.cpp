@@ -1,5 +1,6 @@
 #include "options_view.hpp"
 #include "scene_geometry.hpp"
+#include "native_options_atlases.hpp"
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
@@ -19,13 +20,7 @@ struct Bytes:r::Source {
     void read_at(std::uint64_t at,std::span<std::uint8_t> out)override{CHECK(at<=b.size() && out.size()<=b.size()-at);std::copy_n(b.data()+at,out.size(),out.data());}
 };
 std::shared_ptr<Bytes> fixture(bool small=false){
-    struct Atlas {const char* name;unsigned w,h;};
-    const Atlas atlases[]{
-        {"sys_03000.tga",1280,36},{"sys_09000.tga",1280,56},{"sys_03010.tga",756,96},{"sys_03011.tga",576,96},
-        {"sys_03020.tga",432,128},{"sys_03030.tga",208,72},{"sys_09100.tga",56,72},
-        {"sys_03100.tga",1024,464},{"sys_03200.tga",1024,464},{"sys_03201.tga",1024,464},{"sys_03040.tga",944,216},
-        {"sys_03101.tga",1024,464},{"sys_03210.tga",1024,464},{"sys_03211.tga",1024,464},{"sys_03041.tga",944,120},
-        {"sys_03102.tga",1024,464},{"sys_03220.tga",1024,464},{"sys_03221.tga",1024,464},{"sys_03042.tga",944,24}};
+    const auto& atlases=wa2::test::options_atlases;
     auto source=std::make_shared<Bytes>();auto& b=source->b;b.resize(16+44*std::size(atlases));std::memcpy(b.data(),"KCAP",4);put(b,12,unsigned(std::size(atlases)));
     for(unsigned n=0;n<std::size(atlases);++n){const auto& atlas=atlases[n];const auto w=small?1:atlas.w,h=small?1:atlas.h;const auto at=b.size();const auto size=18+w*h*3;
         std::memcpy(b.data()+20+n*44,atlas.name,std::strlen(atlas.name));put(b,52+n*44,unsigned(at));put(b,56+n*44,size);b.resize(at+size,127);

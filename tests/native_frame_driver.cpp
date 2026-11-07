@@ -14,6 +14,7 @@ int main(int argc,char** argv){try{
     g::Input hover;hover.selection={true,false,false,900,600,0};queue.add(hover);auto received=queue.take();CHECK(received.advance && received.selection.activate && received.selection.x==210 && received.selection.y==320);++cases;
     received=queue.take();CHECK(!received.advance && !received.selection.activate && received.selection.pointer && received.selection.x==900 && received.selection.y==600);++cases;
     g::Input hold;hold.skip=true;queue.add(hold);CHECK(queue.take().skip && queue.take().skip);queue.add({});CHECK(!queue.take().skip);++cases;
+    hold.pointer_held=true;queue.add(hold);CHECK(queue.take().pointer_held && queue.take().pointer_held);queue.add({});CHECK(!queue.take().pointer_held);++cases;
     g::Input toggle;toggle.toggle_window=true;queue.add(toggle);queue.add(toggle);CHECK(!queue.take().toggle_window);queue.add(toggle);CHECK(queue.take().toggle_window && !queue.take().toggle_window);++cases;
     g::Input choice;choice.choice=3;queue.add(choice);choice.choice=6;queue.add(choice);CHECK(queue.take().choice==3 && queue.take().choice==-1);++cases;
     g::Input navigate;navigate.selection.navigation=1;navigate.selection.confirm=true;queue.add(navigate);queue.add(navigate);CHECK(queue.take().selection.navigation==1 && !queue.take().selection.confirm);++cases;

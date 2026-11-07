@@ -22,6 +22,8 @@ std::unique_ptr<game::Application> native_application(resource::BankOpener opene
     };
     auto application=std::make_unique<game::Application>(opener,progress,preference_storage(directory),save_storage(directory),std::move(resolver),startup.seed,std::move(scene));
     application->prepare_title(content,startup.title,std::move(title));
+    auto menu_resources=std::make_shared<resource::Catalog>(opener);
+    application->prepare_options([menu_resources](std::string_view name){return menu_resources->image("grp",name);});
     // A failed title/provider preparation must not persist test-mode changes.
     if(startup.test_mode)progress->flush();return application;
 }

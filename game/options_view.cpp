@@ -88,6 +88,7 @@ bool OptionsView::poll(){
     return true;
 }
 void OptionsView::state(const OptionsState& state){state.validate();state_=state;draw();}
+void OptionsView::timing(OptionsTiming timing){if(timing.open>600 || timing.page>600 || timing.close>600)throw script::Error("Native settings timing is out of range");timing_=timing;draw();}
 void OptionsView::publish(const OptionsState& next){next.validate();if(next==state_)return;if(apply_)apply_(next);state_=next;if(sound_)sound_(audio::SystemCue::accept);}
 void OptionsView::regions(){
     hits_.clear();

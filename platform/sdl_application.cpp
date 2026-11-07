@@ -12,6 +12,7 @@ game::Input game_input(const InputSnapshot& events){
     input.selection.activate=events.pressed_buttons[0];
     input.selection.confirm=events.pressed_keys[SDL_SCANCODE_SPACE] || events.pressed_keys[SDL_SCANCODE_RETURN];
     input.selection.navigation=int(events.pressed_keys[SDL_SCANCODE_DOWN])-int(events.pressed_keys[SDL_SCANCODE_UP]);
+    input.pointer_held=events.buttons[0];
     return input;
 }
 SdlApplication::SdlApplication(game::Application& application,SdlCanvas& canvas,game::DriverSettings settings,AudioOutputFactory factory,std::function<void()> submitted)
