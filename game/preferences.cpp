@@ -38,6 +38,7 @@ Preferences Preferences::decode(std::span<const std::uint8_t> bytes){
 PreferenceStore::PreferenceStore(std::shared_ptr<PreferenceStorage> storage):storage_(std::move(storage)){
     if(!storage_)throw std::invalid_argument("Missing native preference storage");
     if(auto bytes=storage_->read())current_=Preferences::decode(*bytes);
+    else if(auto imported=storage_->legacy()){imported->validate();storage_->replace(imported->encode());current_=*imported;}
 }
 bool PreferenceStore::replace(const Preferences& next){next.validate();if(next==current_)return false;const auto bytes=next.encode();storage_->replace(bytes);current_=next;return true;}
 }

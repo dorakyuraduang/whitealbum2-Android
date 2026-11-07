@@ -26,5 +26,9 @@ int main(int argc,char** argv){try{
     fs::create_directory(unicode/"IC");file(unicode/"IC"/"bak.pak");CHECK(banks("IC/bak.pak")->size()==16);++cases;
     for(auto name:{"../grp.pak","/grp.pak","C:/grp.pak","IC\\bak.pak","grp.txt","grp..pak",""}){rejects([&]{banks(name);});++guards;}++cases;
     fs::create_directory(unicode/"unreadable.pak");rejects([&]{banks("unreadable.pak");});++guards;++cases;
+    rejects([&]{p::native_desktop_legacy_settings("relative");});++guards;auto settings=p::native_desktop_legacy_settings(unicode);CHECK(!settings("SYSTEM.ini"));file(unicode/"SYSTEM.ini");CHECK(settings("SYSTEM.ini")->size()==16);++cases;
+    const auto original=unicode/"Documents"/"Leaf"/"WHITE ALBUM2";fs::create_directories(original);file(original/"D3D.ini");CHECK(settings("Documents/Leaf/WHITE ALBUM2/D3D.ini")->size()==16);++cases;
+    for(auto name:{"../SYSTEM.ini","/SYSTEM.ini","IC/SYSTEM.ini","Documents/Leaf/OTHER/SYSTEM.ini","Sys.sav","grp.pak","","SYSTEM.INI"}){rejects([&]{settings(name);});++guards;}++cases;
+    fs::create_directory(unicode/"D3D.ini");rejects([&]{settings("D3D.ini");});++guards;++cases;
     std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-desktop.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"external_resource_discovery\":true,\"unicode_directories\":true,\"provider_failures_not_missing\":true,\"metadata_only_discovery\":true,\"synthetic_files_only\":true,\"original_resources_opened\":false,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);std::cout<<"PASS native desktop arguments, external resource discovery and file-provider errors.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

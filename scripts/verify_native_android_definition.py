@@ -50,6 +50,18 @@ def main():
     data=library.read_bytes()
     for value in ['org/wa2/port/PortUi',*expected,*expected.values()]:
         if value.encode() not in data:raise ValueError('Linked native JNI service lacks registration data: '+value)
+    declarations=output([jdk/'bin/javap.exe','-p','-s',classes/'org/wa2/port/ResourceDirectory.class'])
+    resource_expected={'openPak':'(Ljava/lang/String;)I','openOptionalPak':'(Ljava/lang/String;)I',
+        'openLegacySettings':'(Ljava/lang/String;)I','listPaks':'()[Ljava/lang/String;','pakMetadata':'(Ljava/lang/String;)[J','reportFailure':'(Ljava/lang/String;)V'}
+    resource_methods={};pending=None
+    for line in declarations.splitlines():
+        found=re.search(r'\bpublic static\b.*\s(\w+)\(',line)
+        if found:pending=found[1] if found[1] in resource_expected else None
+        descriptor=re.match(r'\s+descriptor:\s+(\(.*\).+)$',line)
+        if pending and descriptor:resource_methods[pending]=descriptor[1];pending=None
+    if resource_methods!=resource_expected or pending:raise ValueError('Native Java resource/settings descriptors do not match the native service')
+    for value in ['org/wa2/port/ResourceDirectory',*resource_expected,*resource_expected.values()]:
+        if value.encode() not in data:raise ValueError('Linked native resource/settings JNI lacks registration data: '+value)
     sdl=ROOT/'build/test-content-046/libSDL2.so'
     if digest(sdl)!=core['android_sdl_library_sha256']:raise ValueError('Verified SDL library changed')
     sdl_jni=verify_sdl_jni(classes,sdl)
@@ -75,7 +87,7 @@ def main():
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Native Android definition changed during verification: '+name)
     report=dict(schema='wa2.native-android-definition.v1',source_sha256=inputs,native_core_report_sha256=digest(core_path),java_ui_report_sha256=digest(ui_path),
-        actual_native_jni_library_sha256=digest(library),native_menu_java_jni_signatures=methods,sdl_java_native_exports=sdl_jni,
+        actual_native_jni_library_sha256=digest(library),native_menu_java_jni_signatures=methods,native_resource_java_jni_signatures=resource_methods,sdl_java_native_exports=sdl_jni,
         compile_commands_sha256=digest(directory/'compile_commands.json'),link_graph_sha256=hashlib.sha256(graph.encode()).hexdigest(),common_game_sources=len(expected_common),compiled_source_definitions=sources,
         production_sdl_window_gles_audio_hid_sources=True,configured_only=True,game_built=False,library_loaded=False,apk_created=False,android_device_verified=False,game_launched=False,screen_access=False,passed=True)
     (ROOT/'logs/native-android-definition.json').write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')

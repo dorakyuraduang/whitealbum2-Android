@@ -43,6 +43,8 @@ class PreferenceStorage {
 public:
     virtual ~PreferenceStorage()=default;
     virtual std::optional<std::vector<std::uint8_t>> read()=0;
+    // Called only before this native installation has its own preferences.
+    virtual std::optional<Preferences> legacy(){return {};}
     virtual void replace(std::span<const std::uint8_t>)=0;
 };
 class PreferenceStore {

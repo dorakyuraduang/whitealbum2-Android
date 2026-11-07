@@ -1,6 +1,7 @@
 #include "android_resources.hpp"
 #include "resource_jni.hpp"
 #include "resource_fd.hpp"
+#include "legacy_settings_path.hpp"
 #include <SDL_system.h>
 #include <string>
 
@@ -9,6 +10,7 @@ namespace {
 jclass directory_class{};
 jmethodID open_method{};
 jmethodID optional_method{};
+jmethodID settings_method{};
 jmethodID failure_method{};
 jmethodID list_method{},metadata_method{};
 
@@ -44,18 +46,19 @@ bool initialize_resource_jni(JNIEnv* env) noexcept {
     if(!directory_class)return false;
     open_method=env->GetStaticMethodID(directory_class,"openPak","(Ljava/lang/String;)I");
     if(open_method)optional_method=env->GetStaticMethodID(directory_class,"openOptionalPak","(Ljava/lang/String;)I");
-    if(optional_method)failure_method=env->GetStaticMethodID(directory_class,"reportFailure","(Ljava/lang/String;)V");
+    if(optional_method)settings_method=env->GetStaticMethodID(directory_class,"openLegacySettings","(Ljava/lang/String;)I");
+    if(settings_method)failure_method=env->GetStaticMethodID(directory_class,"reportFailure","(Ljava/lang/String;)V");
     if(failure_method)list_method=env->GetStaticMethodID(directory_class,"listPaks","()[Ljava/lang/String;");
     if(list_method)metadata_method=env->GetStaticMethodID(directory_class,"pakMetadata","(Ljava/lang/String;)[J");
-    if(!open_method || !optional_method || !failure_method || !list_method || !metadata_method){release_resource_jni(env);return false;}
+    if(!open_method || !optional_method || !settings_method || !failure_method || !list_method || !metadata_method){release_resource_jni(env);return false;}
     return true;
 }
 void release_resource_jni(JNIEnv* env) noexcept {
     if(directory_class)env->DeleteGlobalRef(directory_class);
-    directory_class=nullptr;open_method=nullptr;optional_method=nullptr;failure_method=nullptr;
+    directory_class=nullptr;open_method=nullptr;optional_method=nullptr;settings_method=nullptr;failure_method=nullptr;
     list_method=nullptr;metadata_method=nullptr;
 }
-int open_resource_descriptor(std::string_view filename,bool optional) {
+static int open_descriptor(std::string_view filename,jmethodID method,bool optional) {
     if(!directory_class || !open_method)throw resource::Error("Android resource directory bridge is unavailable");
     if(filename.empty() || filename.size()>128)throw resource::Error("invalid resource archive filename");
     for(unsigned char c:filename)if(c==0 || c>=128)throw resource::Error("invalid resource archive filename");
@@ -64,13 +67,19 @@ int open_resource_descriptor(std::string_view filename,bool optional) {
     const std::string name(filename);
     auto local=env->NewStringUTF(name.c_str());
     if(!local)throw resource::Error(consume_error(env));
-    const auto fd=env->CallStaticIntMethod(directory_class,optional?optional_method:open_method,local);
+    if(!method){env->DeleteLocalRef(local);throw resource::Error("Android resource method is unavailable");}
+    const auto fd=env->CallStaticIntMethod(directory_class,method,local);
     env->DeleteLocalRef(local);
     if(env->ExceptionCheck())throw resource::Error(consume_error(env));
     if(fd<0 && !optional)throw resource::Error("Android provider returned no archive descriptor");return fd;
 }
+int open_resource_descriptor(std::string_view filename,bool optional){return open_descriptor(filename,optional?optional_method:open_method,optional);}
 std::shared_ptr<resource::Source> open_resource_bank(std::string_view filename){return platform::adopt_resource_fd(open_resource_descriptor(filename));}
 std::shared_ptr<resource::Source> try_open_resource_bank(std::string_view filename){const auto fd=open_resource_descriptor(filename,true);return fd<0?nullptr:platform::adopt_resource_fd(fd);}
+std::shared_ptr<resource::Source> try_open_legacy_settings(std::string_view filename){
+    if(!platform::legacy_settings_path(filename))throw resource::Error("Invalid original settings filename");
+    const auto fd=open_descriptor(filename,settings_method,true);return fd<0?nullptr:platform::adopt_resource_fd(fd);
+}
 std::vector<ArchiveMetadata> resource_metadata(){
     if(!directory_class || !list_method || !metadata_method)throw resource::Error("Android resource metadata bridge is unavailable");
     auto* env=static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());if(!env)throw resource::Error("Android resource thread has no JNI environment");

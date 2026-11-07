@@ -30,4 +30,11 @@ resource::BankOpener native_desktop_banks(const std::filesystem::path& directory
         try{return open_resource_file(directory/native_utf8_path(name));}catch(const resource::NotFound&){return {};}
     };
 }
+LegacySettingsOpener native_desktop_legacy_settings(const std::filesystem::path& directory){
+    if(directory.empty() || !directory.is_absolute())throw std::invalid_argument("Native settings source directory must be absolute");
+    return [directory=directory.lexically_normal()](std::string_view name)->std::shared_ptr<resource::Source>{
+        if(!legacy_settings_path(name))throw resource::Error("Invalid original settings filename");
+        try{return open_resource_file(directory/native_utf8_path(name));}catch(const resource::NotFound&){return {};}
+    };
+}
 }

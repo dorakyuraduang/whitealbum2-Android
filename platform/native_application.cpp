@@ -11,7 +11,7 @@ NativeStartup native_startup(std::span<const std::string_view> arguments){
         else throw std::invalid_argument("Unsupported native startup argument: "+std::string(argument.substr(0,128)));}
     return result;
 }
-std::unique_ptr<game::Application> native_application(resource::BankOpener opener,const std::filesystem::path& directory,NativeStartup startup,game::SceneServices scene,game::TitleServices title){
+std::unique_ptr<game::Application> native_application(resource::BankOpener opener,const std::filesystem::path& directory,NativeStartup startup,game::SceneServices scene,game::TitleServices title,LegacySettingsOpener legacy){
     if(!opener || (startup.title.movie_suffix && *startup.title.movie_suffix>2) || startup.image_timeout.count()<1 || startup.image_timeout.count()>60000)
         throw std::invalid_argument("Invalid native application startup configuration");
     const auto content=startup.content?*startup.content:game::installed_title_content(opener);
@@ -21,7 +21,7 @@ std::unique_ptr<game::Application> native_application(resource::BankOpener opene
         return [&resources,timeout](const image::Reference& reference){auto request=resources.image(reference);auto pixels=request->wait_for(timeout);
             if(!pixels)throw resource::Error("Native saved-image load timed out: "+reference.archive+"/"+reference.member);return pixels;};
     };
-    auto application=std::make_unique<game::Application>(opener,progress,preference_storage(directory),save_storage(directory),std::move(resolver),startup.seed,std::move(scene));
+    auto application=std::make_unique<game::Application>(opener,progress,preference_storage(directory,std::move(legacy)),save_storage(directory),std::move(resolver),startup.seed,std::move(scene));
     application->prepare_title(content,startup.title,std::move(title));
     auto menu_resources=std::make_shared<resource::Catalog>(opener);
     application->prepare_options([menu_resources](std::string_view name){return menu_resources->image("grp",name);},{},

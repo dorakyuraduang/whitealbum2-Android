@@ -31,6 +31,7 @@ final class ResourceDirectory {
         }
     }
     private static ArchiveNames<ArchiveDocument> archives;
+    private static Uri activeTree;
     private static String failure = "Resource directory is not initialized";
     private static String gameFailure;
     private static int generation;
@@ -45,6 +46,7 @@ final class ResourceDirectory {
             owner = activity;
             context = activity.getApplicationContext();
             archives = null;
+            activeTree = null;
             failure = null;
             gameFailure = null;
             token = ++generation;
@@ -53,7 +55,7 @@ final class ResourceDirectory {
         Uri tree = saved == null ? null : Uri.parse(saved);
         synchronized (LOCK) {
             if (tree != null && tree.equals(preparedTree) && preparedArchives != null) {
-                archives = preparedArchives; preparedArchives = null; preparedTree = null;
+                archives = preparedArchives; activeTree = tree; preparedArchives = null; preparedTree = null;
                 LOCK.notifyAll(); return;
             }
         }
@@ -74,6 +76,7 @@ final class ResourceDirectory {
             if (owner != activity) return;
             owner = null;
             archives = null;
+            activeTree = null;
             failure = "Resource directory was closed";
             gameFailure = null;
             ++generation;
@@ -264,6 +267,7 @@ final class ResourceDirectory {
                 synchronized (LOCK) {
                     if (owner != activity || generation != token) return;
                     archives = found;
+                    activeTree = tree;
                     failure = null;
                     LOCK.notifyAll();
                 }
@@ -287,6 +291,49 @@ final class ResourceDirectory {
 
     public static int openOptionalPak(String name) throws IOException {
         return open(name, true);
+    }
+
+    // Separate from the PAK index: only the two original settings filenames
+    // can be read, and native policy decides whether an import is needed.
+    public static int openLegacySettings(String name) throws IOException {
+        final String[] parts = LegacySettingsPath.parts(name);
+        final Context application;
+        final Uri tree;
+        synchronized (LOCK) { awaitArchives(); application = context; tree = activeTree; }
+        if (tree == null) throw new IOException("Original settings need the authorized Wa2Res directory");
+        final ContentResolver resolver = application.getContentResolver();
+        String parent = DocumentsContract.getTreeDocumentId(tree);
+        for (int n = 0; n < parts.length; ++n) {
+            parent = settingsChild(resolver, tree, parent, parts[n], n + 1 < parts.length);
+            if (parent == null) return -1;
+        }
+        Uri file = DocumentsContract.buildDocumentUriUsingTree(tree, parent);
+        try (ParcelFileDescriptor descriptor = resolver.openFileDescriptor(file, "r")) {
+            if (descriptor == null) throw new IOException("Cannot open original settings: " + name);
+            return descriptor.detachFd();
+        }
+    }
+
+    private static String settingsChild(ContentResolver resolver, Uri tree,
+            String parent, String expected, boolean directory) throws IOException {
+        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parent);
+        String[] fields = { DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE };
+        String found = null;
+        try (Cursor cursor = resolver.query(children, fields, null, null, null)) {
+            if (cursor == null) throw new IOException("Cannot inspect original settings directory");
+            int rows = 0;
+            while (cursor.moveToNext()) {
+                if (++rows > 10000) throw new IOException("Original settings directory has too many entries");
+                String id = cursor.getString(0), name = cursor.getString(1), mime = cursor.getString(2);
+                if (name == null || !name.equalsIgnoreCase(expected)) continue;
+                if (found != null) throw new IOException("Ambiguous original settings path: " + expected);
+                if (id == null || DocumentsContract.Document.MIME_TYPE_DIR.equals(mime) != directory)
+                    throw new IOException("Original settings path has the wrong file type: " + expected);
+                found = id;
+            }
+        }
+        return found;
     }
 
     private static void awaitArchives() throws IOException {

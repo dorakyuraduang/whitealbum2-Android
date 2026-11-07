@@ -21,7 +21,7 @@ int run_native_host(NativeHost host){
     if(!window)throw std::runtime_error(std::string("Create native game window: ")+SDL_GetError());
     SDL_StopTextInput();
     auto canvas=SdlCanvas::create(window.get(),true);canvas->logical_size(1280,720);
-    auto application=native_application(std::move(host.resources),directory,host.startup);
+    auto application=native_application(std::move(host.resources),directory,host.startup,{},{},std::move(host.legacy_settings));
     SdlInput input(SDL_GetWindowID(window.get()));input.logical_size(1280,720);
     struct MenuLifetime {decltype(host.menu_status) publish;~MenuLifetime(){if(publish)publish({});}} menu_lifetime{host.menu_status};
     SdlApplication runner(*application,*canvas,host.driver,{},[&]{if(host.menu_status)host.menu_status(application->user_menu());if(host.submitted)host.submitted();});if(host.menu_status)host.menu_status(application->user_menu());const auto epoch=std::chrono::steady_clock::now();

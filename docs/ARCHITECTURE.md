@@ -8,7 +8,7 @@ CPU state, checked source-address memory, or the Windows compatibility runtime.
 The current released APK still uses AOT; a linkable component is not a full port.
 
 The current native application targets are `hosts/native` (Windows x64) and
-`hosts/native-android` (Android ARM64). Both link the same 83 common game/engine
+`hosts/native-android` (Android ARM64). Both link the same 84 common game/engine
 sources through `platform/native_host.cpp`; OS paths, input, resources, device
 audio and SDL presentation stay outside game policy. Actual production builds
 include window/render/audio backends, and Android includes its native-only Java
@@ -17,11 +17,29 @@ runtime rather than falling back to it for an unsupported command. Separate
 unlaunched development packages and matching LGPL link materials can be made
 with the source-bound build/package tools documented in `BUILDING.md`.
 
-Original manual-save/INI import, remaining source-specific UI/renderer options
+Original manual-save import, remaining source-specific UI/renderer options
 and complete story/device compatibility are not established. The retained AOT
 release and contract completion flags stay unchanged. The component notes
 below record migration increments; later integration sections supersede the
 earlier component-only integration boundaries.
+
+First native startup can import the original integer preferences from
+`SYSTEM.ini` / `D3D.ini`. Both hosts supply read-only Sources for the same
+common parser and directory selection; no Windows profile API is involved.
+It first checks the selected resource directory, then its known
+`Documents/Leaf/WHITE ALBUM2` child, and never mixes the two directories.
+Existing native preferences take precedence, including a corrupt native file
+which must fail rather than silently reset. Valid imported settings are
+persisted atomically before publication and the source is not read on later
+starts. The parser maps original volume/mute/character switches, skip/voice
+policy, opacity, skin, text/transition timing, confirmation, mouse policy,
+movie quality, and window mode/three known window sizes. Source-only Direct3D
+device/debug keys are not portable preferences. Nonstandard timing, wheel
+mode, persisted desktop-menu visibility and window dimensions without native
+support fail explicitly. Import is
+bounded to 64 KiB per file and supports ANSI/UTF-8 and BOM UTF-16 integer keys.
+Synthetic memory/file, bootstrap and Java path/JNI-declaration checks exercise
+this integration; original user settings and devices are not opened by tests.
 
 `native/CMakeLists.txt` is an independent build root for the common native scene,
 script engine, resource/media components and native progress adapter. It never

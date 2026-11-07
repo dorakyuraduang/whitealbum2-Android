@@ -419,6 +419,15 @@ Install-table alignment, signing, native load alignment and exact packaged
 library/DEX bytes are checked without installing an app. Original PAKs remain
 external and are selected in the existing launcher.
 
+On its first launch without `native-settings.wa2cfg`, the native host can read
+`SYSTEM.ini` and `D3D.ini` from the selected resource directory, or from its
+`Documents/Leaf/WHITE ALBUM2` child if neither root file exists. Windows and
+Android use the same decoder and persist the imported preferences in their
+separate private native directory. The old files remain untouched. Later
+starts do not access those source settings. Unsupported custom pacing, wheel
+mode, desktop-menu visibility or window dimensions produce explicit import errors; Direct3D-only device
+keys do not configure SDL. This does not import original manual scene saves.
+
 The assembler also supplies `WA2-native-development-relink.zip`, containing
 the actual native application objects/archive order and corresponding FFmpeg
 source, build configuration and license. Both standalone linker recipes are

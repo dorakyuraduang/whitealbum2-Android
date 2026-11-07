@@ -3,6 +3,7 @@ target_sources(wa2_game_scene PRIVATE title_scene.cpp render_frame.cpp)
 target_sources(wa2_game_scene PRIVATE frame_driver.cpp)
 target_sources(wa2_game_scene PRIVATE options_view.cpp)
 target_sources(wa2_game_scene PRIVATE options_preferences.cpp)
+target_sources(wa2_game_scene PRIVATE preferences_ini.cpp)
 
 target_sources(wa2_game_scene PRIVATE confirmation_view.cpp options_audio.cpp)
 target_sources(wa2_game_scene PRIVATE save_document.cpp)
