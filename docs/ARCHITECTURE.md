@@ -959,6 +959,17 @@ The desktop entry embeds the provided root icon. Legacy D3D-only renderer
 options, desktop menu chrome and exact extra-page animation remain migration
 work; this does not establish full-story or physical presentation compatibility.
 
+Music-browser transitions now use common `MenuTiming` values (15/7/15 source
+logic ticks, or zero when transition waits are disabled). Headers/footer controls
+slide 32 pixels, content fades/scales about the source centre, and the old page
+remains until its fade-out completes. Opening and page transitions consume no
+selection input. Closing starts the existing 120-tick audio fade before the
+visual owner returns to the title; backgrounding freezes both progress and
+transport. Row focus selects its background cell before its label is drawn.
+Finite tests cover gradual/zero-delay paths, repeated transition clicks, exact
+page commit boundaries, early cancellation and background suspension. Other
+extra-page transitions, counters and physical presentation remain unverified.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.

@@ -2,6 +2,7 @@
 #include "scene_selection.hpp"
 #include "system_sounds.hpp"
 #include "confirmation_view.hpp"
+#include "menu_timing.hpp"
 
 namespace wa2::game {
 enum class Option : unsigned {
@@ -24,7 +25,7 @@ struct OptionsState {
     bool operator==(const OptionsState&)const=default;
 };
 enum class OptionsPhase {idle,loading,opening,active,page_loading,page_out,page_in,closing,closed};
-struct OptionsTiming {std::uint32_t open{15},page{7},close{15};};
+using OptionsTiming=MenuTiming;
 struct OptionsInput {script::SelectionInput selection;bool cancel{},held{};std::int32_t page_delta{};};
 struct OptionsHit {
     unsigned id{},row{},cell{};

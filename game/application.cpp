@@ -131,7 +131,7 @@ void Application::open_extra(std::int32_t extra,std::int64_t now){
     observe(now);if(page()!=Page::title || !title_scene_ || title_scene_->stage()!=TitleStage::view || !title_setup_)throw std::logic_error("Native extras require a prepared title page");
     if(!extras_loader_)throw script::Unsupported("Native extras image services are not prepared");if(extra<1 || extra>4)throw script::Unsupported("Native extra view is not implemented: "+std::to_string(extra));
     std::unique_ptr<MusicView> music;std::unique_ptr<ExtraGrid> grid;std::unique_ptr<CommentaryView> commentary;
-    if(extra==2){music=std::make_unique<MusicView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});music->prepare(title_setup_->content,progress_->state());
+    if(extra==2){music=std::make_unique<MusicView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});music->prepare(title_setup_->content,progress_->state(),options_timing(preferences()));
         if(progress_->state().flag(104) && progress_->state().flag(163)){progress_->state().set_flag(134,1);progress_->flush();}title_scene_->music_preview({},120);
     }else if(extra==4){commentary=std::make_unique<CommentaryView>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});commentary->prepare();title_scene_->music_preview({},120);
     }else{grid=std::make_unique<ExtraGrid>(extras_loader_,[this](auto cue){title_scene_->cue(cue);});grid->prepare(extra==1?ExtraGridKind::gallery:ExtraGridKind::replay,title_setup_->content,progress_->state());title_scene_->music_preview(extra==1?41:15,extra==1?30:0);}
@@ -186,7 +186,7 @@ FrameBatch Application::frame(std::int64_t now,Input input,const std::function<s
     if(page()==Page::extras && music_view_){
         title_scene_->update(now);if(background_)return {script::RunState::yielded,0};if(release_input_){input={};release_input_=false;}
         music_view_->update({input.selection,input.cancel || input.toggle_window,input.page_delta});if(auto command=music_view_->take_command()){
-            if(command->kind==MusicCommand::Kind::close)back(now);else try{title_scene_->music_preview(command->kind==MusicCommand::Kind::play?std::optional(command->song):std::nullopt,command->fade);music_view_->played(command->kind==MusicCommand::Kind::play?std::optional(command->index):std::nullopt);}
+            if(command->kind==MusicCommand::Kind::close)back(now);else try{title_scene_->music_preview(command->kind==MusicCommand::Kind::play?std::optional(command->song):std::nullopt,command->fade);if(command->kind!=MusicCommand::Kind::leaving)music_view_->played(command->kind==MusicCommand::Kind::play?std::optional(command->index):std::nullopt);}
             catch(const std::exception& error){if(error_)report_error(error.what(),now);else throw;}}
         return {script::RunState::yielded,0};
     }
