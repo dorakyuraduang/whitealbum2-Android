@@ -1,5 +1,6 @@
 #pragma once
 #include <bit>
+#include <array>
 #include <cstdint>
 #include <span>
 #include <stdexcept>
@@ -11,8 +12,9 @@ namespace wa2::checkpoint {
 using Bytes=std::vector<std::uint8_t>;
 inline constexpr std::size_t maximum_bytes=64u*1024*1024;
 inline std::uint32_t crc(std::span<const std::uint8_t> bytes){
+    static constexpr auto table=[]{std::array<std::uint32_t,256> values{};for(unsigned n=0;n<values.size();++n){auto value=std::uint32_t(n);for(unsigned bit=0;bit<8;++bit)value=(value>>1)^(0xedb88320u&std::uint32_t(0-int(value&1)));values[n]=value;}return values;}();
     std::uint32_t value=0xffffffffu;
-    for(auto b:bytes){value^=b;for(unsigned n=0;n<8;++n)value=(value>>1)^(0xedb88320u&std::uint32_t(0-int(value&1)));}
+    for(auto byte:bytes)value=(value>>8)^table[(value^byte)&255];
     return ~value;
 }
 class Writer {

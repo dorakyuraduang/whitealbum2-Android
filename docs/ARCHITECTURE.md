@@ -721,6 +721,20 @@ save and INI conversion are also unfinished. No whole-game or device/performance
 claim follows from these component checks. Existing generated C++/CFG is a
 development reference, never a native-runtime dependency.
 
+The native manual-save browser now has a separate `game/save_document.*`
+storage boundary. Its small WASP preview (local date, ordering timestamp, raw
+font description and optional 128x72 RGBA thumbnail) and LSGS scene payload have
+independent checksums in a WASF container. `SaveSlots::preview` reads at most
+131084 bytes; the production private-file adapter reads only that prefix rather
+than copying the full scene. Browsing metadata does not establish that the scene
+body is valid: actual loading still checks every scene envelope before owner
+replacement. Earlier LSGS-only native files remain loadable and are identified
+as legacy entries without invented preview details. Slot I/O is serialized for
+the forthcoming asynchronous browser. Writes retain atomic publication and
+original-save isolation. The shared checkpoint CRC now uses a constant table
+with the same polynomial/output; finite reference/known-vector checks cover file
+compatibility. This storage work by itself is not the completed save/load view.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.

@@ -32,6 +32,13 @@ std::optional<std::vector<std::uint8_t>> read(const fs::path& path,std::uint64_t
     std::ifstream input(path,std::ios::binary);std::vector<std::uint8_t> bytes(static_cast<std::size_t>(*count));input.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(bytes.size()));
     if(!input || input.peek()!=std::char_traits<char>::eof())throw std::runtime_error("Cannot read a stable private file");return bytes;
 }
+std::optional<std::vector<std::uint8_t>> read_prefix(const fs::path& path,std::uint64_t minimum,std::uint64_t maximum,std::size_t requested){
+    if(!requested || requested>std::uint64_t(std::numeric_limits<std::streamsize>::max()))throw std::invalid_argument("Invalid private-file prefix bounds");
+    require_directory(path.parent_path());const auto length=size(path,minimum,maximum);if(!length)return {};
+    const auto count=std::size_t(std::min<std::uint64_t>(*length,requested));std::ifstream input(path,std::ios::binary);std::vector<std::uint8_t> bytes(count);
+    input.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(count));if(!input || (count==*length && input.peek()!=std::char_traits<char>::eof()) || size(path,minimum,maximum)!=length)
+        throw std::runtime_error("Cannot read a stable private-file prefix");return bytes;
+}
 void replace(const fs::path& target,std::span<const std::uint8_t> bytes,std::uint64_t minimum,std::uint64_t maximum){
     if(minimum>maximum || bytes.size()<minimum || bytes.size()>maximum)throw std::invalid_argument("Private-file write is outside supported bounds");
     const auto directory=target.parent_path();require_directory(directory);size(target);static std::atomic<std::uint64_t> sequence{};fs::path temporary;bool owned{};

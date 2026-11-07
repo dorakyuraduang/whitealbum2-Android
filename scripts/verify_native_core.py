@@ -52,6 +52,7 @@ def main():
     inputs += [ROOT/'tests/native_audio_checkpoint.cpp']
     inputs += [ROOT/'tests/native_saved_scene.cpp',ROOT/'tests/native_scene_checkpoint.cpp']
     inputs += [ROOT/'tests/native_save_slots.cpp',ROOT/'platform/save_storage.cpp',ROOT/'platform/save_storage.hpp']
+    inputs += [ROOT/'tests/native_save_document.cpp']
     inputs += [ROOT/'tests/native_preferences.cpp']
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
@@ -119,6 +120,7 @@ def main():
             if host=='windows':targets+=['wa2_native_options_preference_tests']
             if host=='windows':targets+=['wa2_native_options_application_tests']
             if host=='windows':targets+=['wa2_native_options_action_tests']
+            if host=='windows':targets+=['wa2_native_save_document_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
@@ -148,6 +150,7 @@ def main():
             allowed+=('tests/native_options_preferences.cpp',)
             allowed+=('tests/native_options_application.cpp',)
             allowed+=('tests/native_options_actions.cpp',)
+            allowed+=('tests/native_save_document.cpp',)
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
@@ -326,6 +329,9 @@ def main():
                 run([directory/'wa2_native_save_slot_tests.exe',directory/'native-save-slots.json'],console,90)
                 save_slots=json.loads((directory/'native-save-slots.json').read_text())
                 if not save_slots['passed'] or save_slots['cases']<10 or save_slots['guards']<19 or save_slots['slot_capacity']!=1000 or not save_slots['synthetic_files_only'] or save_slots['original_saves_opened'] or save_slots['game_launched'] or save_slots['screen_access']:raise ValueError('Native save slot checks failed')
+                run([directory/'wa2_native_save_document_tests.exe',directory/'native-save-document.json'],console,90)
+                save_document=json.loads((directory/'native-save-document.json').read_text())
+                if not save_document['passed'] or save_document['cases']<19 or save_document['guards']<35 or not save_document['bounded_preview_reads'] or not save_document['independent_preview_checksum'] or not save_document['legacy_snapshot_loads'] or not save_document['failed_write_preserves_slot'] or not save_document['crc_compatible'] or not save_document['synthetic_files_only'] or save_document['original_saves_opened'] or save_document['devices_opened'] or save_document['game_launched'] or save_document['screen_access']:raise ValueError('Native save document checks failed')
                 run([directory/'wa2_native_preference_tests.exe',directory/'native-preferences.json'],console,90)
                 preferences=json.loads((directory/'native-preferences.json').read_text())
                 if not preferences['passed'] or preferences['cases']<14 or preferences['guards']<30 or not preferences['memory_storage_only'] or not preferences['fake_voices_only'] or preferences['game_launched'] or preferences['screen_access']:raise ValueError('Native preference checks failed')
@@ -429,6 +435,7 @@ def main():
     report['saved_scene']=saved_scene
     report['scene_checkpoint']=scene_checkpoint
     report['save_slots']=save_slots
+    report['save_document']=save_document
     report['preferences']=preferences
     report['preference_storage']=preference_storage
     report['application']=application
