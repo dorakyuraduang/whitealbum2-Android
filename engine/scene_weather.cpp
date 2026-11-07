@@ -46,13 +46,21 @@ void SceneWeather::create(std::size_t index,bool filled,bool opposite){
             small=(flags_&0x400)!=0;
         }
         if(small){
-            p.kind=std::int16_t(random()%8+248);
-            p.rotation=float((double(random()%((256-p.kind)*100))/100.0+1.0)*.5);
-            p.scale=float((double(random()%((256-p.kind)*100))/100.0+1.0)*.5);
+            if(flags_&0x800){
+                // 0x4073ea consumes a four-way variant, then constructs the
+                // original title's perspective snow. 0x408eff overwrites its
+                // alternate crop with the ordinary weather.tga snow cell.
+                random();p.kind=std::int16_t(random()%8+248);p.rotation=float(random()%3+1);
+                p.scale=float((int(random()%3)-p.kind*2+513)*.5);
+            }else{
+                p.kind=std::int16_t(random()%8+248);
+                p.rotation=float((double(random()%((256-p.kind)*100))/100.0+1.0)*.5);
+                p.scale=float((double(random()%((256-p.kind)*100))/100.0+1.0)*.5);
+            }
         }
         p.angle=float(int(random()%((576-p.kind)*4))-(256-p.kind)*2);
         p.radius=float(filled?int(random()%((436-p.kind)*4))-(256-p.kind)*2:-int(random()%100)-(256-p.kind)*2);
-        p.rate=float(p.kind);p.phase=std::int16_t(random()%256);return;
+        p.origin_x=p.angle;p.rate=float(p.kind);p.phase=std::int16_t(random()%256);return;
     }
     p.kind=std::int16_t(random()%4);
     p.angle=float(double(random()%360)/3.141592);
@@ -73,7 +81,7 @@ void SceneWeather::begin(Command& command){
     const auto code=command.arguments[0].integer(),mode=code&255;
     const auto amplitude=extended?command.arguments[6].integer():0;
     if((mode!=0 && mode!=1 && mode!=3 && mode!=4 && mode!=6) || (code&~0xfff)!=0)throw Unsupported("unimplemented native weather type "+std::to_string(code));
-    if((code&0x800)!=0)throw Unsupported("unimplemented native weather alternate-atlas flag");
+    if((code&0x800)!=0 && mode!=3)throw Unsupported("unimplemented native perspective flag for this weather type");
     const auto priority=command.arguments[4].integer(),scope=command.arguments[5].integer();
     if(priority<0 || priority>2 || scope<0 || scope>2)throw Unsupported("unimplemented native weather layer");
     if(mode==0){
@@ -188,14 +196,18 @@ void SceneWeather::update(){
             const auto wave=weather_curve[(unsigned(p.phase)+64)&255];
             const auto sway=float((double(speed_y_)*wave*p.rotation*(1.0/4096.0))/40.0);
             const auto drift=float(double(p.rotation)*speed_x_/10.0);
-            p.angle=float(double(p.angle)+drift+sway);p.radius=float(double(p.scale)*speed_y_/10.0+p.radius);
+            if(flags_&0x800){
+                const auto perspective=(double(p.origin_x)-640.0)/(5120.0/(257.0-p.rate));
+                p.angle=float(double(p.angle)+(double(drift)+sway+perspective));
+            }else p.angle=float(double(p.angle)+drift+sway);
+            p.radius=float(double(p.scale)*speed_y_/10.0+p.radius);
             const auto retire=[&]{if(n<std::size_t(density_))return false;--extent_;p.active=false;return true;};
             if(p.radius>720){if(retire())continue;create(n,false);}
             const auto boundary=float((896-p.kind)*2);
-            if(p.angle>boundary){if(retire())continue;p.angle-=boundary;}
-            if(p.angle<float(p.kind*4-1024)){if(retire())continue;p.angle+=boundary;}
-            const auto alpha=p.rate<=16?32:p.rate<240?128:integer((256.0-p.rate)*8+32);
-            const auto size=float((257.0-p.rate)*(p.kind<241?2:4));
+            if(p.angle>boundary){if(retire())continue;if(flags_&0x800)create(n,false);else p.angle-=boundary;}
+            if(p.angle<float(p.kind*4-1024)){if(retire())continue;if(flags_&0x800)create(n,false);else p.angle+=boundary;}
+            const auto alpha=(flags_&0x800)?192:p.rate<=16?32:p.rate<240?128:integer((256.0-p.rate)*8+32);
+            const auto size=float((257.0-p.rate)*((flags_&0x800) || p.kind<241?2:4));
             sprites_.push_back({image_,float(integer(p.angle)),float(integer(p.radius)),size,size,0,32,32,32,
                 255,255,255,std::uint8_t(std::clamp(alpha,0,255))});
             sprites_.back().layer=scope_?0x1043:p.kind<241?10:1;sprites_.back().order=0x99+std::int32_t(n);

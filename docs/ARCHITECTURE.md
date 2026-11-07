@@ -99,7 +99,15 @@ fixed slot indices, so density reductions cannot strand later active slots.
 Native type-1 sakura uses three original flipbook atlases, distinct prefilled/
 new-particle RNG order, original wrapping ranges and per-size animation timing.
 Its curve/atlas phase is bounded by their joint period to avoid signed overflow.
-Types 2/5 and the alternate snow atlas remain explicit unsupported cases.
+Snow flag 0x800 selects the title's perspective motion: each spawn retains its
+horizontal origin, smaller particles drift by depth, and side exits respawn
+instead of wrapping. The cached creation/update paths also retain the extra
+variant RNG draw, constant alpha 192 and depth-scaled size. The apparent
+alternate atlas crop is overwritten in the source update before drawing, so
+these particles use the same weather.tga snow cell. Synthetic cases cover the
+title's 0xf03 flags, RNG consumption, geometry, side respawn and checkpoint
+continuation. Types 2/5 and 0x800 on non-snow types remain explicit unsupported
+cases; no title animation or device frame rate has been visually tested.
 
 The native Calendar command computes date/weekday state, retains the 2010..2013
 holiday facts and selects the original three calendar image atlases. Its shared
@@ -346,7 +354,9 @@ static/animated loads, fades and transforms, independent/retired layers and
 changed definitions. These remain component checks, not whole-game saves.
 
 Weather checkpoints preserve all 400 particle slots, population, flags, spawn
-clock, target/current motion, loading references and rain INAS playback. The
+clock, target/current motion, perspective spawn origins, loading references and
+rain INAS playback. The internal particle schema is versioned and rejects the
+earlier unreleased native layout explicitly. The
 last drawn sprite geometry is retained separately: several source effects draw
 before incrementing phase/growth, so advancing again at load would change that
 frame. Restored sakura atlases are regenerated from their three external source

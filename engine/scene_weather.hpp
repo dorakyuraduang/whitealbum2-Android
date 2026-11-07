@@ -13,6 +13,7 @@ struct WeatherParticle {
     std::int16_t kind{},phase{};
     float angle{},radius{},rate{},rotation{},scale{};
     float growth{1},velocity{};
+    float origin_x{};
 };
 class SceneWeather {
 public:

@@ -39,7 +39,10 @@ int main(int argc,char** argv){try{
     snow[0]=s::Value(0x303);random_calls=0;call={173,snow};weather.dispatch(call);weather.update();CHECK(random_calls==8*12 && weather.particles()[0].kind==192);++cases;
     snow[0]=s::Value(0x104);snow[2]=s::Value(10000);call={173,snow};weather.dispatch(call);weather.update();CHECK(weather.type()==4 && weather.extent()==8);++cases;
     call={175,{}};CHECK(!weather.dispatch(call)->complete);for(unsigned n=0;n<400 && weather.active();++n)weather.update();CHECK(weather.dispatch(call)->complete && weather.extent()==0);++cases;
-    snow[0]=s::Value(0x803);call={173,snow};rejects([&]{weather.dispatch(call);});CHECK(!weather.active());++guards;
+    snow[0]=s::Value(0x804);call={173,snow};rejects([&]{weather.dispatch(call);});CHECK(!weather.active());++guards;
+    snow[0]=s::Value(0xf03);snow[2]=s::Value(10);random_calls=0;call={173,snow};weather.dispatch(call);weather.update();CHECK(weather.extent()==8 && random_calls==8*16 && weather.particles()[0].kind==248 && weather.particles()[0].rotation==1 && weather.particles()[0].scale==8.5f && weather.particles()[0].origin_x==-16);++cases;
+    CHECK(weather.sprites()[0].alpha==192 && weather.sprites()[0].width==18 && weather.sprites()[0].source_x==0 && weather.sprites()[0].source_y==32 && weather.sprites()[0].x==-16 && weather.sprites()[0].y==-7);++cases;
+    snow[1]=s::Value(100000);call={173,snow};weather.dispatch(call);weather.update();CHECK(weather.extent()==8 && weather.particles()[0].angle==weather.particles()[0].origin_x && weather.particles()[0].phase==1);snow[1]=s::Value(0);weather.stop(true);++cases;
     snow[0]=s::Value(7);call={173,snow};rejects([&]{weather.dispatch(call);});++guards;
     change[3]=s::Value(3);call={230,change};rejects([&]{weather.dispatch(call);});++guards;
     snow[0]=s::Value(0);snow[2]=s::Value(0);random_calls=0;call={173,snow};CHECK(!weather.dispatch(call)->complete);weather.update();CHECK(weather.dispatch(call)->complete && weather.type()==0 && weather.sprites().size()==1 && random_calls==0);++cases;
