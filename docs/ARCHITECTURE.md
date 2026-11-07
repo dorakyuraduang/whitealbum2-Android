@@ -996,11 +996,19 @@ immediately, then completes the visual transition before returning; cancellation
 from a loading text page cannot later start its clip. Finite tests cover partial
 opening cancellation, zero delay, backgrounded closing and active voice release.
 
-Original-resource verification additionally checks 78 menu atlas header/crop
+Original-resource verification additionally checks 80 menu atlas header/crop
 contracts, without decoding artwork pixels or presenting them. Every original
 Calendar call is examined through literal records and the pure date-support
 policy; unresolved arguments are reported explicitly. This static audit does
 not execute LSCR branches, a scene, UI or a game session.
+
+Extra grids now choose the source IC/CC/CODA locked-card image by row theme,
+include the original page-heading strip, and place page tabs from x=428 relative
+to the first available page. Page transitions alias already-owned immutable
+chrome/thumbnail rasters. A page with no new thumbnails does not request any
+resource again; requests for new content remain bounded and a failed first or
+later thumbnail keeps the old page. Synthetic marker pixels and actual header
+metadata validate the three placeholders without viewing original artwork.
 
 ## Current released implementation
 

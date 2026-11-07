@@ -6,7 +6,7 @@
 namespace wa2::game {
 namespace {
 std::string image_name(std::string_view prefix,unsigned id){if(id>=1000000)throw script::Error("Native extra image identifier is out of range");std::array<char,48> name{};std::snprintf(name.data(),name.size(),"%.*s%06u.tga",int(prefix.size()),prefix.data(),id);return name.data();}
-constexpr unsigned chrome=10;
+constexpr unsigned chrome=12;
 }
 ExtraGrid::ExtraGrid(Loader loader,Sound sound):loader_(std::move(loader)),sound_(std::move(sound)){
     if(!loader_)throw script::Error("Missing native extra-grid image loader");auto black=std::make_shared<image::Raster>();black->width=black->height=1;black->rgba={0,0,0,255};black_=std::move(black);sprites_.reserve(64);
@@ -27,22 +27,24 @@ void ExtraGrid::prepare(ExtraGridKind kind,TitleContent content,const progress::
 ExtraGrid::PageData ExtraGrid::plan(unsigned page)const{
     if(std::find(pages_.begin(),pages_.end(),page)==pages_.end())throw script::Error("Native extra-grid page is unavailable");PageData next;next.page=page;
     const bool gallery=kind_==ExtraGridKind::gallery;const auto theme=gallery?(page<3?0:page<9?1:2):0;
-    for(const auto& name:std::array<std::string,chrome>{gallery?"sys_05000.tga":"sys_06000.tga","sys_09000.tga","sys_05100.tga","sys_05110.tga","sys_05020.tga","sys_09100.tga","sys_05201.tga",gallery?"sys_05021.tga":"sys_06021.tga","sys_05900.tga","sys_05901.tga"})next.assets.push_back({name,{}});
+    const auto asset=[&](std::string name){const auto old=std::find_if(data_.assets.begin(),data_.assets.end(),[&](const auto& value){return value.name==name;});next.assets.push_back({std::move(name),old==data_.assets.end()?nullptr:old->pixels});};
+    for(const auto& name:std::array<std::string,chrome>{gallery?"sys_05000.tga":"sys_06000.tga","sys_09000.tga","sys_05100.tga","sys_05110.tga","sys_05020.tga","sys_09100.tga","sys_05201.tga",gallery?"sys_05021.tga":"sys_06021.tga","sys_05900.tga","sys_05901.tga","sys_05902.tga","sys_05200.tga"})asset(name);
     for(unsigned ordinal=0;ordinal<12;++ordinal){ExtraGridRow row;row.ordinal=ordinal;row.index=page*12+ordinal;row.theme=unsigned(theme);
         if(gallery){const auto& variants=extras::gallery.at(row.index);for(unsigned n=0;n<10;++n)if(variants[n] && gallery_[row.index][n])row.variants.push_back(variants[n]);row.enabled=!row.variants.empty();row.thumbnail=variants[0];
             // The source chooses the first seen thumbnail for these two groups.
             if((row.thumbnail==210300 || row.thumbnail==210400) && row.enabled)row.thumbnail=row.variants.front();
         }else{const auto& replay=extras::replays.at(row.index);row.thumbnail=replay.thumbnail;row.theme=replay.theme;row.enabled=replay_[row.index];}
-        if(row.enabled)next.assets.push_back({image_name("tv",row.thumbnail),{}});next.rows.push_back(std::move(row));
+        if(row.theme>2)throw script::Unsupported("Native extra placeholder theme is out of range");if(row.enabled)asset(image_name("tv",row.thumbnail));next.rows.push_back(std::move(row));
     }return next;
 }
 void ExtraGrid::begin_page(unsigned page){
-    auto next=plan(page);auto request=loader_(next.assets.front().name);if(!request)throw script::Error("Missing native extra-grid image request");pending_=Pending{std::move(next),0,std::move(request)};phase_=ExtraGridPhase::loading;focus_.reset();
+    auto next=plan(page);unsigned first{};while(first<next.assets.size() && next.assets[first].pixels)++first;std::shared_ptr<image::ImageRequest> request;
+    if(first<next.assets.size()){request=loader_(next.assets[first].name);if(!request)throw script::Error("Missing native extra-grid image request");}pending_=Pending{std::move(next),first,std::move(request)};phase_=ExtraGridPhase::loading;focus_.reset();
 }
 bool ExtraGrid::poll(){
     if(!pending_)throw script::Error("Native extra-grid lost its page request");auto& pending=*pending_;
-    constexpr unsigned widths[]{1280,1280,272,272,144,56,840,288,272,272},heights[]{36,56,160,160,128,72,96,40,160,160};
-    try{for(unsigned issued=0;pending.next<pending.data.assets.size();){auto& asset=pending.data.assets[pending.next];if(!pending.request){if(issued==2)return false;pending.request=loader_(asset.name);++issued;if(!pending.request)throw script::Error("Missing native extra-grid image request");}
+    constexpr unsigned widths[]{1280,1280,272,272,144,56,840,288,272,272,272,1000},heights[]{36,56,160,160,128,72,96,40,160,160,160,24};
+    try{for(unsigned issued=0;pending.next<pending.data.assets.size();){auto& asset=pending.data.assets[pending.next];if(asset.pixels){++pending.next;continue;}if(!pending.request){if(issued==2)return false;pending.request=loader_(asset.name);++issued;if(!pending.request)throw script::Error("Missing native extra-grid image request");}
             auto image=pending.request->get();if(!image)return false;
             if(!image->width || !image->height || (pending.next<chrome && (image->width<widths[pending.next] || image->height<heights[pending.next])))throw script::Unsupported("Native extra-grid atlas dimensions are not supported: "+asset.name);
             asset.pixels=std::move(image);pending.request.reset();++pending.next;}
@@ -103,7 +105,7 @@ void ExtraGrid::update(ExtraGridInput input){
     if(selected.pointer){focus_.reset();for(const auto& row:data_.rows){const float x=104.f+272*(row.ordinal%4),y=116.f+160*(row.ordinal/4);if(selected.x>=x && selected.x<x+256 && selected.y>=y && selected.y<y+144){focus_=row.ordinal;break;}}
         if(selected.x>=1164 && selected.x<1220 && selected.y>=688 && selected.y<712)focus_=50;
         if(selected.y>=600 && selected.y<664){if(selected.x>=440 && selected.x<488)focus_=51;if(selected.x>=792 && selected.x<840)focus_=52;}
-        if(selected.y>=72 && selected.y<104)for(auto page:pages_)if(selected.x>=220+60*page && selected.x<280+60*page)focus_=100+page;}
+        if(selected.y>=72 && selected.y<104)for(auto page:pages_){const auto x=428+60*(page-pages_.front());if(selected.x>=x && selected.x<x+60)focus_=100+page;}}
     if(selected.navigation){std::vector<unsigned> controls;for(const auto& row:data_.rows)if(row.enabled)controls.push_back(row.ordinal);controls.insert(controls.end(),{51,52,50});const auto at=std::find(controls.begin(),controls.end(),focus_.value_or(999));const int size=int(controls.size());const auto index=at==controls.end()?(selected.navigation>0?0:size-1):(int(at-controls.begin())+selected.navigation+size)%size;focus_=controls[unsigned(index)];}
     if(focus_ && focus_!=previous && sound_)sound_(audio::SystemCue::focus);if(focus_ && (selected.confirm || (selected.pointer && selected.activate)))activate(*focus_);if(phase_==ExtraGridPhase::cards)draw();
 }
@@ -117,9 +119,10 @@ void ExtraGrid::draw(){
     add(black_,0,0,1280,720,0,0,1,1,cards_visible?128:255);
     if(cards_visible){
     const auto& assets=data_.assets;add(assets[0].pixels,0,-32*(1-whole),1280,36,0,0,1280,36);add(assets[1].pixels,0,664+32*(1-whole),1280,56,0,0,1280,56);
-    for(auto page:pages_)add(assets[6].pixels,220.f+60*page,72,60,32,float(page*60),page==page_?32:focus_==100+page?64:0,60,32);
+    for(auto page:pages_)add(assets[6].pixels,428.f+60*(page-pages_.front()),72,60,32,float(page*60),page==page_?32:focus_==100+page?64:0,60,32,255,scale);
+    add(assets[11].pixels,280,86,1000,24,0,0,1000,24,255,scale);
     const auto card_alpha=unsigned(256*content);
-    unsigned thumb=chrome;for(const auto& row:data_.rows){const float x=96.f+272*(row.ordinal%4),y=112.f+160*(row.ordinal/4);const auto& card=assets[row.enabled?2:9].pixels;add(card,x,y,272,160,0,0,272,160,card_alpha,card_scale);
+    unsigned thumb=chrome;for(const auto& row:data_.rows){const float x=96.f+272*(row.ordinal%4),y=112.f+160*(row.ordinal/4);const auto& card=assets[row.enabled?2:8+row.theme].pixels;add(card,x,y,272,160,0,0,272,160,card_alpha,card_scale);
         if(row.enabled){const auto& image=assets.at(thumb++).pixels;add(image,x+8,y+4,256,144,0,0,float(image->width),float(image->height),card_alpha,card_scale);}
         if(focus_==row.ordinal && row.enabled)add(assets[3].pixels,x,y,272,160,0,0,272,160,card_alpha,card_scale);}
     add(assets[4].pixels,440,600,48,64,focus_==51?96:0,0,48,64,255,scale);add(assets[4].pixels,792,600,48,64,focus_==52?96:0,64,48,64,255,scale);
