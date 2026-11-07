@@ -99,6 +99,10 @@ private:
     resource::Archive archive_;
     Globals globals_;
     Functions functions_;
+    struct ProgramCache;
+    // Weak immutable programs only. Each call still creates its own Runtime;
+    // active parent/local calls reuse parsed data without retaining old scenes.
+    std::shared_ptr<ProgramCache> program_cache_;
     std::vector<std::uint8_t> member(std::string_view name) const;
 };
 struct Command {

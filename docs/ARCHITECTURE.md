@@ -7,6 +7,22 @@ The final native application must not link generated game functions, source
 CPU state, checked source-address memory, or the Windows compatibility runtime.
 The current released APK still uses AOT; a linkable component is not a full port.
 
+The current native application targets are `hosts/native` (Windows x64) and
+`hosts/native-android` (Android ARM64). Both link the same 83 common game/engine
+sources through `platform/native_host.cpp`; OS paths, input, resources, device
+audio and SDL presentation stay outside game policy. Actual production builds
+include window/render/audio backends, and Android includes its native-only Java
+adapters and complete SDL HID/JNI exports. They exclude the AOT and guest-state
+runtime rather than falling back to it for an unsupported command. Separate
+unlaunched development packages and matching LGPL link materials can be made
+with the source-bound build/package tools documented in `BUILDING.md`.
+
+Original manual-save/INI import, remaining source-specific UI/renderer options
+and complete story/device compatibility are not established. The retained AOT
+release and contract completion flags stay unchanged. The component notes
+below record migration increments; later integration sections supersede the
+earlier component-only integration boundaries.
+
 `native/CMakeLists.txt` is an independent build root for the common native scene,
 script engine, resource/media components and native progress adapter. It never
 includes the retained `hosts/CMakeLists.txt`, `recompiled/`, `generated/` or
@@ -1019,6 +1035,28 @@ pairs are checked. The source lookup's fallback slot is retained and its codes
 are listed in the report. Syntax uses a large bounded test window because a
 static walk does not know normal/novel geometry; full-scene pagination, dialogue
 appearance and story execution are explicitly not established by this audit.
+
+Native image loading also retains a bounded recent set of immutable decoded
+rasters after their last request leaves a scene. Each opened archive defaults
+to 8 MiB/eight entries, with a 4 MiB per-image admission limit. This is a
+per-archive retention budget, separate from pictures still owned by active
+scenes; it is not a bound on total process or GPU memory. Colour/chroma variants
+and archive identities remain separate. Oversized pictures still load normally,
+failed/abandoned work is not retained, and eviction cannot invalidate active
+picture owners. Cache statistics expose retained pixel bytes and entries,
+without reading a device or screen. Explicit cache clearing releases its pixel
+owners while leaving active scene/request owners and their metadata intact;
+later requests or pending completions may warm it again.
+
+The native script library reuses an immutable parsed LSCR Program while an
+existing scene/call owns it. The cache contains weak program references, never
+Runtime objects, locals, globals, flow stacks or an old scene kept alive for
+caching. Each invocation retains its own runtime state. Re-entering a local
+script therefore avoids another archive read and parse, while unowned programs
+can be released. Constructed archive tests deny all further source reads on
+warm paths and check byte identity, style/archive isolation, bounded retention,
+eviction/lifetime and global-state preservation. These checks measure avoided
+component I/O; they do not establish game loading times or phone frame rates.
 
 ## Current released implementation
 

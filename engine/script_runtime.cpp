@@ -1,4 +1,6 @@
 #include "script_runtime.hpp"
+#include <map>
+#include <mutex>
 #include <algorithm>
 #include <bit>
 #include <charconv>
@@ -206,7 +208,11 @@ std::vector<std::uint8_t> Library::member(std::string_view name) const {
     if(index==resource::Archive::missing)throw Error("missing script resource "+std::string(name));
     return archive_.load(index,16u*1024*1024);
 }
-Library::Library(resource::Archive archive):archive_(std::move(archive)) {
+struct Library::ProgramCache {
+    std::mutex mutex;
+    std::map<std::string,std::weak_ptr<const Program>,std::less<>> programs;
+};
+Library::Library(resource::Archive archive):archive_(std::move(archive)),program_cache_(std::make_shared<ProgramCache>()) {
     globals_=Globals::parse(member("Global.vrb"));
     functions_.load(member("LFScriptFunc.fnc"));
     functions_.load(member("LFScriptFuncEx.fnc"));
@@ -214,8 +220,14 @@ Library::Library(resource::Archive archive):archive_(std::move(archive)) {
 std::shared_ptr<const Program> Library::load(std::string_view scene) const {
     if(scene.empty() || scene.size()>240 || scene.find_first_of("/\\")!=std::string_view::npos || scene.find('\0')!=std::string_view::npos)
         throw Error("invalid script scene name");
+    {std::lock_guard lock(program_cache_->mutex);
+        std::erase_if(program_cache_->programs,[](const auto& item){return item.second.expired();});
+        if(const auto found=program_cache_->programs.find(scene);found!=program_cache_->programs.end())if(auto program=found->second.lock())return program;}
     const auto text=member(std::string(scene)+".txt");
-    return std::make_shared<const Program>(Program::parse(std::string(scene),member(std::string(scene)+".bnr"),text));
+    auto program=std::make_shared<const Program>(Program::parse(std::string(scene),member(std::string(scene)+".bnr"),text));
+    {std::lock_guard lock(program_cache_->mutex);auto& entry=program_cache_->programs[std::string(scene)];
+        if(auto existing=entry.lock())return existing;entry=program;}
+    return program;
 }
 Runtime::Runtime(std::shared_ptr<const Program> program,const Functions& functions,Globals& globals)
     :program_(std::move(program)),functions_(functions),globals_(globals){if(!program_)throw Error("missing LSCR program");}

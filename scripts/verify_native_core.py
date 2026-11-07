@@ -76,7 +76,7 @@ def main():
     inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
         ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
         ROOT/'platform/sdl_input.hpp',ROOT/'platform/sdl_input.cpp',ROOT/'platform/sdl_application.hpp',ROOT/'platform/sdl_application.cpp']
-    inputs += [ROOT/'tests/native_image_wait.cpp',ROOT/'tests/native_bootstrap.cpp',ROOT/'platform/native_application.hpp',ROOT/'platform/native_application.cpp',ROOT/'platform/native_services.cmake',
+    inputs += [ROOT/'tests/native_image_wait.cpp',ROOT/'tests/native_loading_cache.cpp',ROOT/'tests/native_bootstrap.cpp',ROOT/'platform/native_application.hpp',ROOT/'platform/native_application.cpp',ROOT/'platform/native_services.cmake',
         ROOT/'android/game/game_host.cpp',ROOT/'android/game/CMakeLists.txt',ROOT/'android/native/android_host.hpp',ROOT/'android/native/android_resources.hpp']
     inputs += [ROOT/p for p in ('tests/android_jni_services.cpp','android/game/entry.cmake','android/game/game_jni.cpp',
         'android/native/service_lifecycle.hpp','android/native/frame_hud_jni.hpp','android/native/frame_hud_jni.cpp',
@@ -140,7 +140,7 @@ def main():
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
-            if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
+            if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_loading_cache_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
             if host=='windows':targets+=['wa2_native_desktop_tests']
             if host=='android':targets+=['wa2_native_android_host_check','wa2_retained_android_jni_check']
             if host=='android' and args.android_sdl_library:targets+=['wa2_native_android_entry_check']
@@ -181,7 +181,7 @@ def main():
             allowed+=('tests/native_movie_state.cpp',)
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
-            allowed+=('tests/native_image_wait.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
+            allowed+=('tests/native_image_wait.cpp','tests/native_loading_cache.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
             allowed+=('tests/android_jni_services.cpp',)
             if host=='android':allowed+=('android/game/game_host.cpp','android/game/game_jni.cpp','android/game/user_menu_jni.cpp','android/native/android_entry.cpp',
                 'android/native/android_resources.cpp','android/native/frame_metrics.cpp','android/native/frame_hud_jni.cpp',
@@ -442,6 +442,9 @@ def main():
                 run([directory/'wa2_native_image_wait_tests.exe',directory/'native-image-wait.json'],console,90)
                 image_wait=json.loads((directory/'native-image-wait.json').read_text())
                 if not image_wait['passed'] or image_wait['cases']<13 or image_wait['guards']<7 or not image_wait['completion_notification'] or not image_wait['multiple_waiters_same_owner'] or not image_wait['pending_shutdown_notifies'] or not image_wait['synthetic_resources_only'] or image_wait['original_resources_opened'] or image_wait['devices_opened'] or image_wait['game_launched'] or image_wait['screen_access']:raise ValueError('Native image completion wait checks failed')
+                run([directory/'wa2_native_loading_cache_tests.exe',directory/'native-loading-cache.json'],console,90)
+                loading_cache=json.loads((directory/'native-loading-cache.json').read_text())
+                if not loading_cache['passed'] or loading_cache['cases']<18 or loading_cache['guards']<7 or loading_cache['warm_reads_avoided']<7 or not all(loading_cache[key] for key in ('bounded_image_retention','lru_and_entry_limits','style_and_archive_isolation','active_pixels_survive_eviction','active_program_reused','program_cache_retains_no_runtime','synthetic_resources_only')) or any(loading_cache[key] for key in ('original_resources_opened','devices_opened','game_launched','screen_access')):raise ValueError('Native resource reuse checks failed')
                 run([directory/'wa2_native_bootstrap_tests.exe',directory/'native-bootstrap.json',directory/'native-bootstrap-owned'],console,90)
                 bootstrap=json.loads((directory/'native-bootstrap.json').read_text())
                 if not bootstrap['passed'] or bootstrap['cases']<17 or bootstrap['guards']<11 or not bootstrap['source_ic_presence_rule'] or not bootstrap['title_story_storage_connected'] or not bootstrap['native_preferences_reopened'] or not bootstrap['saved_image_wait_not_polled'] or not bootstrap['test_mode_persisted_after_prepare'] or not bootstrap['failed_prepare_writes_nothing'] or not bootstrap['fake_movies_only'] or not bootstrap['synthetic_resources_only'] or bootstrap['original_resources_opened'] or bootstrap['devices_opened'] or bootstrap['game_launched'] or bootstrap['screen_access']:raise ValueError('Native shared bootstrap checks failed')
@@ -530,6 +533,7 @@ def main():
     report['sdl_application']=sdl_application
     report['input_state']=input_state
     report['image_wait']=image_wait
+    report['loading_cache']=loading_cache
     report['bootstrap']=bootstrap
     report['desktop']=desktop
     report['windows_native_entry']=windows_entry_artifact
