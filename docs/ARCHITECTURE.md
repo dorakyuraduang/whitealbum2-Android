@@ -1010,6 +1010,16 @@ resource again; requests for new content remain bounded and a failed first or
 later thumbnail keeps the old page. Synthetic marker pixels and actual header
 metadata validate the three placeholders without viewing original artwork.
 
+The static corpus audit walks literal argument records for dialogue and choice
+text, consuming unknown flag-expression shapes without evaluating variables or
+calling functions. All 71,243 installed calls expose literal text: 1,644,117
+letter instances parse through the common control/encoding rules. Four actual
+font-sheet headers and both foreground/shadow crops of 3,937 unique glyph/size
+pairs are checked. The source lookup's fallback slot is retained and its codes
+are listed in the report. Syntax uses a large bounded test window because a
+static walk does not know normal/novel geometry; full-scene pagination, dialogue
+appearance and story execution are explicitly not established by this audit.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.
