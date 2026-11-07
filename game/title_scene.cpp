@@ -52,7 +52,7 @@ void TitleScene::update(std::int64_t now,TitleInput input){
     timeline_.sample(now);if(timeline_.paused())return;
     switch(stage_){
     case TitleStage::company_movie:case TitleStage::opening_movie:{
-        if(!movie_)throw script::Error("Native title lost its startup movie");movie_->update(now);if(input.selection.activate || input.selection.confirm)movie_->stop();if(!movie_->finished())break;
+        if(!movie_)throw script::Error("Native title lost its startup movie");movie_->update(now);if(input.selection.activate || input.selection.confirm || input.cancel)movie_->stop();if(!movie_->finished())break;
         movie_.reset();if(stage_==TitleStage::opening_movie){begin_view();break;}
         const auto& state=progress_->state();const bool opening=state.flag(210)!=0 || (content_.local_introductory && state.flag(202)!=0);
         if(opening){stage_=TitleStage::opening_delay;delay_=0;}else begin_view();break;

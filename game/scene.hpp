@@ -145,6 +145,7 @@ public:
     void replay_mode(std::int32_t value){if(value<0 || value>24)throw script::Error("Native replay entry is out of range");replay_mode_=value;selection_.replay_mode(value!=0);}
     std::int32_t replay_mode()const noexcept{return replay_mode_;}
     void flush_progress(){reading_.finish();}
+    void retire(){reading_.finish();movies_.stop();}
     std::vector<std::uint8_t> checkpoint()const;
     using SavedImageResolver=std::function<image::Resolve(resource::Catalog&)>;
     static std::unique_ptr<Scene> restore(resource::BankOpener,std::shared_ptr<progress::Store>,std::span<const std::uint8_t>,std::int64_t monotonic_us,const SavedImageResolver&,const Preferences& preferences={},SceneServices services={});

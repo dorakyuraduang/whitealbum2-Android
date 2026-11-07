@@ -24,6 +24,13 @@ and link checks, not gameplay verification. They produce no APK and do not
 replace the current 0.2.46 delivery. The instructions below describe the retained
 AOT build, which still requires its private cached analysis inputs.
 
+The finite movie-input check uses fake transports and constructed archives.
+It covers first-view/seen skip gates, movie ownership through EOF cleanup,
+frozen hidden-scene controllers, consuming the completing input frame before
+accelerated story ticks, background release and transactional retirement.
+Its report is `native-movie-input.json` in the Windows core build directory;
+it initializes no device and executes no original script or game.
+
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional
 restore failures and conditionally visible selections. `--resource-root res`

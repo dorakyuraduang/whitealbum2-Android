@@ -42,7 +42,8 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
         // stops all ordinary/channel effects. Other voices, BGM and visual
         // state remain live; 0x413bf0 is a different full-reset path.
         voices_.stop(0);effects_.stop_all();},0,[this](auto id){
-        if(!progress_store_)throw script::Error("Missing native movie progress storage");progress_store_->state().set_flag(std::uint32_t(id),1);progress_store_->flush();}){
+        if(!progress_store_)throw script::Error("Missing native movie progress storage");progress_store_->state().set_flag(std::uint32_t(id),1);progress_store_->flush();},[this](auto id){
+        if(!progress_store_)throw script::Error("Missing native movie skip progress storage");return progress_store_->state().flag(std::uint32_t(id))!=0;}){
     environment_.reserve(432);foreground_.reserve(432);
     system_sounds_.prepare();
     preferences(preferences_);
@@ -156,6 +157,17 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     timeline_.sample(monotonic_us);
     if(title_requested_)return script::RunState::stopped;
     if(timeline_.paused())return script::RunState::yielded;
+    if(movies_.active()){
+        // Cached 4337be..433885 bypasses the game update while a movie plays.
+        // Device audio and the movie clock continue; hidden scene controllers,
+        // choices, toolbar and auto-text must not consume that frame's input.
+        const bool requested=input.advance || input.toggle_window || input.cancel || input.selection.activate || input.selection.confirm;
+        if(requested && movies_.request_skip())cancel_automatic();else movies_.update(monotonic_us);
+        input_={};milliseconds_=timeline_.milliseconds();captions_.update(std::uint64_t(monotonic_us)/1000);
+        if(!movies_.playback()->finished())return script::RunState::yielded;
+        if(!session_.active() || session_.active()->pending_command()!=193)throw script::Error("Native movie owner has no suspended SetMovie command");
+        return session_.advance([this](auto& call){return command(call);});
+    }
     // Cached 4187ab..4187dc follows the active script before running it.
     // Prelude waits/read-only skip must not retain the previous chapter's row.
     if(const auto active=session_.active())reading_.enter(active->program().name());
@@ -200,8 +212,8 @@ bool Scene::can_accelerate()const{
     return true;
 }
 FrameBatch Scene::advance_frame(std::int64_t now,Input input,const std::function<std::int64_t()>& clock,FrameBudget budget){
-    if(!clock)throw std::invalid_argument("Missing native frame budget clock");const auto continued=input.continued();
-    return run_frame_batch([&](bool first){const auto state=update(now,first?input:continued);return FrameTick{state,can_accelerate()};},clock,budget);
+    if(!clock)throw std::invalid_argument("Missing native frame budget clock");const auto continued=input.continued();const bool movie_frame=movies_.active();
+    return run_frame_batch([&](bool first){const auto state=update(now,first?input:continued);return FrameTick{state,!movie_frame && can_accelerate()};},clock,budget);
 }
 script::BackgroundFrame Scene::background()const{
     auto frame=backgrounds_.frame();frame.transform=shake_.world();const auto channels=colour_.channels();if(frame.previous)frame.previous->colour=channels;if(frame.current)frame.current->colour=channels;return frame;

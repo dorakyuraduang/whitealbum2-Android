@@ -8,7 +8,7 @@ CPU state, checked source-address memory, or the Windows compatibility runtime.
 The current released APK still uses AOT; a linkable component is not a full port.
 
 The current native application targets are `hosts/native` (Windows x64) and
-`hosts/native-android` (Android ARM64). Both link the same 84 common game/engine
+`hosts/native-android` (Android ARM64). Both link the same 85 common game/engine
 sources through `platform/native_host.cpp`; OS paths, input, resources, device
 audio and SDL presentation stay outside game policy. Actual production builds
 include window/render/audio backends, and Android includes its native-only Java
@@ -544,16 +544,19 @@ Twenty synthetic cases, thirteen guards and twelve archive-lookup cases cover
 these transitions, startup branches and audio/resource policy. Music/movie
 services are fakes; system cue PCM and all scripts/images/PAKs are constructed
 in memory. This does not verify a movie decoder on a device or visual parity.
-The remaining full options/save/load/extras/backlog page views and production
-entry integration still need completion before this is a complete native game.
+The integrated options/save/load/extras/backlog pages and production entries
+are described below. Their component checks do not establish whole-game parity.
 
 Story `SetMovie` now uses the cached pre-play audio sequence: stop speech
 channel 0, then every one-shot, looping and prepared effect. Other speech
 channels, BGM and all scene/UI state remain owned while movie presentation
 temporarily replaces the picture. This is distinct from the cached full-reset
 path. Movie amplitude follows the same quantized master/music preferences as
-title movies, including live edits, and dropping a scene stops its active
-movie transport without marking an uncompleted movie seen.
+title movies, including live edits. Explicit scene retirement first flushes
+reading progress and records a tracked movie as seen before stopping it, as in
+the cached exit path. A failed replacement preparation retains the current
+scene and movie. Destruction following a playback failure still stops the
+transport without inventing a successful viewing.
 
 `SceneServices` injects common music/effect/speech/movie transports and survives
 application save/load replacement. Defaults still use the common resource and
@@ -564,6 +567,20 @@ providers and transport ownership after load. They use fake transports and
 constructed scripts/archives only. Movie completion intentionally yields one
 frame before the following script command. No original story, audio/video
 device, game window or screen is used by these checks.
+
+Story movies own input until the suspended SetMovie command releases the
+player, including the frame after the decoder reports EOF. Left/right mouse,
+Enter, Space and Escape request skip; tracked records from 200 upward require
+an existing seen flag, while untracked clips do not. Held Ctrl does not skip a
+movie. The shared application routes these events before toolbar, right-click
+menu, backlog and choice handling. The hidden scene's frame controllers and
+statistics freeze during playback, while device PCM, wall-derived time,
+movie updates and captions continue. Completion consumes one normal frame
+before story execution resumes, even with latched accelerated skip enabled.
+Startup title movies also accept cancel/right-click input through the common
+title controller. Forty-three finite synthetic cases and seven guards check
+these policies, background input release, failed storage/replacement retention
+and explicit-exit viewing flags, using fake transports and owned archives only.
 
 `game/render_frame.*` assembles an owned shared presentation snapshot for title
 and story. Background/environment membership remains separate from overlays;

@@ -2,8 +2,8 @@
 #include <cmath>
 
 namespace wa2::script{
-SceneMovie::SceneMovie(Factory factory,std::function<void()> before_play,unsigned file_suffix,std::function<void(std::int32_t)> seen)
-    :factory_(std::move(factory)),before_play_(std::move(before_play)),suffix_(file_suffix),seen_(std::move(seen)){
+SceneMovie::SceneMovie(Factory factory,std::function<void()> before_play,unsigned file_suffix,std::function<void(std::int32_t)> seen,std::function<bool(std::int32_t)> skip_allowed)
+    :factory_(std::move(factory)),before_play_(std::move(before_play)),suffix_(file_suffix),seen_(std::move(seen)),skip_allowed_(std::move(skip_allowed)){
     if(!factory_ || suffix_>2)throw Error("invalid native movie factory or file suffix");
 }
 SceneMovie::~SceneMovie(){if(playback_)playback_->stop();}
@@ -13,6 +13,13 @@ void SceneMovie::gain(float value){
     amplitude_=value;if(playback_)playback_->gain(value);
 }
 void SceneMovie::record_seen(){if(!recorded_ && record_>=200 && seen_){seen_(record_);recorded_=true;}}
+bool SceneMovie::request_skip(){
+    if(!playback_ || playback_->finished())return false;
+    // Cached 433838..433855 allows untracked clips and previously seen
+    // tracked clips. A rejected request must not mark the first viewing seen.
+    if(record_>=200){if(!skip_allowed_)throw Unsupported("Missing native movie skip progress policy");if(!skip_allowed_(record_))return false;}
+    stop();return true;
+}
 std::optional<CommandResult> SceneMovie::dispatch(Command& command){
     if(command.index!=193)return {};
     if(command.arguments.size()!=2)throw Error("invalid SetMovie parameter count");

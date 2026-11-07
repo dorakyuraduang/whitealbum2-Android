@@ -76,6 +76,7 @@ def main():
     inputs += [ROOT/'tests/native_title_scene.cpp']
     inputs += [ROOT/'tests/native_render_frame.cpp',ROOT/'platform/sdl_movie.cpp',ROOT/'platform/sdl_movie.hpp',ROOT/'platform/sdl_presentation.cpp',ROOT/'platform/sdl_presentation.hpp']
     inputs += [ROOT/'tests/native_movie_state.cpp']
+    inputs += [ROOT/'tests/native_movie_input.cpp']
     inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
         ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
         ROOT/'platform/sdl_input.hpp',ROOT/'platform/sdl_input.cpp',ROOT/'platform/sdl_application.hpp',ROOT/'platform/sdl_application.cpp']
@@ -145,6 +146,7 @@ def main():
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
+            if host=='windows':targets+=['wa2_native_movie_input_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
             if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_loading_cache_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
             if host=='windows':targets+=['wa2_native_desktop_tests','wa2_native_audio_level_tests']
@@ -188,6 +190,7 @@ def main():
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
+            allowed+=('tests/native_movie_input.cpp',)
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
             allowed+=('tests/native_image_wait.cpp','tests/native_loading_cache.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
@@ -458,6 +461,9 @@ def main():
                 run([directory/'wa2_native_movie_state_tests.exe',directory/'native-movie-state.json'],console,90)
                 movie_state=json.loads((directory/'native-movie-state.json').read_text())
                 if not movie_state['passed'] or movie_state['cases']<28 or movie_state['guards']<12 or not movie_state['source_preplay_audio_order'] or not movie_state['movie_gain_follows_preferences'] or not movie_state['visual_state_preserved'] or not movie_state['services_survive_save_load'] or not movie_state['fake_transports_only'] or not movie_state['synthetic_resources_only'] or movie_state['original_resources_opened'] or movie_state['devices_opened'] or movie_state['game_launched'] or movie_state['screen_access']:raise ValueError('Native movie integration checks failed')
+                run([directory/'wa2_native_movie_input_tests.exe',directory/'native-movie-input.json'],console,90)
+                movie_input=json.loads((directory/'native-movie-input.json').read_text())
+                if not movie_input['passed'] or movie_input['cases']<43 or movie_input['guards']<7 or not all(movie_input[key] for key in ('source_seen_skip_policy','movie_input_consumed','movie_ownership_until_cleanup','hidden_scene_frozen','completing_frame_does_not_accelerate','ctrl_does_not_skip','background_input_discarded','failed_write_keeps_transport','failed_replacement_keeps_transport','explicit_exit_marks_seen','title_cancel_and_right_click','fake_transports_only','synthetic_resources_only')) or any(movie_input[key] for key in ('original_resources_opened','devices_opened','game_launched','screen_access')):raise ValueError('Native movie input and owner checks failed')
                 run([directory/'wa2_native_frame_driver_tests.exe',directory/'native-frame-driver.json'],console,90)
                 frame_driver=json.loads((directory/'native-frame-driver.json').read_text())
                 if not frame_driver['passed'] or frame_driver['cases']<27 or frame_driver['guards']<16 or frame_driver['logic_hz']!=60 or not frame_driver['bounded_catch_up'] or not frame_driver['shared_skip_budget'] or not frame_driver['queued_click_keeps_position'] or not frame_driver['synthetic_clock_and_scripts_only'] or frame_driver['performance_benchmark'] or frame_driver['original_resources_opened'] or frame_driver['devices_opened'] or frame_driver['game_launched'] or frame_driver['screen_access']:raise ValueError('Native frame driver checks failed')
@@ -559,6 +565,7 @@ def main():
     report['title_scene']=title_scene
     report['render_frame']=render_frame
     report['movie_state']=movie_state
+    report['movie_input']=movie_input
     report['frame_driver']=frame_driver
     report['audio_binding']=audio_binding
     report['sdl_application']=sdl_application
