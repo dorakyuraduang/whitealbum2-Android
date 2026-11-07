@@ -427,7 +427,8 @@ Tests use memory storage and newly created synthetic directories, preserve
 sentinel original-format filenames, and check bounded slots, failed writes,
 hard links and malformed data. The application save menu is still pending.
 
-Native application preferences have a separate versioned `WAPR` format and
+Native application preferences have a separate versioned `WAP2` format (with
+read compatibility for the earlier native `WAPR` format) and
 injected storage. Unchanged edits do not write; invalid values and failed
 writes cannot publish a new current value. Current audio gains, character voice
 switches, text budget, window skin/opacity, auto delay, skip-read policy and
@@ -640,11 +641,32 @@ Opening/closing use 15 logic ticks and page fades use 7 by default; the owner
 can supply source-adjusted durations. Applying an edit calls the supplied
 writer before publishing the new value, so a failed write preserves the model.
 Reset confirmation, sound previews and return are explicit owner commands.
-The current checks use constructed blank atlas images and inspect geometry and
-state only; no original image pixels are decoded or displayed. The view model
-is not yet bound to the application's preference storage, window service or
-modal presentation. Skin/colour popup behavior and held-button repetition are
-also pending. Linking this component is not completion of the settings page.
+The view checks use constructed blank atlas images and inspect geometry and
+state only; no original image pixels are decoded or displayed.
+
+`game/options_preferences.*` maps all 28 visible fields, the four mute controls
+and their inverse atlas-cell conventions to common preferences. The native
+text increments now use the cached 60 Hz source calculation `2 / text pace`:
+instant, 4, 2 and 1 layout time units. Arbitrary native text timings remain
+readable from old settings but have no source UI cell and fail explicitly when
+converted to this view; they are not rounded to a different setting. Settings
+retain source opacity values through 256; drawing saturates to 255 instead of
+wrapping to transparent. The extended codec retains previous fields and adds
+three independent mute switches, display/confirmation/right-click policies,
+voice cut on manual message advance, and the transition-wait switch. Legacy
+settings retain their stored custom text speed and receive extension defaults.
+Music/effect/master muting keeps the slider gain and live playback; movie gain
+uses the same mute policy. The common scene applies transition-wait without
+making text instantaneous. Voice cut applies only to channel zero when a
+completed message is manually advanced, preserving other channels and a voice
+whose text is still being revealed. Constructed scene/voice checks exercise
+these bindings and failed preference writes without opening a device.
+
+The view still needs ownership by the application's modal presentation and
+platform window services; storing display/right-click/confirmation policies
+does not by itself implement those actions. Reset confirmation, skin/colour
+popup behavior and held-button repetition are also pending. These components
+are not completion of the settings page.
 
 The native story engine remains incomplete: full options/save/load/extras/
 backlog views, production host integration and unsupported render/animation/

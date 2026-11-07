@@ -12,13 +12,13 @@ SceneDialogue::SceneDialogue(text::FontBook& fonts,Loader loader,std::function<v
     black_=std::make_shared<image::Raster>(image::Raster{1,1,{0,0,0,255}});
 }
 void SceneDialogue::settings(DialogueSettings value){
-    if(value.skin<0 || value.skin>9 || value.window_alpha<0 || value.window_alpha>255 || value.picture_alpha<0 || value.picture_alpha>255 ||
-       value.button_alpha<0 || value.button_alpha>255 || value.text_step<0 || value.text_step>1000 || value.open_ticks<0 || value.open_ticks>300 ||
-       value.novel_alpha<0 || value.novel_alpha>255)
+    if(value.skin<0 || value.skin>9 || value.window_alpha<0 || value.window_alpha>256 || value.picture_alpha<0 || value.picture_alpha>256 ||
+       value.button_alpha<0 || value.button_alpha>256 || value.text_step<0 || value.text_step>1000 || value.open_ticks<0 || value.open_ticks>300 ||
+       value.novel_alpha<0 || value.novel_alpha>256)
         throw Error("invalid native dialogue settings");
     if(assets_started_ && value.skin!=settings_.skin){requests_={};images_={};assets_started_=assets_ready_=false;}
     settings_=value;
-    novel_.alpha(value.novel_alpha);
+    novel_.alpha(std::min(value.novel_alpha,255));
 }
 void SceneDialogue::load_assets(){
     if(!assets_started_){
@@ -65,19 +65,19 @@ std::uint32_t SceneDialogue::duration()const {
     if(page_>=body_.metrics().pages.size())return 0;
     return body_.metrics().pages[page_].duration+160;
 }
-void SceneDialogue::update(bool fast_forward){
+void SceneDialogue::update(bool fast_forward,bool transitions){
     fast_=fast_forward;
-    novel_.update([&](auto ticks){return fast_forward?0:ticks==-1?15:ticks==-2?30:ticks;});
+    novel_.update([&](auto ticks){return fast_forward || !transitions?0:ticks==-1?15:ticks==-2?30:ticks;});
     if(!assets_ready_ && (assets_started_ || phase_!=DialoguePhase::closed))load_assets();
     if(!assets_ready_ || phase_==DialoguePhase::closed)return;
     if(phase_==DialoguePhase::closing){
-        if(fast_forward || open_elapsed_>=close_ticks_){phase_=DialoguePhase::closed;raw_.clear();body_={};name_text_={};old_name_text_={};name_.clear();has_text_=false;}
+        if(fast_forward || !transitions || open_elapsed_>=close_ticks_){phase_=DialoguePhase::closed;raw_.clear();body_={};name_text_={};old_name_text_={};name_.clear();has_text_=false;}
         else ++open_elapsed_;
         return;
     }
     if(name_elapsed_<10)++name_elapsed_;else old_name_text_={};
     if(phase_==DialoguePhase::opening){
-        if(fast_forward || open_elapsed_>=std::uint32_t(settings_.open_ticks))phase_=has_text_?DialoguePhase::typing:DialoguePhase::complete;
+        if(fast_forward || !transitions || open_elapsed_>=std::uint32_t(settings_.open_ticks))phase_=has_text_?DialoguePhase::typing:DialoguePhase::complete;
         else ++open_elapsed_;
     }
     if(phase_==DialoguePhase::typing){
@@ -179,10 +179,10 @@ std::span<const image::Sprite> SceneDialogue::sprites(){
     const auto tag=[&](std::size_t first,int layer,int order){for(;first<sprites_.size();++first){auto& item=sprites_[first];item.layer=layer;item.order=order;item.space=image::SpriteSpace::dialogue;}};
     const auto alpha=phase_==DialoguePhase::opening && settings_.open_ticks?std::uint8_t(std::min(255u,open_elapsed_*255/std::uint32_t(settings_.open_ticks))):
         phase_==DialoguePhase::closing && close_ticks_?std::uint8_t(255-std::min(255u,open_elapsed_*255/close_ticks_)):std::uint8_t(255);
-    if(settings_.window && !novel_.enabled()){add(0,16,496,1248,208,0,0,1248,208,transparent_?0:std::uint8_t((picture_?settings_.picture_alpha:settings_.window_alpha)*alpha/255));
+    if(settings_.window && !novel_.enabled()){add(0,16,496,1248,208,0,0,1248,208,transparent_?0:std::uint8_t(std::min(255,(picture_?settings_.picture_alpha:settings_.window_alpha))*alpha/255));
         add(1,16,496,1248,208,0,0,1248,208,alpha);}
     static constexpr std::array<int,9> button_x{808,848,928,968,1008,1048,1088,1128,1168};
-    for(std::size_t i=0;i<button_x.size();++i)add(2,float(button_x[i]),680,40,40,float(i*40),0,40,40,std::uint8_t(settings_.button_alpha*alpha/255),0x40f+int(i));
+    for(std::size_t i=0;i<button_x.size();++i)add(2,float(button_x[i]),680,40,40,float(i*40),0,40,40,std::uint8_t(std::min(255,settings_.button_alpha)*alpha/255),0x40f+int(i));
     add(3,0,672,1280,48,208,104,120,48,alpha);
     if(has_text_ && (!novel_.enabled() || novel_.text_visible())){
         const auto first=sprites_.size();

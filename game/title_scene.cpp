@@ -18,7 +18,7 @@ TitleScene::TitleScene(resource::BankOpener opener,std::shared_ptr<progress::Sto
 }
 TitleScene::~TitleScene(){if(movie_)movie_->stop();}
 void TitleScene::preferences(const Preferences& value){
-    value.validate();preferences_=value;music_.settings(value.master,value.music);sounds_.settings(value.master,value.effects);
+    value.validate();preferences_=value;music_.settings(value.effective_master(),value.effective_music());sounds_.settings(value.effective_master(),value.effective_effects());
     if(movie_)movie_->gain(value.movie_amplitude());
 }
 void TitleScene::begin_movie(std::string_view stem){

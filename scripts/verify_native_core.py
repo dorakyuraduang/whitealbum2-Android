@@ -56,6 +56,7 @@ def main():
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
     inputs += [ROOT/'tests/native_options_view.cpp']
+    inputs += [ROOT/'tests/native_options_preferences.cpp']
     inputs += [ROOT/'tests/native_title_scene.cpp']
     inputs += [ROOT/'tests/native_render_frame.cpp',ROOT/'platform/sdl_movie.cpp',ROOT/'platform/sdl_movie.hpp',ROOT/'platform/sdl_presentation.cpp',ROOT/'platform/sdl_presentation.hpp']
     inputs += [ROOT/'tests/native_movie_state.cpp']
@@ -113,6 +114,7 @@ def main():
             if host=='windows':targets+=['wa2_native_application_tests']
             if host=='windows':targets+=['wa2_native_title_view_tests']
             if host=='windows':targets+=['wa2_native_options_view_tests']
+            if host=='windows':targets+=['wa2_native_options_preference_tests']
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
@@ -139,6 +141,7 @@ def main():
             allowed+=('tests/native_application.cpp',)
             allowed+=('tests/native_title_view.cpp',)
             allowed+=('tests/native_options_view.cpp',)
+            allowed+=('tests/native_options_preferences.cpp',)
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
@@ -332,6 +335,9 @@ def main():
                 run([directory/'wa2_native_options_view_tests.exe',directory/'native-options-view.json'],console,90)
                 options_view=json.loads((directory/'native-options-view.json').read_text())
                 if not options_view['passed'] or options_view['cases']<24 or options_view['guards']<60 or options_view['maximum_pending_images']>1 or options_view['maximum_new_requests_per_tick']>2 or not options_view['synthetic_images_only'] or options_view['preference_storage_bound'] or options_view['application_view_bound'] or options_view['original_resources_opened'] or options_view['devices_opened'] or options_view['game_launched'] or options_view['screen_access']:raise ValueError('Native options view checks failed')
+                run([directory/'wa2_native_options_preference_tests.exe',directory/'native-options-preferences.json'],console,90)
+                options_preferences=json.loads((directory/'native-options-preferences.json').read_text())
+                if not options_preferences['passed'] or options_preferences['cases']<34 or options_preferences['guards']<15 or not options_preferences['legacy_preferences_preserved'] or not options_preferences['all_visible_cells_mapped'] or not options_preferences['opacity_256_saturates'] or not options_preferences['mute_keeps_live_voice'] or options_preferences['source_text_budget_steps']!=[0,4,2,1] or not options_preferences['synthetic_resources_only'] or not options_preferences['fake_voices_only'] or options_preferences['original_resources_opened'] or options_preferences['devices_opened'] or options_preferences['game_launched'] or options_preferences['screen_access']:raise ValueError('Native options preferences checks failed')
                 run([directory/'wa2_native_title_scene_tests.exe',directory/'native-title-scene.json'],console,90)
                 title_scene=json.loads((directory/'native-title-scene.json').read_text())
                 if not title_scene['passed'] or title_scene['cases']<20 or title_scene['guards']<13 or title_scene['audio_lookup_cases']<12 or not title_scene['synthetic_resources_only'] or not title_scene['fake_music_and_movies'] or not title_scene['title_story_handoff'] or title_scene['devices_opened'] or title_scene['game_launched'] or title_scene['screen_access']:raise ValueError('Native title/application integration checks failed')
@@ -416,6 +422,7 @@ def main():
     report['application']=application
     report['title_view']=title_view
     report['options_view']=options_view
+    report['options_preferences']=options_preferences
     report['title_scene']=title_scene
     report['render_frame']=render_frame
     report['movie_state']=movie_state

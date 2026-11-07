@@ -5,6 +5,7 @@
 #include "application.hpp"
 #include "title_view.hpp"
 #include "options_view.hpp"
+#include "options_preferences.hpp"
 #include "render_frame.hpp"
 #include "frame_driver.hpp"
 #include "audio_binding.hpp"
@@ -50,6 +51,7 @@ extern "C" WA2_LINK_CHECK void wa2_native_link_title_destroy(void* pointer){dele
 extern "C" WA2_LINK_CHECK void* wa2_native_link_options_create(wa2::game::OptionsView::Loader* loader,const wa2::game::OptionsState* state){auto view=std::make_unique<wa2::game::OptionsView>(*loader);view->prepare(*state);return view.release();}
 extern "C" WA2_LINK_CHECK unsigned wa2_native_link_options_update(void* pointer){auto& view=*static_cast<wa2::game::OptionsView*>(pointer);view.update();return unsigned(view.sprites().size());}
 extern "C" WA2_LINK_CHECK void wa2_native_link_options_destroy(void* pointer){delete static_cast<wa2::game::OptionsView*>(pointer);}
+extern "C" WA2_LINK_CHECK unsigned wa2_native_link_options_preferences(wa2::game::Preferences* preferences,const wa2::game::OptionsState* state){if(state)*preferences=wa2::game::options_preferences(*state,*preferences);return unsigned(wa2::game::options_state(*preferences).values.size());}
 extern "C" WA2_LINK_CHECK std::uint32_t wa2_native_link_frame(void* pointer,std::int64_t now){return static_cast<wa2::game::Scene*>(pointer)->advance_frame(now,{},[now]{return now;}).ticks;}
 extern "C" WA2_LINK_CHECK std::size_t wa2_native_link_save_scene(void* pointer){return static_cast<wa2::game::Scene*>(pointer)->checkpoint().size();}
 extern "C" WA2_LINK_CHECK void* wa2_native_link_restore_scene(wa2::resource::BankOpener* opener,std::shared_ptr<wa2::progress::Store>* progress,const std::uint8_t* data,std::size_t size,std::int64_t now,const wa2::game::Scene::SavedImageResolver* resolve){return wa2::game::Scene::restore(*opener,*progress,{data,size},now,*resolve).release();}

@@ -6,7 +6,7 @@ namespace wa2::game {
 enum class Option : unsigned {
     display,text_speed,skip_policy,auto_delay,transition_wait,
     window_opacity,picture_opacity,novel_opacity,button_opacity,window_visibility,
-    confirmation,right_click,master_volume,music_volume,effects_volume,voice_volume,voice_wait,adult_voice,
+    confirmation,right_click,master_volume,music_volume,effects_volume,voice_volume,voice_advance,adult_voice,
     character_0,character_2,character_1,character_3,character_4,character_5,character_10,character_11,character_99,character_98,count
 };
 // A view model, not another preferences file. Choice values are atlas cell

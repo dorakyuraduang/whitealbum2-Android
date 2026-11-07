@@ -48,7 +48,7 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
 }
 void Scene::preferences(const Preferences& value){
     value.validate();auto dialogue=dialogue_.settings();dialogue.skin=value.skin;dialogue.window_alpha=value.window_alpha;dialogue.picture_alpha=value.picture_alpha;dialogue.button_alpha=value.button_alpha;dialogue.novel_alpha=value.novel_alpha;dialogue.text_step=value.text_step;dialogue.window=value.window;
-    music_.settings(value.master,value.music);effects_.settings(value.master,value.effects);voices_.settings(value.master,value.speech,value.mute_adult);voices_.enabled(value.voice_enabled);voices_.character_switches(value.character_voice);system_sounds_.settings(value.master,value.effects);
+    music_.settings(value.effective_master(),value.effective_music());effects_.settings(value.effective_master(),value.effective_effects());voices_.settings(value.effective_master(),value.speech,value.mute_adult);voices_.enabled(value.voice_enabled);voices_.character_switches(value.character_voice);system_sounds_.settings(value.effective_master(),value.effective_effects());
     dialogue_.settings(dialogue);script::SelectionSettings selection;selection.skin=value.skin;selection.replay=replay_mode_;selection_.settings(selection);controls_.auto_delay(value.auto_ticks);skip_read_only_=value.skip_read_only;preferences_=value;
     movies_.gain(value.movie_amplitude());
 }
@@ -117,11 +117,11 @@ script::RunState Scene::update(std::int64_t monotonic_us,Input input){
     else if(auto selected=selection_.input(input.selection))choose(*selected);
     input_=input;milliseconds_=timeline_.milliseconds();++statistics_.ticks;
     if(input_.toggle_window){window_visible_=!window_visible_;dialogue_.visible(window_visible_);}
-    if(input_.advance){window_visible_=true;dialogue_.visible(true);dialogue_.advance();}
+    if(input_.advance){window_visible_=true;dialogue_.visible(true);if(preferences_.cut_voice_on_advance && !controls_.modes().demo_mode && dialogue_.phase()==script::DialoguePhase::waiting)voices_.stop(0);dialogue_.advance();}
     if(dialogue_.phase()==script::DialoguePhase::waiting && controls_.automatic_advance())dialogue_.advance();
-    const auto duration=[this](std::int32_t frames){return skipping()?0:frames==-1?15:frames==-2?30:frames;};
+    const auto duration=[this](std::int32_t frames){return preferences_.transition_frames(frames,skipping());};
     movies_.update(monotonic_us);music_.update(duration);effects_.update(duration);voices_.update(duration);weather_.update();shake_.update(duration);
-    backgrounds_.update(duration);colour_.update(duration);bitmaps_.update(duration);characters_.update(duration);dialogue_.update(skipping());
+    backgrounds_.update(duration);colour_.update(duration);bitmaps_.update(duration);characters_.update(duration);dialogue_.update(skipping(),preferences_.transition_wait);
     calendar_.update([this](auto frames){return skipping()?frames/3:frames;});
     if(background_changing_ && !backgrounds_.busy()){weather_.background_finished(backgrounds_.picture());bitmaps_.clear_retired();characters_.clear_retired();background_changing_=false;}
     const auto state=session_.advance([this](auto& call){return command(call);});captions_.update(std::uint64_t(monotonic_us)/1000);selection_.sync(choices_);selection_.update(duration);

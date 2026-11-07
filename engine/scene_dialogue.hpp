@@ -8,7 +8,7 @@
 namespace wa2::script {
 enum class DialoguePhase {closed,opening,typing,waiting,complete,closing};
 struct DialogueSettings {
-    int skin{},window_alpha{207},picture_alpha{134},button_alpha{134},text_step{10},open_ticks{10};
+    int skin{},window_alpha{207},picture_alpha{134},button_alpha{134},text_step{2},open_ticks{10};
     bool window{true};
     int novel_alpha{};
 };
@@ -17,7 +17,7 @@ public:
     using Loader=std::function<std::shared_ptr<image::ImageRequest>(std::string_view)>;
     SceneDialogue(text::FontBook& fonts,Loader loader,std::function<void(std::int32_t)> seen={},std::function<void()> end_message={});
     std::optional<CommandResult> dispatch(Command& command);
-    void update(bool fast_forward=false);
+    void update(bool fast_forward=false,bool transitions=true);
     void advance();
     void visible(bool value){visible_=value;}
     void settings(DialogueSettings value);

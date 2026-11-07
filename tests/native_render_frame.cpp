@@ -43,6 +43,9 @@ int main(int argc,char** argv){try{
     script.call(131,{s::Value(std::string()),s::Value(7),s::Value(1)});for(unsigned n=0;n<2;++n)script.call(208,{s::Value(std::string()),s::Value(0),s::Value(0),s::Value(0)});script.call(209,{s::Value(0)});script.call(194,{s::Value(1000),s::Value(0),s::Value(0)});script.finish();
     banks["ck-gal.pak"]=bank({{"Global.vrb",text("3,FLG_00,0\r\n")},{"LFScriptFunc.fnc",functions(0,200)},{"LFScriptFuncEx.fnc",functions(200,239)},{"1001.bnr",script.code},{"1001.txt",text(script.strings)}});
     app.start({},0);std::int64_t now{};until([&]{now+=16667;app.scene()->update(now,{true});return app.scene()->choices().active();});for(unsigned n=0;n<32;++n)app.scene()->update(now+=16667);
+    // Logical ticks do not guarantee a background worker has published its
+    // images. Wait for the owned resources used by the geometry assertions.
+    until([&]{app.scene()->update(now+=16667);return app.scene()->background().current && app.scene()->foreground().size()>=3 && app.scene()->selection().size()>=2;});
     const auto before=app.scene()->checkpoint();frame.capture(app);CHECK(frame.background().current && frame.overlays().size()>=17 && !frame.movie_active());++cases;
     const auto has=[&](int layer,int order){return std::find_if(frame.overlays().begin(),frame.overlays().end(),[&](const auto& item){return item.layer==layer && item.order==order;});};
     CHECK(has(0x104d,0x11)!=frame.overlays().end() && has(0x1054,0x12)!=frame.overlays().end() && has(0x105b,0x13)!=frame.overlays().end() && has(0x1057,0x454)!=frame.overlays().end());++cases;
