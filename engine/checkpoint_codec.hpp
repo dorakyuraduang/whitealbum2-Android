@@ -58,6 +58,7 @@ public:
     bool boolean(){const auto value=u32();if(value>1)throw std::runtime_error("Invalid native checkpoint boolean");return value!=0;}
     std::span<const std::uint8_t> blob(std::size_t maximum=maximum_bytes){const auto count=u32();if(count>maximum)throw std::runtime_error("Native checkpoint field exceeds limit");return raw(count);}
     std::string string(std::size_t maximum=1024*1024){const auto b=blob(maximum);return {reinterpret_cast<const char*>(b.data()),b.size()};}
+    bool empty()const noexcept{return at_==bytes_.size();}
     void finish()const{if(at_!=bytes_.size())throw std::runtime_error("Trailing native checkpoint data");}
 };
 }

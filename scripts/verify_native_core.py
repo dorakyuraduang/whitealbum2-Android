@@ -81,6 +81,7 @@ def main():
     inputs += [ROOT/'tests/native_legacy_save.cpp']
     inputs += [ROOT/'tests/native_gallery_progress.cpp']
     inputs += [ROOT/'tests/native_legacy_scene.cpp',ROOT/'tests/native_legacy_fixture.hpp',ROOT/'tests/native_legacy_slots.cpp']
+    inputs += [ROOT/'tests/native_character_palettes.cpp']
     inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
         ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
         ROOT/'platform/sdl_input.hpp',ROOT/'platform/sdl_input.cpp',ROOT/'platform/sdl_application.hpp',ROOT/'platform/sdl_application.cpp']
@@ -155,6 +156,7 @@ def main():
             if host=='windows':targets+=['wa2_native_legacy_save_tests']
             if host=='windows':targets+=['wa2_native_gallery_progress_tests']
             if host=='windows':targets+=['wa2_native_legacy_scene_tests','wa2_native_legacy_slots_tests']
+            if host=='windows':targets+=['wa2_native_character_palette_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
             if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_loading_cache_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
             if host=='windows':targets+=['wa2_native_desktop_tests','wa2_native_audio_level_tests']
@@ -203,6 +205,7 @@ def main():
             allowed+=('tests/native_legacy_save.cpp',)
             allowed+=('tests/native_gallery_progress.cpp',)
             allowed+=('tests/native_legacy_scene.cpp','tests/native_legacy_slots.cpp')
+            allowed+=('tests/native_character_palettes.cpp',)
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
             allowed+=('tests/native_image_wait.cpp','tests/native_loading_cache.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
@@ -330,6 +333,9 @@ def main():
                 run([directory/'wa2_native_legacy_slots_tests.exe',directory/'native-legacy-slots.json'],console,90)
                 legacy_slots=json.loads((directory/'native-legacy-slots.json').read_text())
                 if not legacy_slots['passed'] or legacy_slots['cases']<34 or legacy_slots['guards']<34 or not all(legacy_slots[key] for key in ('source_names_and_directory_precedence','native_corruption_never_falls_back','read_only_original_files','bounded_preview_without_scene_read','bgra_thumbnail_keeps_all_rows','actual_application_load_and_native_save','failed_load_preserves_live_owner','owned_desktop_files_only','synthetic_data_only')) or any(legacy_slots[key] for key in ('original_resources_opened','original_saves_opened','devices_opened','game_launched','screen_access')):raise ValueError('Read-only original manual-slot integration checks failed')
+                run([directory/'wa2_native_character_palette_tests.exe',directory/'native-character-palettes.json'],console,90)
+                character_palettes=json.loads((directory/'native-character-palettes.json').read_text())
+                if not character_palettes['passed'] or character_palettes['cases']<24 or character_palettes['guards']<12 or not all(character_palettes[key] for key in ('source_time_and_background_selection','chroma_primary_secondary_order','alpha_preserved','cg_and_reuse_keep_automatic_name','preserved_character_pixels_not_recoloured','new_images_use_new_palette','native_and_original_save_state','old_native_controls_readable','selected_failure_never_falls_back','composite_requests_do_not_reread_maps','patch_root_ic_precedence','synthetic_pixels_only')) or any(character_palettes[key] for key in ('original_resources_opened','devices_opened','game_launched','screen_access')):raise ValueError('Native automatic character palette checks failed')
                 catalogue=None
                 run([directory/'wa2_native_control_state_tests.exe',directory/'native-control-state.json'],console,90)
                 control_state=json.loads((directory/'native-control-state.json').read_text())
@@ -598,6 +604,7 @@ def main():
     report['gallery_progress']=gallery_progress
     report['legacy_scene']=legacy_scene
     report['legacy_slots']=legacy_slots
+    report['character_palettes']=character_palettes
     report['frame_driver']=frame_driver
     report['audio_binding']=audio_binding
     report['sdl_application']=sdl_application

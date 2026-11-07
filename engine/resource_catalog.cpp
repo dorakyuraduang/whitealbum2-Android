@@ -38,7 +38,7 @@ const Archive& Catalog::required(std::string_view group){
 const Archive* Catalog::optional(std::string_view group,bool introductory){
     const auto path=(introductory?"IC/":"")+group_name(group)+".pak";auto& selected=bank(path);return selected.archive?&*selected.archive:nullptr;
 }
-Catalog::Found Catalog::find(std::string_view group,std::string_view name){
+Catalog::Found Catalog::find(std::string_view group,std::string_view name,bool optional){
     filename(name);const auto pack=group_name(group)+".pak";
     // Cached 0x437820 checks patch.pak, root PAK, then IC PAK. Keep that order
     // when both chapters contain a matching filename.
@@ -46,18 +46,26 @@ Catalog::Found Catalog::find(std::string_view group,std::string_view name){
         auto& selected=bank(path);if(!selected.archive)continue;
         const auto member=selected.archive->find_first(name);if(member!=Archive::missing)return {&selected,member};
     }
-    throw Error("missing original resource "+std::string(name)+" in "+pack+"/IC");
+    if(optional)return {nullptr,Archive::missing};throw Error("missing original resource "+std::string(name)+" in "+pack+"/IC");
 }
-std::shared_ptr<image::ImageRequest> Catalog::image(std::string_view group,std::string_view name,std::int32_t chroma,std::string_view colour_map){
-    image::ImageStyle style{chroma};image::validate_image_style(style);
-    if(!colour_map.empty()){
-        filename(colour_map);std::string folded(colour_map);for(auto& ch:folded)if(ch>='A' && ch<='Z')ch+=32;
-        // The image loader resolves AMP effects through its default grp bank,
-        // independently of whether the image itself belongs to bak or char.
-        const auto key=std::pair{std::string("grp"),std::move(folded)};
-        if(const auto found=colours_.find(key);found!=colours_.end())style.colours=found->second.lock();
-        if(!style.colours){const auto selected=find("grp",colour_map);style.colours=intern_colour(std::make_shared<const image::ColourMap>(image::parse_colour_map(selected.bank->archive->load(selected.member,1280))));
-            std::erase_if(colours_,[](const auto& item){return item.second.expired();});colours_[key]=style.colours;}
+bool Catalog::contains(std::string_view group,std::string_view name){return find(group,name,true).bank!=nullptr;}
+void Catalog::retain_colour(const std::shared_ptr<const image::ColourMap>& value){
+    std::erase(retained_colours_,value);retained_colours_.push_back(value);if(retained_colours_.size()>32)retained_colours_.erase(retained_colours_.begin());
+}
+std::shared_ptr<const image::ColourMap> Catalog::colour_map(std::string_view name){
+    if(name.empty())return {};filename(name);std::string folded(name);for(auto& ch:folded)if(ch>='A' && ch<='Z')ch+=32;
+    // The source's default grp bank supplies both maps. Keep a small warm set
+    // because an effective composite table need not retain its input tables.
+    const auto key=std::pair{std::string("grp"),std::move(folded)};
+    if(const auto found=colours_.find(key);found!=colours_.end())if(auto existing=found->second.lock()){retain_colour(existing);return existing;}
+    const auto selected=find("grp",name);auto result=intern_colour(std::make_shared<const image::ColourMap>(image::parse_colour_map(selected.bank->archive->load(selected.member,1280))));
+    std::erase_if(colours_,[](const auto& item){return item.second.expired();});colours_[key]=result;retain_colour(result);return result;
+}
+std::shared_ptr<image::ImageRequest> Catalog::image(std::string_view group,std::string_view name,std::int32_t chroma,std::string_view primary,std::string_view secondary){
+    image::ImageStyle style{chroma};image::validate_image_style(style);style.colours=colour_map(primary);
+    if(auto effect=colour_map(secondary)){
+        if(!style.colours)style.colours=std::move(effect);
+        else{auto combined=std::make_shared<image::ColourMap>();for(unsigned channel=0;channel<3;++channel)for(unsigned value=0;value<256;++value)combined->channels[channel][value]=effect->channels[channel][style.colours->channels[channel][value]];style.colours=intern_colour(std::move(combined));}
     }
     auto selected=find(group,name);if(!selected.bank->images)selected.bank->images=std::make_unique<image::ImageStore>(*selected.bank->archive);
     return selected.bank->images->request(selected.bank->archive->members()[selected.member].name,std::move(style));

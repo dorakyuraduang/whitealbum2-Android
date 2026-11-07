@@ -34,7 +34,9 @@ Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<prog
     backgrounds_([this](auto name){return resources_.image("bak",name,controls_.modes().background_chroma,controls_.modes().background_effect);},[this](bool keep_characters){bitmaps_.clear_retired();characters_.clear_retired();background_changing_=true;preserve_characters_=keep_characters;bitmaps_.retire_background();if(!keep_characters)characters_.retire_background();},
         [this](auto name){return resources_.image("grp",name);},[this](auto name){return resources_.image("grp",name,controls_.modes().background_chroma,controls_.modes().background_effect);},[this](auto bank,auto index){progress_.event_image(bank,index);}),
     bitmaps_([this](auto name,auto group,auto){return resources_.image(group,name);},[this](auto name,auto group){return image::Animation::parse(resources_.data(group,name));},[this](auto name){progress_.image_file(name);}),
-    characters_([this](auto name){return resources_.image("char",name,controls_.modes().character_chroma,controls_.modes().character_effect);}),
+    characters_([this](auto name){const auto& mode=controls_.modes();std::string_view automatic=mode.automatic_palette;
+        if(automatic.empty() || !resources_.contains("grp",automatic)){switch(mode.time){case 0:automatic={};break;case 1:automatic="evening.amp";break;case 2:automatic="night.amp";break;case 3:automatic="indoor.AMP";break;default:throw script::Unsupported("Automatic character palette for time mode "+std::to_string(mode.time));}}
+        return resources_.image("char",name,mode.character_chroma,automatic,mode.character_effect);}),
     dialogue_(fonts_,[this](auto name){return resources_.image("grp",name);},[this](auto line){
         reading_.seen(session_.active()?session_.active()->program().name():statistics_.scene,line);controls_.reset_message_timer();++statistics_.messages;},[this]{shake_.end_message();}),
     movies_([this](auto name,auto record)->std::unique_ptr<movie::Playback>{return services_.movie?services_.movie(name,record):std::make_unique<movie::Player>(resources_.movie(name),mixer_);},[this]{
@@ -139,7 +141,12 @@ script::CommandResult Scene::command(script::Command& call){
     if(auto value=colour_.dispatch(call))return *value;
     if(auto value=bitmaps_.dispatch(call))return *value;
     if(auto value=characters_.dispatch(call))return *value;
-    if(auto value=backgrounds_.dispatch(call,controls_.modes().time)){dialogue_.picture(backgrounds_.picture());return *value;}
+    {const bool first=!call.continuation;
+        if(auto value=backgrounds_.dispatch(call,controls_.modes().time)){
+            if(first && (call.index==146 || call.index==147 || call.index==225 || call.index==226) && call.arguments[1].integer()!=-2){std::array<char,32> name{};std::snprintf(name.data(),name.size(),"B%04d%d%d.amp",int(call.arguments[1].integer()),int(call.arguments[2].integer()),int(controls_.modes().time));controls_.automatic_palette(name.data());}
+            dialogue_.picture(backgrounds_.picture());return *value;
+        }
+    }
     if(auto value=movies_.dispatch(call))return *value;
     throw script::Unsupported("Native game command is not implemented: "+std::to_string(call.index)+" "+library_.functions().at(call.index).name+
         " in scene "+(session_.active()?session_.active()->program().name():std::string()));

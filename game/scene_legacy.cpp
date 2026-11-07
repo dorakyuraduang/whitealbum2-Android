@@ -50,6 +50,7 @@ std::unique_ptr<Scene> Scene::restore_legacy(resource::BankOpener opener,std::sh
     // restores neither a skip latch nor a serialized source wait counter.
     checkpoint::Writer control;for(auto value:{data.integer(0x4c),data.integer(0x54),data.integer(0x58),0,data.integer(0x110c),data.integer(0x1114),0,0,preferences.auto_ticks})control.i32(value);
     control.string(data.text(0x7c,32));control.string(data.text(0x9c,32));for(unsigned n=0;n<3;++n)control.boolean(false);for(unsigned n=0;n<4;++n)control.u32(0);control.i32(data.integer(0xef0));next->controls_.restore(control.seal("LSCT"));
+    next->controls_.automatic_palette(data.text(0x5c,32));
     next->reading_.enter(next->statistics_.scene);const auto reading_bytes=next->reading_.checkpoint();auto reading=checkpoint::Reader::open("LSRH",reading_bytes);auto reading_scene=reading.string(240);const auto reading_index=reading.u32();checkpoint::Writer position;position.string(reading_scene);position.u32(reading_index);position.i32(data.signed_word(0x220));position.i32(0);next->reading_.restore(position.seal("LSRH"));
     // Resolve immutable pixels through this final owner's catalogue. Temporary
     // visual controllers have no gallery/reading callbacks and never run LSCR.

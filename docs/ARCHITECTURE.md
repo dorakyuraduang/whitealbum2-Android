@@ -305,6 +305,29 @@ same-filename reuse for subsequent character commands. Static resource checks
 parse the main-story negative/sepia maps; only constructed pixels are converted
 by tests. Native backdrop/audio settings and full application UI remain pending.
 
+Character image loads also follow the cached automatic palette selection. A
+present background-specific `Bxxxxxx.amp` takes precedence; otherwise time modes
+0/1/2/3 choose no table, evening, night or indoor. A new B/BC/B2/BC2 changes the
+automatic filename, while CGs, background reuse and a time assignment retain it.
+Preserved character pixels remain unchanged until a different image is loaded,
+matching the source's same-image reuse. Pixel conversion applies chroma, the
+automatic table and then the explicit effect, with alpha retained. The catalogue
+composes the two tables once during image selection and interns the effective
+style. A warm set of at most 32 input tables (24 KiB of lookup bytes) avoids
+repeated AMP reads when only composite styles remain active. No additional
+per-sprite or per-frame pixel conversion is introduced. Existing patch/root/IC
+selection and provider/corruption errors remain explicit.
+
+An optional marked LSCT extension preserves the automatic filename. Older
+native control records without it still load; unknown markers, malformed names
+and trailing data fail before state publication. Original version-2 scene
+conversion reads the corresponding saved filename as ordinary format data.
+Twenty-four constructed-pixel/script cases and twelve guards check all time
+defaults, both palette stages with noncommuting tables, CG/reuse/BC retention,
+native/original save state, source precedence and warm composite reuse without
+AMP reads. These are memory checks; original pixels, physical colour output and
+device performance are not inspected or claimed.
+
 The native scene's embedded main-story captions now receive typed speech and
 effect lifecycle events. Pending captions wait for their asynchronous voice to
 be ready; prepared effects do not start captions before playback. Stop events

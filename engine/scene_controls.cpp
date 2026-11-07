@@ -3,6 +3,9 @@
 #include <bit>
 
 namespace wa2::script {
+namespace {
+void palette_name(std::string_view value){if(value.size()>31 || value.find('\0')!=std::string_view::npos || value.find_first_of("/\\")!=std::string_view::npos)throw Error("Invalid automatic character palette name");}
+}
 SceneControls::SceneControls(Milliseconds clock,std::function<bool()> interrupt_timer,std::function<bool()> interrupt_wait,std::function<bool()> skipping,std::function<std::int32_t()> readable)
     :clock_(std::move(clock)),interrupt_timer_(std::move(interrupt_timer)),interrupt_wait_(std::move(interrupt_wait)),skipping_(std::move(skipping)),readable_(std::move(readable)){
     if(!clock_)throw Error("missing native scene clock");
@@ -78,16 +81,19 @@ bool SceneControls::automatic_advance(){
     if(interrupt_wait_ && interrupt_wait_() && readable_ && readable_()!=0){message_elapsed_=0;return true;}
     return false;
 }
+void SceneControls::automatic_palette(std::string value){palette_name(value);modes_.automatic_palette=std::move(value);}
 std::vector<std::uint8_t> SceneControls::checkpoint()const{
     checkpoint::Writer out;
     for(auto v:{modes_.time,modes_.background_chroma,modes_.character_chroma,modes_.log_output,modes_.voice_chapter,modes_.voice_offset,modes_.demo_mode,modes_.demo_ticks,modes_.auto_ticks})out.i32(v);
     out.string(modes_.background_effect);out.string(modes_.character_effect);out.boolean(modes_.draw_requested);out.boolean(modes_.auto_mode);out.boolean(modes_.latched_skip);
-    out.u32(timer_origin_);out.u32(wait_counter_);out.u32(wait_value_);out.u32(message_elapsed_);out.i32(modes_.adult_mode);return out.seal("LSCT");
+    out.u32(timer_origin_);out.u32(wait_counter_);out.u32(wait_value_);out.u32(message_elapsed_);out.i32(modes_.adult_mode);out.u32(0x504d4341);out.string(modes_.automatic_palette);return out.seal("LSCT");
 }
 void SceneControls::restore(std::span<const std::uint8_t> bytes){
     auto in=checkpoint::Reader::open("LSCT",bytes);SceneModes next;
     next.time=in.i32();next.background_chroma=in.i32();next.character_chroma=in.i32();next.log_output=in.i32();next.voice_chapter=in.i32();next.voice_offset=in.i32();next.demo_mode=in.i32();next.demo_ticks=in.i32();next.auto_ticks=in.i32();
     next.background_effect=in.string(4096);next.character_effect=in.string(4096);next.draw_requested=in.boolean();next.auto_mode=in.boolean();next.latched_skip=in.boolean();
-    const auto timer=in.u32(),counter=in.u32(),wait=in.u32(),elapsed=in.u32();next.adult_mode=in.i32();in.finish();modes_=std::move(next);timer_origin_=timer;wait_counter_=counter;wait_value_=wait;message_elapsed_=elapsed;
+    const auto timer=in.u32(),counter=in.u32(),wait=in.u32(),elapsed=in.u32();next.adult_mode=in.i32();
+    if(!in.empty()){if(in.u32()!=0x504d4341)throw Error("Unknown saved automatic palette extension");next.automatic_palette=in.string(31);palette_name(next.automatic_palette);}
+    in.finish();modes_=std::move(next);timer_origin_=timer;wait_counter_=counter;wait_value_=wait;message_elapsed_=elapsed;
 }
 }

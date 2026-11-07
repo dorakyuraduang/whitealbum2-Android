@@ -14,15 +14,19 @@ class Catalog {
     std::map<std::string,std::shared_ptr<Source>,std::less<>> movies_;
     std::map<std::pair<std::string,std::string>,std::weak_ptr<const image::ColourMap>> colours_;
     std::vector<std::weak_ptr<const image::ColourMap>> restored_colours_;
+    std::vector<std::shared_ptr<const image::ColourMap>> retained_colours_;
     std::shared_ptr<const image::ColourMap> intern_colour(std::shared_ptr<const image::ColourMap>);
+    std::shared_ptr<const image::ColourMap> colour_map(std::string_view);
+    void retain_colour(const std::shared_ptr<const image::ColourMap>&);
     Bank& bank(std::string_view path);
     struct Found {Bank* bank;std::size_t member;};
-    Found find(std::string_view group,std::string_view name);
+    Found find(std::string_view group,std::string_view name,bool optional=false);
 public:
     explicit Catalog(BankOpener opener);
     const Archive& required(std::string_view group);
     const Archive* optional(std::string_view group,bool introductory=false);
-    std::shared_ptr<image::ImageRequest> image(std::string_view group,std::string_view name,std::int32_t chroma=256,std::string_view colour_map={});
+    bool contains(std::string_view group,std::string_view name);
+    std::shared_ptr<image::ImageRequest> image(std::string_view group,std::string_view name,std::int32_t chroma=256,std::string_view colour_map={},std::string_view secondary_map={});
     std::shared_ptr<image::ImageRequest> image(const image::Reference&);
     image::Reference reference(const std::shared_ptr<image::ImageRequest>&)const;
     image::Reference reference(const std::shared_ptr<const image::Raster>&)const;

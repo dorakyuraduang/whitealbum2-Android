@@ -5,6 +5,7 @@ namespace wa2::script {
 struct SceneModes {
     std::int32_t time{},background_chroma{},character_chroma{},log_output{};
     std::string background_effect,character_effect;
+    std::string automatic_palette;
     std::int32_t voice_chapter{-1},voice_offset{};
     std::int32_t adult_mode{};
     std::int32_t demo_mode{},demo_ticks{},auto_ticks{};
@@ -26,6 +27,7 @@ public:
     void auto_mode(bool value,std::int32_t ticks){modes_.auto_mode=value;modes_.auto_ticks=ticks;message_elapsed_=0;}
     void auto_delay(std::int32_t ticks)noexcept{modes_.auto_ticks=ticks;}
     void latched_skip(bool value){modes_.latched_skip=value;}
+    void automatic_palette(std::string value);
     std::vector<std::uint8_t> checkpoint()const;
     void restore(std::span<const std::uint8_t> bytes);
 private:

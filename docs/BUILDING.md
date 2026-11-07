@@ -60,6 +60,14 @@ check matches the actual Java descriptors for original-save metadata/open calls
 with the linked JNI literals. Original PAKs and manual saves stay external;
 the Android provider itself is not run by these checks.
 
+`native-character-palettes.json` checks automatic background/time palette
+selection and the source chroma/primary/secondary order using owned TGA and AMP
+bytes. It also covers preserved characters, CG/reuse state, native and original
+save conversion, old control-record compatibility and composite cache reuse.
+The image-style, control-state, scene-checkpoint and loading-cache checks cover
+the related shared paths. No original image is decoded and no display, game or
+performance test is run by this check.
+
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional
 restore failures and conditionally visible selections. `--resource-root res`
