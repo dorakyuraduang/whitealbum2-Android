@@ -16,7 +16,7 @@ void SdlInput::begin_frame(){
 }
 void SdlInput::position(float x,float y){
     if(coordinates_){const auto point=coordinates_(x,y);x=point.first;y=point.second;}
-    if(std::isfinite(x) && std::isfinite(y)){snapshot_.x=x;snapshot_.y=y;}
+    if(std::isfinite(x) && std::isfinite(y)){snapshot_.x=x;snapshot_.y=y;snapshot_.pointer=true;}
 }
 void SdlInput::button(unsigned index){
     const auto down=mouse_buttons_.at(index)||(index==0 && finger_.has_value());
@@ -25,7 +25,7 @@ void SdlInput::button(unsigned index){
     }
 }
 void SdlInput::release_all(){
-    snapshot_.released_keys|=snapshot_.keys;snapshot_.keys.reset();mouse_buttons_.fill(false);finger_.reset();
+    snapshot_.released_keys|=snapshot_.keys;snapshot_.keys.reset();mouse_buttons_.fill(false);finger_.reset();snapshot_.pointer=false;
     for(unsigned i=0;i<5;++i)button(i);
 }
 void SdlInput::consume(const SDL_Event& event){

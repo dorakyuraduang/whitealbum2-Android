@@ -13,7 +13,7 @@ struct InputSnapshot {
     std::bitset<SDL_NUM_SCANCODES> keys,pressed_keys,released_keys;
     std::bitset<5> buttons,pressed_buttons,released_buttons;
     float x{},y{},wheel_x{},wheel_y{};
-    bool quit{},focused{true},background{},minimized{},renderer_reset{};
+    bool pointer{},quit{},focused{true},background{},minimized{},renderer_reset{};
 };
 class SdlInput {
 public:

@@ -57,6 +57,9 @@ def main():
     inputs += [ROOT/'tests/native_title_scene.cpp']
     inputs += [ROOT/'tests/native_render_frame.cpp',ROOT/'platform/sdl_movie.cpp',ROOT/'platform/sdl_movie.hpp',ROOT/'platform/sdl_presentation.cpp',ROOT/'platform/sdl_presentation.hpp']
     inputs += [ROOT/'tests/native_movie_state.cpp']
+    inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
+        ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
+        ROOT/'platform/sdl_input.hpp',ROOT/'platform/sdl_input.cpp',ROOT/'platform/sdl_application.hpp',ROOT/'platform/sdl_application.cpp']
     inputs += [ROOT/'tests/native_preference_storage.cpp',ROOT/'platform/private_file.cpp',ROOT/'platform/private_file.hpp',ROOT/'platform/preference_storage.cpp',ROOT/'platform/preference_storage.hpp']
     inputs += [p for folder in ('engine','game') for p in (ROOT/folder).glob('*') if p.suffix in ('.cpp','.hpp','.inc','.cmake','.txt')]
     inputs += [p for p in (ROOT/'third_party/wa2_subtitles').glob('*.inc')]
@@ -73,7 +76,7 @@ def main():
             if status:raise subprocess.CalledProcessError(status,command)
     def output(command):
         return subprocess.run(list(map(str,command)),cwd=ROOT,env=env,creationflags=flags,capture_output=True,text=True,encoding='utf-8',errors='replace',check=True,timeout=60).stdout
-    sources={};artifacts={};codec_bindings={};composition_state=None;composition_artifact=None
+    sources={};artifacts={};codec_bindings={};composition_state=None;composition_artifact=None;sdl_application=None;input_state=None
     composition_sdl_sha=digest(args.sdl_archive) if args.sdl_archive else None
     shader_compiler_sha=digest(args.shader_compiler);mask_shader_checks=[]
     with (ROOT/'logs/native-core-build.log').open('wb') as console:
@@ -99,8 +102,10 @@ def main():
             if host=='windows':targets+=['wa2_native_title_scene_tests']
             if host=='windows':targets+=['wa2_native_render_frame_tests']
             if host=='windows':targets+=['wa2_native_movie_state_tests']
+            if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
             if host=='windows' and args.resource_root:targets.append('wa2_native_script_catalogue_tests')
             if host=='windows' and args.sdl_archive:targets.append('wa2_native_scene_composition_tests')
+            if host=='windows' and args.sdl_archive:targets+=['wa2_native_sdl_application_tests','wa2_native_input_tests']
             if host=='windows':targets.append('wa2_native_mask_source_tests')
             run([cmake,'--build',directory,'--target',*targets,'--parallel','1'],console,2400)
             commands=json.loads((directory/'compile_commands.json').read_text())
@@ -119,6 +124,8 @@ def main():
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
+            allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
+                'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
             if any(not name.startswith(allowed) for name in names):raise ValueError('Non-native source in core compile graph: '+str(sorted(names)))
             # Inspect the actual Ninja dependency closure, not only filenames in
             # a CMake declaration. No old AOT archive can hide in the link inputs.
@@ -286,6 +293,12 @@ def main():
                 run([directory/'wa2_native_movie_state_tests.exe',directory/'native-movie-state.json'],console,90)
                 movie_state=json.loads((directory/'native-movie-state.json').read_text())
                 if not movie_state['passed'] or movie_state['cases']<28 or movie_state['guards']<12 or not movie_state['source_preplay_audio_order'] or not movie_state['movie_gain_follows_preferences'] or not movie_state['visual_state_preserved'] or not movie_state['services_survive_save_load'] or not movie_state['fake_transports_only'] or not movie_state['synthetic_resources_only'] or movie_state['original_resources_opened'] or movie_state['devices_opened'] or movie_state['game_launched'] or movie_state['screen_access']:raise ValueError('Native movie integration checks failed')
+                run([directory/'wa2_native_frame_driver_tests.exe',directory/'native-frame-driver.json'],console,90)
+                frame_driver=json.loads((directory/'native-frame-driver.json').read_text())
+                if not frame_driver['passed'] or frame_driver['cases']<27 or frame_driver['guards']<16 or frame_driver['logic_hz']!=60 or not frame_driver['bounded_catch_up'] or not frame_driver['shared_skip_budget'] or not frame_driver['queued_click_keeps_position'] or not frame_driver['synthetic_clock_and_scripts_only'] or frame_driver['performance_benchmark'] or frame_driver['original_resources_opened'] or frame_driver['devices_opened'] or frame_driver['game_launched'] or frame_driver['screen_access']:raise ValueError('Native frame driver checks failed')
+                run([directory/'wa2_native_audio_binding_tests.exe',directory/'native-audio-binding.json'],console,90)
+                audio_binding=json.loads((directory/'native-audio-binding.json').read_text())
+                if not audio_binding['passed'] or audio_binding['cases']<14 or audio_binding['guards']<5 or audio_binding['peak_live_outputs']!=1 or not audio_binding['mixer_alive_until_detach'] or not audio_binding['unchanged_owner_keeps_output'] or not audio_binding['fake_outputs_only'] or audio_binding['devices_opened'] or audio_binding['game_launched'] or audio_binding['screen_access']:raise ValueError('Native audio binding checks failed')
                 shader_directory=directory/'mask-shaders'
                 run([directory/'wa2_native_mask_source_tests.exe',shader_directory],console,90)
                 for profile in ('desktop','embedded'):
@@ -300,6 +313,14 @@ def main():
                     if any(token in composition_graph for token in forbidden):raise ValueError('AOT dependency in owned-memory composition test')
                     composition_artifact=dict(sha256=digest(directory/'wa2_native_scene_composition_tests.exe'),
                         native_link_graph_sha256=hashlib.sha256(composition_graph.encode()).hexdigest())
+                    run([directory/'wa2_native_sdl_application_tests.exe',directory/'native-sdl-application.json'],console,90)
+                    sdl_application=json.loads((directory/'native-sdl-application.json').read_text())
+                    if not sdl_application['passed'] or sdl_application['cases']<17 or sdl_application['guards']<2 or not sdl_application['owned_memory_only'] or not sdl_application['fake_audio_outputs_only'] or not sdl_application['actual_present_hook'] or not sdl_application['synthetic_event_structs_only'] or sdl_application['os_event_queue_polled'] or sdl_application['original_resources_opened'] or sdl_application['windows_created'] or sdl_application['devices_opened'] or sdl_application['game_launched'] or sdl_application['screen_access']:raise ValueError('Native SDL application pump checks failed')
+                    sdl_graph=output([ninja,'-C',directory,'-t','graph','wa2_native_sdl_application_tests.exe']).replace('\\','/').lower()
+                    if any(token in sdl_graph for token in forbidden):raise ValueError('AOT dependency in owned-memory application pump test')
+                    run([directory/'wa2_native_input_tests.exe',directory/'native-input.json'],console,90)
+                    input_state=json.loads((directory/'native-input.json').read_text())
+                    if not input_state['passed'] or input_state['cases']<14 or not input_state['synthetic_event_structs_only'] or input_state['os_event_queue_polled'] or input_state['os_input_injected'] or input_state['windows_created'] or input_state['screen_access'] or input_state['game_launched']:raise ValueError('Native synthetic input checks failed')
                 if args.resource_root:
                     run([directory/'wa2_native_script_catalogue_tests.exe',args.resource_root.resolve(),directory/'native-script-catalogue.json'],console,90)
                     catalogue=json.loads((directory/'native-script-catalogue.json').read_text())
@@ -337,6 +358,10 @@ def main():
     report['title_scene']=title_scene
     report['render_frame']=render_frame
     report['movie_state']=movie_state
+    report['frame_driver']=frame_driver
+    report['audio_binding']=audio_binding
+    report['sdl_application']=sdl_application
+    report['input_state']=input_state
     (ROOT/'logs/native-core-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print('PASS shared native core: '+str(len(sources['windows']))+' identical common sources, full link on x64/ARM64, no AOT dependency. This is not a complete game.',flush=True)
 

@@ -499,7 +499,7 @@ these transitions, startup branches and audio/resource policy. Music/movie
 services are fakes; system cue PCM and all scripts/images/PAKs are constructed
 in memory. This does not verify a movie decoder on a device or visual parity.
 The remaining full options/save/load/extras/backlog page views and production
-host loop still need completion before this is a complete native game.
+entry integration still need completion before this is a complete native game.
 
 Story `SetMovie` now uses the cached pre-play audio sequence: stop speech
 channel 0, then every one-shot, looping and prepared effect. Other speech
@@ -547,6 +547,37 @@ device audio and the final present. Finite software composition checks use a
 64x36 owned memory surface, generated solid colours and small constructed YUV
 planes in forty-five cases; they create no window or SDL video/audio/event device. These checks do
 not validate the original game's full visual output or hardware performance.
+
+`game/frame_driver.*` provides one wall-clock scheduler for all native hosts.
+Normal logic remains exactly 60 Hz across 30/60/120/240 Hz presentation schedules.
+Integer remainder clocks avoid long-term rounding drift and large timestamp
+multiplication overflow. A stall permits at most eight normal catch-up updates
+and drops excess work; only the final due update may use the remaining shared
+skip budget. Eight catch-up updates cannot each obtain a fresh 2 ms skip budget.
+Background suspension clears pending edges and catch-up debt; resuming makes
+one immediate normal update without replaying stale gestures. Queued clicks
+retain their press coordinates while subsequent motion changes hover position.
+Constructed clocks/scripts check these rules without measuring device FPS.
+
+`platform/audio_binding.*` retains each mixer until its device callback is
+detached. Unchanged ownership keeps the existing output; title/story/load
+handoffs close the old output before opening a new one, with no overlapping
+devices. Factory/open/close failures preserve ownership through cleanup and
+report errors. The destructor also detaches safely if teardown reports failure.
+Fake outputs check close/destruction ordering and that at most one is active.
+
+`platform/sdl_application.*` connects the common driver, SDL input translation,
+frame snapshot, presentation and audio binding. Hosts supply the application,
+canvas, event collector, monotonic clock, wait adapter and successful-present
+callback. Mouse/touch hover is tracked explicitly; existing Android gesture
+adaptation supplies Ctrl for enabled long-press skip instead of a second
+unconditional native timer. The common pump uses host-provided resource/storage
+adapters and never creates a window or selects a platform-specific script engine. Its owned-memory checks
+exercise rendering, actual-present counting, cache reset, background suspension
+and scene/mixer replacement using fake device outputs and constructed events.
+The full loop is compiled, not run, during development; tests never poll an OS
+event queue. Native entry/storage integration and complete modal pages remain
+pending, so this is still not a launchable complete game release.
 
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate
