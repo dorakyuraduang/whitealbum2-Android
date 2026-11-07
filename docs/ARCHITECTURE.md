@@ -750,18 +750,22 @@ the shared settings view, matching the cached source's 0/1 branches. The latter
 persists from its actual option cell, suspends story logic before processing that
 click, and consumes the closing click before resuming. Missing settings services
 and missing save services (source policy 2) fail before changing story/navigation.
-Policy 2 now opens the common save view when its services are prepared. The full
-settings page is still incomplete. Display-mode changes require the window
-adapter described below; options over another modal page fail explicitly.
-Skin/colour selection popup behavior, held-button repetition and the original captured
-parent-image zoom are pending. The current compositor retains the live parent
-scene beneath the options overlay. Persisting confirmation/window policies is
-not a claim that every action using them has been implemented.
+Policy 2 now opens the common save view when its services are prepared.
+Display-mode changes require the window adapter described below; options over
+another modal page fail explicitly. The current compositor retains the frozen
+parent scene beneath the options overlay. Cached 4222ed..42237c and
+422c38..422ce7 now supply its missing left header: chapter themes 0/1/2 select
+sys_05010/05011/05012, while title and later themes select sys_04010. The first
+three use source/destination Y 16 and require 184 atlas rows for their 168-row
+crop; the full header starts at zero. Header/chrome zoom is about 640/360 and
+travels between 1.1 and 1 during the fifteen-tick fade. The header remains
+owned across tab changes. The cached options path uses press edges and drag
+state; speculative held-arrow or captured-parent zoom features are not added.
 
-The native story engine remains incomplete: full options/extras views,
-production host integration and unsupported render/animation/
-weather modes still need native implementations or integration. Source manual
-save and INI conversion are also unfinished. No whole-game or device/performance
+The native story engine remains unverified as a complete game. Shared page
+views, production host builds and original INI import are described below;
+unsupported render/animation/weather modes still fail explicitly. Original
+manual-save conversion is unfinished. No whole-game or device/performance
 claim follows from these component checks. Existing generated C++/CFG is a
 development reference, never a native-runtime dependency.
 
@@ -871,9 +875,9 @@ result appears. Modal loading, closing and result timers freeze in the
 background; the original scene's mixer continues in the foreground. Failed
 loads keep the old scene; read/write failures clear the operation, report the
 error and rebase input/time before resuming. Manual-save completion uses the
-same result atlas instead of cropping a dialogue background. The captured
-parent-image transitions of options/save menus remain unfinished; the backlog
-source itself enters and leaves directly (403850 and 403e00). Cached source
+same result atlas instead of cropping a dialogue background. Menu chrome uses
+its source centre-based zoom; the backlog itself enters and leaves directly
+(403850 and 403e00). Cached source
 41247c..41250d gates
 each recorded voice control using its first speaker and the existing ten
 character switches (406410); master/global speech mute does not disable that

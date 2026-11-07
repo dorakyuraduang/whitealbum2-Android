@@ -1,5 +1,6 @@
 #include "save_view.hpp"
 #include "menu_digits.hpp"
+#include "menu_header.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -25,7 +26,7 @@ std::string SaveView::name(unsigned index)const{
     if(index==0)return context_.mode==SaveMode::save?"sys_01000.tga":"sys_02000.tga";
     if(index==3)return context_.mode==SaveMode::save?"sys_01011.tga":"sys_02011.tga";
     if(index<12)return std::string(common[index]);
-    if(index==12)return context_.title || context_.theme>2?"sys_04010.tga":"sys_0501"+std::to_string(context_.theme)+".tga";
+    if(index==12)return std::string(menu_header(context_.theme,context_.title).name);
     if(index==13)return "sys_"+std::to_string(context_.skin)+"0110.tga";
     if(index==14)return "sys_02030.tga";if(index==15)return "sys_02031.tga";if(index==16)return "sys_02050.tga";
     if(index==17)return "sys_"+std::to_string(context_.skin)+"0011.tga";
@@ -45,7 +46,7 @@ void SaveView::prepare(SaveContext context,std::span<const SaveSlotInfo> invento
 }
 bool SaveView::images(){
     for(unsigned issued=0;image_next_<images_.size();){if(image_next_>=14 && image_next_<18 && context_.mode==SaveMode::save){++image_next_;continue;}if(!image_request_){if(issued==2)return false;image_request_=loader_(name(image_next_));++issued;if(!image_request_)throw script::Error("Missing native save image request");}
-        auto value=image_request_->get();if(!value)return false;if(value->width<widths[image_next_] || value->height<heights[image_next_])throw script::Unsupported("Native save atlas dimensions are not supported");images_[image_next_++]=std::move(value);image_request_.reset();}
+        auto value=image_request_->get();if(!value)return false;const auto height=image_next_==12?menu_header(context_.theme,context_.title).minimum_height:heights[image_next_];if(value->width<widths[image_next_] || value->height<height)throw script::Unsupported("Native save atlas dimensions are not supported");images_[image_next_++]=std::move(value);image_request_.reset();}
     return true;
 }
 bool SaveView::poll(PageData& data){
@@ -117,7 +118,7 @@ void SaveView::draw(){
     const auto item=[&](unsigned n,float x,float y,float w,float h,float sx,float sy,int layer,int order,float alpha,float zoom=1){push(images_[n],x,y,w,h,sx,sy,layer,order,alpha,zoom);};
     push(black_,0,0,1280,720,0,0,0x1061,0x4a8,128*whole);sprites_.back().source_width=sprites_.back().source_height=1;
     item(0,0,-32*(1-whole),1280,40,0,0,0x1062,0x4a4,256*whole);item(1,-64,664+32*(1-whole),1280,56,0,0,0x1062,0x4a5,256*whole);
-    const bool full_header=context_.title || context_.theme>2;item(12,40,full_header?0:16,304,168,0,full_header?0:16,0x1062,0x4a7,256*whole);
+    const auto header=menu_header(context_.theme,context_.title);item(12,40,float(header.y),304,168,0,float(header.y),0x1062,0x4a7,256*whole);
     item(5,440,64,840,48,0,0,0x1063,0x4fe,256*whole);item(5,440,64,840,48,0,48,0x1062,0x4ff,256*whole);
     for(unsigned n=0;n<10;++n){const auto selected=page_==n;item(6,float(624+n*64),72,64,32,float(n*64),selected?0:focus_==10+n?64:32,selected?0x1064:0x1062,0x4e0+int(n),256*whole);}
     const auto status=[&](unsigned id){return pressed_==id?2:focus_==id?1:0;};item(8,440,600,48,64,float(status(21)*48),0,0x1063,0x4ab,256*whole);item(8,792,600,48,64,float(status(22)*48),64,0x1063,0x4ac,256*whole);item(8,496,608,288,40,144,0,0x1063,0x4fc,256*whole);item(9,1164,688,56,24,0,float(status(20)*24),0x1063,0x4ad,256*whole);

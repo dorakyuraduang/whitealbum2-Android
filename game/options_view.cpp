@@ -1,4 +1,5 @@
 #include "options_view.hpp"
+#include "menu_header.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -46,8 +47,8 @@ constexpr std::array<std::array<std::string_view,4>,3> pages{{
     {"sys_03101.tga","sys_03210.tga","sys_03211.tga","sys_03041.tga"},
     {"sys_03102.tga","sys_03220.tga","sys_03221.tga","sys_03042.tga"}
 }};
-constexpr std::array<unsigned,13> widths{1280,1280,756,576,432,208,56,1024,1024,1024,944,192,264};
-constexpr std::array<unsigned,13> heights{36,56,96,96,128,72,72,464,464,464,24,8,1008};
+constexpr std::array<unsigned,14> widths{1280,1280,756,576,432,208,56,1024,1024,1024,944,192,264,304};
+constexpr std::array<unsigned,14> heights{36,56,96,96,128,72,72,464,464,464,24,8,1008,168};
 unsigned checked(Option option){if(unsigned(option)>=count)throw script::Error("Unknown native settings field");return unsigned(option);}
 bool slider(Option option){return option==Option::auto_delay || (option>=Option::window_opacity && option<=Option::button_opacity) || (option>=Option::master_volume && option<=Option::voice_volume);}
 int upper(Option option){return option==Option::auto_delay?600:slider(option)?256:option==Option::text_speed?3:option==Option::right_click?2:1;}
@@ -67,11 +68,11 @@ OptionsView::OptionsView(Loader loader,Apply apply,Sound sound,CurrentMusic musi
     if(!loader_)throw script::Error("Missing native settings image loader");
     black_=std::make_shared<const image::Raster>(image::Raster{1,1,{0,0,0,255}});hits_.reserve(48);sprites_.reserve(64);
 }
-void OptionsView::clear(){assets_={};pending_.reset();hits_.clear();sprites_.clear();focus_.reset();drag_.reset();pressed_.reset();command_.reset();confirmation_.reset();phase_=OptionsPhase::idle;page_=elapsed_=0;}
-void OptionsView::prepare(const OptionsState& state,unsigned page,OptionsTiming timing){
-    state.validate();if(page>=3 || timing.open>600 || timing.page>600 || timing.close>600)throw script::Error("Native settings page or timing is out of range");
+void OptionsView::clear(){assets_={};pending_.reset();context_={};hits_.clear();sprites_.clear();focus_.reset();drag_.reset();pressed_.reset();command_.reset();confirmation_.reset();phase_=OptionsPhase::idle;page_=elapsed_=0;}
+void OptionsView::prepare(const OptionsState& state,unsigned page,OptionsTiming timing,OptionsContext context){
+    state.validate();if(page>=3 || timing.open>600 || timing.page>600 || timing.close>600 || context.theme<0 || context.theme>6)throw script::Error("Native settings page, timing or theme is out of range");
     Bundle next;next.page=page;next.request=loader_(common[0]);if(!next.request)throw script::Error("Missing native settings image request");
-    clear();state_=state;timing_=timing;page_=page;pending_=std::move(next);phase_=OptionsPhase::loading;
+    clear();state_=state;timing_=timing;context_=context;page_=page;pending_=std::move(next);phase_=OptionsPhase::loading;
 }
 bool OptionsView::poll(){
     auto& next=*pending_;
@@ -79,9 +80,9 @@ bool OptionsView::poll(){
     // Menu atlases cannot fill the eight-item shared image queue themselves.
     for(unsigned issued=0;next.next<next.images.size();){
         if(next.images[next.next]){++next.next;continue;}
-        if(!next.request){if(issued==2)return false;const auto name=next.next<7?common[next.next]:next.next<11?pages[next.page][next.next-7]:next.next==11?"sys_00301.tga":"sys_00300.tga";next.request=loader_(name);++issued;if(!next.request)throw script::Error("Missing native settings image request");}
+        if(!next.request){if(issued==2)return false;const std::string_view name=next.next<7?common[next.next]:next.next<11?pages[next.page][next.next-7]:next.next==11?"sys_00301.tga":next.next==12?"sys_00300.tga":menu_header(context_.theme,context_.title).name;next.request=loader_(name);++issued;if(!next.request)throw script::Error("Missing native settings image request");}
         auto image=next.request->get();if(!image)return false;
-        const auto height=next.next==10?next.page==0?216u:next.page==1?120u:24u:heights[next.next];
+        const auto height=next.next==10?next.page==0?216u:next.page==1?120u:24u:next.next==13?menu_header(context_.theme,context_.title).minimum_height:heights[next.next];
         if(image->width<widths[next.next] || image->height<height)throw script::Unsupported("Native settings atlas dimensions are not supported");
         next.images[next.next++]=std::move(image);next.request.reset();
     }
@@ -166,6 +167,10 @@ void OptionsView::draw(){
     item(0,0,-32*(1-whole),1280,40,0,0,0x1062,0x4a4,256*whole);
     item(1,0,664+32*(1-whole),1280,56,0,0,0x1062,0x4a5,256*whole);
     const auto chrome_scale=1+.1f*(1-whole);
+    const auto header=menu_header(context_.theme,context_.title);
+    // Cached 4222ed..42237c and 422c38..422ce7 select the source header;
+    // 422e4f applies the same centre-based chrome zoom, not a parent capture.
+    item(13,40,float(header.y),304,168,0,float(header.y),0x1062,0x4a7,256*whole,chrome_scale);
     const auto status=[&](unsigned id){return pressed_==id?2:focus_==id?1:0;};
     item(4,440,600,48,64,float(status(7)*48),0,0x1064,0x4a9,256*whole,chrome_scale);
     item(4,792,600,48,64,float(status(8)*48),64,0x1064,0x4aa,256*whole,chrome_scale);

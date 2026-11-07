@@ -115,7 +115,7 @@ void Application::open(Page page,std::int64_t now){
             if(next.fullscreen!=preferences().fullscreen && !display_)throw script::Unsupported("Native options display-mode adapter is not prepared");
             if(next.right_click!=preferences().right_click && next.right_click==2 && !save_services_.images)throw script::Unsupported("Native right-click save-page services are not prepared");preferences(next);},
             [this](audio::SystemCue cue){if(scene_)scene_->cue(cue);else if(title_scene_)title_scene_->cue(cue);},[this]{return audio_caption();});
-        next->prepare(options_state(preferences()),0,options_timing(preferences()));
+        next->prepare(options_state(preferences()),0,options_timing(preferences()),{scene_?scene_->theme():0,!scene_});
     }
     if((page==Page::save || page==Page::load) && save_services_.images){
         if(save_view_ || (this->page()!=Page::story && this->page()!=Page::title))throw script::Unsupported("Native save menu over another modal page is not implemented");

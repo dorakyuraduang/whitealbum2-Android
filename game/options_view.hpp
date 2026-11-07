@@ -27,6 +27,7 @@ struct OptionsState {
 };
 enum class OptionsPhase {idle,loading,opening,active,page_loading,page_out,page_in,closing,closed};
 using OptionsTiming=MenuTiming;
+struct OptionsContext {int theme{};bool title{};};
 struct OptionsInput {script::SelectionInput selection;bool cancel{},held{};std::int32_t page_delta{};};
 struct OptionsHit {
     unsigned id{},row{},cell{};
@@ -43,7 +44,7 @@ public:
     using Sound=std::function<void(audio::SystemCue)>;
     using Apply=std::function<void(const OptionsState&)>;
     OptionsView(Loader,Apply={},Sound={},CurrentMusic={});
-    void prepare(const OptionsState&,unsigned page=0,OptionsTiming={});
+    void prepare(const OptionsState&,unsigned page=0,OptionsTiming={},OptionsContext={});
     void clear();
     void update(OptionsInput={});
     void state(const OptionsState&);
@@ -51,6 +52,7 @@ public:
     void confirm_reset(int skin,ConfirmationView::Text);
     const ConfirmationView* confirmation()const noexcept{return confirmation_.get();}
     const OptionsState& state()const noexcept{return state_;}
+    const OptionsContext& context()const noexcept{return context_;}
     OptionsPhase phase()const noexcept{return phase_;}
     unsigned page()const noexcept{return page_;}
     std::optional<unsigned> focused()const noexcept{return focus_;}
@@ -59,9 +61,9 @@ public:
     std::optional<OptionsCommand> take_command();
 private:
     using Image=std::shared_ptr<const image::Raster>;
-    struct Bundle {std::array<Image,13> images;unsigned page{},next{};std::shared_ptr<image::ImageRequest> request;};
+    struct Bundle {std::array<Image,14> images;unsigned page{},next{};std::shared_ptr<image::ImageRequest> request;};
     Loader loader_;Apply apply_;Sound sound_;CurrentMusic current_music_;
-    OptionsState state_;OptionsTiming timing_;
+    OptionsState state_;OptionsTiming timing_;OptionsContext context_;
     Bundle assets_;std::optional<Bundle> pending_;
     std::shared_ptr<const image::Raster> black_;
     std::vector<OptionsHit> hits_;
