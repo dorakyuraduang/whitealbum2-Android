@@ -970,6 +970,18 @@ Finite tests cover gradual/zero-delay paths, repeated transition clicks, exact
 page commit boundaries, early cancellation and background suspension. Other
 extra-page transitions, counters and physical presentation remain unverified.
 
+Gallery/replay grids use the same bounded opening, page and closing timing.
+Their next page must load completely before the old page starts to fade, and
+its rows commit only at the fade-out boundary. CG replacement retains the old
+raster for the cached 16-tick alpha transition, with no pixel/screen capture.
+An exit publishes its audio fade before leaving. Replay entry preparation keeps
+the return grid usable if a resource provider fails; a successful replay retains
+that same page and owner. Constructed tests cover alpha steps, suppressed
+transition clicks, failed preparation/retry, backgrounding and save restoration.
+Commentary-page transitions, remaining counters/chrome and full physical game
+compatibility are still migration work. Native desktop SDL windows now request
+the provided embedded icon for both large and small window icons.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.

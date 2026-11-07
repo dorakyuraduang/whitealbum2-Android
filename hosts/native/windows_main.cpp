@@ -12,6 +12,7 @@ int main(int argc,char** argv){
         if(argc<0 || argc>33 || (argc && !argv))throw std::invalid_argument("Invalid native desktop argument list");std::vector<std::string_view> arguments;
         for(int n=1;n<argc;++n){if(!argv[n])throw std::invalid_argument("Missing native desktop argument");arguments.emplace_back(argv[n]);}
         auto startup=wa2::platform::native_desktop_startup(arguments);
+        SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON,"101");SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL,"101");
         std::unique_ptr<char,decltype(&SDL_free)> base(SDL_GetBasePath(),SDL_free);if(!base)throw std::runtime_error("Native executable directory is unavailable");
         const auto directory=wa2::platform::native_desktop_directory(wa2::platform::native_utf8_path(base.get()),std::filesystem::current_path(),startup.resources);
         wa2::platform::NativeHost host;host.resources=wa2::platform::native_desktop_banks(directory);host.startup=startup.game;host.startup.seed=std::uint32_t(SDL_GetPerformanceCounter());
