@@ -12,7 +12,7 @@ NativeStartup native_startup(std::span<const std::string_view> arguments){
     return result;
 }
 std::unique_ptr<game::Application> native_application(resource::BankOpener opener,const std::filesystem::path& directory,NativeStartup startup,game::SceneServices scene,game::TitleServices title){
-    if(!opener || startup.title.movie_suffix>2 || startup.image_timeout.count()<1 || startup.image_timeout.count()>60000)
+    if(!opener || (startup.title.movie_suffix && *startup.title.movie_suffix>2) || startup.image_timeout.count()<1 || startup.image_timeout.count()>60000)
         throw std::invalid_argument("Invalid native application startup configuration");
     const auto content=startup.content?*startup.content:game::installed_title_content(opener);
     auto progress=std::make_shared<progress::Store>(progress_storage(directory));

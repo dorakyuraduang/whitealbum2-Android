@@ -7,9 +7,10 @@ struct SettingsStorage:g::PreferenceStorage {
     std::optional<Bytes> read()override{return bytes;}
     void replace(std::span<const std::uint8_t> data)override{if(fail)throw std::runtime_error("injected settings write failure");bytes=Bytes(data.begin(),data.end());++writes;}
 };
-Bytes legacy(const g::Preferences& prefs){
+Bytes legacy(const g::Preferences& prefs,bool version2=false){
     wa2::checkpoint::Writer out;for(auto value:{prefs.master,prefs.music,prefs.effects,prefs.speech,prefs.skin,prefs.window_alpha,prefs.picture_alpha,prefs.button_alpha,prefs.novel_alpha,prefs.text_step,prefs.auto_ticks})out.i32(value);
-    for(auto value:{prefs.window,prefs.skip_read_only,prefs.mute_adult,prefs.voice_enabled,prefs.captions})out.boolean(value);for(auto value:prefs.character_voice)out.boolean(value);return out.seal("WAPR");
+    for(auto value:{prefs.window,prefs.skip_read_only,prefs.mute_adult,prefs.voice_enabled,prefs.captions})out.boolean(value);for(auto value:prefs.character_voice)out.boolean(value);
+    if(version2){out.i32(prefs.right_click);for(auto value:prefs.audio_muted)out.boolean(value);for(auto value:{prefs.fullscreen,prefs.confirmation,prefs.cut_voice_on_advance,prefs.transition_wait})out.boolean(value);}return out.seal(version2?"WAP2":"WAPR");
 }
 Bytes patch_settings(Bytes bytes,unsigned at,unsigned value){for(unsigned n=0;n<4;++n)bytes.at(at+n)=std::uint8_t(value>>(n*8));const auto crc=wa2::checkpoint::crc(std::span(bytes).first(bytes.size()-4));for(unsigned n=0;n<4;++n)bytes[bytes.size()-4+n]=std::uint8_t(crc>>(n*8));return bytes;}
 struct VoiceState {unsigned stops{},gain{};};
@@ -27,7 +28,10 @@ int main(int argc,char** argv){try{
     for(unsigned n=0;n<10;++n){auto next=state;next.value(g::Option(unsigned(g::Option::character_0)+n),1);auto result=g::options_preferences(next,prefs);for(unsigned j=0;j<10;++j)CHECK(result.character_voice[j]==(j!=n));CHECK(g::options_state(result)==next);++cases;}
     auto edited=state;edited.value(g::Option::display,0);edited.value(g::Option::window_visibility,1);edited.value(g::Option::skip_policy,0);edited.value(g::Option::confirmation,1);edited.value(g::Option::transition_wait,0);edited.value(g::Option::voice_advance,0);edited.value(g::Option::adult_voice,1);edited.value(g::Option::right_click,2);edited.value(g::Option::auto_delay,600);edited.muted={true,true,true,true};
     auto before=prefs;before.skin=9;before.captions=false;auto result=g::options_preferences(edited,before);CHECK(result.fullscreen && !result.window && !result.skip_read_only && !result.confirmation && !result.transition_wait && result.cut_voice_on_advance && result.mute_adult && !result.voice_enabled && result.skin==9 && !result.captions && result.auto_ticks==600 && result.right_click==2);CHECK(g::options_state(result)==edited);++cases;
-    CHECK(g::Preferences::decode(result.encode())==result && std::string_view(reinterpret_cast<const char*>(result.encode().data()),4)=="WAP2");++cases;
+    CHECK(g::Preferences::decode(result.encode())==result && std::string_view(reinterpret_cast<const char*>(result.encode().data()),4)=="WAP3");++cases;
+    CHECK(g::Preferences::decode(legacy(result,true))==result);++cases;
+    auto quality=result;quality.movie_quality=1;CHECK(g::Preferences::decode(quality.encode())==quality && g::options_preferences(g::options_state(quality),quality)==quality && g::options_defaults(quality).movie_quality==1);++cases;
+    for(auto invalid:{-1,2}){quality.movie_quality=invalid;rejects([&]{quality.validate();});++guards;}rejects([&]{g::Preferences::decode(patch_settings(result.encode(),unsigned(result.encode().size()-8),2));});++guards;
     auto old=prefs;old.character_voice[4]=false;old.text_step=10;const auto old_bytes=legacy(old);CHECK(g::Preferences::decode(old_bytes)==old);auto extension_defaults=g::Preferences::decode(old_bytes);CHECK((!extension_defaults.fullscreen && extension_defaults.confirmation && extension_defaults.transition_wait && !extension_defaults.cut_voice_on_advance && extension_defaults.audio_muted==std::array<bool,3>{}));++cases;
     auto memory=std::make_shared<SettingsStorage>();memory->bytes=legacy(prefs);g::PreferenceStore store(memory);CHECK(store.current()==prefs && !memory->writes);CHECK(store.replace(result) && memory->writes==1);g::PreferenceStore reopened(memory);CHECK(reopened.current()==result);++cases;
     memory->fail=true;rejects([&]{store.replace(g::options_preferences(state,store.current()));});++guards;CHECK(store.current()==result && g::Preferences::decode(*memory->bytes)==result && memory->writes==1);memory->fail=false;++cases;

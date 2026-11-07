@@ -16,7 +16,7 @@ TitleScene::TitleScene(resource::BankOpener opener,std::shared_ptr<progress::Sto
     voices_([this](const auto& line){if(services_.speech)return services_.speech(line);auto source=audio::speech_resource(resources_,line.chapter,line.line,line.speaker);return audio::play_ogg(*mixer_,{source,line.loop?source:nullptr});},[]{return -1;},[]{return -1;}),
     random_(seed),view_([this](auto name){return resources_.image("grp",name);},[this]{return random_.next();},[this](auto cue){sounds_.play(cue);},[this](auto song,auto fade){if(song)music_.play(*song,fade,1,255);else music_.stop(fade);}),
     services_(std::move(services)),content_(content),startup_(startup),stage_(startup.movies?TitleStage::company_movie:TitleStage::view){
-    if(!progress_)throw std::invalid_argument("Missing native title progress storage");if(startup_.movie_suffix>2)throw std::invalid_argument("Invalid native title movie suffix");
+    if(!progress_)throw std::invalid_argument("Missing native title progress storage");if(startup_.movie_suffix && *startup_.movie_suffix>2)throw std::invalid_argument("Invalid native title movie suffix");
     preferences(settings);sounds_.prepare();if(startup_.movies)begin_movie("mv00");else begin_view();
 }
 TitleScene::~TitleScene(){commentary_stop();if(movie_)movie_->stop();}
@@ -42,7 +42,7 @@ void TitleScene::commentary_play(unsigned speaker){
 bool TitleScene::commentary_playing()const{if(!commentary_)return false;if(const auto error=commentary_->failure();!error.empty())throw script::Error("Native commentary playback failed: "+error);return !commentary_->finished();}
 text::PreparedText TitleScene::menu_text(std::string_view raw,const text::TextStyle& style){if(!menu_fonts_)menu_fonts_=std::make_unique<text::FontBook>(resources_.required("fon"));return menu_fonts_->prepare(text::layout(raw,style));}
 void TitleScene::begin_movie(std::string_view stem){
-    const auto name=std::string(stem)+char('0'+startup_.movie_suffix)+".pak";
+    const auto name=std::string(stem)+char('0'+startup_.movie_suffix.value_or(unsigned(preferences_.movie_quality)))+".pak";
     auto next=services_.movie?services_.movie(name):std::make_unique<movie::Player>(resources_.movie(name),mixer_);
     if(!next)throw script::Error("Native title movie factory returned no player");next->gain(preferences_.movie_amplitude());movie_=std::move(next);
 }

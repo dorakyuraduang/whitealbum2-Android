@@ -7,6 +7,7 @@ SceneMovie::SceneMovie(Factory factory,std::function<void()> before_play,unsigne
     if(!factory_ || suffix_>2)throw Error("invalid native movie factory or file suffix");
 }
 SceneMovie::~SceneMovie(){if(playback_)playback_->stop();}
+void SceneMovie::file_suffix(unsigned value){if(value>2)throw Error("invalid native movie file suffix");suffix_=value;}
 void SceneMovie::gain(float value){
     if(!std::isfinite(value) || value<0 || value>1)throw Error("Invalid native movie amplitude");
     amplitude_=value;if(playback_)playback_->gain(value);

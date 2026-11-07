@@ -13,7 +13,7 @@ namespace wa2::game {
 // registry. The cached local-IC test is existence of IC/bak.pak (0x432ab1).
 // A provider failure must propagate rather than be treated as missing content.
 TitleContent installed_title_content(const resource::BankOpener&);
-struct TitleStartup {bool movies{true};unsigned movie_suffix{};};
+struct TitleStartup {bool movies{true};std::optional<unsigned> movie_suffix;};
 enum class TitleStage {company_movie,opening_delay,opening_movie,view};
 struct TitleServices {
     script::SceneMusic::Factory music;

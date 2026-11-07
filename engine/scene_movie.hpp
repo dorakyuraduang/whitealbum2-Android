@@ -15,6 +15,7 @@ public:
     std::optional<movie::VideoFrame> frame()const{return playback_?playback_->frame():std::nullopt;}
     bool active()const{return playback_ && !playback_->finished();}
     void gain(float amplitude);
+    void file_suffix(unsigned);
     const movie::Playback* playback()const noexcept{return playback_.get();}
     void stop(){if(playback_){record_seen();playback_->stop();}}
 private:

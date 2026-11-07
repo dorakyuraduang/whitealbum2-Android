@@ -23,6 +23,9 @@ struct Preferences {
     std::array<bool,3> audio_muted{};
     bool fullscreen{},confirmation{true},cut_voice_on_advance{},transition_wait{true};
     std::int32_t right_click{};
+    // Cached high/low movie modes select external suffixes 0/1 respectively.
+    // Changing quality affects the next clip, never restarts an active clip.
+    std::int32_t movie_quality{};
     bool operator==(const Preferences&)const=default;
     void validate()const;
     float movie_amplitude()const;

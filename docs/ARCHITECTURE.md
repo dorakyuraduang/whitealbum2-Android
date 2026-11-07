@@ -940,6 +940,18 @@ page requests an OS edit field; startup must not raise an unsolicited IME.
 Source transitions/meters/counters and remaining original settings UI still
 need completion, and physical presentation remains unverified.
 
+The shared user menu now exposes source high/low video quality. Cached movie
+name selection maps high quality to suffix `0.pak` and low quality to `1.pak`;
+the current decoder is not restarted when that preference changes. Title and
+story owners both apply it to the next external clip. An explicit bootstrap
+suffix is reserved for controlled integrations. Missing selected movie files
+remain resource errors, rather than silently changing a user's selection.
+`WAP3` preferences retain `WAPR` and `WAP2` decoding, with high quality as their
+compatible default. The original window-management dialog contains four
+opacity sliders and a visibility switch, already covered by the common native
+options view; it is not a separate skin/colour picker. Window-size and renderer
+menus, information pages and exact extra-page animation remain migration work.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.

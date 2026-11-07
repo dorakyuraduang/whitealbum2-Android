@@ -51,7 +51,7 @@ void Scene::preferences(const Preferences& value){
     value.validate();auto dialogue=dialogue_.settings();dialogue.skin=value.skin;dialogue.window_alpha=value.window_alpha;dialogue.picture_alpha=value.picture_alpha;dialogue.button_alpha=value.button_alpha;dialogue.novel_alpha=value.novel_alpha;dialogue.text_step=value.text_step;dialogue.window=value.window;
     music_.settings(value.effective_master(),value.effective_music());effects_.settings(value.effective_master(),value.effective_effects());voices_.settings(value.effective_master(),value.speech,value.mute_adult);voices_.enabled(value.voice_enabled);voices_.character_switches(value.character_voice);system_sounds_.settings(value.effective_master(),value.effective_effects());
     dialogue_.settings(dialogue);script::SelectionSettings selection;selection.skin=value.skin;selection.replay=replay_mode_;selection_.settings(selection);controls_.auto_delay(value.auto_ticks);skip_read_only_=value.skip_read_only;preferences_=value;
-    movies_.gain(value.movie_amplitude());
+    movies_.file_suffix(unsigned(value.movie_quality));movies_.gain(value.movie_amplitude());
 }
 std::unique_ptr<audio::Voice> Scene::sound(std::int32_t id,bool loop,bool paused){
     if(services_.effects)return services_.effects(id,loop,paused);
