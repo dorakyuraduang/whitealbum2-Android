@@ -40,7 +40,7 @@ void TitleScene::commentary_play(unsigned speaker){
     if(!next)throw script::Error("Native commentary factory returned no voice");next->gain(std::uint8_t(std::clamp(std::int64_t(255)*preferences_.effective_master()*preferences_.speech/65536,std::int64_t(0),std::int64_t(255))));commentary_stop();commentary_=std::move(next);
 }
 bool TitleScene::commentary_playing()const{if(!commentary_)return false;if(const auto error=commentary_->failure();!error.empty())throw script::Error("Native commentary playback failed: "+error);return !commentary_->finished();}
-text::PreparedText TitleScene::menu_text(std::string_view raw,const text::TextStyle& style){if(!menu_fonts_)menu_fonts_=std::make_unique<text::FontBook>(resources_.required("fon"));return menu_fonts_->prepare(text::layout(raw,style));}
+text::PreparedText TitleScene::menu_text(std::string_view raw,const text::TextStyle& style){if(!menu_fonts_)menu_fonts_=std::make_unique<text::FontBook>(resources_.members("fon"));return menu_fonts_->prepare(text::layout(raw,style));}
 void TitleScene::begin_movie(std::string_view stem){
     const auto name=std::string(stem)+char('0'+startup_.movie_suffix.value_or(unsigned(preferences_.movie_quality)))+".pak";
     auto next=services_.movie?services_.movie(name):std::make_unique<movie::Player>(resources_.movie(name),mixer_);

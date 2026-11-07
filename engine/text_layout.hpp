@@ -47,11 +47,12 @@ public:
 };
 class FontBook {
     struct Atlas {std::vector<std::uint8_t> source;image::TgaLayout layout;};
-    resource::Archive archive_;
+    resource::MemberLoader members_;
     std::array<std::unique_ptr<Atlas>,4> atlases_;
     const Atlas& atlas(unsigned index);
 public:
-    explicit FontBook(resource::Archive archive):archive_(std::move(archive)){}
+    explicit FontBook(resource::Archive archive):FontBook(resource::archive_members(std::move(archive))){}
+    explicit FontBook(resource::MemberLoader members);
     static PreparedText defer(Layout);
     bool materialize(PreparedText&);
     PreparedText prepare(Layout layout);

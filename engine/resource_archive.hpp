@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -67,4 +68,9 @@ private:
     std::vector<Member> members_;
     bool stored_size_prefix_{};
 };
+// A caller selects its byte limit before a member is read or decompressed.
+// Single-archive adapters own their source; catalogue adapters borrow their
+// catalogue so patch/root/IC lookup stays in one resource-access boundary.
+using MemberLoader=std::function<std::vector<std::uint8_t>(std::string_view,std::size_t)>;
+MemberLoader archive_members(Archive);
 }

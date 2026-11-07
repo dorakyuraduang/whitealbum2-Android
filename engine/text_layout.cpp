@@ -130,11 +130,11 @@ Layout layout(std::string_view raw,const TextStyle& style){
     auto& last=result.pages.back();last.duration=time;last.end_x=x;last.end_y=y;
     return result;
 }
+FontBook::FontBook(resource::MemberLoader members):members_(std::move(members)){if(!members_)throw image::Error("Missing native font member loader");}
 const FontBook::Atlas& FontBook::atlas(unsigned index){
     if(index>=atlases_.size())throw image::Error("invalid original font bank");
     if(!atlases_[index]){
-        const auto member=archive_.find_first(font_names[index]);if(member==resource::Archive::missing)throw image::Error("missing original font atlas");
-        auto value=std::make_unique<Atlas>();value->source=archive_.load(member,16u*1024*1024);value->layout=image::inspect_game_tga(value->source);
+        auto value=std::make_unique<Atlas>();value->source=members_(font_names[index],16u*1024*1024);if(value->source.size()>16u*1024*1024)throw image::Error("Font member loader exceeded its byte limit");value->layout=image::inspect_game_tga(value->source);
         const auto cell=index<2?40u:24u;
         if(value->layout.bits!=8 || value->layout.width!=cell*80 || value->layout.height<cell*(glyph_count(true)/80+1))throw image::Error("unexpected original font atlas dimensions");
         atlases_[index]=std::move(value);

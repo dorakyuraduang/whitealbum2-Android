@@ -306,4 +306,9 @@ std::shared_ptr<Source> Archive::open_member(std::size_t index,std::size_t maxim
     if(member.stored_size>maximum)throw Error("resource member exceeds memory limit");
     return std::make_shared<MemberSource>(source_,member.offset,member.stored_size);
 }
+MemberLoader archive_members(Archive archive){
+    return [archive=std::move(archive)](std::string_view name,std::size_t maximum){
+        const auto index=archive.find_first(name);if(index==Archive::missing)throw NotFound("missing original resource "+std::string(name));return archive.load(index,maximum);
+    };
+}
 }

@@ -1153,6 +1153,21 @@ hide these footers. Source pictures stay external and share the bounded image
 cache. Constructed PCM, voice and menu/application checks cover these rules;
 physical-device latency and actual meter appearance remain unverified.
 
+Native script and font members now use that same catalogue's patch/root/IC
+lookup, rather than opening a single root archive behind it. Original cached
+437820 supplies the precedence used by script binary/text and font-sheet
+reads. A small bounded member-reader interface retains the existing 16 MiB
+per-member limit before archive reads or decompression. The single-archive
+adapter still owns its source for callers that intentionally use an isolated
+archive; catalogue readers borrow their scene/title's longer-lived catalogue.
+Selected corrupt data and permission/read errors remain errors, with no
+fallback to an older script or font. Missing members alone continue lookup.
+Constructed script/PAK checks exercise globals, function catalogues, code,
+text, IC-only scripts and a real common Runtime invocation. Generated uniform
+font sheets with different palette markers check mixed-layer foreground and
+shadow coverage, failed preparation/retry and warm reads with I/O denied.
+These checks neither execute original story scripts nor read original pixels.
+
 The native script library reuses an immutable parsed LSCR Program while an
 existing scene/call owns it. The cache contains weak program references, never
 Runtime objects, locals, globals, flow stacks or an old scene kept alive for

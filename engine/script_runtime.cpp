@@ -204,15 +204,15 @@ std::uint32_t Program::label(std::int32_t id) const {
 }
 std::uint32_t Program::word(std::uint32_t offset) const {if(offset%4)throw Error("unaligned LSCR offset");return u32(binary_,offset);}
 std::vector<std::uint8_t> Library::member(std::string_view name) const {
-    const auto index=archive_.find_first(name);
-    if(index==resource::Archive::missing)throw Error("missing script resource "+std::string(name));
-    return archive_.load(index,16u*1024*1024);
+    auto value=members_(name,16u*1024*1024);if(value.size()>16u*1024*1024)throw Error("Script member loader exceeded its byte limit");return value;
 }
 struct Library::ProgramCache {
     std::mutex mutex;
     std::map<std::string,std::weak_ptr<const Program>,std::less<>> programs;
 };
-Library::Library(resource::Archive archive):archive_(std::move(archive)),program_cache_(std::make_shared<ProgramCache>()) {
+Library::Library(resource::Archive archive):Library(resource::archive_members(std::move(archive))){}
+Library::Library(resource::MemberLoader members):members_(std::move(members)),program_cache_(std::make_shared<ProgramCache>()) {
+    if(!members_)throw Error("Missing native script member loader");
     globals_=Globals::parse(member("Global.vrb"));
     functions_.load(member("LFScriptFunc.fnc"));
     functions_.load(member("LFScriptFuncEx.fnc"));

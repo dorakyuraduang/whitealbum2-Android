@@ -27,7 +27,9 @@ public:
     image::Reference reference(const std::shared_ptr<image::ImageRequest>&)const;
     image::Reference reference(const std::shared_ptr<const image::Raster>&)const;
     std::shared_ptr<Source> stream(std::string_view group,std::string_view name);
-    std::vector<std::uint8_t> data(std::string_view group,std::string_view name);
+    std::vector<std::uint8_t> data(std::string_view group,std::string_view name,std::size_t maximum=128u*1024*1024);
+    // The returned reader borrows this catalogue; the caller must not outlive it.
+    MemberLoader members(std::string_view group);
     std::shared_ptr<Source> movie(std::string_view filename);
     std::size_t open_banks()const noexcept;
 };

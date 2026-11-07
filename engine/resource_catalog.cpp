@@ -77,7 +77,10 @@ image::Reference Catalog::reference(const std::shared_ptr<const image::Raster>& 
     for(const auto& [path,bank]:banks_)if(bank.images)if(auto record=bank.images->describe(raster))return {path,std::move(record->member),std::move(record->style)};
     throw Error("Image does not belong to this native resource catalogue");
 }
-std::vector<std::uint8_t> Catalog::data(std::string_view group,std::string_view name){const auto selected=find(group,name);return selected.bank->archive->load(selected.member);}
+std::vector<std::uint8_t> Catalog::data(std::string_view group,std::string_view name,std::size_t maximum){const auto selected=find(group,name);return selected.bank->archive->load(selected.member,maximum);}
+MemberLoader Catalog::members(std::string_view group){
+    const auto selected=group_name(group);return [this,selected](std::string_view name,std::size_t maximum){return data(selected,name,maximum);};
+}
 std::shared_ptr<Source> Catalog::movie(std::string_view name){
     filename(name);std::string folded(name);for(auto& ch:folded)if(ch>='A' && ch<='Z')ch+=32;
     if(folded.size()<5 || folded.substr(folded.size()-4)!=".pak")throw Error("original movie must be a PAK file");

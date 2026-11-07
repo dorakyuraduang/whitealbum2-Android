@@ -10,8 +10,8 @@
 
 namespace wa2::game {
 Scene::Scene(resource::BankOpener opener,std::uint32_t seed,std::shared_ptr<progress::Store> progress,SceneServices services)
-    :resources_(std::move(opener)),services_(std::move(services)),mixer_(std::make_shared<audio::Mixer>()),system_sounds_(*mixer_,[this](auto id){return sound_resource(id);}),fonts_(resources_.required("fon")),
-    library_(resources_.required("ck-gal")),session_(library_),random_(seed),progress_store_(std::move(progress)),reading_(progress_store_),builtins_(random_),
+    :resources_(std::move(opener)),services_(std::move(services)),mixer_(std::make_shared<audio::Mixer>()),system_sounds_(*mixer_,[this](auto id){return sound_resource(id);}),fonts_(resources_.members("fon")),
+    library_(resources_.members("ck-gal")),session_(library_),random_(seed),progress_store_(std::move(progress)),reading_(progress_store_),builtins_(random_),
     controls_([this]{return milliseconds_;},[this]{return input_.advance || skipping();},[this]{return input_.advance || skipping();},[this]{return skipping();},[this]{return reading_.status(replay_mode_);}),
     progress_(progress_store_),
     choices_(progress_store_,[this]()->std::string_view{return session_.active()?session_.active()->program().name():statistics_.scene;}),

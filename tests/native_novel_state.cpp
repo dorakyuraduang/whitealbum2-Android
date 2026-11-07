@@ -26,7 +26,7 @@ int main(int argc,char** argv){try{
     rejects([&]{t::layout(text);});++guards;
     // Empty text never asks FontBook for an atlas. The controller integration
     // can therefore be checked without opening a resource or graphics device.
-    t::FontBook fonts({});s::SceneDialogue dialogue(fonts,[](auto)->std::shared_ptr<wa2::image::ImageRequest>{throw std::runtime_error("Unexpected asset load");});
+    t::FontBook fonts(wa2::resource::Archive{});s::SceneDialogue dialogue(fonts,[](auto)->std::shared_ptr<wa2::image::ImageRequest>{throw std::runtime_error("Unexpected asset load");});
     s::DialogueSettings settings;settings.novel_alpha=127;dialogue.settings(settings);mode[0]=s::Value(1);enable={220,mode};dialogue.dispatch(enable);
     const auto sprites=dialogue.sprites();CHECK(sprites.size()==1 && sprites[0].width==1280 && sprites[0].height==720 && sprites[0].alpha==127 && sprites[0].image->rgba==std::vector<std::uint8_t>({0,0,0,255}));++cases;
     CHECK(sprites[0].layer==0x104c && sprites[0].order==0x41d && sprites[0].space==wa2::image::SpriteSpace::screen);++cases;

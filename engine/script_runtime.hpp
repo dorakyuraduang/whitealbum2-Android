@@ -91,12 +91,13 @@ private:
 class Library {
 public:
     explicit Library(resource::Archive archive);
+    explicit Library(resource::MemberLoader);
     std::shared_ptr<const Program> load(std::string_view scene) const;
     Globals& globals() noexcept {return globals_;}
     const Globals& globals() const noexcept {return globals_;}
     const Functions& functions() const noexcept {return functions_;}
 private:
-    resource::Archive archive_;
+    resource::MemberLoader members_;
     Globals globals_;
     Functions functions_;
     struct ProgramCache;
