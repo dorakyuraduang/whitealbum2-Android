@@ -420,8 +420,13 @@ already playing channel. Turning speech off lowers existing gains through the
 original zero-duration volume operation; turning it back on permits future
 lines rather than replaying an old line. Looping-voice restore observes the
 current policy without creating a decoder for excluded speech. Synthetic checks
-use fake voices and memory settings storage; application option controls and
-the ordinary settings-file adapter remain to be connected.
+use fake voices and memory settings storage. The file adapter persists only
+`native-settings.wa2cfg` in a host-supplied private directory, through the same
+exclusive temporary/flush/atomic replacement helper as native save slots.
+It rejects links, directories and excessive lengths; it never imports or
+modifies original settings or system/manual saves. Separate synthetic-directory
+checks cover reopen, unchanged edits, damaged files and wide Windows paths.
+Application option controls still need integration.
 
 The native SDL canvas selects OpenGL on desktop and GLES2 on Android. Both use
 one common mask-shader equation, with GLSL 120/100 preambles and the appropriate

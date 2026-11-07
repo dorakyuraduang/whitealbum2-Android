@@ -14,17 +14,22 @@ add_subdirectory("${WA2_ROOT}/engine" engine EXCLUDE_FROM_ALL)
 target_link_libraries(wa2_engine PUBLIC Threads::Threads)
 include("${WA2_ROOT}/engine/movie.cmake")
 add_subdirectory("${WA2_ROOT}/game" game EXCLUDE_FROM_ALL)
+add_library(wa2_native_private_file STATIC "${WA2_ROOT}/platform/private_file.cpp")
+target_include_directories(wa2_native_private_file PUBLIC "${WA2_ROOT}/platform")
+add_library(wa2_native_preference_storage STATIC "${WA2_ROOT}/platform/preference_storage.cpp")
+target_link_libraries(wa2_native_preference_storage PUBLIC wa2_game_scene wa2_native_private_file)
+target_include_directories(wa2_native_preference_storage PUBLIC "${WA2_ROOT}/platform")
 add_library(wa2_native_progress_storage STATIC "${WA2_ROOT}/platform/progress_storage.cpp")
 target_link_libraries(wa2_native_progress_storage PUBLIC wa2_progress)
 target_include_directories(wa2_native_progress_storage PUBLIC "${WA2_ROOT}/platform")
 add_library(wa2_native_save_storage STATIC "${WA2_ROOT}/platform/save_storage.cpp")
-target_link_libraries(wa2_native_save_storage PUBLIC wa2_game_scene)
+target_link_libraries(wa2_native_save_storage PUBLIC wa2_game_scene wa2_native_private_file)
 target_include_directories(wa2_native_save_storage PUBLIC "${WA2_ROOT}/platform")
 
 # Link the complete existing native scene to catch unresolved dependencies on
 # either host. This is a link-check library, not a launchable game or APK.
 add_library(wa2_native_link_check SHARED "${WA2_ROOT}/tests/native_core_link.cpp")
-target_link_libraries(wa2_native_link_check PRIVATE wa2_game_scene wa2_native_progress_storage wa2_native_save_storage)
+target_link_libraries(wa2_native_link_check PRIVATE wa2_game_scene wa2_native_progress_storage wa2_native_save_storage wa2_native_preference_storage)
 if(ANDROID)
     # The existing ARM64 codec assembly binds its internal tables locally,
     # using the same static-codec visibility contract as the retained host.
@@ -95,6 +100,8 @@ add_executable(wa2_native_save_slot_tests "${WA2_ROOT}/tests/native_save_slots.c
 target_link_libraries(wa2_native_save_slot_tests PRIVATE wa2_native_save_storage)
 add_executable(wa2_native_preference_tests "${WA2_ROOT}/tests/native_preferences.cpp")
 target_link_libraries(wa2_native_preference_tests PRIVATE wa2_game_scene)
+add_executable(wa2_native_preference_storage_tests "${WA2_ROOT}/tests/native_preference_storage.cpp")
+target_link_libraries(wa2_native_preference_storage_tests PRIVATE wa2_native_preference_storage)
 # Compile the shared presentation adapter on both toolchains without opening
 # an SDL device. Linking/render-driver validation is a separate boundary.
 add_library(wa2_native_presentation_check STATIC "${WA2_ROOT}/platform/sdl_scene.cpp" "${WA2_ROOT}/platform/sdl_canvas.cpp" "${WA2_ROOT}/platform/sdl_mask.cpp" "${WA2_ROOT}/platform/mask_shaders.cpp")
@@ -155,6 +162,7 @@ if(NOT ANDROID)
     add_test(NAME native_scene_checkpoint COMMAND wa2_native_scene_checkpoint_tests "${CMAKE_BINARY_DIR}/native-scene-checkpoint.json")
     add_test(NAME native_save_slots COMMAND wa2_native_save_slot_tests "${CMAKE_BINARY_DIR}/native-save-slots.json")
     add_test(NAME native_preferences COMMAND wa2_native_preference_tests "${CMAKE_BINARY_DIR}/native-preferences.json")
+    add_test(NAME native_preference_storage COMMAND wa2_native_preference_storage_tests "${CMAKE_BINARY_DIR}/native-preference-storage.json")
 endif()
 
 # No path through this target includes hosts/, recompiled/, generated/ or port/.
