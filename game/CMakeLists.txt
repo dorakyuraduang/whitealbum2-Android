@@ -7,6 +7,7 @@ target_sources(wa2_game_scene PRIVATE preferences_ini.cpp)
 
 target_sources(wa2_game_scene PRIVATE confirmation_view.cpp options_audio.cpp)
 target_sources(wa2_game_scene PRIVATE save_document.cpp)
+target_sources(wa2_game_scene PRIVATE legacy_save.cpp)
 target_sources(wa2_game_scene PRIVATE save_catalog.cpp)
 target_sources(wa2_game_scene PRIVATE menu_digits.cpp save_view.cpp)
 target_sources(wa2_game_scene PRIVATE quick_view.cpp)

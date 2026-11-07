@@ -38,6 +38,12 @@ Only constructed continuations are executed after conversion; original saves
 and scripts are not opened. This check does not make original manual slots
 loadable: whole-scene conversion and a read-only file adapter remain required.
 
+`native-legacy-save.json` additionally checks the bounded original header and
+version-2 scene audio converter. It uses constructed byte records and fake
+transports to verify loop restoration, omitted one-shots/fading-out music,
+current preferences and transactional failure. It opens no original save,
+audio device or game; this report is not whole-scene save compatibility.
+
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional
 restore failures and conditionally visible selections. `--resource-root res`

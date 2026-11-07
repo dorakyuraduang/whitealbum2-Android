@@ -8,7 +8,7 @@ CPU state, checked source-address memory, or the Windows compatibility runtime.
 The current released APK still uses AOT; a linkable component is not a full port.
 
 The current native application targets are `hosts/native` (Windows x64) and
-`hosts/native-android` (Android ARM64). Both link the same 86 common game/engine
+`hosts/native-android` (Android ARM64). Both link the same 87 common game/engine
 sources through `platform/native_host.cpp`; OS paths, input, resources, device
 audio and SDL presentation stay outside game policy. Actual production builds
 include window/render/audio backends, and Android includes its native-only Java
@@ -92,6 +92,21 @@ yet an original manual-scene importer. Thirty-one constructed-data cases and
 seventy-seven guards exercise native resumption, exact real bits, call ownership,
 reference remapping, malformed files and conversion without execution or
 mutation. No original save, original script or device is used in those checks.
+
+`game/legacy_save.*` inspects the original 88-byte header and translates its
+version-2 scene audio records into the existing LSMR/LSER/LSVR formats. Header
+inspection checks the stored version, story classification, local SYSTEMTIME
+fields and original-byte description, without interpreting the thumbnail or
+requiring the scene payload. Audio translation restarts one retained music
+owner and looping effect/voice channels; idle/fading-out music, ordinary speech,
+one-shot effects and transport cursors are omitted as in the source loader.
+Ambiguous simultaneous music owners and unsupported phases fail explicitly.
+Conversion does not open transports or mutate a current scene. The common
+audio restorers continue to apply current volume, mute and speaker preferences.
+Twenty-nine constructed-data cases and thirty-nine guards check these records
+with fake playback. Complete original scene conversion, thumbnail conversion
+and the read-only legacy slot adapter are still required before exposing an
+original manual save as loadable in the native menus.
 
 Selection commands 208/209 now retain original insertion ordinals, conditional
 hidden/disabled entries, eight-entry limits, and persistent choice-history
