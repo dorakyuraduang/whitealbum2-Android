@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -26,11 +27,21 @@ public:
 // providers do not silently fall back to an unrelated private directory.
 class MutableFiles {
 public:
+    // One CreateFile operation owns this metadata/alias decision. It expires
+    // before the next API call, so external edits are never hidden by a cache.
+    struct OpenPlan {
+        std::optional<ReadOnlyFileInfo> info;
+        std::string identity;
+        std::function<std::FILE*(bool,bool,std::uint32_t,std::uint32_t&)> open;
+    };
     virtual ~MutableFiles()=default;
     virtual std::optional<ReadOnlyFileInfo> info(std::string_view)=0;
     virtual std::string identity(std::string_view name){return std::string(name);}
     virtual std::vector<ReadOnlyFileInfo> list(std::string_view)=0;
     virtual std::FILE* open(std::string_view,bool read,bool write,std::uint32_t creation,std::uint32_t& error)=0;
+    virtual OpenPlan prepare_open(std::string_view name){
+        return {info(name),identity(name),[this,path=std::string(name)](bool read,bool write,std::uint32_t creation,std::uint32_t& error){return open(path,read,write,creation,error);}};
+    }
     virtual std::uint32_t directory(std::string_view)=0;
     virtual std::uint32_t remove(std::string_view,bool directory)=0;
     virtual std::uint32_t move(std::string_view,std::string_view)=0;

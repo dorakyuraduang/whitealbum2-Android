@@ -99,6 +99,7 @@ def main():
             if not report.get('passed') or report.get('game_launched') or report.get('screen_access') or report.get('source_executable_opened'):raise ValueError('Finite memory/file test failed: '+name)
             reports[name]=report
         saves=reports['selected_save_files']
+        if not all(saves[key] for key in ('single_lookup_open_plan','next_operation_sees_external_edits','sharing_checked_before_truncation')) or saves['fixture_root_opens']!=saves['fixture_root_metadata_queries']:raise ValueError('Repeated or stale save-open metadata queries')
         skip=reports['fast_forward']
         if skip['static_predicate_comparisons']<7000 or not all(skip[key] for key in ('unchanged_static_predicate','unread_policy_preserved','worker_and_object_waits_preserved','game_clock_unscaled','source_sync_restored','presentation_only_coalescing')):raise ValueError('Incomplete fast-forward scheduling checks')
         if saves['cases']<40 or not all(saves[key] for key in ('root_pc_files_read','source_path_aliases','alias_sharing_preserved','random_access_writes','profile_roundtrip','nested_pc_fallback','test_profile_isolated','private_fallback_forbidden')):raise ValueError('Incomplete selected-directory file checks')

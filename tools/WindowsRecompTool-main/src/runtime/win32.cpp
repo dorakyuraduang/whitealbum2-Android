@@ -592,17 +592,18 @@ void install_win32(Process& p) {
         if((write || creation!=3) && !q.options.allow_file_write){q.set_error(5);return 0xffffffffu;}
         const auto mounted=mounted_info(q,path);if(mounted && ((mounted->attributes&16) || write || creation!=3)){q.set_error(5);return 0xffffffffu;}
         auto* external=mutable_files_for(q,path);const auto logical=mounted_name(q,path);
-        std::error_code ec;bool exists=mounted.has_value() || (external?external->info(logical).has_value():std::filesystem::exists(path,ec));if(ec){q.set_error(3);return 0xffffffffu;}
+        std::optional<MutableFiles::OpenPlan> plan;if(external && !mounted)plan=external->prepare_open(logical);
+        std::error_code ec;bool exists=mounted.has_value() || (plan?plan->info.has_value():std::filesystem::exists(path,ec));if(ec){q.set_error(3);return 0xffffffffu;}
         if(creation<1 || creation>5){q.set_error(87);return 0xffffffffu;}if(creation==1 && exists){q.set_error(80);return 0xffffffffu;}
         if((creation==3 || creation==5) && !exists){q.set_error(2);return 0xffffffffu;}if(creation==5 && !write){q.set_error(5);return 0xffffffffu;}
         // Native Windows enforces cross-process sharing. The portable process
         // also enforces both directions of sharing against its open handles.
-        const auto identity=file_identity(q,path);
+        const auto identity=plan?q.options.data_root/plan->identity:path;
         for(const auto& [id,old]:q.state().files){(void)id;if(old.path==identity &&
             ((read && !(old.share&1)) || (write && !(old.share&2)) || (old.read && !(share&1)) || (old.write && !(share&2)))){q.set_error(32);return 0xffffffffu;}}
         std::FILE* file=nullptr;U32 open_error_code{};
         if(mounted){file=q.state().read_only_files->open(mounted_name(q,path));if(!file){q.set_error(file_error(errno));return 0xffffffffu;}}
-        else if(external){file=external->open(logical,read,write,creation,open_error_code);if(!file){q.set_error(open_error_code);return 0xffffffffu;}}
+        else if(plan){file=plan->open(read,write,creation,open_error_code);if(!file){q.set_error(open_error_code);return 0xffffffffu;}}
         else {
 #ifdef _WIN32
         HANDLE h=::CreateFileW(path.c_str(),access,share,nullptr,creation,flags?flags:FILE_ATTRIBUTE_NORMAL,nullptr);

@@ -22,6 +22,10 @@ inline bool source_skip_requested(wr::Memory::ExecutionScope& memory){
 inline bool source_fast_forward(wr::Memory& memory) noexcept {
     try{
         auto scope=memory.execution_scope();
+        // Story state 3 also owns modal save/load screens (cached 0x41a783,
+        // 0x41ef89). A retained skip key/latch must not accelerate their UI.
+        const auto screen=scope.load<32>(0xa39208);
+        if(screen==6 || screen==7)return false;
         // Both current and last completed update must be story state 3,
         // matching 0x418f2b. Window transitions retain their ordinary pacing.
         return scope.load<32>(0xa3a36c)==3 && scope.load<32>(0xa3a380)==3 &&

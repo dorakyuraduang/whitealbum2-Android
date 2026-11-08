@@ -21,7 +21,7 @@ void source_and_scheduler(Counts& counts,bool linear){
     runtime.load();
     CHECK(!p.gui() && !p.directdraw());
     const auto reset=[&]{
-        for(auto at:{0x4be03cu,0x4c2240u,0xa39788u,0x4be018u,0x4be00cu,0xa391e4u,0xa391e8u,0x4be048u,0xa391f4u,0x4c2234u})m.store(at,0,32);
+        for(auto at:{0x4be03cu,0x4c2240u,0xa39788u,0x4be018u,0x4be00cu,0xa391e4u,0xa391e8u,0x4be048u,0xa391f4u,0x4c2234u,0xa39208u})m.store(at,0,32);
         m.store(0xa3a36c,3,32);m.store(0xa3a380,3,32);
     };
     // Compare the read-only policy with the actual unchanged static predicate
@@ -46,6 +46,7 @@ void source_and_scheduler(Counts& counts,bool linear){
     }
     reset();m.store(0xa39788,1,32);m.store(0x4be00c,1,8);
     CHECK(wa2::aot::source_fast_forward(m));
+    for(U32 screen:{6u,7u}){m.store(0xa39208,screen,32);CHECK(!wa2::aot::source_fast_forward(m));++counts.guards;}m.store(0xa39208,0,32);
     for(U32 at:{0xa3a36cu,0xa3a380u,0x4c2234u}){
         const auto before=m.load(at,32);m.store(at,at==0x4c2234?2:4,32);
         CHECK(!wa2::aot::source_fast_forward(m));m.store(at,before,32);++counts.guards;
@@ -72,6 +73,7 @@ void source_and_scheduler(Counts& counts,bool linear){
     p.state().current_thread_id=2;invoke(2,IdleReturn);p.state().current_thread_id=1;
     m.store(0xa39788,0,32);invoke(2,IdleReturn);m.store(0xa39788,1,32);
     m.store(0xa3a36c,4,32);invoke(2,IdleReturn);m.store(0xa3a36c,3,32);
+    for(U32 screen:{6u,7u}){m.store(0xa39208,screen,32);invoke(2,IdleReturn);}m.store(0xa39208,0,32);
     const auto saved=p.cpu;m.store(p.cpu.r[wr::ESP],IdleReturn,32);p.state().sleep_thread(2);p.cpu=saved;
     CHECK(report().find("\"accelerated_idle_calls\":32")!=std::string::npos);
     CHECK(p.callback(p.resolve("winmm.dll","timeGetTime"),{})==time && clock_calls==1);

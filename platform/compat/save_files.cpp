@@ -32,11 +32,12 @@ std::optional<std::string> mapped(std::string_view value,bool folder=false){
 class Saves final:public wr::MutableFiles {
     std::shared_ptr<wr::MutableFiles> files_;std::string prefix_;
     std::string physical(std::string_view name){return name.empty() && !prefix_.empty()?prefix_.substr(0,prefix_.size()-1):prefix_+std::string(name);}
-    std::string existing(const std::string& name){
-        if(files_->info(physical(name)))return physical(name);
-        if(name.find('/')==name.npos && file_name(name)){const auto legacy=physical(std::string(main_folder)+"/"+name);if(files_->info(legacy))return legacy;}
-        return physical(name);
+    std::pair<std::string,std::optional<Info>> locate(const std::string& name){
+        auto path=physical(name);auto info=files_->info(path);if(info)return {std::move(path),std::move(info)};
+        if(name.find('/')==name.npos && file_name(name)){const auto legacy=physical(std::string(main_folder)+"/"+name);if(auto found=files_->info(legacy))return {legacy,std::move(found)};}
+        return {std::move(path),{}};
     }
+    std::string existing(const std::string& name){return locate(name).first;}
 public:
     std::string identity(std::string_view value)override{const auto name=mapped(value);return name?existing(*name):physical(fold(value));}
     Saves(std::shared_ptr<wr::MutableFiles> files,bool test):files_(std::move(files)),prefix_(test?"test-mode/":""){
@@ -45,7 +46,7 @@ public:
     }
     std::optional<Info> info(std::string_view value)override{
         if(auto directory=mapped(value,true)){if(directory->empty() || *directory=="documents" || *directory=="documents/leaf")return Info{std::string(value),0,0,16};auto result=files_->info(physical(*directory));if(result)result->name=std::string(value);return result;}
-        const auto path=mapped(value);if(!path)return {};auto result=files_->info(existing(*path));if(result)result->name=std::string(value);return result;
+        const auto path=mapped(value);if(!path)return {};auto result=locate(*path).second;if(result)result->name=std::string(value);return result;
     }
     std::vector<Info> list(std::string_view value)override{
         const auto path=mapped(value,true);if(!path)return {};std::map<std::string,Info> result;
@@ -58,6 +59,14 @@ public:
     }
     std::FILE* open(std::string_view value,bool read,bool write,U32 creation,U32& error)override{
         const auto path=mapped(value);if(!path){error=5;return nullptr;}return files_->open((creation==3 || creation==4 || creation==5)?existing(*path):physical(*path),read,write,creation,error);
+    }
+    OpenPlan prepare_open(std::string_view value)override{
+        const auto name=mapped(value);
+        if(!name)return {{},physical(fold(value)),[](bool,bool,U32,U32& error)->std::FILE*{error=5;return nullptr;}};
+        auto [found,info]=locate(*name);
+        return {std::move(info),found,[files=files_,existing=found,primary=physical(*name)](bool read,bool write,U32 creation,U32& error){
+            return files->open((creation==3 || creation==4 || creation==5)?existing:primary,read,write,creation,error);
+        }};
     }
     U32 directory(std::string_view value)override{const auto path=mapped(value,true);if(!path)return 5;if(path->empty())return 183;std::string parent;std::size_t at{};while((at=path->find('/',at))!=path->npos){parent=path->substr(0,at++);const auto error=files_->directory(physical(parent));if(error && error!=183)return error;}return files_->directory(physical(*path));}
     U32 remove(std::string_view value,bool directory)override{const auto path=mapped(value,directory);if(!path || directory)return 5;return files_->remove(existing(*path),false);}

@@ -12,13 +12,28 @@ using namespace wr;namespace c=wa2::platform::compat;
 #define CHECK(x) do{if(!(x))throw std::runtime_error(std::string("check failed: ")+#x);}while(false)
 Image fixture(){Image image;image.base=0x400000;image.entry=0x401000;image.size=0x10000;image.headers_size=4096;image.bytes.resize(8192);image.sections={{".text",4096,4096,4096,4096,0x60000020}};return image;}
 std::vector<std::uint8_t> read(const std::filesystem::path& path){std::ifstream in(path,std::ios::binary);CHECK(in);return {std::istreambuf_iterator<char>(in),{}};}
+class CountedFiles final:public MutableFiles {
+    std::shared_ptr<MutableFiles> files;
+public:
+    unsigned queries{},opens{};
+    explicit CountedFiles(std::shared_ptr<MutableFiles> source):files(std::move(source)){}
+    std::optional<ReadOnlyFileInfo> info(std::string_view name)override{++queries;return files->info(name);}
+    std::string identity(std::string_view name)override{return files->identity(name);}
+    std::vector<ReadOnlyFileInfo> list(std::string_view name)override{return files->list(name);}
+    std::FILE* open(std::string_view name,bool r,bool w,U32 mode,U32& error)override{++opens;return files->open(name,r,w,mode,error);}
+    U32 directory(std::string_view name)override{return files->directory(name);}
+    U32 remove(std::string_view name,bool directory)override{return files->remove(name,directory);}
+    U32 move(std::string_view a,std::string_view b)override{return files->move(a,b);}
+    U32 attributes(std::string_view name,U32 flags)override{return files->attributes(name,flags);}
+    void replace(std::string_view name,std::span<const std::uint8_t> bytes)override{files->replace(name,bytes);}
+};
 int main(int argc,char** argv){try{
     CHECK(argc==2);unsigned cases{};const auto parent=std::filesystem::canonical(std::filesystem::path(argv[1]).parent_path());const auto root=parent/("selected-save-fixture-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(std::filesystem::create_directory(root));
     const auto selected=root/"Wa2Res",private_root=root/"private";CHECK(std::filesystem::create_directory(selected) && std::filesystem::create_directory(private_root));
     std::ofstream(selected/"Sys.sav",std::ios::binary)<<"PC-SAVE";std::ofstream(private_root/"Sys.sav")<<"WRONG";
     std::ofstream(selected/"SYSTEM.ini")<<"[DEFAULT]\r\nbgm_vol=37\r\nmov_lv=2\r\nunknown=keep\r\n";
     std::ofstream(selected/"default.ini")<<"[DEFAULT]\r\nvalue=17\r\n";
-    auto files=c::save_files(c::local_files(selected),false);ProcessOptions options;options.data_root=private_root;options.allow_file_write=true;
+    auto counted=std::make_shared<CountedFiles>(c::local_files(selected));auto files=c::save_files(counted,false);ProcessOptions options;options.data_root=private_root;options.allow_file_write=true;
     Process p(FunctionExecutor{[](Cpu&,Memory&)->bool{throw std::runtime_error("File checks must never execute game code");}},options);c::install_system(p);p.state().mutable_files=files;
     c::install_resource_mount(p,std::make_shared<c::ResourceMount>(std::vector<ReadOnlyFileInfo>{{"grp.pak",4,0},{"IC/grp.pak",4,0}},[](std::string_view)->std::FILE*{throw std::runtime_error("PAK payloads must not be opened");}));p.load(fixture());const auto memory=p.allocate_bytes(4096);const auto base_handles=p.state().files.size();
     const auto call=[&](const char* name,std::initializer_list<U32> arguments){const auto target=p.resolve("kernel32.dll",name);CHECK(target);return p.callback(target,{arguments.begin(),arguments.size()});};
@@ -60,5 +75,17 @@ int main(int argc,char** argv){try{
     CHECK(call("WriteFile",{handle,memory,4,memory+128,0})==1 && call("CloseHandle",{handle})==1 && std::filesystem::file_size(picked/"external.sav")==4);++cases;
     const auto unicode_root=root/std::filesystem::path(u8"\u6e38\u620f\u76ee\u5f55");CHECK(std::filesystem::create_directory(unicode_root));std::ofstream(unicode_root/"grp.pak",std::ios::binary)<<"OWN";auto unicode_mount=c::local_resource_mount(unicode_root);auto* unicode_file=unicode_mount->open("grp.pak");CHECK(unicode_file);CHECK(std::fgetc(unicode_file)=='O' && std::fclose(unicode_file)==0);++cases;
     CHECK(p.state().files.size()==base_handles);++cases;
-    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.selected-save-files.v1\",\"cases\":"<<cases<<",\"root_pc_files_read\":true,\"source_path_aliases\":true,\"alias_sharing_preserved\":true,\"random_access_writes\":true,\"profile_roundtrip\":true,\"nested_pc_fallback\":true,\"test_profile_isolated\":true,\"private_fallback_forbidden\":true,\"synthetic_files_only\":true,\"original_saves_opened\":false,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);std::cout<<"PASS selected-directory original-format save and configuration I/O.\n";return 0;
+    counted->queries=counted->opens=0;
+    for(unsigned n=0;n<32;++n){handle=call("CreateFileA",{n&1?primary:alias,0x80000000,1,0,3,128,0});CHECK(handle!=0xffffffff && call("CloseHandle",{handle})==1);}
+    CHECK(counted->queries==32 && counted->opens==32);const auto open_queries=counted->queries;cases+=32;
+    counted->queries=counted->opens=0;CHECK(call("CreateFileA",{p.put_string("save_99.sav"),0x80000000,7,0,3,128,0})==0xffffffff && p.last_error==2);
+    CHECK(counted->queries==2 && counted->opens==0);++cases;
+    handle=call("CreateFileA",{primary,0x80000000,1,0,3,128,0});CHECK(handle!=0xffffffff);counted->queries=counted->opens=0;
+    CHECK(call("CreateFileA",{alias,0x40000000,7,0,2,128,0})==0xffffffff && p.last_error==32 && counted->queries==1 && counted->opens==0);
+    CHECK(call("CloseHandle",{handle})==1 && read(selected/"Sys.sav")==normal);++cases;
+    std::ofstream(selected/"Sys.sav",std::ios::binary|std::ios::trunc)<<"CHANGED-PC";
+    handle=call("CreateFileA",{alias,0x80000000,7,0,3,128,0});CHECK(handle!=0xffffffff && call("GetFileSize",{handle,0})==10 && call("CloseHandle",{handle})==1);++cases;
+    std::filesystem::remove(selected/"Sys.sav");CHECK(call("CreateFileA",{primary,0x80000000,7,0,3,128,0})==0xffffffff && p.last_error==2);++cases;
+    CHECK(p.state().files.size()==base_handles);
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.selected-save-files.v1\",\"cases\":"<<cases<<",\"single_lookup_open_plan\":true,\"fixture_root_opens\":32,\"fixture_root_metadata_queries\":"<<open_queries<<",\"next_operation_sees_external_edits\":true,\"sharing_checked_before_truncation\":true,\"root_pc_files_read\":true,\"source_path_aliases\":true,\"alias_sharing_preserved\":true,\"random_access_writes\":true,\"profile_roundtrip\":true,\"nested_pc_fallback\":true,\"test_profile_isolated\":true,\"private_fallback_forbidden\":true,\"synthetic_files_only\":true,\"original_saves_opened\":false,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";out.close();CHECK(out);std::cout<<"PASS selected-directory original-format save and configuration I/O, bounded metadata queries and fresh file operations.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}
