@@ -42,17 +42,18 @@ game::Input game_input(const InputSnapshot& events){
     }
     return input;
 }
-SdlApplication::SdlApplication(game::Application& application,SdlCanvas& canvas,game::DriverSettings settings,AudioOutputFactory factory,std::function<void()> submitted)
+SdlApplication::SdlApplication(game::Application& application,SdlCanvas& canvas,game::DriverSettings settings,AudioOutputFactory factory,std::function<void()> submitted,InputFilter filter)
     :application_(application),driver_(application,settings),canvas_(canvas),presentation_(canvas),
-    audio_(factory?std::move(factory):AudioOutputFactory([](audio::Mixer& mixer){return std::make_unique<SdlAudio>(mixer);})),submitted_(std::move(submitted)){
+    audio_(factory?std::move(factory):AudioOutputFactory([](audio::Mixer& mixer){return std::make_unique<SdlAudio>(mixer);})),submitted_(std::move(submitted)),input_filter_(std::move(filter)){
     if(!application.has_save_thumbnail())application.prepare_save_thumbnail([](game::Scene& scene){game::RenderFrame frame;frame.capture(scene);return save_thumbnail(frame);});
     auto window=canvas.window_services();if(window.fullscreen)application.prepare_display(std::move(window.fullscreen));if(window.error)application.prepare_errors(std::move(window.error));
     if(window.resize)application.prepare_window_sizes(std::move(window.resize));if(window.information)application.prepare_information(std::move(window.information),std::move(window.environment));
 }
 game::DriverFrame SdlApplication::pump(std::int64_t now,const InputSnapshot& events,const Clock& clock){
-    const auto result=driver_.pump(now,{game_input(events),events.background || events.minimized || !events.focused,events.quit},clock);
+    std::optional<InputSnapshot> filtered;const auto* source=&events;if(input_filter_){filtered.emplace(events);input_filter_(*filtered);source=&*filtered;}const auto& input=*source;
+    const auto result=driver_.pump(now,{game_input(input),input.background || input.minimized || !input.focused,input.quit},clock);
     audio_.synchronize(application_.mixer(),application_.background());
-    if(events.renderer_reset)presentation_.reset_textures();
+    if(input.renderer_reset)presentation_.reset_textures();
     if(result.draw && !result.closed){frame_.capture(application_);presentation_.draw(frame_);canvas_.present(submitted_);}
     return result;
 }

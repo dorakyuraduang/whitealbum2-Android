@@ -51,7 +51,7 @@ def main():
     commands=json.loads((directory/'compile_commands.json').read_text());sources=sorted({Path(item['file']).resolve().relative_to(ROOT).as_posix() for item in commands if Path(item['output']).resolve().relative_to(directory).as_posix().lower() in graph})
     expected=set(core['native_compiled_sources'])
     if not expected.issubset(sources):raise ValueError('Full SDL desktop root omits common game sources: '+str(sorted(expected-set(sources))))
-    for name in ('platform/native_host.cpp','platform/native_desktop.cpp','hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c',
+    for name in ('platform/native_host.cpp','platform/native_desktop.cpp','platform/windows/native_menu.cpp','hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c',
             'tools/SDL-release-2.32.10/src/video/windows/SDL_windowsvideo.c','tools/SDL-release-2.32.10/src/render/opengl/SDL_render_gl.c'):
         if name not in sources:raise ValueError('Missing actual desktop SDL/device source: '+name)
     if not any('/src/audio/wasapi/' in path or '/src/audio/winmm/' in path for path in sources):raise ValueError('Native desktop root omits a production audio backend')

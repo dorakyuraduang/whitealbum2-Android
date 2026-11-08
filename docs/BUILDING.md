@@ -76,6 +76,13 @@ retained crops through failed/retried variant loads. All images are constructed
 fixtures. Scrolling is checked with resource requests counted and denied; no
 original CG pixels, window, event injection or screen access is involved.
 
+The Windows entry link includes its actual owned-menubar adapter. The
+`native-sdl-application.json` memory check covers immediate menu suspension,
+a synthetic long modal gap, released keys/pointer and exactly-once selected
+commands through the production pump. It never opens a Win32 menu/window or
+polls OS events. Entry/source-closure checks additionally require the Windows
+adapter while both hosts continue compiling identical common game sources.
+
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional
 restore failures and conditionally visible selections. `--resource-root res`

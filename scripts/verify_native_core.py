@@ -65,7 +65,7 @@ def main():
     inputs += [ROOT/p for p in ('platform/native_user_menu.hpp','platform/sdl_user_command.hpp','android/game/user_menu_jni.hpp','android/game/user_menu_jni.cpp','hosts/native-android/CMakeLists.txt')]
     inputs += [ROOT/p for p in ('tests/native_desktop.cpp','platform/native_desktop.hpp','platform/native_desktop.cpp',
         'platform/native_host.hpp','platform/native_host.cpp','platform/native_host.cmake','hosts/native/CMakeLists.txt',
-        'hosts/native/entry.cmake','hosts/native/windows_main.cpp','hosts/app.rc.in','icon.ico','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')]
+        'hosts/native/entry.cmake','hosts/native/windows_main.cpp','platform/native_menu_adapter.hpp','platform/windows/native_menu.hpp','platform/windows/native_menu.cpp','hosts/app.rc.in','icon.ico','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')]
     inputs += [ROOT/'tests/native_preferences.cpp',ROOT/'tests/native_audio_levels.cpp']
     inputs += [ROOT/'tests/native_application.cpp',ROOT/'tests/native_scene_fixture.hpp']
     inputs += [ROOT/'tests/native_title_view.cpp']
@@ -202,7 +202,7 @@ def main():
             allowed+=('tests/native_extra_grid.cpp',)
             allowed+=('tests/native_commentary.cpp',)
             allowed+=('tests/native_desktop.cpp','platform/native_desktop.cpp','platform/native_host.cpp',
-                'hosts/native/windows_main.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')
+                'hosts/native/windows_main.cpp','platform/windows/native_menu.cpp','tools/SDL-release-2.32.10/src/main/windows/SDL_windows_main.c')
             allowed+=('tests/native_title_scene.cpp',)
             allowed+=('tests/native_render_frame.cpp','platform/sdl_movie.cpp','platform/sdl_presentation.cpp')
             allowed+=('tests/native_movie_state.cpp',)
@@ -558,6 +558,7 @@ def main():
                         native_link_graph_sha256=hashlib.sha256(composition_graph.encode()).hexdigest())
                     run([directory/'wa2_native_sdl_application_tests.exe',directory/'native-sdl-application.json'],console,90)
                     sdl_application=json.loads((directory/'native-sdl-application.json').read_text())
+                    if sdl_application['cases']<30 or sdl_application['guards']<4 or not all(sdl_application[key] for key in ('native_modal_gap_rebased','modal_command_applied_once','modal_ordinary_input_released')):raise ValueError('Native modal menu clock/input gap checks failed')
                     if not sdl_application['passed'] or sdl_application['cases']<17 or sdl_application['guards']<2 or not sdl_application['owned_memory_only'] or not sdl_application['memory_renderer_has_no_window_services'] or not sdl_application['fake_audio_outputs_only'] or not sdl_application['actual_present_hook'] or not sdl_application['synthetic_event_structs_only'] or sdl_application['os_event_queue_polled'] or sdl_application['original_resources_opened'] or sdl_application['windows_created'] or sdl_application['devices_opened'] or sdl_application['game_launched'] or sdl_application['screen_access']:raise ValueError('Native SDL application pump checks failed')
                     sdl_graph=output([ninja,'-C',directory,'-t','graph','wa2_native_sdl_application_tests.exe']).replace('\\','/').lower()
                     if any(token in sdl_graph for token in forbidden):raise ValueError('AOT dependency in owned-memory application pump test')

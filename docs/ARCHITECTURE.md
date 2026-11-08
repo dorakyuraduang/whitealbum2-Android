@@ -1207,7 +1207,7 @@ fullscreen. Android does not enable desktop resizing. Version/environment
 information uses common command policy and an SDL presentation service, pausing
 the active owner and rebasing its clock/input after a blocking native dialog.
 The desktop entry embeds the provided root icon. Legacy D3D-only renderer
-options, desktop menu chrome and exact extra-page animation remain migration
+options, remaining source-menu options and exact extra-page animation remain migration
 work; this does not establish full-story or physical presentation compatibility.
 
 Music-browser transitions now use common `MenuTiming` values (15/7/15 source
@@ -1248,6 +1248,25 @@ Gallery/replay arrow turns additionally move outgoing/incoming cards in opposite
 32-pixel directions without the tab-change zoom. The loading transaction retains
 its requested direction; selecting a page tab clears that direction. Finite
 checks cover both turn directions, the page commit and a subsequent tab change.
+
+The native Windows entry now supplies a separate owned menubar window at the
+game client's top edge. Its four groups forward all nineteen common user
+commands and use the same enabled/checked masks as Android. The game SDL window
+never receives a Win32 menu or a changed client rectangle. State and position
+updates are suppressed when unchanged. All HWND/menu handles and UTF-16 label
+conversion remain in `platform/windows/native_menu.*`; no Windows menu policy
+or callback enters the common game/engine implementation.
+
+A native menu may run its own nested message loop inside SDL event pumping.
+The adapter suspends the common owner immediately and marks one background pump
+after the loop. The shared frame driver then resumes without consuming elapsed
+menu time, releases ordinary input and applies the selected explicit command
+once. Finite owned-memory SDL tests cover a thirty-second synthetic gap,
+immediate mixer pause, no catch-up, command retention, failure and input release.
+The real Windows entry is compiled/linked but no HWND or menu is opened during
+verification. This adds the default edge-activated command menu; the persisted
+source-only Alt activation option remains explicitly unsupported. It does not
+establish actual desktop/device presentation or whole-game compatibility.
 
 Voice-comment pages also share the source menu timing. Their opening/closing
 opacity, centred content scale and header/footer motion stay in the common

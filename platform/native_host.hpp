@@ -1,6 +1,7 @@
 #pragma once
 #include "native_application.hpp"
 #include "frame_driver.hpp"
+#include "native_menu_adapter.hpp"
 
 namespace wa2::platform {
 struct NativeHost {
@@ -13,6 +14,7 @@ struct NativeHost {
     bool fullscreen{};
     std::function<void()> submitted;
     void(*menu_status)(game::UserMenuState)noexcept{};
+    NativeMenuFactory menu;
 };
 // Shared SDL application entry. OS wrappers supply paths/resource access and
 // final error reporting; neither wrapper has its own story or frame policy.

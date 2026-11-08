@@ -20,10 +20,12 @@ class SdlApplication {
     AudioBinding audio_;
     game::RenderFrame frame_;
     std::function<void()> submitted_;
+    std::function<void(InputSnapshot&)> input_filter_;
 public:
     using Clock=std::function<std::int64_t()>;
     using Sleep=std::function<void(std::int64_t)>;
-    SdlApplication(game::Application&,SdlCanvas&,game::DriverSettings={},AudioOutputFactory={},std::function<void()> submitted={});
+    using InputFilter=std::function<void(InputSnapshot&)>;
+    SdlApplication(game::Application&,SdlCanvas&,game::DriverSettings={},AudioOutputFactory={},std::function<void()> submitted={},InputFilter={});
     game::DriverFrame pump(std::int64_t now,const InputSnapshot&,const Clock& budget_clock);
     void run(SdlInput&,const Clock&,const Sleep&);
 };
