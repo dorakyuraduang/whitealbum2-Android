@@ -1,0 +1,74 @@
+#include "native_legacy_fixture.hpp"
+#include "legacy_save.hpp"
+#include "checkpoint_codec.hpp"
+#include "application.hpp"
+#include "legacy_slots.hpp"
+#include "font_glyphs.hpp"
+#include <algorithm>
+
+namespace c=wa2::checkpoint;namespace a=wa2::audio;
+constexpr unsigned old_scene=0x11d84,old_script=0x140d4;
+void old_field(Bytes& bytes,unsigned at,int value){put(bytes,old_scene+at,std::bit_cast<unsigned>(value));}
+void old_half(Bytes& bytes,unsigned at,int value){half(bytes,old_scene+at,unsigned(value));}
+void old_string(Bytes& bytes,unsigned at,std::string_view value){string(bytes,old_scene+at,value);}
+Bytes old_file(std::initializer_list<Bytes> frames){
+    const auto newer=file(frames);Bytes bytes(old_script);std::copy_n(newer.begin(),88+65536,bytes.begin());put(bytes,0,1);bytes.insert(bytes.end(),newer.begin()+script_at,newer.end());
+    old_field(bytes,0x50,256);old_field(bytes,0x54,256);old_field(bytes,0x1040,-1);for(unsigned n=0;n<4;++n)old_field(bytes,0xe90+n*4,-1);for(unsigned at:{0x1034,0x1038,0x103c})old_field(bytes,at,128);
+    bytes[old_scene+0x1dc]=1;bytes[old_scene+0x1de]=10;bytes[old_scene+0x1e4]=1;old_half(bytes,0x1e8,2);old_half(bytes,0x1ec,7);old_string(bytes,0x1ee,"ABC\\kDEF");old_half(bytes,0x5ee,1);old_string(bytes,0x5f0,"OWNED");return bytes;
+}
+struct AudioState {int id{};bool loop{},stopped{};};
+struct Voice:a::Voice {
+    std::shared_ptr<AudioState> state;explicit Voice(std::shared_ptr<AudioState> value):state(std::move(value)){}bool ready()const override{return true;}bool finished()const override{return state->stopped;}std::string failure()const override{return {};}void gain(std::uint8_t)override{}void stop()override{state->stopped=true;}void pause(bool)override{}
+};
+struct Slots:g::SaveStorage {
+    std::map<unsigned,Bytes> values;
+    std::optional<Bytes> read(unsigned slot)override{const auto found=values.find(slot);return found==values.end()?std::optional<Bytes>{}:found->second;}
+    void replace(unsigned slot,std::span<const std::uint8_t> bytes)override{values[slot]=Bytes(bytes.begin(),bytes.end());}
+    std::vector<g::SaveSlotInfo> list()override{std::vector<g::SaveSlotInfo> result;for(const auto& [slot,bytes]:values)result.push_back({slot,bytes.size(),0,{}});return result;}
+};
+struct Preferences:g::PreferenceStorage {std::optional<Bytes> read()override{return {};}void replace(std::span<const std::uint8_t>)override{}};
+// Synthetic indexed font sheets: retain only headers, synthesize uniform
+// coverage on reads. No original glyph pixels and no device font are used.
+struct Fonts:Source {
+    Bytes prefix;std::array<Bytes,4> headers;std::array<std::uint64_t,4> starts{};std::uint64_t length{};
+    Fonts(){prefix.resize(16+4*44);std::memcpy(prefix.data(),"KCAP",4);put(prefix,12,4);length=prefix.size();
+        const std::array<std::string,4> names{"\x96\x7b\x91\xcc" "80.tga","\x91\xdc\x89\x65" "80.tga","14pt\x96\x7b\x91\xcc" ".tga","14pt\x91\xdc" ".tga"};
+        for(unsigned n=0;n<4;++n){const auto cell=n<2?40u:24u,width=cell*80,height=cell*(wa2::text::glyph_count(true)/80+1),size=21+width*height;CHECK(size<=16u*1024*1024);starts[n]=length;length+=size;std::memcpy(prefix.data()+20+n*44,names[n].data(),names[n].size());put(prefix,52+n*44,unsigned(starts[n]));put(prefix,56+n*44,size);auto& header=headers[n];header.resize(21);header[1]=header[2]=header[5]=1;header[7]=24;half(header,12,width);half(header,14,height);header[16]=8;header[17]=32;header[18]=header[19]=header[20]=255;}}
+    std::uint64_t size()const override{return length;}
+    void read_at(std::uint64_t at,std::span<std::uint8_t> out)override{CHECK(at<=length && out.size()<=length-at);std::fill(out.begin(),out.end(),0);const auto copy=[&](std::uint64_t start,const Bytes& data){const auto first=std::max(at,start),last=std::min(at+out.size(),start+data.size());if(first<last)std::copy_n(data.data()+std::size_t(first-start),std::size_t(last-first),out.data()+std::size_t(first-at));};copy(0,prefix);for(unsigned n=0;n<4;++n)copy(starts[n],headers[n]);}
+};
+int main(int argc,char** argv){try{
+    CHECK(argc==2);unsigned cases{},guards{};auto banks=memory_banks();banks["fon.pak"]=std::make_shared<Fonts>();Script message;message.call(131,{s::Value(std::string("SCRIPT")),s::Value(7),s::Value(1)});message.call(194,{s::Value(100000),s::Value(0),s::Value(1)});message.finish();Script choice;choice.call(209,{s::Value(0)});choice.call(194,{s::Value(100000),s::Value(0),s::Value(1)});choice.finish();
+    const auto program=s::Program::parse("1001",message.code,text(message.strings)),choices=s::Program::parse("2003",choice.code,text(choice.strings));
+    banks["ck-gal.pak"]=bank({{"Global.vrb",text("3,FLG_00,0\r\n")},{"LFScriptFunc.fnc",functions(0,200)},{"LFScriptFuncEx.fnc",functions(200,239)},{"1001.bnr",message.code},{"1001.txt",text(message.strings)},{"2003.bnr",choice.code},{"2003.txt",text(choice.strings)}});banks["char.pak"]=bank({{"tak000001.tga",raster(32,64)}});
+    const r::BankOpener open=[&](auto name)->std::shared_ptr<r::Source>{const auto found=banks.find(std::string(name));return found==banks.end()?nullptr:found->second;};auto disk=std::make_shared<Storage>();auto progress=std::make_shared<p::Store>(disk);progress->flush();const auto initial=progress->state().encode();const auto writes=disk->writes;
+    std::vector<std::shared_ptr<AudioState>> songs,effects;unsigned speech{};bool fail_audio{};g::SceneServices services;
+    const auto voice=[&](auto& list,int id,bool loop)->std::unique_ptr<a::Voice>{if(fail_audio)throw r::Error("injected old-save audio failure");auto state=std::make_shared<AudioState>();state->id=id;state->loop=loop;list.push_back(state);return std::make_unique<Voice>(state);};
+    services.music=[&](int id,bool loop){return voice(songs,id,loop);};services.effects=[&](int id,bool loop,bool){return voice(effects,id,loop);};services.speech=[&](const auto&)->std::unique_ptr<a::Voice>{++speech;throw r::Error("Old source restore must not restart voices");};
+    const auto restore=[&](const Bytes& bytes){return g::Scene::restore_legacy(open,progress,bytes,1000000,memory_resolver(),{},services,29);};const auto plain=old_file({frame(program,131)});auto game=restore(plain);
+    CHECK(game->statistics().scene=="1001" && game->statistics().command==131 && game->dialogue_state().raw_text()=="ABC\\kDEF" && game->dialogue_state().name()=="OWNED" && game->dialogue_state().speaker()==10 && game->dialogue_state().budget()==2 && !game->dialogue_state().novel().enabled() && progress->state().encode()==initial && disk->writes==writes && !speech);++cases;
+    {const auto checkpoint=game->checkpoint();CHECK(g::SavedScene::decode(checkpoint).logical_us==0);auto loaded=g::Scene::restore(open,progress,checkpoint,1000000,memory_resolver(),{},services);CHECK(loaded->checkpoint()==checkpoint);}++cases;
+    auto full=plain;old_field(full,0x34,1);old_field(full,0x18,10);old_field(full,0x1c,12);old_field(full,0x20,-3);old_field(full,0x24,1600);old_field(full,0x28,576);old_field(full,0x44,37);
+    const unsigned slot=3;old_field(full,0xbc+slot*4,1);old_field(full,0xdc+slot*4,10);old_field(full,0xfc+slot*4,1);old_field(full,0x11c+slot*4,3);old_field(full,0x13c+slot*4,9);old_field(full,0x15c+slot*4,100);old_field(full,0x17c+slot*4,201);
+    const auto bitmap=0x1048+2*0x98;old_string(full,bitmap,"atlas.tga");old_string(full,bitmap+0x44,"grp");old_field(full,bitmap+0x20,1);full[old_scene+bitmap+0x4c]=full[old_scene+bitmap+0x4d]=1;old_field(full,bitmap+0x50,4);old_field(full,bitmap+0x54,3);old_half(full,bitmap+0x58,256);full[old_scene+bitmap+0x5a]=128;full[old_scene+bitmap+0x5b]=67;full[old_scene+bitmap+0x5c]=23;old_half(full,bitmap+0x5e,120);full[old_scene+bitmap+0x71]=8;full[old_scene+bitmap+0x72]=1;old_field(full,bitmap+0x74,2);
+    for(const auto [offset,value]:{std::pair<unsigned,int>{0x78,33},{0x7a,44},{0x7c,16},{0x7e,8},{0x80,2},{0x82,3},{0x84,90},{0x86,91},{0x90,11},{0x92,12}})old_half(full,bitmap+offset,value);old_field(full,bitmap+0x88,std::bit_cast<int>(2.5f));old_field(full,bitmap+0x8c,std::bit_cast<int>(90.f));
+    old_field(full,0xe90,18);old_field(full,0xea0,1);old_field(full,0xec0,197);old_field(full,0xed0+15*4,1);old_field(full,0xf10+15*4,9015);old_field(full,0xf50+15*4,1);old_field(full,0xf90+15*4,88);std::fill(full.begin()+old_scene+0xfd0,full.begin()+old_scene+0x1034,1);old_field(full,0x1040,2004);
+    game=restore(full);CHECK(game->background().current && game->background().current->scale_x==1.25f && game->background().current->scale_y==.8f && game->background().current->angle==0 && game->background().current->source_x==620 && game->background().current->source_y==341 && game->environment().size()==1 && songs.back()->id==18 && songs.back()->loop && effects.back()->id==9015 && effects.back()->loop && !speech && progress->state().encode()==initial && disk->writes==writes);++cases;
+    const auto environment=game->environment(),sprites=game->foreground();CHECK(std::any_of(environment.begin(),environment.end(),[](const auto& value){return value.alpha==201 && value.source_width==32 && value.source_height==64;}));CHECK(std::any_of(sprites.begin(),sprites.end(),[](const auto& value){return value.order==0x13 && value.alpha==120 && value.angle==0 && value.width==40 && value.source_x==2 && value.source_y==3 && value.source_width==16 && value.source_height==8;}));++cases;
+    {const auto saved=g::SavedScene::decode(game->checkpoint());auto controls=c::Reader::open("LSCT",saved.part(g::ScenePart::controls));for(unsigned n=0;n<4;++n)controls.i32();CHECK(controls.i32()==2004 && controls.i32()==0);CHECK(saved.logical_us==0);}++cases;
+    {auto older=plain;old_field(older,0xe6c,1);old_field(older,0xe70,0xb03);old_field(older,0xe78,10);old_field(older,0xe7c,8);old_field(older,0xe80,1);const auto normalized=g::upgrade_legacy_scene_v1(std::span(older).subspan(old_scene,g::original_scene_v1_bytes));const auto value=[&](unsigned at){c::Reader field(std::span<const std::uint8_t>(normalized).subspan(at,4));return field.u32();};CHECK(normalized.size()==g::original_scene_v2_bytes && value(0xed8)==3 && !value(0xeec) && !value(0xef4));auto next=restore(older);const auto snapshot=next->checkpoint();CHECK(g::Scene::restore(open,progress,snapshot,1000000,memory_resolver(),{},services)->checkpoint()==snapshot && next->foreground().size()>0);}++cases;
+    {auto older=plain;std::fill_n(older.begin()+old_scene+0x5f0,31,'N');older[old_scene+0x60f]=0;auto next=restore(older);CHECK(next->dialogue_state().name()==std::string(31,'N'));}++cases;
+    {auto older=plain;old_half(older,0x1e8,32767);older[old_scene+0x1e6]=1;auto next=restore(older);next->update(1016667,{.advance=true});next->update(1033334);CHECK(next->statistics().command==194 && !next->statistics().messages && !speech && disk->writes==writes);}++cases;
+    {auto older=old_file({frame(program)});older[old_scene+0x1dc]=0;std::fill_n(older.begin()+old_scene+0x5f0,32,'X');CHECK(restore(older)->dialogue_state().phase()==s::DialoguePhase::closed);}++cases;
+    {auto thumbnail=plain;thumbnail[88]=1;thumbnail[89]=2;thumbnail[90]=3;thumbnail[91]=4;thumbnail[88+65532]=11;thumbnail[88+65533]=12;thumbnail[88+65534]=13;thumbnail[88+65535]=14;const auto preview=g::inspect_legacy_save_preview(thumbnail);CHECK(preview.original && preview.thumbnail->width==128 && preview.thumbnail->height==128 && preview.thumbnail->rgba[0]==3 && preview.thumbnail->rgba[2]==1 && preview.thumbnail->rgba[65532]==13 && preview.thumbnail->rgba[65535]==14);}++cases;
+    const auto live=game->checkpoint();const auto live_song=songs.back();const auto reject=[&](const Bytes& bytes){rejects([&]{restore(bytes);});CHECK(game->checkpoint()==live && !live_song->stopped && progress->state().encode()==initial && disk->writes==writes);++guards;};
+    for(unsigned length:{0u,87u,old_script,old_script+11})reject(Bytes(plain.begin(),plain.begin()+length));++cases;
+    for(unsigned length:{0u,1u,unsigned(g::original_scene_v1_bytes-1),unsigned(g::original_scene_v1_bytes+1)}){rejects([&]{g::upgrade_legacy_scene_v1(Bytes(length));});++guards;}++cases;
+    {auto bad=plain;std::fill_n(bad.begin()+old_scene+0x5f0,32,'X');reject(bad);bad=plain;std::fill_n(bad.begin()+old_scene+0x1ee,1024,'X');reject(bad);}++cases;
+    for(const auto [at,value]:{std::pair<unsigned,int>{0x2c,3},{0x48,-1},{0x1034,256},{0x1038,-1},{0x15c+3*4,129}}){auto bad=full;old_field(bad,at,value);reject(bad);}++cases;
+    {auto bad=plain;bad.push_back(1);reject(bad);bad=plain;put(bad,0,3);reject(bad);bad=plain;put(bad,old_script+12+0x80c,1);reject(bad);}++cases;
+    fail_audio=true;reject(full);fail_audio=false;++cases;
+    {auto native=std::make_shared<Slots>();auto source=std::make_shared<Source>();source->b=full;g::LegacySaveSources original;original.open=[&](auto name)->std::shared_ptr<r::Source>{CHECK(name=="save_00.sav");return source;};original.list=[&]{return std::vector<g::LegacySaveFile>{{"save_00.sav",full.size(),0,{}}};};auto storage=g::legacy_save_storage(native,std::move(original),false);g::Application app(open,progress,std::make_shared<Preferences>(),storage,memory_resolver(),31,services);app.load(0,1000000);CHECK(app.page()==g::Page::story && app.scene()->background().current->scale_x==1.25f && app.scene()->dialogue_state().name()=="OWNED");app.save(0);CHECK(native->values.contains(0) && !g::original_manual_save(native->values.at(0)) && source->b==full);app.close(1000001);}++cases;
+    {auto selected=old_file({frame(choices,209)});old_field(selected,0x610,1);old_field(selected,0x618,2);old_string(selected,0x61c,"FIRST");old_string(selected,0x71c,"SECOND");auto next=restore(selected);CHECK(next->choices().active() && next->choices().items().size()==2 && !next->choices().items()[0].show_disabled && progress->state().encode()==initial);next->update(1016667,{.choice=1});next->update(1033334);CHECK(next->statistics().command==194 && progress->state().flag(992)==2 && !progress->state().flag(900));}++cases;
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.native-legacy-v1.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"old_dimensions_not_percentages\":true,\"integer_character_positions\":true,\"bounded_old_speaker_names\":true,\"source_choice_history_fallback\":true,\"source_voice_reset_policy\":true,\"unchanged_bitmap_load_semantics\":true,\"shared_script_packet_import\":true,\"native_checkpoint_round_trip\":true,\"failed_restore_keeps_live_scene\":true,\"synthetic_data_only\":true,\"original_resources_opened\":false,\"original_saves_opened\":false,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out);std::cout<<"PASS version-1 scene, original field policy and native owners; own bytes only.\n";return 0;
+}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

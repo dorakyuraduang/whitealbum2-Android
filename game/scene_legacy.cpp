@@ -33,10 +33,11 @@ template<class Controller> void apply(Controller& controller,unsigned index,std:
 }
 }
 std::unique_ptr<Scene> Scene::restore_legacy(resource::BankOpener opener,std::shared_ptr<progress::Store> progress,std::span<const std::uint8_t> bytes,std::int64_t now,const SavedImageResolver& saved_images,const Preferences& preferences,SceneServices services,std::uint32_t seed){
-    const auto header=inspect_legacy_save_header(bytes);if(header.version!=2)throw script::Unsupported("Original version-1 manual scene conversion is not established");
-    constexpr std::size_t prefix=0x134d4,scene_offset=0x110a0;
+    const auto header=inspect_legacy_save_header(bytes);const bool older=header.version==1;
+    const std::size_t prefix=older?0x140d4:0x134d4,scene_offset=older?0x11d84:0x110a0;
     if(bytes.size()<=prefix || bytes.size()>checkpoint::maximum_bytes || now<0 || !progress || !saved_images)throw script::Error("Invalid original manual scene size, storage or restore services");preferences.validate();
-    const auto record=bytes.subspan(scene_offset,original_scene_v2_bytes);const LegacyFields data(record);const auto audio=import_legacy_scene_audio(record);
+    SavedScene::Bytes upgraded;if(older)upgraded=upgrade_legacy_scene_v1(bytes.subspan(scene_offset,original_scene_v1_bytes));
+    const auto record=older?std::span<const std::uint8_t>(upgraded):bytes.subspan(scene_offset,original_scene_v2_bytes);const LegacyFields data(record);const auto audio=import_legacy_scene_audio(record);
     const auto raw=data.byte(0x210)?data.text(0x222,1024):std::string{};
     auto next=std::make_unique<Scene>(std::move(opener),seed,std::move(progress),std::move(services));next->preferences(preferences);auto resolve=saved_images(next->resources_);if(!resolve)throw script::Error("Missing original scene image resolver");
     const auto translated=script::import_legacy_script(bytes.subspan(prefix),next->library_.functions(),next->library_.globals(),[&](auto name){return next->library_.load(name);},

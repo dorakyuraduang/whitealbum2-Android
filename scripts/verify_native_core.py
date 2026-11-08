@@ -82,6 +82,7 @@ def main():
     inputs += [ROOT/'tests/native_gallery_progress.cpp']
     inputs += [ROOT/'tests/native_legacy_scene.cpp',ROOT/'tests/native_legacy_fixture.hpp',ROOT/'tests/native_legacy_slots.cpp']
     inputs += [ROOT/'tests/native_character_palettes.cpp']
+    inputs += [ROOT/'tests/native_legacy_v1.cpp']
     inputs += [ROOT/'tests/native_game_directory.cpp',ROOT/'platform/game_directory.cpp',ROOT/'platform/game_directory.hpp']
     inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
         ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
@@ -158,6 +159,7 @@ def main():
             if host=='windows':targets+=['wa2_native_legacy_save_tests']
             if host=='windows':targets+=['wa2_native_gallery_progress_tests']
             if host=='windows':targets+=['wa2_native_legacy_scene_tests','wa2_native_legacy_slots_tests']
+            if host=='windows':targets+=['wa2_native_legacy_v1_tests']
             if host=='windows':targets+=['wa2_native_character_palette_tests']
             if host=='windows':targets+=['wa2_native_frame_driver_tests','wa2_native_audio_binding_tests']
             if host=='windows':targets+=['wa2_native_image_wait_tests','wa2_native_loading_cache_tests','wa2_native_bootstrap_tests','wa2_android_jni_service_tests']
@@ -208,6 +210,7 @@ def main():
             allowed+=('tests/native_gallery_progress.cpp',)
             allowed+=('tests/native_legacy_scene.cpp','tests/native_legacy_slots.cpp')
             allowed+=('tests/native_character_palettes.cpp',)
+            allowed+=('tests/native_legacy_v1.cpp',)
             allowed+=('tests/native_game_directory.cpp','platform/game_directory.cpp')
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
@@ -310,6 +313,9 @@ def main():
             if host=='windows':
                 print('Running synthetic native script/progress checks; no game starts.',flush=True)
                 run([directory/'wa2_native_progress_tests.exe',directory/'native-progress.json'],console,90)
+                run([directory/'wa2_native_legacy_v1_tests.exe',directory/'native-legacy-v1.json'],console,90)
+                legacy_v1=json.loads((directory/'native-legacy-v1.json').read_text())
+                if not legacy_v1['passed'] or legacy_v1['cases']<18 or legacy_v1['guards']<19 or not all(legacy_v1[key] for key in ('old_dimensions_not_percentages','integer_character_positions','bounded_old_speaker_names','source_choice_history_fallback','source_voice_reset_policy','unchanged_bitmap_load_semantics','shared_script_packet_import','native_checkpoint_round_trip','failed_restore_keeps_live_scene','synthetic_data_only')) or any(legacy_v1[key] for key in ('original_resources_opened','original_saves_opened','devices_opened','game_launched','screen_access')):raise ValueError('Original version-1 native scene conversion checks failed')
                 run([directory/'wa2_native_game_directory_tests.exe',directory/'native-game-directory.json'],console,90)
                 game_directory=json.loads((directory/'native-game-directory.json').read_text())
                 if not game_directory['passed'] or game_directory['cases']<1022 or game_directory['guards']<42 or not all(game_directory[key] for key in ('selected_directory_isolation','root_sys_precedence','read_only_original_import','bounded_previews','range_writes_preserve_other_blocks','failed_writes_retryable','synthetic_files_only')) or game_directory['game_launched'] or game_directory['screen_access']:raise ValueError('Native selected game-directory checks failed')
@@ -611,6 +617,7 @@ def main():
     report['legacy_scene']=legacy_scene
     report['legacy_slots']=legacy_slots
     report['character_palettes']=character_palettes
+    report['legacy_v1']=legacy_v1
     report['game_directory']=game_directory
     report['frame_driver']=frame_driver
     report['audio_binding']=audio_binding

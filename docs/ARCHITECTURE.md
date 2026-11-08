@@ -119,7 +119,7 @@ Twenty-nine constructed-data cases and thirty-nine guards check these records
 with fake playback. This audio/header converter alone does not establish
 complete original scene or device compatibility.
 
-`Scene::restore_legacy` translates version-2 manual scenes into ordinary native
+`Scene::restore_legacy` translates version-1 and version-2 manual scenes into ordinary native
 owners. It restores script/global/call state, settled background/camera and
 character views, static/INAS bitmap state, dialogue text/page/reveal, source
 choice-history identity, calendar, continuous shake, prefilled weather and
@@ -133,8 +133,24 @@ stored destination rectangle are omitted by the original loader. Native
 checkpoints retain their full geometry. Twenty-seven constructed-data cases
 and forty-three guards cover native checkpoint round trips, page continuation,
 nested return, choice history and failed replacement with fake transports.
-Version 1, unrecoverable saved text/heap values, pending commands other than
+Unrecoverable saved text/heap values, pending commands other than
 message/selection waits and ambiguous simultaneous music remain explicit errors.
+
+The version-1 path has its own fixed-prefix/record bounds and converts only
+serialized fields to the version-2 schema before creating these same native
+owners. Old integer background destination dimensions are divided by 1280/720;
+rotation is zero. Character positions use the old integer placement, while the
+speaker-name field keeps its original 32-byte bound. Choice restore supplies
+the source's zero history group/script identity and disabled-display flag,
+using the same fallback history entry as its old loader. Old weather ignores
+extended flags/amplitude, and the old voice-chapter override is retained while
+voice offset/adult mode reset. The source does not restore its old voice loops,
+calendar, novel flag or clock; the native candidate starts those unsaved fields
+fresh. These are file-format translations, with no recompiled functions or
+original objects. Eighteen synthetic cases and nineteen guards cover background,
+character/bitmap geometry, source defaults, thumbnail rows, full native application
+load/save, read-only source retention and failed candidates. No original save,
+original story, physical font or rendering/audio device is opened.
 
 `game/legacy_slots.*` adds a read-only source layer below native slots. Native
 files, including damaged ones, take precedence. Original `save_00.sav` through

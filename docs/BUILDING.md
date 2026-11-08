@@ -50,9 +50,11 @@ owners. `native-legacy-slots.json` covers read-only original directory layers,
 bounded full-thumbnail previews, native precedence and actual application
 load/native-save/failure routes using constructed saves and uniquely owned
 temporary directories. `native-save-view.json` checks both original-square and
-native-wide thumbnail crops. These tests do not open user saves or execute an
-original story. Version-1 scene records and unrecoverable pending command data
-remain explicitly unsupported; this is not whole-game compatibility proof.
+native-wide thumbnail crops. `native-legacy-v1.json` adds the older record's
+dimension/character/text layout, original reset policy, read-only source
+retention and actual application load/native-save route. These tests do not
+open user saves or execute an original story. Unrecoverable pending command
+data remains explicitly unsupported; this is not whole-game compatibility proof.
 
 `verify_native_android_ui.py` also compiles and runs the finite
 `LegacySavePathTest` without Android services. The native Android definition
@@ -492,7 +494,7 @@ or `Documents/Leaf/WHITE ALBUM2 -closing chapter-/Sys.sav` (closing-only resourc
 within that root, validating the exact original length before publishing a
 root copy. It never merges separate introductory progress. Invalid root files
 and provider failures remain explicit errors; they do not trigger fresh saves.
-Original manual saves retain their read-only inventory and version-2 state
+Original manual saves retain their read-only inventory and version-1/version-2 state
 converter. Native scene saves remain a different format, with no reverse export.
 
 Desktop replacements use a closed, flushed temporary and atomic rename.

@@ -11,7 +11,7 @@ authorization are remembered by the app. Writes use one background queue and
 complete before game start; an error is shown rather than writing to private
 storage. Test mode uses `native-test/` in that same folder. Renew an
 old read-only folder grant to allow read/write access. PC system progress and
-supported version-2 manual saves may be copied into this selection; native
+supported version-1/version-2 manual saves may be copied into this selection; native
 scene saves use their own format and cannot be loaded by the original PC game.
 This changes the native development target, not the retained 0.2.46 AOT binary.
 
