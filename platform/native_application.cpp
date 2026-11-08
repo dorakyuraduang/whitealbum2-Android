@@ -11,11 +11,12 @@ NativeStartup native_startup(std::span<const std::string_view> arguments){
         else throw std::invalid_argument("Unsupported native startup argument: "+std::string(argument.substr(0,128)));}
     return result;
 }
-std::unique_ptr<game::Application> native_application(resource::BankOpener opener,const std::filesystem::path& directory,NativeStartup startup,game::SceneServices scene,game::TitleServices title,LegacySettingsOpener legacy,game::LegacySaveSources legacy_saves){
-    if(!opener || (startup.title.movie_suffix && *startup.title.movie_suffix>2) || startup.image_timeout.count()<1 || startup.image_timeout.count()>60000)
+std::unique_ptr<game::Application> native_application(resource::BankOpener opener,std::shared_ptr<GameDirectory> directory,NativeStartup startup,game::SceneServices scene,game::TitleServices title,LegacySettingsOpener legacy,game::LegacySaveSources legacy_saves){
+    if(!opener || !directory || (startup.title.movie_suffix && *startup.title.movie_suffix>2) || startup.image_timeout.count()<1 || startup.image_timeout.count()>60000)
         throw std::invalid_argument("Invalid native application startup configuration");
     const auto content=startup.content?*startup.content:game::installed_title_content(opener);
-    auto progress=std::make_shared<progress::Store>(progress_storage(directory));
+    if(startup.test_mode)directory=game_test_directory(std::move(directory));
+    auto progress=std::make_shared<progress::Store>(progress_storage(directory,content.local_introductory));
     if(startup.test_mode)progress->state().unlock_all_for_testing();
     game::Scene::SavedImageResolver resolver=[timeout=startup.image_timeout](resource::Catalog& resources)->image::Resolve{
         return [&resources,timeout](const image::Reference& reference){auto request=resources.image(reference);auto pixels=request->wait_for(timeout);
@@ -46,4 +47,5 @@ std::unique_ptr<game::Application> native_application(resource::BankOpener opene
     // A failed title/provider preparation must not persist test-mode changes.
     if(startup.test_mode)progress->flush();return application;
 }
+std::unique_ptr<game::Application> native_application(resource::BankOpener opener,const std::filesystem::path& directory,NativeStartup startup,game::SceneServices scene,game::TitleServices title,LegacySettingsOpener legacy,game::LegacySaveSources legacy_saves){return native_application(std::move(opener),game_directory(directory),startup,std::move(scene),std::move(title),std::move(legacy),std::move(legacy_saves));}
 }

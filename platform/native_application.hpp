@@ -15,8 +15,10 @@ struct NativeStartup {
 };
 // Arguments exclude argv[0]. This policy is common to desktop and Android.
 NativeStartup native_startup(std::span<const std::string_view> arguments);
-// The host supplies an existing private directory, separate from external
-// resources and the retained AOT application's files. No PAK is copied.
-std::unique_ptr<game::Application> native_application(resource::BankOpener,const std::filesystem::path& private_directory,
+// The host supplies the selected game directory; no PAK is copied. Desktop
+// files and Android SAF use the same persistence policy and byte formats.
+std::unique_ptr<game::Application> native_application(resource::BankOpener,std::shared_ptr<GameDirectory>,
+    NativeStartup={},game::SceneServices={},game::TitleServices={},LegacySettingsOpener={},game::LegacySaveSources={});
+std::unique_ptr<game::Application> native_application(resource::BankOpener,const std::filesystem::path& selected_directory,
     NativeStartup={},game::SceneServices={},game::TitleServices={},LegacySettingsOpener={},game::LegacySaveSources={});
 }

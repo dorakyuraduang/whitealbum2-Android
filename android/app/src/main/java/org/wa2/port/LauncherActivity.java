@@ -54,7 +54,7 @@ public final class LauncherActivity extends Activity {
         choose = new Button(this); choose.setText("选择资源文件夹"); choose.setAllCaps(false); choose.setTextColor(TEXT);
         choose.setBackgroundTintList(ColorStateList.valueOf(0xff30474b)); card.addView(choose, row(14));
         choose.setOnClickListener(view -> pickDirectory());
-        card.addView(text("选择存放原版 PAK 的 Wa2Res 文件夹，并保留 IC 子目录。资源直接读取，不复制到应用内。", 13, MUTED), row(8));
+        card.addView(text("选择存放原版 PAK 的 Wa2Res 文件夹，并保留 IC 子目录。资源直接读取；存档和游戏配置也保存在所选目录，可放入 PC 版存档。", 13, MUTED), row(8));
         Switch fps = new Switch(this); fps.setText("显示 FPS 和帧耗时"); fps.setTextColor(TEXT); fps.setTextSize(16); fps.setPadding(0, dp(12), 0, dp(12));
         fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> LaunchSettings.setShowFps(this, checked));
         content.addView(fps, row(16));
@@ -80,7 +80,7 @@ public final class LauncherActivity extends Activity {
     }
     private void pickDirectory() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
         Uri saved = ResourceDirectory.selectedTree(this);
         intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, saved == null ? DocumentsContract.buildDocumentUri(ResourceLocation.AUTHORITY, ResourceLocation.DOCUMENT_ID) : saved);
         try { startActivityForResult(intent, PICK_DIRECTORY); }
@@ -99,7 +99,7 @@ public final class LauncherActivity extends Activity {
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || generation != token) return;
                 busy = false; refresh();
-                if (failure != null) { status.setText(failure + "\n请重新选择可读取的 Wa2Res 文件夹。"); return; }
+                if (failure != null) { status.setText(failure + "\n请重新选择并授权可读写的 Wa2Res 文件夹。"); return; }
                 status.setText("已找到 " + found + " 个资源包。");
                 if (launch) { launching = true; busy = true; refresh(); status.setText("正在启动游戏…"); startActivity(new Intent(this, Wa2Activity.class)); }
             });

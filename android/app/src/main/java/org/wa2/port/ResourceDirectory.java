@@ -15,11 +15,14 @@ import android.provider.DocumentsContract;
 import java.io.IOException;
 import java.util.Locale;
 import java.util.ArrayList;
+import java.nio.ByteBuffer;
 
 /** Original PAKs stay in the selected local Wa2Res folder; no resource imports. */
 final class ResourceDirectory {
     private static final int REQUEST_DIRECTORY = 0x5741;
     private static final Object LOCK = new Object();
+    private static final Object STORAGE_LOCK = new Object();
+    private static final int TREE_ACCESS = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
     private static final String PREFERENCES = "resource-directory";
     private static final String TREE_KEY = "tree-uri";
     private static Context context;
@@ -66,7 +69,7 @@ final class ResourceDirectory {
             preferences().edit().remove(TREE_KEY).apply();
             if (tree != null) {
                 try { context.getContentResolver().releasePersistableUriPermission(tree,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (RuntimeException ignored) { }
+                    TREE_ACCESS); } catch (RuntimeException ignored) { }
             }
             choose(activity, token, null);
         }
@@ -111,17 +114,17 @@ final class ResourceDirectory {
         SharedPreferences prefs = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
         String previous = prefs.getString(TREE_KEY, null);
         if ((grantFlags & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0)
-            resolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        // Persist only a verified tree with a durable read grant. Providers
+            resolver.takePersistableUriPermission(tree, grantFlags & TREE_ACCESS);
+        // Persist only a verified tree with durable read/write grants. Providers
         // without this capability cannot promise a usable next launch.
         boolean durable = false;
         for (android.content.UriPermission permission : resolver.getPersistedUriPermissions())
-            if (permission.isReadPermission() && tree.equals(permission.getUri())) durable = true;
-        if (!durable) throw new IOException("所选目录未提供持久读取授权，请重新授权。");
+            if (permission.isReadPermission() && permission.isWritePermission() && tree.equals(permission.getUri())) durable = true;
+        if (!durable) throw new IOException("游戏存档和配置需要所选目录的持久读写授权，请重新选择文件夹授权。");
         if (!prefs.edit().putString(TREE_KEY, tree.toString()).commit()) throw new IOException("无法保存资源目录设置");
         synchronized (LOCK) { preparedTree = tree; preparedArchives = found; }
         if (previous != null && !previous.equals(tree.toString())) {
-            try { resolver.releasePersistableUriPermission(Uri.parse(previous), Intent.FLAG_GRANT_READ_URI_PERMISSION); }
+            try { resolver.releasePersistableUriPermission(Uri.parse(previous), TREE_ACCESS); }
             catch (RuntimeException ignored) { }
         }
         return found.size();
@@ -143,12 +146,12 @@ final class ResourceDirectory {
         if (!current(activity, token) || activity.isFinishing()) return;
         String message = "请选择存放原版资源的 Wa2Res 文件夹（默认：内部共享存储根目录 / Wa2Res）。"
             + "请把原版 .pak 放入 Wa2Res，并保留 IC 子目录。"
-            + "首次启动请在系统界面授权读取 Wa2Res；以后会沿用该授权。";
+            + "请授权读写 Wa2Res，存档和游戏配置保存在这个目录；以后会沿用该授权。";
         if (problem != null) message = problem + "\n\n" + message;
         new AlertDialog.Builder(activity).setTitle("游戏资源").setMessage(message)
             .setPositiveButton("授权 Wa2Res", (dialog, which) -> {
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION |
+                intent.addFlags(TREE_ACCESS |
                     Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION |
                     Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
                 intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
@@ -251,20 +254,19 @@ final class ResourceDirectory {
                 SharedPreferences prefs = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
                 String previous = prefs.getString(TREE_KEY, null);
                 if (persist) {
-                    try {
-                        resolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        resolver.takePersistableUriPermission(tree, TREE_ACCESS);
                         prefs.edit().putString(TREE_KEY, tree.toString()).apply();
                         if (previous != null && !previous.equals(tree.toString())) {
                             try { resolver.releasePersistableUriPermission(Uri.parse(previous),
-                                Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (SecurityException ignored) { }
+                                TREE_ACCESS); } catch (SecurityException ignored) { }
                         }
-                    } catch (SecurityException ignored) {
-                        // The current read grant is still usable for this run.
-                        prefs.edit().remove(TREE_KEY).apply();
-                    }
                 } else if (previous != null && !previous.equals(tree.toString())) {
                     prefs.edit().remove(TREE_KEY).apply();
                 }
+                boolean durable = false;
+                for (android.content.UriPermission permission : resolver.getPersistedUriPermissions())
+                    if (permission.isReadPermission() && permission.isWritePermission() && tree.equals(permission.getUri())) durable = true;
+                if (!durable) throw new IOException("存档和配置需要 Wa2Res 的持久读写授权，请重新选择文件夹。");
                 synchronized (LOCK) {
                     if (owner != activity || generation != token) return;
                     archives = found;
@@ -303,6 +305,29 @@ final class ResourceDirectory {
 
     public static int openLegacySave(String name) throws IOException {
         return openLegacyFile(LegacySavePath.parts(name));
+    }
+
+    public static int gameStorageToken() throws IOException {
+        synchronized (LOCK) { awaitArchives(); if (activeTree == null) throw new IOException("Game storage needs an authorized directory"); return generation; }
+    }
+    private static GameDocuments gameDocuments(int token) throws IOException {
+        synchronized (LOCK) {
+            awaitArchives();
+            if (activeTree == null || token != generation) throw new IOException("Game directory changed; return to the launcher and restart the game");
+            return new GameDocuments(context.getContentResolver(),activeTree);
+        }
+    }
+    public static int openGameFile(String name,int token) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized (STORAGE_LOCK) { return files.open(name); }
+    }
+    public static void replaceGameFile(String name,int token,ByteBuffer bytes) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized (STORAGE_LOCK) { files.replace(name,bytes); }
+    }
+    public static void updateGameFile(String name,int token,long expected,long offset,ByteBuffer bytes) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized (STORAGE_LOCK) { files.update(name,expected,offset,bytes); }
+    }
+    public static String[] gameSaveMetadata(int token,String directory) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized (STORAGE_LOCK) { return files.saves(directory); }
     }
 
     private static int openLegacyFile(String[] parts) throws IOException {

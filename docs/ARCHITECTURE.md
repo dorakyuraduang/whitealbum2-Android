@@ -61,7 +61,7 @@ byte. Invalid indices/lengths fail before mutation. Existing unknown fields are
 round-tripped, and the full-content test profile uses the shared unlock list.
 
 An injected Storage adapter separates persistence from game state. The ordinary
-file adapter opens only Sys.sav in a host-supplied private directory. It preserves
+file adapter opens Sys.sav in the selected game directory. It preserves
 manual saves/settings and writes only dirty original-format blocks (4 KiB for
 system flags). Failed blocks remain dirty for retry. Whole-file/multi-block
 atomicity and a complete scene-save snapshot are not claimed. A scene without
@@ -562,7 +562,7 @@ file/save-menu integration and whole-game compatibility remain unverified.
 
 The native save-slot repository now validates snapshot envelopes before writes
 and after reads. Its file adapter keeps `native-saves/slot-NNN.wa2sav` beneath a
-host-supplied private directory, apart from original manual saves and Sys.sav.
+selected game directory, apart from original manual saves and Sys.sav.
 Writes use an exclusively created temporary, flush its contents, then replace
 the named native slot atomically (with directory flushing on Android/POSIX).
 Slot enumeration sorts numeric IDs and reports damaged entries individually;
@@ -590,7 +590,7 @@ original zero-duration volume operation; turning it back on permits future
 lines rather than replaying an old line. Looping-voice restore observes the
 current policy without creating a decoder for excluded speech. Synthetic checks
 use fake voices and memory settings storage. The file adapter persists only
-`native-settings.wa2cfg` in a host-supplied private directory, through the same
+`native-settings.wa2cfg` in the selected game directory, through the same
 exclusive temporary/flush/atomic replacement helper as native save slots.
 It rejects links, directories and excessive lengths; it never imports or
 modifies original settings or system/manual saves. Separate synthetic-directory
@@ -767,7 +767,7 @@ using constructed scripts, fake movies and owned temporary files.
 
 `android/game/game_host.cpp` is now a thin migration entry around the same
 bootstrap and SDL application loop. It creates the Android window/canvas,
-supplies authorized PAK descriptors, a separate `native-game` private directory,
+supplies authorized PAK descriptors and the selected directory's SAF storage,
 clock/wait adapters and the successful-present callback. It no longer owns
 another story scheduler, skip timer, manual draw ordering or raw mixer device.
 The NDK compiles this entry without launching it. With an existing Android
@@ -1313,6 +1313,38 @@ warm paths and check byte identity, style/archive isolation, bounded retention,
 eviction/lifetime and global-state preservation. These checks measure avoided
 component I/O; they do not establish game loading times or phone frame rates.
 
+## Selected game-directory persistence
+
+The native development entries use `platform/game_directory.*` for all game
+progress, preferences and scene slots. The same common storage wrappers select
+root `Sys.sav`, `native-settings.wa2cfg` and `native-saves/slot-NNN.wa2sav` on
+Windows and Android. The former AppData/internal `native-game` locations are
+not the active native storage root. Selecting another resource directory also
+selects another save/configuration set. No original PAK payload is modified.
+
+Android supplies seekable authorized document descriptors and bounded metadata,
+while Windows supplies ordinary files with wide paths. Java receives direct
+byte buffers only during synchronous writes; it does not retain native buffer
+addresses or mirror game data into internal storage. A generation token rejects
+an old host after its directory binding changes. Directory scans are bounded,
+and each SAF publication reuses its own short-lived metadata index. The strict
+file allowlist admits no PAK, original manual save, INI write or parent escape.
+
+Native test mode scopes this same service to `native-test/` beneath the selected
+root. It never imports or writes normal Sys.sav. Normal root progress has first
+priority, including explicit errors for invalid sizes/provider failures. Only
+when absent may the common adapter import one matching combined/closing
+Documents Sys.sav; it validates exact size and publishes the root copy before
+returning. Separate introductory progress is not merged. Already loaded clean
+progress performs no write; later flag updates retain the 4 KiB block boundary.
+
+Filesystem replacements use the existing exclusive flushed temporary/rename.
+SAF replacements use staged publication with a retained old document and
+interruption recovery before the next read. Synthetic provider faults cover
+write, rename, cleanup, failed rollback and retry. These are finite memory/file
+checks, not a provider/device or whole-game compatibility claim. The retained
+AOT release binary remains unchanged.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.
@@ -1339,7 +1371,7 @@ raise an explicit unsupported error.
 | `android/app/` | Launcher, folder authorization and optional frame HUD |
 | `native/`, `game/`, `engine/script_*` | Independent incomplete native migration core; not yet the released game entry |
 | `engine/progress*`, `engine/scene_progress*` | Native system progress and script command handling |
-| `platform/progress_storage*` | Native private-save filesystem adapter |
+| `platform/progress_storage*`, `platform/game_directory*` | Shared selected-directory persistence policy with filesystem/SAF adapters |
 
 The admitted set currently contains 1,750 entries, 1,424 owning bodies and
 122,950 instruction locations. There are 181 deferred entries and 13 remaining

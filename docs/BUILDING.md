@@ -456,8 +456,8 @@ Reports are `logs/native-production-windows.json` and
 `scripts/package_native_preview.py` assembles separately named migration
 artifacts under `out/native-development`, using these production libraries and
 the verified native-only DEX. The development application ID is
-`org.wa2.port.nativeengine`; it neither overwrites the retained AOT APK nor
-shares its private saves. Its manifest uses fully qualified common Java entry
+`org.wa2.port.nativeengine`; it does not overwrite the retained AOT APK or read
+its private saves. Its manifest uses fully qualified common Java entry
 classes, ARM64/API 26 and GLES 2, with no legacy widget/file-dialog adapters.
 Install-table alignment, signing, native load alignment and exact packaged
 library/DEX bytes are checked without installing an app. Original PAKs remain
@@ -466,11 +466,36 @@ external and are selected in the existing launcher.
 On its first launch without `native-settings.wa2cfg`, the native host can read
 `SYSTEM.ini` and `D3D.ini` from the selected resource directory, or from its
 `Documents/Leaf/WHITE ALBUM2` child if neither root file exists. Windows and
-Android use the same decoder and persist the imported preferences in their
-separate private native directory. The old files remain untouched. Later
+Android use the same decoder and persist the imported preferences as
+`native-settings.wa2cfg` in that selected game directory. The old INI files remain untouched. Later
 starts do not access those source settings. Unsupported custom pacing, wheel
 mode, desktop-menu visibility or window dimensions produce explicit import errors; Direct3D-only device
-keys do not configure SDL. This does not import original manual scene saves.
+keys do not configure SDL.
+
+Native progress, configuration and manual/quick saves are stored beneath the
+selected game root on both platforms: `Sys.sav`, `native-settings.wa2cfg` and
+`native-saves/slot-NNN.wa2sav`. Android uses writable SAF documents, not an
+internal-storage mirror. Previously read-only grants must be renewed. Native
+test mode uses `native-test/` under the same selection, keeping normal PC
+progress unchanged. Directory selection and Android launcher switches are
+still remembered by the launcher; these are separate from game preferences.
+
+PC `Sys.sav` may be copied directly to the selected root. If absent, the common
+adapter imports one `Documents/Leaf/WHITE ALBUM2/Sys.sav` (combined resources)
+or `Documents/Leaf/WHITE ALBUM2 -closing chapter-/Sys.sav` (closing-only resources)
+within that root, validating the exact original length before publishing a
+root copy. It never merges separate introductory progress. Invalid root files
+and provider failures remain explicit errors; they do not trigger fresh saves.
+Original manual saves retain their read-only inventory and version-2 state
+converter. Native scene saves remain a different format, with no reverse export.
+
+Desktop replacements use a closed, flushed temporary and atomic rename.
+Android document replacements keep `.wa2-new`/`.wa2-old` sidecars until a
+complete new file is published, with recovery of interrupted transactions on
+the next open. Providers must support write, create and rename. Progress
+updates retain narrow original-format block writes, not a complete rewrite
+on every flag. Finite synthetic storage/provider fault checks cover these
+contracts; neither an Android provider nor real gameplay has been exercised.
 
 The assembler also supplies `WA2-native-development-relink.zip`, containing
 the actual native application objects/archive order and corresponding FFmpeg

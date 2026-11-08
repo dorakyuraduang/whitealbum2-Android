@@ -3,6 +3,14 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
+The separate native migration development package now saves game data in the
+currently selected Wa2Res: root `Sys.sav`, `native-settings.wa2cfg` and
+`native-saves/`. Test mode uses `native-test/` in that same folder. Renew an
+old read-only folder grant to allow read/write access. PC system progress and
+supported version-2 manual saves may be copied into this selection; native
+scene saves use their own format and cannot be loaded by the original PC game.
+This changes the native development target, not the retained 0.2.46 AOT binary.
+
 `0.2.46-shared-aot` expands the isolated test profile to all known content:
 chapters/endings, CG differences, music, replay entries, watched movies and read
 text. Existing chapter-only test saves are upgraded on the next test launch.

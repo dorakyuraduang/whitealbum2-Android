@@ -19,7 +19,7 @@ int run_game(int argc,char** argv){
         auto startup=platform::native_startup(arguments);startup.seed=std::uint32_t(SDL_GetPerformanceCounter());
         platform::NativeHost host;host.resources=[](auto name){return try_open_resource_bank(name);};host.legacy_settings=[](auto name){return try_open_legacy_settings(name);};host.startup=startup;host.fullscreen=true;host.submitted=frame_presented;host.menu_status=publish_user_menu;
         host.legacy_saves.open=[](auto name){return try_open_legacy_save(name);};host.legacy_saves.list=[]{std::vector<game::LegacySaveFile> files;for(auto& item:legacy_save_metadata())files.push_back({std::move(item.name),item.size,item.modified_millis,{}});return files;};
-        host.private_directory=[]{const auto* internal=SDL_AndroidGetInternalStoragePath();if(!internal || !*internal)throw std::runtime_error("Native private storage is unavailable");return std::filesystem::path(internal)/"native-game";};
+        host.storage=[]{return selected_game_directory();};
         return platform::run_native_host(std::move(host));
     }catch(const std::exception& error){
         __android_log_print(ANDROID_LOG_ERROR,"WA2","%s",error.what());report_game_failure(error.what());return 1;

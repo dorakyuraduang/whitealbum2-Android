@@ -1,5 +1,6 @@
 #pragma once
 #include "resource_archive.hpp"
+#include "game_directory.hpp"
 #include <string_view>
 
 namespace wa2::android {
@@ -9,5 +10,6 @@ std::shared_ptr<resource::Source> open_resource_bank(std::string_view filename);
 std::shared_ptr<resource::Source> try_open_resource_bank(std::string_view filename);
 std::shared_ptr<resource::Source> try_open_legacy_settings(std::string_view filename);
 std::shared_ptr<resource::Source> try_open_legacy_save(std::string_view filename);
+std::shared_ptr<platform::GameDirectory> selected_game_directory();
 void report_game_failure(std::string_view message) noexcept;
 }

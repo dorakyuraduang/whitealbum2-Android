@@ -1,9 +1,11 @@
 #pragma once
+#include "game_directory.hpp"
 #include "../engine/progress.hpp"
 #include <filesystem>
 
 namespace wa2::platform {
-// The host supplies a private save directory, never the PAK resource root.
-// The directory must exist; only its Sys.sav file is opened or written.
-std::shared_ptr<progress::Storage> progress_storage(const std::filesystem::path& private_directory);
+// The selected game directory must exist. Root Sys.sav is authoritative;
+// one matching original Documents child is imported only when root is absent.
+std::shared_ptr<progress::Storage> progress_storage(const std::filesystem::path& selected_directory);
+std::shared_ptr<progress::Storage> progress_storage(std::shared_ptr<GameDirectory>,bool combined=false);
 }

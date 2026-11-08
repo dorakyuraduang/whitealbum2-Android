@@ -53,6 +53,8 @@ def main():
     declarations=output([jdk/'bin/javap.exe','-p','-s',classes/'org/wa2/port/ResourceDirectory.class'])
     resource_expected={'openPak':'(Ljava/lang/String;)I','openOptionalPak':'(Ljava/lang/String;)I',
         'openLegacySettings':'(Ljava/lang/String;)I','openLegacySave':'(Ljava/lang/String;)I','legacySaveMetadata':'()[Ljava/lang/String;',
+        'gameStorageToken':'()I','openGameFile':'(Ljava/lang/String;I)I','replaceGameFile':'(Ljava/lang/String;ILjava/nio/ByteBuffer;)V',
+        'updateGameFile':'(Ljava/lang/String;IJJLjava/nio/ByteBuffer;)V','gameSaveMetadata':'(ILjava/lang/String;)[Ljava/lang/String;',
         'listPaks':'()[Ljava/lang/String;','pakMetadata':'(Ljava/lang/String;)[J','reportFailure':'(Ljava/lang/String;)V'}
     resource_methods={};pending=None
     for line in declarations.splitlines():

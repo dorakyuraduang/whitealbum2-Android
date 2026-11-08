@@ -7,7 +7,7 @@ struct NativeHost {
     resource::BankOpener resources;
     LegacySettingsOpener legacy_settings;
     game::LegacySaveSources legacy_saves;
-    std::function<std::filesystem::path()> private_directory;
+    std::function<std::shared_ptr<GameDirectory>()> storage;
     NativeStartup startup;
     game::DriverSettings driver;
     bool fullscreen{};

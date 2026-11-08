@@ -1,45 +1,29 @@
 #include "progress_storage.hpp"
+#include "legacy_save_path.hpp"
 #include <algorithm>
-#include <array>
-#include <fstream>
 
 namespace wa2::platform {
 namespace {
-class ProgressFile final : public progress::Storage {
-    std::filesystem::path directory_,file_;
-    bool exists(){
-        const auto directory=std::filesystem::symlink_status(directory_);
-        if(!std::filesystem::is_directory(directory) || std::filesystem::is_symlink(directory))throw progress::Error("Progress directory must be an ordinary private directory");
-        std::error_code error;const auto status=std::filesystem::symlink_status(file_,error);
-        if(error && error!=std::errc::no_such_file_or_directory)throw std::filesystem::filesystem_error("Cannot inspect progress save",file_,error);
-        if(!std::filesystem::exists(status))return false;
-        if(!std::filesystem::is_regular_file(status) || std::filesystem::is_symlink(status) || std::filesystem::hard_link_count(file_)!=1)
-            throw progress::Error("Progress save must be a private ordinary file");
-        if(std::filesystem::file_size(file_)!=progress::layout::system_save_bytes)throw progress::Error("Unsupported Sys.sav length");
-        return true;
-    }
+class ProgressFile final:public progress::Storage {
+    std::shared_ptr<GameDirectory> directory_;
+    bool combined_;
 public:
-    explicit ProgressFile(std::filesystem::path directory):directory_(std::move(directory)),file_(directory_/"Sys.sav"){}
+    ProgressFile(std::shared_ptr<GameDirectory> directory,bool combined):directory_(std::move(directory)),combined_(combined){if(!directory_)throw std::invalid_argument("Missing selected progress directory");}
     std::optional<progress::Bytes> load()override{
-        if(!exists())return {};
-        std::ifstream input(file_,std::ios::binary);progress::Bytes bytes(progress::layout::system_save_bytes);
-        input.read(reinterpret_cast<char*>(bytes.data()),std::streamsize(bytes.size()));
-        if(!input)throw progress::Error("Cannot read native progress save");return bytes;
+        constexpr auto size=progress::layout::system_save_bytes;
+        if(auto bytes=game_file_read(*directory_,"Sys.sav",size,size))return bytes;
+        // Select one installation; a root file, including corrupt files, wins.
+        const auto name=std::string(resource::legacy_save_directories[combined_?1:2])+"Sys.sav";
+        if(auto bytes=game_file_read(*directory_,name,size,size)){progress::State::decode(*bytes);directory_->replace("Sys.sav",*bytes);return bytes;}return {};
     }
     void write(progress::Block block,std::span<const std::uint8_t> bytes)override{
-        const auto at=progress::offset(block);
-        if(bytes.size()!=progress::size(block))throw progress::Error("Invalid progress write block length");
-        if(!exists()){
-            std::ofstream output(file_,std::ios::binary|std::ios::trunc);
-            std::array<char,65536> zeros{};std::size_t remaining=progress::layout::system_save_bytes;
-            while(output && remaining){const auto count=std::min(remaining,zeros.size());output.write(zeros.data(),std::streamsize(count));remaining-=count;}
-            output.close();if(!output)throw progress::Error("Cannot initialize native progress save");
-        }
-        std::fstream output(file_,std::ios::binary|std::ios::in|std::ios::out);
-        output.seekp(std::streamoff(at));output.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));
-        output.close();if(!output)throw progress::Error("Cannot persist native progress block");
+        const auto at=progress::offset(block);if(bytes.size()!=progress::size(block))throw progress::Error("Invalid progress write block length");
+        constexpr auto size=progress::layout::system_save_bytes;auto source=directory_->open("Sys.sav");
+        if(!source){progress::Bytes initial(size);std::copy(bytes.begin(),bytes.end(),initial.begin()+at);directory_->replace("Sys.sav",initial);return;}
+        if(source->size()!=size)throw progress::Error("Unsupported Sys.sav length");source.reset();directory_->update("Sys.sav",size,at,bytes);
     }
 };
 }
-std::shared_ptr<progress::Storage> progress_storage(const std::filesystem::path& private_directory){return std::make_shared<ProgressFile>(private_directory);}
+std::shared_ptr<progress::Storage> progress_storage(std::shared_ptr<GameDirectory> directory,bool combined){return std::make_shared<ProgressFile>(std::move(directory),combined);}
+std::shared_ptr<progress::Storage> progress_storage(const std::filesystem::path& directory){return progress_storage(game_directory(directory));}
 }

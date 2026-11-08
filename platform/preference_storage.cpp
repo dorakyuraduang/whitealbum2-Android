@@ -1,15 +1,14 @@
 #include "preference_storage.hpp"
-#include "private_file.hpp"
 #include "preferences_ini.hpp"
 
 namespace wa2::platform {
 namespace {
 class PreferenceFile final:public game::PreferenceStorage {
-    std::filesystem::path file_;
+    std::shared_ptr<GameDirectory> directory_;
     LegacySettingsOpener legacy_;
 public:
-    explicit PreferenceFile(std::filesystem::path directory,LegacySettingsOpener legacy):file_(std::filesystem::absolute(std::move(directory)).lexically_normal()/"native-settings.wa2cfg"),legacy_(std::move(legacy)){}
-    std::optional<std::vector<std::uint8_t>> read()override{return private_file::read(file_,16,4096);}
+    explicit PreferenceFile(std::shared_ptr<GameDirectory> directory,LegacySettingsOpener legacy):directory_(std::move(directory)),legacy_(std::move(legacy)){if(!directory_)throw std::invalid_argument("Missing selected preference directory");}
+    std::optional<std::vector<std::uint8_t>> read()override{return game_file_read(*directory_,"native-settings.wa2cfg",16,4096);}
     std::optional<game::Preferences> legacy()override{
         if(!legacy_)return {};
         const auto read=[&](std::string_view name)->std::optional<std::vector<std::uint8_t>>{
@@ -23,8 +22,9 @@ public:
         }
         return {};
     }
-    void replace(std::span<const std::uint8_t> bytes)override{private_file::replace(file_,bytes,16,4096);}
+    void replace(std::span<const std::uint8_t> bytes)override{if(bytes.size()<16 || bytes.size()>4096)throw std::invalid_argument("Native settings exceed size bounds");directory_->replace("native-settings.wa2cfg",bytes);}
 };
 }
-std::shared_ptr<game::PreferenceStorage> preference_storage(const std::filesystem::path& directory,LegacySettingsOpener legacy){return std::make_shared<PreferenceFile>(directory,std::move(legacy));}
+std::shared_ptr<game::PreferenceStorage> preference_storage(std::shared_ptr<GameDirectory> directory,LegacySettingsOpener legacy){return std::make_shared<PreferenceFile>(std::move(directory),std::move(legacy));}
+std::shared_ptr<game::PreferenceStorage> preference_storage(const std::filesystem::path& directory,LegacySettingsOpener legacy){return preference_storage(game_directory(directory),std::move(legacy));}
 }

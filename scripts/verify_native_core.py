@@ -82,6 +82,7 @@ def main():
     inputs += [ROOT/'tests/native_gallery_progress.cpp']
     inputs += [ROOT/'tests/native_legacy_scene.cpp',ROOT/'tests/native_legacy_fixture.hpp',ROOT/'tests/native_legacy_slots.cpp']
     inputs += [ROOT/'tests/native_character_palettes.cpp']
+    inputs += [ROOT/'tests/native_game_directory.cpp',ROOT/'platform/game_directory.cpp',ROOT/'platform/game_directory.hpp']
     inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
         ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
         ROOT/'platform/sdl_input.hpp',ROOT/'platform/sdl_input.cpp',ROOT/'platform/sdl_application.hpp',ROOT/'platform/sdl_application.cpp']
@@ -127,6 +128,7 @@ def main():
             targets=['wa2_native_link_check','wa2_native_presentation_check']+(['wa2_native_progress_tests','wa2_native_script_state_tests','wa2_native_control_state_tests','wa2_native_camera_state_tests','wa2_native_voice_state_tests','wa2_native_novel_state_tests','wa2_native_weather_state_tests','wa2_native_calendar_state_tests','wa2_native_animation_state_tests','wa2_native_scene_geometry_tests','wa2_native_shake_state_tests','wa2_native_world_state_tests','wa2_native_image_style_tests','wa2_native_caption_state_tests','wa2_native_selection_state_tests'] if host=='windows' else [])
             if host=='windows':targets+=['wa2_native_system_sound_tests','wa2_native_lifecycle_state_tests','wa2_native_stream_voice_tests','wa2_native_dialogue_state_tests','wa2_native_sprite_atlas_tests','wa2_native_font_coverage_tests','wa2_native_frame_batch_tests','wa2_native_backlog_state_tests','wa2_native_background_state_tests','wa2_native_character_state_tests']
             if host=='windows':targets+=['wa2_native_scene_context_tests']
+            if host=='windows':targets+=['wa2_native_game_directory_tests']
             if host=='windows':targets+=['wa2_native_bitmap_state_tests']
             if host=='windows':targets+=['wa2_native_weather_checkpoint_tests']
             if host=='windows':targets+=['wa2_native_audio_checkpoint_tests']
@@ -206,6 +208,7 @@ def main():
             allowed+=('tests/native_gallery_progress.cpp',)
             allowed+=('tests/native_legacy_scene.cpp','tests/native_legacy_slots.cpp')
             allowed+=('tests/native_character_palettes.cpp',)
+            allowed+=('tests/native_game_directory.cpp','platform/game_directory.cpp')
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
             allowed+=('tests/native_image_wait.cpp','tests/native_loading_cache.cpp','tests/native_bootstrap.cpp','platform/native_application.cpp')
@@ -229,7 +232,7 @@ def main():
                 if relative not in graph:continue
                 if not obj.is_file():raise ValueError('Missing compiled native object: '+str(obj))
                 name=Path(item['file']).resolve().relative_to(ROOT).as_posix()
-                if name.startswith(('engine/','game/','platform/progress_storage.cpp','platform/save_storage.cpp','platform/private_file.cpp','platform/preference_storage.cpp')):linked_sources.append(name)
+                if name.startswith(('engine/','game/','platform/progress_storage.cpp','platform/save_storage.cpp','platform/private_file.cpp','platform/preference_storage.cpp','platform/game_directory.cpp','platform/file_io.cpp')):linked_sources.append(name)
             sources[host]=sorted(set(linked_sources))
             if not {'game/scene.cpp','engine/scene_progress.cpp','engine/progress.cpp','engine/script_runtime.cpp','platform/progress_storage.cpp'}.issubset(sources[host]):
                 raise ValueError('Native source/link inventory is incomplete')
@@ -307,6 +310,9 @@ def main():
             if host=='windows':
                 print('Running synthetic native script/progress checks; no game starts.',flush=True)
                 run([directory/'wa2_native_progress_tests.exe',directory/'native-progress.json'],console,90)
+                run([directory/'wa2_native_game_directory_tests.exe',directory/'native-game-directory.json'],console,90)
+                game_directory=json.loads((directory/'native-game-directory.json').read_text())
+                if not game_directory['passed'] or game_directory['cases']<1022 or game_directory['guards']<42 or not all(game_directory[key] for key in ('selected_directory_isolation','root_sys_precedence','read_only_original_import','bounded_previews','range_writes_preserve_other_blocks','failed_writes_retryable','synthetic_files_only')) or game_directory['game_launched'] or game_directory['screen_access']:raise ValueError('Native selected game-directory checks failed')
                 checks=json.loads((directory/'native-progress.json').read_text())
                 if (not checks['passed'] or checks['flag_cases']!=30 or checks['gallery_cases']!=32 or checks['history_cases']!=20 or
                     checks['script_calls']!=5 or checks['io_cases']!=7 or checks['guard_cases']!=25 or checks['flag_write_bytes']!=4096 or
@@ -605,6 +611,7 @@ def main():
     report['legacy_scene']=legacy_scene
     report['legacy_slots']=legacy_slots
     report['character_palettes']=character_palettes
+    report['game_directory']=game_directory
     report['frame_driver']=frame_driver
     report['audio_binding']=audio_binding
     report['sdl_application']=sdl_application

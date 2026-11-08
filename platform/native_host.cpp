@@ -12,10 +12,9 @@ struct SdlLifetime {
 };
 }
 int run_native_host(NativeHost host){
-    if(!host.resources || !host.private_directory)throw std::invalid_argument("Missing native host resource or private-directory adapter");host.driver.validate();
+    if(!host.resources || !host.storage)throw std::invalid_argument("Missing native host resource or game-directory storage adapter");host.driver.validate();
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"linear");SdlLifetime sdl;
-    const auto directory=host.private_directory();if(directory.empty() || !directory.is_absolute())throw std::invalid_argument("Native host private directory must be absolute");
-    std::filesystem::create_directory(directory);
+    const auto directory=host.storage();if(!directory)throw std::invalid_argument("Native host game directory is unavailable");
     std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)> window(SDL_CreateWindow("WHITE ALBUM2",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,
         1280,720,SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|(host.fullscreen?SDL_WINDOW_FULLSCREEN_DESKTOP:0)),SDL_DestroyWindow);
     if(!window)throw std::runtime_error(std::string("Create native game window: ")+SDL_GetError());
