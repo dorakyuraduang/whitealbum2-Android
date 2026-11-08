@@ -33,8 +33,12 @@ which must fail rather than silently reset. Valid imported settings are
 persisted atomically before publication and the source is not read on later
 starts. The parser maps original volume/mute/character switches, skip/voice
 policy, opacity, skin, text/transition timing, confirmation, mouse policy,
-movie quality, and window mode/three known window sizes. Source-only Direct3D
-device/debug keys are not portable preferences. Nonstandard timing, wheel
+movie quality, and window mode/three known window sizes.
+The original `mov_lv` values are levels, not native filename suffixes: levels
+`2`, `1`, `0` map to suffixes `0`, `1`, `2` respectively. All three levels are
+accepted and persist in the existing native preference format. An absent key
+keeps the native high-quality default. Imports leave the INI untouched.
+Source-only Direct3D device/debug keys are not portable preferences. Nonstandard timing, wheel
 mode and window dimensions without native
 support fail explicitly. Import is
 bounded to 64 KiB per file and supports ANSI/UTF-8 and BOM UTF-16 integer keys.
@@ -1201,7 +1205,9 @@ need completion, and physical presentation remains unverified.
 The shared user menu now exposes source high/low video quality. Cached movie
 name selection maps high quality to suffix `0.pak` and low quality to `1.pak`;
 the current decoder is not restarted when that preference changes. Title and
-story owners both apply it to the next external clip. An explicit bootstrap
+story owners both apply it to the next external clip. Imported original
+`mov_lv=0` retains suffix `2.pak`, with neither high/low menu item checked,
+following the cached original menu comparisons. An explicit bootstrap
 suffix is reserved for controlled integrations. Missing quality variants now
 follow the explicitly bounded default-file policy described above; an existing
 variant with a provider or decoder failure remains an error.

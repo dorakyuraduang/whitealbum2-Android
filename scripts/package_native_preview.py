@@ -20,7 +20,8 @@ from verify_shared_package import verify_resource_table
 
 NS='http://schemas.android.com/apk/res/android'
 PACKAGE='org.wa2.port.nativeengine'
-VERSION='0.3.0-native-development'
+VERSION='0.3.1-native-development'
+VERSION_CODE=2
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--check-only',action='store_true');args=parser.parse_args()
@@ -95,7 +96,7 @@ def main():
         if not all(re.search(r'\b'+symbol+r'\s*$',exports,re.M) for symbol in ('JNI_OnLoad','SDL_main')):raise ValueError('Native package stripping lost its Java/SDL entry exports')
         windows=directory/'WA2_Native_x64.exe';run([llvm/'bin/llvm-strip.exe','--strip-all','-o',windows,production['windows']['application']['file']])
         manifest=ET.parse(manifest_source);top=manifest.getroot();top.set('package',PACKAGE)
-        top.set('{'+NS+'}versionCode','1');top.set('{'+NS+'}versionName',VERSION)
+        top.set('{'+NS+'}versionCode',str(VERSION_CODE));top.set('{'+NS+'}versionName',VERSION)
         uses=ET.Element('uses-sdk');uses.set('{'+NS+'}minSdkVersion','26');uses.set('{'+NS+'}targetSdkVersion','35');top.insert(0,uses)
         for feature in top.findall('uses-feature'):
             if feature.get('{'+NS+'}glEsVersion') is not None:feature.set('{'+NS+'}glEsVersion','0x00020000')
@@ -133,7 +134,7 @@ def main():
             for name,path in libraries.items():
                 if package.read('lib/arm64-v8a/'+name)!=path.read_bytes():raise ValueError('Packaged native library changed: '+name)
         badging=inspect([bt/'aapt.exe','dump','badging',signed])
-        if PACKAGE not in badging or VERSION not in badging or "native-code: 'arm64-v8a'" not in badging or 'org.wa2.port.LauncherActivity' not in badging:raise ValueError('Native APK manifest/entry identity is wrong')
+        if PACKAGE not in badging or VERSION not in badging or f"versionCode='{VERSION_CODE}'" not in badging or "native-code: 'arm64-v8a'" not in badging or 'org.wa2.port.LauncherActivity' not in badging:raise ValueError('Native APK manifest/entry identity is wrong')
         windows_zip=directory/'WA2-native-Windows-x64-development.zip'
         with zipfile.ZipFile(windows_zip,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
             archive.write(windows,'WA2_Native_x64.exe')
@@ -155,7 +156,7 @@ def main():
             artifacts[host]=dict(file=str(destination),sha256=digest(destination),bytes=destination.stat().st_size)
         report=dict(schema='wa2.native-preview-package.v1',source_sha256=bindings,codec_archives_sha256=codec_bindings,native_core_report_sha256=digest(core_path),
             production_reports={host:digest(ROOT/('logs/native-production-'+host+'.json')) for host in production},
-            artifacts=artifacts,libraries=library_records,application_id=PACKAGE,version=VERSION,resource_table=table,
+            artifacts=artifacts,libraries=library_records,application_id=PACKAGE,version=VERSION,version_code=VERSION_CODE,resource_table=table,
             matching_lgpl_relink_materials=True,relink_recipe_verified=relink_manifest['relink_recipe_verified'],
             common_game_sources=core['native_compiled_sources'],native_java_report_sha256=digest(ui_path),
             game_resources_embedded=False,recompiled_game_linked=False,guest_cpu_and_memory_linked=False,

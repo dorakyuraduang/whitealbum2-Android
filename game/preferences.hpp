@@ -24,6 +24,7 @@ struct Preferences {
     bool fullscreen{},confirmation{true},cut_voice_on_advance{},transition_wait{true};
     std::int32_t right_click{};
     // Cached high/low movie modes select external suffixes 0/1 respectively.
+    // Suffix 2 preserves the original mov_lv=0 mode; INI levels are not suffixes.
     // Changing quality affects the next clip, never restarts an active clip.
     std::int32_t movie_quality{};
     // Original windowed choices: 1280x720, 1024x576 and 800x450. Hosts without

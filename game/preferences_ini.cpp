@@ -55,7 +55,7 @@ public:
         if(value.empty() || parsed.ec!=std::errc{} || parsed.ptr!=value.data()+value.size())throw std::invalid_argument("Invalid original settings integer: "+std::string(key));return result;
     }
     std::int32_t range(std::string_view key,std::int32_t previous,std::int32_t low,std::int32_t high)const{
-        const auto value=get(key);if(!value)return previous;if(*value<low || *value>high)throw std::invalid_argument("Original setting outside native support: "+std::string(key));return *value;
+        const auto value=get(key);if(!value)return previous;if(*value<low || *value>high)throw std::invalid_argument("Original setting outside native support: "+std::string(key)+"="+std::to_string(*value)+" (expected "+std::to_string(low)+".."+std::to_string(high)+")");return *value;
     }
     bool boolean(std::string_view key,bool previous)const{return range(key,previous?1:0,0,1)!=0;}
 };
@@ -70,7 +70,11 @@ Preferences import_preferences_ini(std::span<const std::uint8_t> system,std::spa
     next.window=source.boolean("win_disp",next.window);next.confirmation=source.boolean("yes_no",next.confirmation);next.right_click=source.range("r_click",next.right_click,0,2);
     next.cut_voice_on_advance=source.boolean("page_voice",next.cut_voice_on_advance);next.mute_adult=source.boolean("ero_voice",next.mute_adult);
     for(unsigned n=0;n<next.character_voice.size();++n)next.character_voice[n]=source.boolean("char_voice"+std::to_string(n),next.character_voice[n]);
-    next.skip_read_only=!source.boolean("msg_cut_optin",false);next.auto_ticks=source.range("auto_max",next.auto_ticks,0,36000);next.movie_quality=source.range("mov_lv",next.movie_quality,0,1);
+    next.skip_read_only=!source.boolean("msg_cut_optin",false);next.auto_ticks=source.range("auto_max",next.auto_ticks,0,36000);
+    // The original INI stores a level, while native preferences store the
+    // actual movie filename suffix. Cached 413a9c..413b72 maps 2/1/0 to 0/1/2.
+    const auto movie_level=source.range("mov_lv",2,0,2);
+    next.movie_quality=movie_level==2?0:movie_level==1?1:2;
     // Cached 433030..4330a2 scales each persisted integer by one half.
     if(const auto value=source.get("wait")){if(*value!=0 && *value!=2)throw std::invalid_argument("Unsupported original transition wait setting");next.transition_wait=*value!=0;}
     if(const auto value=source.get("msg_wait")){switch(*value){case 0:next.text_step=0;break;case 1:next.text_step=4;break;case 2:next.text_step=2;break;case 4:next.text_step=1;break;default:throw std::invalid_argument("Unsupported original message wait setting");}}

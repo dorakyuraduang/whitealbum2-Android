@@ -1,8 +1,10 @@
 #include "native_application.hpp"
 #include "progress_storage.hpp"
+#include "file_io.hpp"
 #include "native_scene_fixture.hpp"
 #include "native_title_atlases.hpp"
 #include <filesystem>
+#include <tuple>
 
 namespace platform=wa2::platform;namespace fs=std::filesystem;
 struct MovieState {bool stopped{},paused{};float gain{};std::string name;};
@@ -40,5 +42,24 @@ int main(int argc,char** argv){try{
     app=platform::native_application(opener,imported,startup,{},title,[&](auto name)->std::shared_ptr<r::Source>{imports.emplace_back(name);if(name=="SYSTEM.ini"){auto source=std::make_shared<Source>();source->b=text("[DEFAULT]\nall_vol=64\nbgm_vol=128\nmov_lv=1\nwin_alpha=42");return source;}return {};});
     CHECK(imports==std::vector<std::string>({"SYSTEM.ini","D3D.ini"}) && app->preferences().master==64 && app->preferences().window_alpha==42 && movies.back()->name=="mv001.pak" && movies.back()->gain==32/255.f && fs::is_regular_file(imported/"native-settings.wa2cfg"));app->close(0);app.reset();++cases;
     app=platform::native_application(opener,imported,startup,{},title,[](auto)->std::shared_ptr<r::Source>{throw r::Error("Imported settings provider must remain unused");});CHECK(app->preferences().master==64 && movies.back()->name=="mv001.pak");app->close(0);app.reset();++cases;
-    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-bootstrap.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"source_ic_presence_rule\":true,\"title_story_storage_connected\":true,\"native_preferences_reopened\":true,\"saved_image_wait_not_polled\":true,\"test_mode_persisted_after_prepare\":true,\"failed_prepare_writes_nothing\":true,\"fake_movies_only\":true,\"synthetic_resources_only\":true,\"original_resources_opened\":false,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);std::cout<<"PASS common native bootstrap, title/content selection, private persistence and notified image restore.\n";return 0;
+    // The original INI levels are not the native filename suffixes. Exercise
+    // the actual import/store/title/story/reopen route with owned files and
+    // our own LSCR; no original settings, movie or story is opened/executed.
+    Script movie_script;movie_script.call(193,{s::Value(std::string("mv12")),s::Value(0)});movie_script.call(194,{s::Value(1000000),s::Value(0),s::Value(0)});movie_script.finish();
+    banks["ck-gal.pak"]=bank({{"Global.vrb",text("3,FLG_00,0\r\n")},{"LFScriptFunc.fnc",functions(0,200)},{"LFScriptFuncEx.fnc",functions(200,239)},{"1001.bnr",movie_script.code},{"1001.txt",text(movie_script.strings)}});
+    unsigned movie_imports{};
+    for(const auto [level,suffix,prefix]:std::array<std::tuple<int,int,std::string_view>,4>{{{0,2,""},{1,1,""},{2,0,""},{2,0,"Documents/Leaf/WHITE ALBUM2/"}}}){
+        const auto selected=directory("movie-import-"+std::to_string(movie_imports++));const auto ini_path=selected/fs::path(std::string(prefix)+"SYSTEM.ini");fs::create_directories(ini_path.parent_path());
+        const auto ini_bytes=text("[DEFAULT]\nmov_lv="+std::to_string(level)+"\nall_vol=64\nbgm_vol=128\n");{std::ofstream file(ini_path,std::ios::binary);file.write(reinterpret_cast<const char*>(ini_bytes.data()),std::streamsize(ini_bytes.size()));file.close();CHECK(file);}
+        const auto unchanged=[&]{auto source=platform::open_resource_file(ini_path);Bytes bytes(std::size_t(source->size()));source->read_at(0,bytes);CHECK(bytes==ini_bytes);};
+        const auto count=movies.size();g::SceneServices story;story.movie=[&](auto name,auto)->std::unique_ptr<wa2::movie::Playback>{return title.movie(name);};
+        app=platform::native_application(opener,selected,startup,story,title,[&](auto name)->std::shared_ptr<r::Source>{const auto path=selected/fs::path(name);return fs::is_regular_file(path)?platform::open_resource_file(path):nullptr;});
+        const auto expected="mv00"+std::to_string(suffix)+".pak";CHECK(app->preferences().movie_quality==suffix && movies.size()==count+1 && movies.back()->name==expected && movies.back()->gain==32/255.f && fs::is_regular_file(selected/"native-settings.wa2cfg"));unchanged();
+        const auto checked=app->user_menu().checked;CHECK(bool(checked&g::command_bit(g::UserCommand::movie_high))==(suffix==0) && bool(checked&g::command_bit(g::UserCommand::movie_low))==(suffix==1));
+        app->start({},0);std::int64_t clock{};for(unsigned ticks=0;!app->scene()->movie_active();++ticks){CHECK(ticks<10);clock+=16667;app->frame(clock,{},[&]{return clock;});}
+        CHECK(movies.size()==count+2 && movies.back()->name=="mv12"+std::to_string(suffix)+".pak" && movies.back()->gain==32/255.f);app->close(clock);app.reset();unchanged();++cases;
+        app=platform::native_application(opener,selected,startup,{},title,[](auto)->std::shared_ptr<r::Source>{throw r::Error("Original movie setting must not be reimported");});CHECK(app->preferences().movie_quality==suffix && movies.back()->name==expected && movies.back()->gain==32/255.f);app->close(0);app.reset();unchanged();++cases;
+    }
+    const auto invalid_movie=directory("invalid-movie-import");rejects([&]{platform::native_application(opener,invalid_movie,startup,{},title,[](auto name)->std::shared_ptr<r::Source>{if(name!="SYSTEM.ini")return {};auto source=std::make_shared<Source>();source->b=text("[DEFAULT]\nmov_lv=3");return source;});});CHECK(fs::is_empty(invalid_movie));++guards;++cases;
+    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-bootstrap.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"original_movie_levels_imported\":true,\"imported_movie_suffixes_reach_title_and_story\":true,\"original_movie_settings_unchanged\":true,\"source_ic_presence_rule\":true,\"title_story_storage_connected\":true,\"native_preferences_reopened\":true,\"saved_image_wait_not_polled\":true,\"test_mode_persisted_after_prepare\":true,\"failed_prepare_writes_nothing\":true,\"fake_movies_only\":true,\"synthetic_resources_only\":true,\"original_resources_opened\":false,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);std::cout<<"PASS common native bootstrap, title/content selection, private persistence and notified image restore.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

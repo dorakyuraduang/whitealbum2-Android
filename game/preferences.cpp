@@ -10,7 +10,7 @@ void Preferences::validate()const{
     for(auto v:{window_alpha,picture_alpha,button_alpha,novel_alpha})if(v<0 || v>256)throw std::invalid_argument("Native preference opacity is out of range");
     if(text_step<0 || text_step>1000 || auto_ticks<0 || auto_ticks>36000)throw std::invalid_argument("Native preference text timing is out of range");
     if(right_click<0 || right_click>2)throw std::invalid_argument("Native preference right-click policy is out of range");
-    if(movie_quality<0 || movie_quality>1)throw std::invalid_argument("Native preference movie quality is out of range");
+    if(movie_quality<0 || movie_quality>2)throw std::invalid_argument("Native preference movie quality is out of range");
     if(window_size<0 || window_size>2)throw std::invalid_argument("Native preference window size is out of range");
 }
 float Preferences::movie_amplitude()const{validate();return float(std::min(255,effective_master()*effective_music()/256))/255.f;}

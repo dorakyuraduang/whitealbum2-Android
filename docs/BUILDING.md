@@ -501,6 +501,16 @@ starts do not access those source settings. Unsupported custom pacing, wheel
 mode or window dimensions produce explicit import errors; Direct3D-only device
 keys do not configure SDL.
 
+Original movie levels `mov_lv=0/1/2` map to native movie suffixes `2/1/0`.
+Constructed ANSI/UTF-16 preference checks cover all three values and their
+native format round trips. The owned-file bootstrap checks import from the
+root/known Documents folder, send the result to both fake title and synthetic
+story movie transports, reopen native settings with INI access denied, and
+check that the source INI stays byte-identical. Out-of-range values still fail
+before publishing native settings. These checks launch no game or device.
+The separate native development package is `0.3.1-native-development`
+(Android version code 2), retaining the same application ID and signing key.
+
 Native progress, configuration and manual/quick saves are stored beneath the
 selected game root on both platforms: `Sys.sav`, `native-settings.wa2cfg` and
 `native-saves/slot-NNN.wa2sav`. Android uses writable SAF documents, not an

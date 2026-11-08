@@ -14,6 +14,10 @@ old read-only folder grant to allow read/write access. PC system progress and
 supported version-1/version-2 manual saves may be copied into this selection; native
 scene saves use their own format and cannot be loaded by the original PC game.
 This changes the native development target, not the retained 0.2.46 AOT binary.
+`0.3.1-native-development` fixes startup import of the original `mov_lv=2`
+setting. Original levels `2/1/0` select movie suffixes `0/1/2`; all three values
+are supported. Update the native development APK with the same signing
+identity; no INI edit or save/configuration deletion is needed for this error.
 When copying old Documents/Leaf folders, the native host also merges the
 introductory Sys.sav into current progress using the original startup rule.
 Source flag 99 is excluded and the original files remain read-only. Unchanged

@@ -18,7 +18,8 @@ UserMenuState Application::user_menu()const{
     enable(UserCommand::backlog,control(script::StoryControl::backlog) && bool(backlog_loader_) && scene_->backlog().entries().size()>=2);
     enable(UserCommand::hide,control(script::StoryControl::hide));enable(UserCommand::automatic,control(script::StoryControl::automatic));enable(UserCommand::skip,control(script::StoryControl::skip));
     if(preferences().fullscreen)state.checked|=command_bit(UserCommand::fullscreen);
-    state.checked|=command_bit(preferences().movie_quality?UserCommand::movie_low:UserCommand::movie_high);
+    if(preferences().movie_quality==0)state.checked|=command_bit(UserCommand::movie_high);
+    else if(preferences().movie_quality==1)state.checked|=command_bit(UserCommand::movie_low);
     if(!preferences().fullscreen)state.checked|=command_bit(UserCommand(unsigned(UserCommand::window_hd)+unsigned(preferences().window_size)));
     if(scene_){if(!scene_->window_visible())state.checked|=command_bit(UserCommand::hide);if(scene_->modes().auto_mode)state.checked|=command_bit(UserCommand::automatic);if(scene_->modes().latched_skip)state.checked|=command_bit(UserCommand::skip);}
     return state;
