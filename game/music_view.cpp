@@ -83,7 +83,13 @@ void MusicView::draw(){
     const auto row_alpha=unsigned(256*content);
     for(const auto& row:rows_){const float x=40.f+400*(row.ordinal/13),y=88.f+32*(row.ordinal%13);add(images_[2],x,y,400,32,0,row.enabled?(focus_==row.ordinal?96:playing_==row.index?64:32):0,400,32,row_alpha,row_scale);
         if(row.enabled)add(images_[3],x+40,y+4,344,24,0,float(row.index*24),344,24,row_alpha,row_scale);}
-    add(images_[7],120,528,1040,56,0,0,1024,56,255,body_scale);if(playing_)add(images_[8],156,552,512,24,0,float(*playing_*24),512,24,255,body_scale);
+    add(images_[7],120,528,1040,56,0,0,1024,56,255,body_scale);
+    if(playing_){
+        // Cached music-browser owners keep the selected 24-pixel row in
+        // two separate sheets: its 344-pixel name and 512-pixel information.
+        add(images_[3],160,552,344,24,0,float(*playing_*24),344,24,255,body_scale);
+        add(images_[8],536,552,512,24,0,float(*playing_*24),512,24,255,body_scale);
+    }
     add(images_[4],440,600,48,64,focus_==51?96:0,0,48,64,255,body_scale);add(images_[4],792,600,48,64,focus_==52?96:0,64,48,64,255,body_scale);
     add(images_[5],496,608,288,40,0,0,288,40,255,body_scale);add(images_[6],1164,688+32*(1-whole),56,24,0,focus_==50?24:0,56,24);
     if(current_music_ && (phase_==MusicViewPhase::active || phase_==MusicViewPhase::page_out || phase_==MusicViewPhase::page_in))

@@ -468,6 +468,7 @@ def main():
                 run([directory/'wa2_native_music_view_tests.exe',directory/'native-music-view.json'],console,90)
                 music_view=json.loads((directory/'native-music-view.json').read_text())
                 if not music_view['small_music_caption_rows']:raise ValueError('Native music caption checks failed')
+                if music_view['cases']<41 or not music_view['selected_music_dual_labels']:raise ValueError('Native selected music name/information labels failed')
                 if not music_view['passed'] or music_view['cases']<26 or music_view['guards']<12 or music_view['track_count']!=63 or music_view['maximum_pending_images']>1 or music_view['maximum_new_images_per_tick']>2 or not music_view['source_progress_rules'] or not music_view['two_page_mapping'] or not music_view['title_application_bound'] or not music_view['failed_play_preserves_active_track'] or not music_view['fake_music_only'] or not music_view['synthetic_resources_only'] or music_view['devices_opened'] or music_view['game_launched'] or music_view['screen_access']:raise ValueError('Native music-browser/application checks failed')
                 run([directory/'wa2_native_extra_grid_tests.exe',directory/'native-extra-grid.json'],console,90)
                 extra_grid=json.loads((directory/'native-extra-grid.json').read_text())

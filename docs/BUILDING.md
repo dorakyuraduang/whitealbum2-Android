@@ -86,6 +86,9 @@ The same finite checks cover the source's default edge and Alt-only activation,
 without polling a keyboard. Preference checks import `menu=0/1`, preserve the
 setting through ordinary option changes/reset, read the old `WAP4` format and
 reject malformed `WAP5` flags. Android stores the same preference record.
+`native-music-view.json` also checks the selected name/information sprites from
+their separate sheets, all sixty-three row bounds, page retention and stopped
+visibility using constructed atlas data only.
 
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional

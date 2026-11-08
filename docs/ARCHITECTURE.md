@@ -1117,6 +1117,13 @@ device appearance remain unverified. Cached source 0x42a6d0 is a voice-comment
 menu using `9500_...` speech,
 not a movie gallery. No native release or whole-game compatibility is claimed.
 
+The selected music entry uses both source label sheets: the 344-by-24 name at
+(160,552) and the 512-by-24 information row at (536,552). Both retain the playing
+entry's absolute catalogue row when the browsing page changes; stopping removes
+both. Constructed atlases check all sixty-three rows, the alternate-track entry,
+page retention and stopped visibility. These are layout/data checks, not device
+or original-image appearance verification.
+
 `game/extra_grid.*` now shares native gallery/replay navigation, immutable visible
 images and presentation. Its content-only catalogue has 168 gallery groups and
 24 replay entries from the existing cached tables. Unlock tests use gallery
