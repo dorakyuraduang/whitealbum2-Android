@@ -477,8 +477,14 @@ selected game root on both platforms: `Sys.sav`, `native-settings.wa2cfg` and
 `native-saves/slot-NNN.wa2sav`. Android uses writable SAF documents, not an
 internal-storage mirror. Previously read-only grants must be renewed. Native
 test mode uses `native-test/` under the same selection, keeping normal PC
-progress unchanged. Directory selection and Android launcher switches are
-still remembered by the launcher; these are separate from game preferences.
+progress unchanged. Android launcher switches (FPS, long-press fast-forward,
+test mode) are also stored in the selected root's `native-launcher.wa2cfg`.
+Only the last directory URI and its Android permission grant stay in app
+preferences. A verified existing selection without this file may import the
+old private switch values once; a different new selection starts with defaults.
+Writes run on one background queue and game start drains it before capturing
+that folder's launch profile. No UI-thread provider I/O is needed. Restored
+activity tasks carry the verified session profile, or return to the launcher.
 
 PC `Sys.sav` may be copied directly to the selected root. If absent, the common
 adapter imports one `Documents/Leaf/WHITE ALBUM2/Sys.sav` (combined resources)

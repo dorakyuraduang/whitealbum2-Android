@@ -24,7 +24,8 @@ public final class LauncherActivity extends Activity {
     private static final int TEXT = 0xffedf4f3, MUTED = 0xffa4b7b6, ACCENT = 0xff76d6c4;
     private TextView directory, status;
     private Button choose, start;
-    private boolean busy, launching;
+    private Switch fps, longPress, testMode;
+    private boolean busy, launching, refreshing, profileReady;
     private int generation;
 
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -55,28 +56,31 @@ public final class LauncherActivity extends Activity {
         choose.setBackgroundTintList(ColorStateList.valueOf(0xff30474b)); card.addView(choose, row(14));
         choose.setOnClickListener(view -> pickDirectory());
         card.addView(text("选择存放原版 PAK 的 Wa2Res 文件夹，并保留 IC 子目录。资源直接读取；存档和游戏配置也保存在所选目录，可放入 PC 版存档。", 13, MUTED), row(8));
-        Switch fps = new Switch(this); fps.setText("显示 FPS 和帧耗时"); fps.setTextColor(TEXT); fps.setTextSize(16); fps.setPadding(0, dp(12), 0, dp(12));
-        fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> LaunchSettings.setShowFps(this, checked));
+        fps = new Switch(this); fps.setText("显示 FPS 和帧耗时"); fps.setTextColor(TEXT); fps.setTextSize(16); fps.setPadding(0, dp(12), 0, dp(12));
+        fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setShowFps(this, checked,this::saved);}});
         content.addView(fps, row(16));
-        Switch longPress = new Switch(this); longPress.setText("长按快进"); longPress.setTextColor(TEXT); longPress.setTextSize(16); longPress.setPadding(0, dp(12), 0, dp(12));
-        longPress.setChecked(LaunchSettings.longPressFastForward(this)); longPress.setOnCheckedChangeListener((button, checked) -> LaunchSettings.setLongPressFastForward(this, checked));
+        longPress = new Switch(this); longPress.setText("长按快进"); longPress.setTextColor(TEXT); longPress.setTextSize(16); longPress.setPadding(0, dp(12), 0, dp(12));
+        longPress.setChecked(LaunchSettings.longPressFastForward(this)); longPress.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setLongPressFastForward(this, checked,this::saved);}});
         content.addView(longPress, row(4));
         content.addView(text("单指长按画面快进，松手停止。双指轻点画面可隐藏或显示右上角菜单按钮。", 13, MUTED), row(4));
-        Switch testMode = new Switch(this); testMode.setText("测试模式（解锁全部内容）"); testMode.setTextColor(TEXT); testMode.setTextSize(16); testMode.setPadding(0, dp(12), 0, dp(12));
-        testMode.setChecked(LaunchSettings.testMode(this)); testMode.setOnCheckedChangeListener((button, checked) -> LaunchSettings.setTestMode(this, checked));
+        testMode = new Switch(this); testMode.setText("测试模式（解锁全部内容）"); testMode.setTextColor(TEXT); testMode.setTextSize(16); testMode.setPadding(0, dp(12), 0, dp(12));
+        testMode.setChecked(LaunchSettings.testMode(this)); testMode.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setTestMode(this, checked,this::saved);}});
         content.addView(testMode, row(12));
         content.addView(text("解锁全部章节、结局、CG 差分、音乐和回想，并标记影片已观看、文本已读。使用独立测试存档，旧测试进度会自动补齐；关闭后恢复普通存档。切换后从本页重新启动生效。", 13, MUTED), row(4));
         start = new Button(this); start.setText("开始游戏"); start.setAllCaps(false); start.setTextColor(0xff102723);
         start.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); content.addView(start, row(16));
         start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));
         status = text("", 13, MUTED); status.setMinHeight(dp(48)); content.addView(status, row(12));
-        setContentView(scroll); refresh();
+        setContentView(scroll); refresh();Uri remembered=ResourceDirectory.selectedTree(this);if(remembered!=null)prepare(remembered,0,false);
     }
+    private void saved(String problem) { runOnUiThread(() -> {if(isFinishing() || isDestroyed() || busy)return;status.setText(problem!=null?"保存启动设置失败："+problem:LaunchSettings.saving(this)?"正在保存启动设置…":"启动设置已保存到所选游戏目录。");}); }
     private void refresh() {
         Uri tree = ResourceDirectory.selectedTree(this);
         directory.setText(tree == null ? "尚未选择 · 默认位置：内部存储 / Wa2Res" : ResourceDirectory.displayLocation(tree));
-        choose.setEnabled(!busy); start.setEnabled(!busy && tree != null);
-        if (!busy) status.setText(tree == null ? "请先选择并授权游戏资源文件夹。" : "设置会自动保存。点击开始游戏后读取资源。");
+        choose.setEnabled(!busy); start.setEnabled(!busy && tree != null && profileReady);
+        refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));refreshing=false;
+        for(Switch control:new Switch[]{fps,longPress,testMode})control.setEnabled(!busy && profileReady);
+        if (!busy) status.setText(tree == null ? "请先选择并授权游戏资源文件夹。" : "启动设置、游戏配置和存档保存在所选游戏目录。");
     }
     private void pickDirectory() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
@@ -88,20 +92,20 @@ public final class LauncherActivity extends Activity {
     }
     private void prepare(Uri tree, int flags, boolean launch) {
         if (busy || tree == null) return;
-        busy = true; final int token = ++generation; refresh(); status.setText("正在检查资源目录…");
+        busy = true; profileReady=false; final int token = ++generation; refresh(); status.setText("正在检查资源目录和启动配置…");
         final android.content.Context application = getApplicationContext();
         new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             String problem = null; int count = 0;
-            try { count = ResourceDirectory.prepareSelection(application, tree, flags); }
+            try {Uri previous=ResourceDirectory.selectedTree(application);count = ResourceDirectory.prepareSelection(application, tree, flags);LaunchSettings.prepare(application,tree,tree.equals(previous));}
             catch (Exception error) { problem = error.getMessage(); if (problem == null) problem = "无法读取所选资源目录。"; }
             final String failure = problem; final int found = count;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || generation != token) return;
-                busy = false; refresh();
+                busy = false;profileReady=failure==null;refresh();
                 if (failure != null) { status.setText(failure + "\n请重新选择并授权可读写的 Wa2Res 文件夹。"); return; }
                 status.setText("已找到 " + found + " 个资源包。");
-                if (launch) { launching = true; busy = true; refresh(); status.setText("正在启动游戏…"); startActivity(new Intent(this, Wa2Activity.class)); }
+                if (launch) {Intent session=new Intent(this,Wa2Activity.class);LaunchSettings.applySession(this,session);launching = true; busy = true; refresh(); status.setText("正在启动游戏…"); startActivity(session);}
             });
         }, "WA2 launcher resources").start();
     }

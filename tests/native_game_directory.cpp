@@ -5,6 +5,7 @@
 #include "legacy_save_path.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -28,7 +29,7 @@ struct Directory:p::GameDirectory {
 int main(int argc,char** argv){try{
     CHECK(argc==2);unsigned cases{},guards{};
     for(unsigned slot=0;slot<1000;++slot){char name[32];std::snprintf(name,sizeof(name),"slot-%03u.wa2sav",slot);CHECK(p::game_slot_file(name)==slot && p::game_file_path(std::string("native-saves/")+name,true));++cases;}
-    for(const auto name:{"Sys.sav","native-settings.wa2cfg","native-saves/slot-999.wa2sav"}){CHECK(p::game_file_path(name) && p::game_file_path(name,true));++cases;}
+    for(const auto name:{"Sys.sav","native-settings.wa2cfg","native-launcher.wa2cfg","native-saves/slot-999.wa2sav"}){CHECK(p::game_file_path(name) && p::game_file_path(name,true));++cases;}
     for(const auto prefix:r::legacy_save_directories){const auto name=std::string(prefix)+"Sys.sav";CHECK(p::game_file_path(name) && (p::game_file_path(name,true)==prefix.empty()));++cases;}
     for(const auto name:{"","..","../Sys.sav","native-saves/../Sys.sav","/Sys.sav","C:/Sys.sav","native-saves\\slot-000.wa2sav","native-saves/slot-1000.wa2sav","native-saves/slot-abc.wa2sav","native-saves/slot-000.wa2sav.tmp","grp.pak","SYSTEM.ini","save_00.sav","native-settings.wa2cfg/evil"}){CHECK(!p::game_file_path(name) && !p::game_file_path(name,true));++guards;}
     progress::State original;original.set_flag(5,1);original.set_flag(310,0x4567);original.set_gallery(1,210301,129);original.mark_read(120,42);auto original_bytes=original.encode();original_bytes[0x81234]=0xab;
@@ -53,5 +54,7 @@ int main(int argc,char** argv){try{
     g::PreferenceStore test_settings(p::preference_storage(test));CHECK(test_settings.current()==g::Preferences{});test_settings.replace(preferences);CHECK(first->files.contains("native-test/native-settings.wa2cfg") && first->files.at("native-settings.wa2cfg")==preferences.encode());++cases;
     p::save_storage(test)->replace(12,snapshot);CHECK(first->files.contains("native-test/native-saves/slot-012.wa2sav") && !first->files.contains("native-saves/slot-012.wa2sav"));++cases;
     for(const auto name:{"native-test/native-test/Sys.sav","native-test/Documents/Leaf/WHITE ALBUM2/Sys.sav","native-test/../Sys.sav"}){CHECK(!p::game_file_path(name));++guards;}
+    // A cached resource-reader length must not hide changes to a mutable save.
+    namespace fs=std::filesystem;const auto owned=fs::absolute(fs::path(argv[1])).parent_path()/("storage-length-fixture-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(fs::create_directory(owned));auto ordinary=p::game_directory(owned);ordinary->replace("native-launcher.wa2cfg",Bytes(16,0x51));auto opened=ordinary->open("native-launcher.wa2cfg");CHECK(opened->size()==16);{std::ofstream append(owned/"native-launcher.wa2cfg",std::ios::binary|std::ios::app);append.put('x');append.close();CHECK(append);}rejects([&]{opened->size();});++guards;++cases;
     std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-game-directory.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"selected_directory_isolation\":true,\"root_sys_precedence\":true,\"read_only_original_import\":true,\"bounded_previews\":true,\"range_writes_preserve_other_blocks\":true,\"failed_writes_retryable\":true,\"synthetic_files_only\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);std::cout<<"PASS selected game-directory saves, configuration, original progress and bounded I/O.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

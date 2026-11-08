@@ -22,7 +22,7 @@ std::optional<unsigned> game_slot_file(std::string_view name)noexcept{
 }
 bool game_file_path(std::string_view name,bool writable)noexcept{
     if(name.starts_with("native-test/")){const auto child=name.substr(12);return !child.starts_with("native-test/") && game_file_path(child,true);}
-    if(name=="Sys.sav" || name=="native-settings.wa2cfg")return true;
+    if(name=="Sys.sav" || name=="native-settings.wa2cfg" || name=="native-launcher.wa2cfg")return true;
     if(name.starts_with("native-saves/") && game_slot_file(name.substr(13)))return true;
     if(!writable)for(const auto prefix:resource::legacy_save_directories)if(name.size()==prefix.size()+7 && name.starts_with(prefix) && name.substr(prefix.size())=="Sys.sav")return true;
     return false;
@@ -35,6 +35,15 @@ std::optional<std::vector<std::uint8_t>> game_file_read(GameDirectory& directory
 }
 namespace {
 namespace fs=std::filesystem;
+class StoredSource final:public resource::Source {
+    std::shared_ptr<resource::Source> source_;
+    fs::path file_;
+    std::uint64_t bytes_;
+public:
+    StoredSource(std::shared_ptr<resource::Source> source,fs::path file,std::uint64_t bytes):source_(std::move(source)),file_(std::move(file)),bytes_(bytes){if(source_->size()!=bytes_)throw resource::Error("Game file changed while opening");}
+    std::uint64_t size()const override{private_file::require_directory(file_.parent_path());if(private_file::size(file_,bytes_,bytes_)!=bytes_)throw resource::Error("Game file disappeared during read");return bytes_;}
+    void read_at(std::uint64_t offset,std::span<std::uint8_t> bytes)override{source_->read_at(offset,bytes);}
+};
 class Directory final:public GameDirectory {
     fs::path root_;
     std::optional<fs::path> path(std::string_view name,bool create=false){
@@ -52,7 +61,7 @@ class Directory final:public GameDirectory {
     }
 public:
     explicit Directory(fs::path root):root_(fs::absolute(std::move(root)).lexically_normal()){}
-    std::shared_ptr<resource::Source> open(std::string_view name)override{const auto file=path(name);if(!file || !private_file::size(*file))return {};return open_resource_file(*file);}
+    std::shared_ptr<resource::Source> open(std::string_view name)override{const auto file=path(name);if(!file)return {};const auto bytes=private_file::size(*file);if(!bytes)return {};return std::make_shared<StoredSource>(open_resource_file(*file),*file,*bytes);}
     void replace(std::string_view name,std::span<const std::uint8_t> bytes)override{if(!game_file_path(name,true))throw resource::Error("Invalid game-file write path");private_file::replace(*path(name,true),bytes,0,64u*1024*1024);}
     void update(std::string_view name,std::uint64_t expected,std::uint64_t offset,std::span<const std::uint8_t> bytes)override{
         if(!game_file_path(name,true) || expected>64u*1024*1024 || offset>expected || bytes.size()>expected-offset)throw resource::Error("Invalid game-file update range");const auto file=path(name);if(!file || private_file::size(*file,expected,expected)!=expected)throw resource::Error("Game-file update needs an existing complete file");

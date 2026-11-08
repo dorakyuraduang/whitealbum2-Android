@@ -11,7 +11,7 @@ final class GameStoragePath {
     static boolean valid(String path, boolean write) {
         if (path == null) return false;
         if (path.startsWith("native-test/")) { String child=path.substring(12);return !child.startsWith("native-test/") && valid(child,true); }
-        if (path.equals("Sys.sav") || path.equals("native-settings.wa2cfg")) return true;
+        if (path.equals("Sys.sav") || path.equals("native-settings.wa2cfg") || path.equals("native-launcher.wa2cfg")) return true;
         if (path.startsWith("native-saves/") && slot(path.substring(13))) return true;
         if (!write) for (String prefix : LegacySavePath.DIRECTORIES) if (path.equals(prefix + "Sys.sav")) return true;
         return false;

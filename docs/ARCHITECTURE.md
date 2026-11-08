@@ -1345,6 +1345,20 @@ write, rename, cleanup, failed rollback and retry. These are finite memory/file
 checks, not a provider/device or whole-game compatibility claim. The retained
 AOT release binary remains unchanged.
 
+The Android launcher separately stores its three adapter switches in
+`native-launcher.wa2cfg` under the selected root. Its small versioned/checksummed
+record is distinct from game preferences. Queue serialization prevents an older
+toggle write from overtaking a newer one, and failed writes retain dirty state
+for retry before launch. An edit made during a pending write cannot be cleared
+by that older acknowledgement. Existing root files beat the one-time private
+switch fallback, while newly selected roots start with defaults. The launcher
+passes a folder-bound immutable profile to the SDL activity; a restored task
+cannot start SDL_main with a missing/mismatched launch profile. Only directory
+selection/permission metadata stays in app preferences. Pure JVM checks cover
+record corruption, narrow defaults, write retry and interleaved edits, with no
+Android provider/activity launch. The retained AOT library does not link the
+native-only game-directory implementation.
+
 ## Current released implementation
 
 The current host is a mixed static recompilation and native subsystem port.

@@ -5,7 +5,11 @@ external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The separate native migration development package now saves game data in the
 currently selected Wa2Res: root `Sys.sav`, `native-settings.wa2cfg` and
-`native-saves/`. Test mode uses `native-test/` in that same folder. Renew an
+`native-saves/`. FPS, long-press and test-mode launcher switches are in the
+same root's `native-launcher.wa2cfg`; only the selected directory URI and its
+authorization are remembered by the app. Writes use one background queue and
+complete before game start; an error is shown rather than writing to private
+storage. Test mode uses `native-test/` in that same folder. Renew an
 old read-only folder grant to allow read/write access. PC system progress and
 supported version-2 manual saves may be copied into this selection; native
 scene saves use their own format and cannot be loaded by the original PC game.

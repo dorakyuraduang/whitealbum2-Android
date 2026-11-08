@@ -15,6 +15,12 @@ public final class Wa2Activity extends SDLActivity {
     }
     @Override protected String[] getLibraries() { return PortUi.libraries(); }
     @Override protected String[] getArguments() { return LaunchSettings.testMode(this) ? new String[] { "--test-mode" } : new String[0]; }
+    @Override protected void resumeNativeThread() {
+        // A restored task must retain its verified folder/profile pairing.
+        // If it cannot, return through the launcher before SDL_main can run.
+        if(isFinishing() || !LaunchSettings.sessionValid(this))return;
+        super.resumeNativeThread();
+    }
     private static native void nativeResetFrameMetrics();
     private static void resetFrameMetricsIfLoaded() {
         // SDL itself reports native-library loading errors. An optional HUD
@@ -24,6 +30,7 @@ public final class Wa2Activity extends SDLActivity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         if (SDLActivity.mBrokenLibraries) return;
+        if(!LaunchSettings.sessionValid(this)){startActivity(new Intent(this,LauncherActivity.class));finishNormally();return;}
         ResourceDirectory.attach(this);
         PortUi.attach(this);
         touchControls=new GameTouchControls(mSurface,LaunchSettings.longPressFastForward(this),this::forwardTouch,PortUi.touchMenu());

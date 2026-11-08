@@ -23,7 +23,7 @@ public final class GameStorageTest {
     public static void main(String[] args)throws Exception{
         int cases=0,guards=0;
         for(int slot=0;slot<1000;++slot){String name=String.format(java.util.Locale.ROOT,"slot-%03d.wa2sav",slot);check(GameStoragePath.slot(name) && GameStoragePath.valid("native-saves/"+name,true));++cases;}
-        for(String name:new String[]{"Sys.sav","native-settings.wa2cfg","native-saves/slot-999.wa2sav"}){check(GameStoragePath.valid(name,true));++cases;}
+        for(String name:new String[]{"Sys.sav","native-settings.wa2cfg","native-launcher.wa2cfg","native-saves/slot-999.wa2sav"}){check(GameStoragePath.valid(name,true));++cases;}
         for(String prefix:LegacySavePath.DIRECTORIES){check(GameStoragePath.valid(prefix+"Sys.sav",false) && GameStoragePath.valid(prefix+"Sys.sav",true)==prefix.isEmpty());++cases;}
         for(String name:new String[]{"native-test/Sys.sav","native-test/native-settings.wa2cfg","native-test/native-saves/slot-999.wa2sav"}){check(GameStoragePath.valid(name,true));++cases;}
         for(String name:new String[]{"native-test/native-test/Sys.sav","native-test/Documents/Leaf/WHITE ALBUM2/Sys.sav","native-test/../Sys.sav"}){check(!GameStoragePath.valid(name,false) && !GameStoragePath.valid(name,true));++guards;}

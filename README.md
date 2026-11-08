@@ -27,7 +27,7 @@
 
 `scripts/verify_native_core.py` 独立编译并链接 Windows x64 / Android ARM64 的同一原生核心，检查编译清单、链接依赖及符号中没有 AOT、原程序 CPU 或虚拟内存组件。测试只执行合成脚本、合成存档和自有内存画面。完整 SDL 构建定义分别在 `hosts/native` 和 `hosts/native-android`；安卓原生 Java 适配器不包含旧 Win32 控件/文件对话框类，菜单动作仍由共用 C++ 决定。这些检查不会启动游戏，不能证明手机兼容或整体帧率；尚未替换已交付 APK。见 [原生核心与现有版本的边界](docs/ARCHITECTURE.md)。
 
-`scripts/build_native_hosts.py` 构建并检查带实际 SDL 窗口、渲染和设备音频后端的两端应用。`scripts/package_native_preview.py` 生成独立的 `org.wa2.port.nativeengine` 开发 APK、Windows 压缩包及匹配的视频解码库重新链接材料，放在忽略的 `out/native-development` 目录。原生开发版将存档和游戏配置写入当前选择的游戏目录：根部 `Sys.sav`、`native-settings.wa2cfg` 和 `native-saves/`；测试模式改用同一目录下的 `native-test/`。可将 PC 的 `Sys.sav`、`save_00.sav` 等放入所选目录读取；新的原生剧情存档不能直接交给原版 PC 程序读取。安卓需要重新授予目录读写权限。旧 AOT 包和原有私有数据保留，PAK 保持外置，不进行安装或运行。构建与打包顺序见 [BUILDING](docs/BUILDING.md)。
+`scripts/build_native_hosts.py` 构建并检查带实际 SDL 窗口、渲染和设备音频后端的两端应用。`scripts/package_native_preview.py` 生成独立的 `org.wa2.port.nativeengine` 开发 APK、Windows 压缩包及匹配的视频解码库重新链接材料，放在忽略的 `out/native-development` 目录。原生开发版将存档和游戏配置写入当前选择的游戏目录：根部 `Sys.sav`、`native-settings.wa2cfg` 和 `native-saves/`；安卓启动开关保存在同处的 `native-launcher.wa2cfg`；测试模式改用同一目录下的 `native-test/`。可将 PC 的 `Sys.sav`、`save_00.sav` 等放入所选目录读取；新的原生剧情存档不能直接交给原版 PC 程序读取。安卓需要重新授予目录读写权限。旧 AOT 包和原有私有数据保留，PAK 保持外置，不进行安装或运行。构建与打包顺序见 [BUILDING](docs/BUILDING.md)。
 
 `0.2.46-shared-aot`（开发版本）。Windows 与 Android 使用相同的核心源码。
 

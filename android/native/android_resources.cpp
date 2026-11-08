@@ -97,6 +97,7 @@ std::shared_ptr<resource::Source> try_open_legacy_settings(std::string_view file
 std::shared_ptr<resource::Source> try_open_legacy_save(std::string_view filename){
     if(!resource::legacy_save_path(filename))throw resource::Error("Invalid original manual-save filename");const auto fd=open_descriptor(filename,save_open_method,true);return fd<0?nullptr:platform::adopt_resource_fd(fd);
 }
+#if defined(WA2_NATIVE_GAME_STORAGE)
 namespace {
 class GameDirectory final:public platform::GameDirectory {
     jint token_;
@@ -122,6 +123,7 @@ public:
 };
 }
 std::shared_ptr<platform::GameDirectory> selected_game_directory(){return std::make_shared<GameDirectory>();}
+#endif
 std::vector<ArchiveMetadata> legacy_save_metadata(){
     if(!directory_class || !save_list_method)throw resource::Error("Android original-save metadata bridge is unavailable");auto* env=static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());if(!env)throw resource::Error("Android save thread has no JNI environment");
     auto array=static_cast<jobjectArray>(env->CallStaticObjectMethod(directory_class,save_list_method));if(env->ExceptionCheck())throw resource::Error(consume_error(env));if(!array)throw resource::Error("Android returned no original-save inventory");std::vector<ArchiveMetadata> result;
