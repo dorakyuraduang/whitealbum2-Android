@@ -24,6 +24,15 @@ its aspect-ratio fit. It also restores the full confirmation-panel crop,
 integer glyph edges/baselines for sized text and completed-message positions
 in original manual saves. These changes have finite memory/file and build
 checks; their appearance and system-bar behavior still need device validation.
+`0.3.3-native-development` corrects font masks: 32-bit indexed font palettes
+use their stored alpha, while RGB-only grayscale palettes retain their blue
+coverage. Treating both formats as blue masks exposed transparent padding and
+hid black strokes, producing thick white text. Owned-memory pixel checks cover
+story dialogue and confirmation labels through the actual common text/SDL
+renderer. The Android entry also supplies SDL's landscape-only orientation
+hint; a resizable SDL window otherwise overrides the manifest with full-user
+orientation. Both landscape directions remain allowed, with aspect-ratio fit.
+No device, game or screen was used to validate this development package.
 When copying old Documents/Leaf folders, the native host also merges the
 introductory Sys.sav into current progress using the original startup rule.
 Source flag 99 is excluded and the original files remain read-only. Unchanged

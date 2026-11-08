@@ -25,8 +25,8 @@ Raster decode_game_tga(std::span<const std::uint8_t> source);
 // Glyphs can be decoded directly from a large indexed font atlas. No complete
 // RGBA atlas allocation is needed to obtain a small visible glyph rectangle.
 Raster decode_game_tga_region(std::span<const std::uint8_t> source,Region region);
-// Font coverage is palette blue, ignoring reserved palette alpha. Copy from an
-// inspected indexed atlas directly into an owned RGBA glyph atlas; on failure
+// Font coverage uses stored palette alpha when present; RGB-only grayscale
+// fonts use palette blue. Copy directly into an owned RGBA glyph atlas; on failure
 // destination pixels may be partial and must not be published by the caller.
 void copy_game_font_coverage(std::span<const std::uint8_t> source,const TgaLayout&,Region glyph,
     Raster& destination,std::uint32_t x,std::uint32_t y);

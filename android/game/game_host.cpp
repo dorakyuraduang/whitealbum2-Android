@@ -14,6 +14,9 @@ namespace wa2::android {
 int run_game(int argc,char** argv){
     try{
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON,"1");SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE,"0");
+        // SDL's resizable-window policy otherwise selects FULL_USER and can
+        // override the manifest's sensorLandscape request with portrait.
+        SDL_SetHint(SDL_HINT_ORIENTATIONS,"LandscapeLeft LandscapeRight");
         if(argc<0 || argc>33 || (argc && !argv))throw std::invalid_argument("Invalid native argument list");
         std::vector<std::string_view> arguments;for(int n=1;n<argc;++n){if(!argv[n])throw std::invalid_argument("Missing native argument");arguments.emplace_back(argv[n]);}
         auto startup=platform::native_startup(arguments);startup.seed=std::uint32_t(SDL_GetPerformanceCounter());

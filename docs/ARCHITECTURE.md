@@ -49,7 +49,11 @@ Android's SDL display adapter keeps the native window in immersive fullscreen
 independently of the retained PC window-mode preference. It no longer clears
 SDL's fullscreen/system-bar state when first applying portable preferences.
 Desktop display policy and aspect-ratio fitting of the shared logical canvas
-are retained. Actual Android system-bar behavior is not device-verified.
+are retained. The Android entry supplies SDL's `LandscapeLeft LandscapeRight`
+orientation hint before creating the window: SDL's resizable-window default
+otherwise overrides the manifest's sensor-landscape request with full-user
+orientation. The linked-entry audit requires this hint in the Android library.
+Actual Android system-bar and orientation behavior are not device-verified.
 
 Text presentation now applies the cached integer glyph-edge truncation and
 line baseline for sized glyphs. Existing layout records keep their format;
@@ -491,12 +495,21 @@ font pixels still require original-resource/device presentation validation.
 Constructed constant-coverage font atlases additionally exercise visible
 body/name layer tagging and mid-name-transition checkpoint continuation.
 
-Visible glyphs now copy palette-blue coverage directly from the cached indexed
-font source into their final white-RGB/coverage-alpha tiles. The former temporary
+Visible glyphs copy stored palette alpha for 32-bit indexed font sources, or
+blue coverage for RGB-only grayscale sources, into their final white-RGB/alpha
+tiles. Local external-font palette metadata establishes that colour and alpha
+are independent; transparent white padding and opaque black ink must not use
+blue as coverage. The earlier blue-only conversion and its tests incorrectly
+ignored this distinction. The former temporary
 RGBA region allocation and second pixel copy for every glyph/shadow are gone.
 Source origin, palette bounds and destination bounds remain checked. Synthetic
-24/32-bit palettes in both TGA row orientations compare byte-for-byte with
-the previous region-decoder blue values, including reserved alpha bytes.
+24/32-bit palettes in both TGA row orientations check their respective channels.
+Constructed font atlases also pass through FontBook, story dialogue,
+confirmation labels and SDL's software renderer into an owned RGBA buffer.
+Transparent padding, opaque ink, black outline and partial-alpha antialiasing
+have independent expected pixel values; normal/sized text, a two-byte glyph,
+ruby banks and warm texture reuse are covered. No original glyph pixels,
+window, screen, video/audio/event subsystem or game execution enters this check.
 
 The native scene exposes a bounded skip-frame entry. It advances multiple logic
 ticks without presenting intermediate states, with a default 2 ms/256-tick

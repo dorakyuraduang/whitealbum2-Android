@@ -508,8 +508,13 @@ root/known Documents folder, send the result to both fake title and synthetic
 story movie transports, reopen native settings with INI access denied, and
 check that the source INI stays byte-identical. Out-of-range values still fail
 before publishing native settings. These checks launch no game or device.
-The separate native development package is `0.3.2-native-development`
-(Android version code 3), retaining the same application ID and signing key.
+The separate native development package is `0.3.3-native-development`
+(Android version code 4), retaining the same application ID and signing key.
+The font-mask tests distinguish independent palette colour/alpha from
+RGB-only grayscale coverage. The owned-memory composition test additionally
+renders constructed glyphs through the actual story and confirmation paths,
+checking transparent padding, white ink, black outline and antialiasing pixels.
+The linked Android entry must contain its landscape-only SDL orientation hint.
 The loading-cache check additionally compares sized foreground/outline
 rectangles to cached integer geometry while retaining old layout records.
 Confirmation checks bound the source's 656x264 request to the external

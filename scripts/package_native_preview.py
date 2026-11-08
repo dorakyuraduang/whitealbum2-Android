@@ -20,8 +20,8 @@ from verify_shared_package import verify_resource_table
 
 NS='http://schemas.android.com/apk/res/android'
 PACKAGE='org.wa2.port.nativeengine'
-VERSION='0.3.2-native-development'
-VERSION_CODE=3
+VERSION='0.3.3-native-development'
+VERSION_CODE=4
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--check-only',action='store_true');args=parser.parse_args()

@@ -77,7 +77,10 @@ void copy_game_font_coverage(std::span<const std::uint8_t> source,const TgaLayou
         const auto* row=source.data()+layout.data_offset+std::size_t(sy)*layout.width+glyph.x;
         auto* output=destination.rgba.data()+((std::size_t(dy+y)*destination.width)+dx)*4;
         for(std::uint32_t x=0;x<glyph.width;++x,output+=4){const auto index=row[x];if(index>=layout.palette_entries)throw Error("Game font palette index out of range");
-            output[0]=output[1]=output[2]=255;output[3]=layout.palette[index][2];}
+            // RGBA font palettes store coverage independently of RGB: an
+            // opaque black stroke and transparent white padding are valid.
+            // Grayscale RGB-only palettes retain their blue-channel mask.
+            output[0]=output[1]=output[2]=255;output[3]=layout.palette[index][layout.alpha?3:2];}
     }
 }
 Raster decode_game_bmp(std::span<const std::uint8_t> source){

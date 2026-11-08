@@ -48,6 +48,7 @@ def main():
         if pending and descriptor:methods[pending]=descriptor[1];pending=None
     if methods!=expected or pending:raise ValueError('Native Java/JNI menu declarations do not match the native service')
     data=library.read_bytes()
+    if b'LandscapeLeft LandscapeRight\0' not in data:raise ValueError('Linked native Android entry lacks its landscape-only SDL orientation hint')
     for value in ['org/wa2/port/PortUi',*expected,*expected.values()]:
         if value.encode() not in data:raise ValueError('Linked native JNI service lacks registration data: '+value)
     declarations=output([jdk/'bin/javap.exe','-p','-s',classes/'org/wa2/port/ResourceDirectory.class'])
