@@ -70,6 +70,12 @@ The image-style, control-state, scene-checkpoint and loading-cache checks cover
 the related shared paths. No original image is decoded and no display, game or
 performance test is run by this check.
 
+`native-extra-grid.json` also checks full-CG native-resolution cropping,
+four/eight-pixel edge scroll bands, bounded viewports, thumbnail expansion and
+retained crops through failed/retried variant loads. All images are constructed
+fixtures. Scrolling is checked with resource requests counted and denied; no
+original CG pixels, window, event injection or screen access is involved.
+
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional
 restore failures and conditionally visible selections. `--resource-root res`

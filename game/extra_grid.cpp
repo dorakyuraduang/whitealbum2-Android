@@ -11,7 +11,7 @@ constexpr unsigned chrome(ExtraGridKind kind){return kind==ExtraGridKind::replay
 ExtraGrid::ExtraGrid(Loader loader,Sound sound,CurrentMusic music):loader_(std::move(loader)),sound_(std::move(sound)),current_music_(std::move(music)){
     if(!loader_)throw script::Error("Missing native extra-grid image loader");auto black=std::make_shared<image::Raster>();black->width=black->height=1;black->rgba={0,0,0,255};black_=std::move(black);sprites_.reserve(64);
 }
-void ExtraGrid::clear(){pages_.clear();data_={};pending_.reset();full_request_.reset();full_.reset();previous_full_.reset();variants_.clear();sprites_.clear();focus_.reset();command_.reset();leaving_.reset();page_=variant_=full_id_=elapsed_=0;timing_={};close_from_=1;coda_complete_=false;phase_=ExtraGridPhase::idle;}
+void ExtraGrid::clear(){pages_.clear();data_={};pending_.reset();full_request_.reset();full_.reset();previous_full_.reset();variants_.clear();sprites_.clear();focus_.reset();command_.reset();leaving_.reset();page_=variant_=full_id_=full_row_=elapsed_=0;full_view_=previous_view_={};page_direction_=0;timing_={};close_from_=1;coda_complete_=false;phase_=ExtraGridPhase::idle;}
 void ExtraGrid::prepare(ExtraGridKind kind,TitleContent content,const progress::State& progress,unsigned page,MenuTiming timing){
     timing.validate();
     if(kind!=ExtraGridKind::gallery && kind!=ExtraGridKind::replay)throw script::Error("Unknown native extra-grid kind");
@@ -39,9 +39,9 @@ ExtraGrid::PageData ExtraGrid::plan(unsigned page)const{
         if(row.theme>2)throw script::Unsupported("Native extra placeholder theme is out of range");if(row.enabled)asset(image_name("tv",row.thumbnail));next.rows.push_back(std::move(row));
     }return next;
 }
-void ExtraGrid::begin_page(unsigned page){
+void ExtraGrid::begin_page(unsigned page,int direction){
     auto next=plan(page);unsigned first{};while(first<next.assets.size() && next.assets[first].pixels)++first;std::shared_ptr<image::ImageRequest> request;
-    if(first<next.assets.size()){request=loader_(next.assets[first].name);if(!request)throw script::Error("Missing native extra-grid image request");}pending_=Pending{std::move(next),first,std::move(request)};phase_=ExtraGridPhase::loading;focus_.reset();draw();
+    if(first<next.assets.size()){request=loader_(next.assets[first].name);if(!request)throw script::Error("Missing native extra-grid image request");}pending_=Pending{std::move(next),first,std::move(request)};page_direction_=direction;phase_=ExtraGridPhase::loading;focus_.reset();draw();
 }
 bool ExtraGrid::poll(){
     if(!pending_)throw script::Error("Native extra-grid lost its page request");auto& pending=*pending_;
@@ -66,13 +66,28 @@ float ExtraGrid::visibility()const noexcept{
 }
 void ExtraGrid::turn(int delta){
     if(delta!=-1 && delta!=1)throw script::Error("Native extra-grid page step is out of range");const auto current=std::find(pages_.begin(),pages_.end(),page_);if(current==pages_.end())throw script::Error("Native extra-grid current page is unavailable");
-    const auto index=(int(current-pages_.begin())+delta+int(pages_.size()))%int(pages_.size());begin_page(pages_[unsigned(index)]);if(sound_)sound_(audio::SystemCue::focus);
+    const auto index=(int(current-pages_.begin())+delta+int(pages_.size()))%int(pages_.size());begin_page(pages_[unsigned(index)],-delta);if(sound_)sound_(audio::SystemCue::focus);
 }
 void ExtraGrid::full(unsigned index){
     if(index>=variants_.size())throw script::Error("Native gallery variant is unavailable");auto request=loader_(image_name("v",variants_[index]));if(!request)throw script::Error("Missing native gallery image request");
     full_request_=std::move(request);pending_variant_=index;phase_=ExtraGridPhase::full_loading;
 }
-void ExtraGrid::cards(){full_request_.reset();full_.reset();previous_full_.reset();variants_.clear();focus_.reset();elapsed_=0;phase_=ExtraGridPhase::cards;draw();}
+void ExtraGrid::cards(){full_request_.reset();full_.reset();previous_full_.reset();full_view_=previous_view_={};variants_.clear();focus_.reset();elapsed_=0;phase_=ExtraGridPhase::cards;draw();}
+void ExtraGrid::pan(const script::SelectionInput& input){
+    if(!input.pointer || !full_)return;
+    const auto move=[](unsigned value,float pointer,unsigned viewport,unsigned extent){
+        // Cached gallery edge bands: four pixels per inner band, another
+        // four in its outer band, once per 60 Hz game update. The picture is
+        // cropped at its native resolution, not stretched into the viewport.
+        const auto maximum=extent>viewport?extent-viewport:0;
+        const auto step=[&](int amount){value=unsigned(std::clamp<std::int64_t>(std::int64_t(value)+amount,0,maximum));};
+        if(pointer<100)step(-4);if(pointer>viewport-100)step(4);
+        if(pointer<200)step(-4);if(pointer>viewport-200)step(4);
+        return value;
+    };
+    const std::array next{move(full_view_[0],input.x,1280,full_->width),move(full_view_[1],input.y,720,full_->height)};
+    if(next!=full_view_){full_view_=next;draw();}
+}
 void ExtraGrid::finish_close(){
     if(!leaving_)throw script::Error("Native extra exit has no destination");command_=*leaving_;leaving_.reset();elapsed_=0;
     // A replay keeps this exact page as its return owner. Its exit command is
@@ -88,7 +103,7 @@ void ExtraGrid::activate(unsigned id){
     if(id==50){leave({ExtraGridCommand::Kind::close});if(sound_)sound_(audio::SystemCue::cancel);return;}
     if(id==51 || id==52){turn(id==51?-1:1);return;}if(id>=100 && id<114){const auto page=id-100;if(page!=page_)begin_page(page);return;}
     if(id>=data_.rows.size())throw script::Error("Unknown native extra-grid control");const auto& row=data_.rows[id];if(!row.enabled){if(sound_)sound_(audio::SystemCue::reject);return;}
-    if(kind_==ExtraGridKind::replay)leave({ExtraGridCommand::Kind::replay,row.index+1});else{auto old=variants_;variants_=row.variants;try{full(0);}catch(...){variants_=std::move(old);throw;}}
+    if(kind_==ExtraGridKind::replay)leave({ExtraGridCommand::Kind::replay,row.index+1});else{auto old=variants_;variants_=row.variants;try{full(0);full_row_=row.ordinal;}catch(...){variants_=std::move(old);throw;}}
     if(sound_)sound_(audio::SystemCue::accept);
 }
 std::optional<ExtraGridCommand> ExtraGrid::take_command(){auto command=command_;command_.reset();return command;}
@@ -105,8 +120,8 @@ void ExtraGrid::update(ExtraGridInput input){
         else if(phase_==ExtraGridPhase::full_in && ++elapsed_>=16){previous_full_.reset();phase_=ExtraGridPhase::full;elapsed_=0;}
         draw();return;
     }
-    if(phase_==ExtraGridPhase::full_loading){try{auto image=full_request_->get();if(!image)return;if(!image->width || !image->height)throw script::Error("Native gallery image is empty");previous_full_=std::move(full_);full_=std::move(image);variant_=pending_variant_;full_id_=variants_.at(variant_);full_request_.reset();elapsed_=0;phase_=ExtraGridPhase::full_in;draw();}catch(...){full_request_.reset();if(full_)phase_=ExtraGridPhase::full;else cards();throw;}return;}
-    if(phase_==ExtraGridPhase::full){if(input.page_delta<0){if(variant_)full(variant_-1);}else if(input.page_delta>0 || selected.confirm || (selected.pointer && selected.activate)){if(variant_+1<variants_.size())full(variant_+1);else cards();}return;}
+    if(phase_==ExtraGridPhase::full_loading){try{auto image=full_request_->get();if(!image)return;if(!image->width || !image->height)throw script::Error("Native gallery image is empty");previous_full_=std::move(full_);previous_view_=full_view_;full_=std::move(image);full_view_={};variant_=pending_variant_;full_id_=variants_.at(variant_);full_request_.reset();elapsed_=0;phase_=ExtraGridPhase::full_in;draw();}catch(...){full_request_.reset();if(full_)phase_=ExtraGridPhase::full;else cards();throw;}return;}
+    if(phase_==ExtraGridPhase::full){if(input.page_delta<0){if(variant_)full(variant_-1);}else if(input.page_delta>0 || selected.confirm || (selected.pointer && selected.activate)){if(variant_+1<variants_.size())full(variant_+1);else cards();}else pan(selected);return;}
     if(input.page_delta){turn(input.page_delta);return;}const auto previous=focus_;
     if(selected.pointer){focus_.reset();for(const auto& row:data_.rows){const float x=104.f+272*(row.ordinal%4),y=116.f+160*(row.ordinal/4);if(row.enabled && selected.x>=x && selected.x<x+256 && selected.y>=y && selected.y<y+144){focus_=row.ordinal;break;}}
         if(selected.x>=1164 && selected.x<1220 && selected.y>=688 && selected.y<712)focus_=50;
@@ -119,7 +134,9 @@ void ExtraGrid::draw(){
     sprites_.clear();if(data_.assets.empty() || phase_==ExtraGridPhase::closed)return;int order{};
     const auto whole=visibility(),fraction=timing_.page?std::min(1.f,float(elapsed_)/timing_.page):1.f;
     const auto content=phase_==ExtraGridPhase::page_out?1-fraction:phase_==ExtraGridPhase::page_in?fraction:1.f;
-    const auto scale=1+.1f*(1-whole),card_scale=1+.1f*(1-whole*content);
+    const bool sliding=page_direction_ && (phase_==ExtraGridPhase::page_out || phase_==ExtraGridPhase::page_in);
+    const auto scale=1+.1f*(1-whole),card_scale=sliding?1.f:1+.1f*(1-whole*content);
+    const auto page_x=sliding?32.f*page_direction_*(phase_==ExtraGridPhase::page_out?fraction:fraction-1):0.f;
     const auto add=[&](std::shared_ptr<const image::Raster> image,float x,float y,float w,float h,float sx,float sy,float sw,float sh,unsigned alpha=255,float factor=1){sprites_.push_back({std::move(image),640+(x-640)*factor,360+(y-360)*factor,w*factor,h*factor,sx,sy,sw,sh,255,255,255,std::uint8_t(std::min(255u,unsigned(float(alpha)*whole)))});sprites_.back().layer=0x1060;sprites_.back().order=order++;};
     const bool cards_visible=!full_ || (phase_==ExtraGridPhase::full_in && !previous_full_);
     add(black_,0,0,1280,720,0,0,1,1,cards_visible?128:255);
@@ -128,7 +145,7 @@ void ExtraGrid::draw(){
     for(auto page:pages_)add(assets[6].pixels,428.f+60*(page-pages_.front()),72,60,32,float(page*60),page==page_?32:focus_==100+page?64:0,60,32,255,scale);
     add(assets[11].pixels,280,86,1000,24,0,0,1000,24,255,scale);
     const auto card_alpha=unsigned(256*content);
-    unsigned thumb=chrome(kind_);for(const auto& row:data_.rows){const float x=96.f+272*(row.ordinal%4),y=112.f+160*(row.ordinal/4);
+    unsigned thumb=chrome(kind_);for(const auto& row:data_.rows){const float x=96.f+272*(row.ordinal%4)+page_x,y=112.f+160*(row.ordinal/4);
         // Cached replay branches 42e5bc/42f4ea distinguish an uncleared CODA
         // placeholder from a cleared chapter with an unseen individual scene.
         auto card_index=row.enabled?2u:8+row.theme;
@@ -148,7 +165,15 @@ void ExtraGrid::draw(){
         const auto index=chrome(kind_)-2;append_music_caption(sprites_,assets[index].pixels,assets[index+1].pixels,current_music_(),0x1060,order);
     }
     }
-    if(previous_full_)add(previous_full_,0,0,1280,720,0,0,float(previous_full_->width),float(previous_full_->height));
-    if(full_)add(full_,0,0,1280,720,0,0,float(full_->width),float(full_->height),phase_==ExtraGridPhase::full_in?std::min(255u,elapsed_*16):255);
+    if(previous_full_)add(previous_full_,0,0,1280,720,float(previous_view_[0]),float(previous_view_[1]),1280,720);
+    if(full_){
+        if(phase_==ExtraGridPhase::full_in && !previous_full_){
+            // The first CG expands from its selected 256x144 thumbnail over
+            // sixteen ticks. Later variants keep the separate linear fade.
+            const auto remaining=16-std::min(elapsed_,16u),square=remaining*remaining;
+            add(full_,float((104+272*(full_row_%4))*square/256),float((116+160*(full_row_/4))*square/256),
+                float((1280*256-1024*square)/256),float((720*256-576*square)/256),0,0,1280,720,(255*(256-square))/256);
+        }else add(full_,0,0,1280,720,float(full_view_[0]),float(full_view_[1]),1280,720,phase_==ExtraGridPhase::full_in?std::min(255u,elapsed_*16):255);
+    }
 }
 }

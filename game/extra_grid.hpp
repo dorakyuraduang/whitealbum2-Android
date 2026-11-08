@@ -39,14 +39,15 @@ private:
     std::vector<unsigned> pages_;PageData data_;std::optional<Pending> pending_;
     std::shared_ptr<const image::Raster> black_,full_,previous_full_;
     std::shared_ptr<image::ImageRequest> full_request_;
-    std::vector<unsigned> variants_;unsigned variant_{},pending_variant_{},full_id_{},page_{};
+    std::vector<unsigned> variants_;unsigned variant_{},pending_variant_{},full_id_{},page_{},full_row_{};
+    std::array<unsigned,2> full_view_{},previous_view_{};
     std::optional<unsigned> focus_;std::optional<ExtraGridCommand> command_;
     std::optional<ExtraGridCommand> leaving_;
-    MenuTiming timing_;unsigned elapsed_{};float close_from_{1};
+    MenuTiming timing_;unsigned elapsed_{};float close_from_{1};int page_direction_{};
     std::vector<image::Sprite> sprites_;ExtraGridPhase phase_{ExtraGridPhase::idle};
     PageData plan(unsigned)const;
-    void begin_page(unsigned);bool poll();void commit_page();void turn(int);void activate(unsigned);
+    void begin_page(unsigned,int direction=0);bool poll();void commit_page();void turn(int);void activate(unsigned);
     void leave(ExtraGridCommand);void finish_close();
-    void full(unsigned);void cards();void draw();
+    void full(unsigned);void cards();void draw();void pan(const script::SelectionInput&);
 };
 }

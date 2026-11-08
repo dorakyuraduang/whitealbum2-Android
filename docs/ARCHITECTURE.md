@@ -8,7 +8,7 @@ CPU state, checked source-address memory, or the Windows compatibility runtime.
 The current released APK still uses AOT; a linkable component is not a full port.
 
 The current native application targets are `hosts/native` (Windows x64) and
-`hosts/native-android` (Android ARM64). Both link the same 89 common game/engine
+`hosts/native-android` (Android ARM64). Both link the same 91 common game/engine
 sources through `platform/native_host.cpp`; OS paths, input, resources, device
 audio and SDL presentation stay outside game policy. Actual production builds
 include window/render/audio backends, and Android includes its native-only Java
@@ -17,8 +17,8 @@ runtime rather than falling back to it for an unsupported command. Separate
 unlaunched development packages and matching LGPL link materials can be made
 with the source-bound build/package tools documented in `BUILDING.md`.
 
-Version-1 manual-save conversion, remaining source-specific UI/renderer options
-and complete story/device compatibility are not established. The retained AOT
+Remaining source-specific UI/renderer options and complete story/device
+compatibility are not established. The retained AOT
 release and contract completion flags stay unchanged. The component notes
 below record migration increments; later integration sections supersede the
 earlier component-only integration boundaries.
@@ -1232,6 +1232,22 @@ transition clicks, failed preparation/retry, backgrounding and save restoration.
 Remaining counters/chrome and full physical game compatibility are still
 migration work. Native desktop SDL windows now request
 the provided embedded icon for both large and small window icons.
+
+The first full CG expands from its selected 256-by-144 thumbnail rectangle over
+sixteen logic ticks using the cached quadratic geometry/alpha curve. Later
+variants retain their separate sixteen-tick linear crossfade. The common view
+uses a native-resolution 1280-by-720 source window rather than shrinking an
+oversized CG into the screen. Pointer bands within 200/100 logical pixels of
+each edge scroll by four/eight pixels per tick, bounded by the actual raster.
+Panning issues no image request or pixel copy. A failed variant request retains
+the previous image and crop; successful variants and reopening a card reset the
+new viewport, while the crossfade keeps the old crop. Constructed images check
+edge thresholds, both axes, clamping, geometry milestones, retry and no-I/O
+scrolling. No original rendered image, device or screen is used in these checks.
+Gallery/replay arrow turns additionally move outgoing/incoming cards in opposite
+32-pixel directions without the tab-change zoom. The loading transaction retains
+its requested direction; selecting a page tab clears that direction. Finite
+checks cover both turn directions, the page commit and a subsequent tab change.
 
 Voice-comment pages also share the source menu timing. Their opening/closing
 opacity, centred content scale and header/footer motion stay in the common
