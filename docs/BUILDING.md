@@ -508,8 +508,15 @@ root/known Documents folder, send the result to both fake title and synthetic
 story movie transports, reopen native settings with INI access denied, and
 check that the source INI stays byte-identical. Out-of-range values still fail
 before publishing native settings. These checks launch no game or device.
-The separate native development package is `0.3.1-native-development`
-(Android version code 2), retaining the same application ID and signing key.
+The separate native development package is `0.3.2-native-development`
+(Android version code 3), retaining the same application ID and signing key.
+The loading-cache check additionally compares sized foreground/outline
+rectangles to cached integer geometry while retaining old layout records.
+Confirmation checks bound the source's 656x264 request to the external
+544x216 panel, including both buttons. Original version-1/version-2 scene
+checks accept the completed-message page sentinel and resume its suspended
+command once, without publishing progress or replaying text. No original
+save/story or OS window/device is used by these constructed checks.
 
 Native progress, configuration and manual/quick saves are stored beneath the
 selected game root on both platforms: `Sys.sav`, `native-settings.wa2cfg` and

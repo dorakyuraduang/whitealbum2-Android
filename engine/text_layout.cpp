@@ -2,6 +2,7 @@
 #include "font_glyphs.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <limits>
 #include <map>
 
@@ -177,9 +178,15 @@ void PreparedText::append(std::vector<image::Sprite>& out,std::uint32_t page,std
             const auto source_size=item.small?16:layout_.style.source_size;
             const auto inset=layer?0:(pitch-source_size)/2;
             const auto extent=layer?pitch:source_size;
-            const auto offset=layer?0.f:(pitch-source_size)/2.f*item.scale;
+            // Layout checkpoints retain their historical centre-adjusted Y.
+            // Cached 446500 instead draws sized glyphs on the line baseline
+            // and truncates each local rectangle edge before adding the
+            // external (possibly fractional/animated) text-object position.
+            const auto centre=item.small?0.f:std::trunc((float(layout_.style.size)-std::round(item.scale*layout_.style.size))/2.f);
+            const auto left=std::trunc(item.x+inset*item.scale),top=std::trunc(item.y-centre+inset*item.scale);
+            const auto right=std::trunc(item.x+(inset+extent)*item.scale),bottom=std::trunc(item.y-centre+(inset+extent)*item.scale);
             const auto colour=layer?item.shadow:foreground.value_or(item.colour);
-            out.push_back({image_,x+item.x+offset,y+item.y+offset,extent*item.scale,extent*item.scale,
+            out.push_back({image_,x+left,y+top,right-left,bottom-top,
                 float(tile%16*40+inset),float(tile/16*40+inset),float(extent),float(extent),colour.r,colour.g,colour.b,alpha});
         }
         if(!layer)break;

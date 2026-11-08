@@ -73,8 +73,14 @@ void SceneDialogue::restore_content(const DialogueContent& content){
     const std::array<Value,1> novel{Value(int(content.novel))};Command mode{220,novel};next.novel_.dispatch(mode);
     if(content.open){
         next.name(content.name,content.speaker);next.message(content.raw,content.line,true);
-        if(std::size_t(content.page)>=next.body_.metrics().pages.size())throw Error("Saved dialogue page is outside its text");
-        next.page_=std::size_t(content.page);next.budget_=std::min(std::uint32_t(content.budget),next.duration());next.phase_=next.budget_>=next.duration()?DialoguePhase::waiting:DialoguePhase::typing;
+        const auto pages=next.body_.metrics().pages.size();
+        if(std::size_t(content.page)>pages)throw Error("Saved dialogue page "+std::to_string(content.page)+" is outside its text ("+std::to_string(pages)+" pages)");
+        // The source increments its page counter before checking completion
+        // (cached 410d10..410d38). One past the final segment is a valid save:
+        // retain all displayed text and let the suspended message finish once.
+        const bool completed=std::size_t(content.page)==pages;
+        next.page_=completed?pages-1:std::size_t(content.page);next.budget_=completed?next.duration():std::min(std::uint32_t(content.budget),next.duration());
+        next.phase_=completed?DialoguePhase::complete:next.budget_>=next.duration()?DialoguePhase::waiting:DialoguePhase::typing;
         next.open_elapsed_=std::uint32_t(settings_.open_ticks);next.name_elapsed_=10;
     }
     restore(next.checkpoint());

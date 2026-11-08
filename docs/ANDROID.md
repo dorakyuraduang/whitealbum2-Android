@@ -18,6 +18,12 @@ This changes the native development target, not the retained 0.2.46 AOT binary.
 setting. Original levels `2/1/0` select movie suffixes `0/1/2`; all three values
 are supported. Update the native development APK with the same signing
 identity; no INI edit or save/configuration deletion is needed for this error.
+`0.3.2-native-development` keeps Android's SDL window immersive even when the
+portable PC preference selects windowed mode. The 1280x720 logical canvas keeps
+its aspect-ratio fit. It also restores the full confirmation-panel crop,
+integer glyph edges/baselines for sized text and completed-message positions
+in original manual saves. These changes have finite memory/file and build
+checks; their appearance and system-bar behavior still need device validation.
 When copying old Documents/Leaf folders, the native host also merges the
 introductory Sys.sav into current progress using the original startup rule.
 Source flag 99 is excluded and the original files remain read-only. Unchanged

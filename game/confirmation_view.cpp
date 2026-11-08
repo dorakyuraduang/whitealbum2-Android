@@ -19,7 +19,7 @@ bool ConfirmationView::poll(){
     for(unsigned n=0;n<images_.size();++n)if(!images_[n]){
         if(!request_){request_=loader_("sys_00101.tga");if(!request_)throw script::Error("Missing native confirmation button request");}
         auto image=request_->get();if(!image)return false;
-        if(image->width<(n?320u:544u) || image->height<(n?120u:128u))throw script::Unsupported("Native confirmation atlas dimensions are not supported");
+        if(image->width<(n?320u:544u) || image->height<(n?120u:216u))throw script::Unsupported("Native confirmation atlas dimensions are not supported");
         images_[n]=std::move(image);request_.reset();
     }
     return true;
@@ -56,7 +56,9 @@ void ConfirmationView::draw(){
     const auto fraction=phase_==ConfirmationPhase::opening?(open_?std::min(1.f,float(elapsed_)/open_):1.f):phase_==ConfirmationPhase::closing?(close_?1-std::min(1.f,float(elapsed_)/close_):0.f):1.f;
     const auto alpha=std::uint8_t(std::clamp(int(256*fraction),0,255));
     sprites_.push_back({black_,0,0,1280,720,0,0,1,1,255,255,255,std::uint8_t(76*fraction)});sprites_.back().layer=0x1066;sprites_.back().order=0x537;
-    sprites_.push_back({images_[0],368,256,656,128,0,0,656,128,255,255,255,alpha});sprites_.back().layer=0x1066;sprites_.back().order=0x533;
+    // Cached 41e3f1..41e42a uses 656x264. The external 544x216 atlas is
+    // bounded by scene_quad at its full edges, rather than cut to 128 rows.
+    sprites_.push_back({images_[0],368,256,656,264,0,0,656,264,255,255,255,alpha});sprites_.back().layer=0x1066;sprites_.back().order=0x533;
     for(unsigned n=0;n<2;++n){const auto row=pressed_==n?2u:focus_==n?1u:0u;sprites_.push_back({images_[1],float(n?648:472),376,160,40,float(n*160),float(row*40),160,40,255,255,255,alpha});sprites_.back().layer=0x1067;sprites_.back().order=0x534+int(n);}
     const auto first=sprites_.size();label_.append(sprites_,0,std::numeric_limits<std::uint32_t>::max(),516,304,alpha);
     for(auto n=first;n<sprites_.size();++n){sprites_[n].layer=0x1067;sprites_[n].order=0x530;}

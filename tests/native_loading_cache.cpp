@@ -1,6 +1,7 @@
 #include "native_scene_fixture.hpp"
 #include "font_glyphs.hpp"
 #include <atomic>
+#include <tuple>
 
 // Count only reads from constructed PAK bytes. No file, device or real scene
 // is opened; a warm cache must remain usable when new I/O is denied.
@@ -85,6 +86,15 @@ int main(int argc,char** argv){try{
         std::map<std::string,std::shared_ptr<r::Source>> files{{"patch.pak",patch},{"fon.pak",root},{"IC/fon.pak",intro}};unsigned intro_opens{};r::Catalog catalogue([&](auto name)->std::shared_ptr<r::Source>{if(name=="IC/fon.pak")++intro_opens;const auto found=files.find(std::string(name));return found==files.end()?nullptr:found->second;});
         wa2::text::FontBook fonts(catalogue.members("fon"));auto prepared=fonts.prepare(wa2::text::layout("A"));std::vector<i::Sprite> sprites;prepared.append(sprites,0,100000,0,0);CHECK(sprites.size()==2 && !intro_opens);const auto pixels=sprites.back().image;CHECK(pixels->rgba[3]==61 && pixels->rgba[40*4+3]==127);++cases;
         const auto patch_reads=patch->reads,root_reads=root->reads;patch->denied=root->denied=true;auto next=fonts.prepare(wa2::text::layout("B"));CHECK(next.image_bytes() && patch->reads==patch_reads && root->reads==root_reads);++warm_reads_avoided;++cases;patch->denied=root->denied=false;
+        // Constructed font coverage; expected integer rectangles were checked
+        // against cached generated C++ with our own ASCII/control strings.
+        // Keep the old layout record round trip while correcting presentation.
+        for(const auto [raw,left,top,extent,shadow_extent]:std::array<std::tuple<std::string_view,int,int,int,int>,3>{{{"AB",4,18,32,40},{"<F20:AB>",2,16,23,28},{"<F14:AB>",2,16,16,20}}}){
+            const auto metrics=wa2::text::checkpoint_layout(wa2::text::layout(raw));auto text=fonts.prepare(wa2::text::restore_layout(metrics));CHECK(wa2::text::checkpoint_layout(text.metrics())==metrics);sprites.clear();text.append(sprites,0,100000,.25f,3.5f);
+            CHECK(sprites.size()==4 && sprites[0].red==0 && sprites[0].green==0 && sprites[0].blue==0 && sprites[2].red==255 && sprites[2].green==255 && sprites[2].blue==255);
+            CHECK(sprites[0].x==.25f && sprites[0].y==17.5f && sprites[0].width==shadow_extent && sprites[0].height==shadow_extent && sprites[2].x==left+.25f && sprites[2].y==top+3.5f && sprites[2].width==extent && sprites[2].height==extent && sprites[2].source_width==32);
+            const auto advance=raw=="AB"?14:raw=="<F20:AB>"?10:7;CHECK(sprites[1].x==advance+.25f && sprites[3].x==advance+left+.25f && sprites[0].alpha==255 && sprites[2].alpha==255);++cases;
+        }
         files.erase("patch.pak");files.erase("fon.pak");r::Catalog intro_only([&](auto name)->std::shared_ptr<r::Source>{const auto found=files.find(std::string(name));return found==files.end()?nullptr:found->second;});wa2::text::FontBook child_fonts(intro_only.members("fon"));auto child=child_fonts.prepare(wa2::text::layout("C"));sprites.clear();child.append(sprites,0,100000,0,0);CHECK(sprites.size()==2 && sprites.back().image->rgba[3]==191 && sprites.back().image->rgba[40*4+3]==191);++cases;
         std::vector<std::size_t> limits;bool fail_shadow=true;wa2::text::FontBook retry([&](auto name,std::size_t maximum){limits.push_back(maximum);if(name==shadow && fail_shadow)throw r::Error("owned shadow failure");return r::archive_members(r::Archive::open(root))(name,maximum);});auto pending=wa2::text::FontBook::defer(wa2::text::layout("D"));rejects([&]{retry.materialize(pending);});CHECK(!pending.image_bytes() && limits==std::vector<std::size_t>({16u*1024*1024,16u*1024*1024}));fail_shadow=false;CHECK(retry.materialize(pending) && pending.image_bytes() && limits.size()==3);++guards;++cases;
     }

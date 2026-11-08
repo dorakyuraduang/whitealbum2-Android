@@ -45,6 +45,26 @@ bounded to 64 KiB per file and supports ANSI/UTF-8 and BOM UTF-16 integer keys.
 Synthetic memory/file, bootstrap and Java path/JNI-declaration checks exercise
 this integration; original user settings and devices are not opened by tests.
 
+Android's SDL display adapter keeps the native window in immersive fullscreen
+independently of the retained PC window-mode preference. It no longer clears
+SDL's fullscreen/system-bar state when first applying portable preferences.
+Desktop display policy and aspect-ratio fitting of the shared logical canvas
+are retained. Actual Android system-bar behavior is not device-verified.
+
+Text presentation now applies the cached integer glyph-edge truncation and
+line baseline for sized glyphs. Existing layout records keep their format;
+their historical centre-adjusted Y is compensated only while building glyph
+sprites. Foreground and outline colours/coverage are retained. Constructed
+font sheets check normal, F20 and F14 rectangles, paired passes and fractional
+outer positions against cached generated-code results for owned ASCII strings.
+The confirmation panel uses the source's 656x264 rectangle, bounded to the
+full 544x216 external atlas rather than cutting it to 128 rows. A completed
+source message can store a page counter equal to its number of segments;
+conversion retains all visible text, normalizes to the final native segment
+and resumes the suspended command once. Greater page values still fail with
+the actual counter and segment count. Constructed old saves and native
+round trips check this boundary; no original story or device is executed.
+
 `native/CMakeLists.txt` is an independent build root for the common native scene,
 script engine, resource/media components and native progress adapter. It never
 includes the retained `hosts/CMakeLists.txt`, `recompiled/`, `generated/` or

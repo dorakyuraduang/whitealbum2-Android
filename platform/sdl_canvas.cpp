@@ -93,6 +93,11 @@ CanvasWindowServices SdlCanvas::window_services(){
     const auto weak=std::weak_ptr<State>(state_);CanvasWindowServices services;
     services.fullscreen=[weak](bool enabled){
         const auto state=weak.lock();if(!state)throw std::runtime_error("Native display adapter is closed");state->enter();auto* window=SDL_RenderGetWindow(state->renderer);
+#ifdef __ANDROID__
+        // The shared preference retains the PC window mode for portable
+        // settings. Android presentation must keep SDL's immersive mode live.
+        enabled=true;
+#endif
         if(!window)throw std::runtime_error("Native display adapter has no window");if(SDL_SetWindowFullscreen(window,enabled?SDL_WINDOW_FULLSCREEN_DESKTOP:0))fail("change native display mode");
     };
 #ifndef __ANDROID__
