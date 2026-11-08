@@ -75,7 +75,7 @@ Preferences import_preferences_ini(std::span<const std::uint8_t> system,std::spa
     if(const auto value=source.get("wait")){if(*value!=0 && *value!=2)throw std::invalid_argument("Unsupported original transition wait setting");next.transition_wait=*value!=0;}
     if(const auto value=source.get("msg_wait")){switch(*value){case 0:next.text_step=0;break;case 1:next.text_step=4;break;case 2:next.text_step=2;break;case 4:next.text_step=1;break;default:throw std::invalid_argument("Unsupported original message wait setting");}}
     (void)source.range("wheel",0,0,0);
-    (void)source.range("menu",0,0,0);
+    next.menu_alt=source.boolean("menu",false);
     next.fullscreen=!device.boolean("window_mode",true);
     const auto width=device.get("win_size_w"),height=device.get("win_size_h");
     if(width || height){if(!width || !height)throw std::invalid_argument("Incomplete original window dimensions");

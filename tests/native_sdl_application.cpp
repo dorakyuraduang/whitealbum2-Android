@@ -14,6 +14,18 @@ struct Output:platform::AudioOutput {
 };
 int main(int argc,char** argv){try{
     CHECK(argc==2);unsigned cases{},guards{};SDL_SetMainReady();CHECK(SDL_Init(0)==0);
+    {
+        using A=platform::MenuActivation;platform::NativeMenuActivation policy;
+        CHECK(policy.update(false,true,false,false,false)==A::hide && policy.update(false,true,true,false,false)==A::show && policy.update(false,true,false,false,false)==A::hide);++cases;
+        CHECK(policy.update(false,true,true,false,true)==A::show && policy.update(false,true,false,false,true)==A::show && policy.update(false,false,true,false,true)==A::hide);++cases;
+        CHECK(policy.update(true,true,true,false,false)==A::hide && policy.update(true,true,false,true,false)==A::focus);++cases;
+        CHECK(policy.update(true,true,false,true,false)==A::show && policy.update(true,true,false,false,false)==A::show);++cases;
+        CHECK(policy.update(true,true,true,false,false)==A::show && policy.update(true,true,false,false,false)==A::hide);++cases;
+        CHECK(policy.update(true,true,false,true,false)==A::focus);policy.dismiss();CHECK(policy.update(true,true,false,true,false)==A::hide);++cases;
+        CHECK(policy.update(true,false,false,false,false)==A::hide && policy.update(true,false,false,true,false)==A::hide && policy.update(true,true,false,true,false)==A::hide);++cases;
+        CHECK(policy.update(true,true,false,false,false)==A::hide && policy.update(true,true,true,true,false)==A::focus && policy.update(true,true,false,false,true)==A::show && policy.update(true,true,false,false,false)==A::hide);++cases;
+        CHECK(policy.update(false,true,true,false,false)==A::show && policy.update(true,true,true,false,false)==A::hide);++cases;
+    }
     std::unique_ptr<SDL_Surface,decltype(&SDL_FreeSurface)> surface(SDL_CreateRGBSurfaceWithFormat(0,64,36,32,SDL_PIXELFORMAT_RGBA32),SDL_FreeSurface);CHECK(surface);
     {
         auto* renderer=SDL_CreateSoftwareRenderer(surface.get());CHECK(renderer);auto canvas=platform::SdlCanvas::adopt(renderer);canvas->logical_size(1280,720);
@@ -61,5 +73,5 @@ int main(int argc,char** argv){try{
         rejects([&]{runner.run(input,{},{});});rejects([&]{runner.run(input,[]{return 0;},{});});guards+=2;++cases;
         const auto presents=canvas->statistics().presents;events.quit=true;now+=1;frame=runner.pump(now,events,[]{return 0;});CHECK(frame.closed && !frame.draw && app.page()==g::Page::closed && !app.mixer() && outputs[1]->closes==1 && outputs[1]->destroyed==1 && !outputs[1]->bad_owner && canvas->statistics().presents==presents);++cases;
     }
-    surface.reset();SDL_Quit();std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-sdl-application.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"owned_memory_only\":true,\"memory_renderer_has_no_window_services\":true,\"surface_size\":[64,36],\"fake_audio_outputs_only\":true,\"synthetic_event_structs_only\":true,\"actual_present_hook\":true,\"native_modal_gap_rebased\":true,\"modal_command_applied_once\":true,\"modal_ordinary_input_released\":true,\"os_event_queue_polled\":false,\"original_resources_opened\":false,\"windows_created\":0,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);std::cout<<"PASS common SDL application pump with owned-memory frames, event structs and fake output handoffs.\n";return 0;
+    surface.reset();SDL_Quit();std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.native-sdl-application.v1\",\"cases\":"<<cases<<",\"guards\":"<<guards<<",\"owned_memory_only\":true,\"memory_renderer_has_no_window_services\":true,\"surface_size\":[64,36],\"fake_audio_outputs_only\":true,\"synthetic_event_structs_only\":true,\"actual_present_hook\":true,\"native_modal_gap_rebased\":true,\"source_menu_activation_policy\":true,\"modal_command_applied_once\":true,\"modal_ordinary_input_released\":true,\"os_event_queue_polled\":false,\"original_resources_opened\":false,\"windows_created\":0,\"devices_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);std::cout<<"PASS common SDL application pump with owned-memory frames, event structs and fake output handoffs.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

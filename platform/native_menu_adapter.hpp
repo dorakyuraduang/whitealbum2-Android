@@ -10,7 +10,7 @@ namespace wa2::platform {
 class NativeMenuAdapter {
 public:
     virtual ~NativeMenuAdapter()=default;
-    virtual void publish(game::UserMenuState)=0;
+    virtual void publish(game::UserMenuState,bool alt_activation)=0;
     virtual void filter(InputSnapshot&)=0;
 };
 // An OS menu can run a nested message loop inside SDL_PollEvent. Suspend its
@@ -28,4 +28,24 @@ public:
     }
 };
 using NativeMenuFactory=std::function<std::unique_ptr<NativeMenuAdapter>(SDL_Window*,std::function<void()>)>;
+
+enum class MenuActivation {hide,show,focus};
+// Default source menus follow the pointer. Alt-only menus wait for the
+// pointer to enter before treating a later exit as dismissal. No OS polling
+// or game policy is part of this finite presentation state.
+class NativeMenuActivation {
+    bool mode_{},alt_{},open_{},entered_{};
+public:
+    void dismiss()noexcept{open_=entered_=false;}
+    MenuActivation update(bool alt_mode,bool eligible,bool top_edge,bool alt_down,bool tracking)noexcept{
+        const bool pressed=alt_down && !alt_;alt_=alt_down;
+        if(mode_!=alt_mode){mode_=alt_mode;dismiss();}
+        if(!eligible){dismiss();return MenuActivation::hide;}
+        if(tracking)return MenuActivation::show;
+        if(!mode_)return top_edge?MenuActivation::show:MenuActivation::hide;
+        if(pressed){open_=true;entered_=top_edge;return MenuActivation::focus;}
+        if(open_){if(top_edge)entered_=true;else if(entered_)dismiss();}
+        return open_?MenuActivation::show:MenuActivation::hide;
+    }
+};
 }

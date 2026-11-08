@@ -21,18 +21,19 @@ std::vector<std::uint8_t> Preferences::encode()const{
     for(auto v:{window,skip_read_only,mute_adult,voice_enabled,captions})out.boolean(v);
     for(auto v:character_voice)out.boolean(v);
     out.i32(right_click);for(auto v:audio_muted)out.boolean(v);
-    for(auto v:{fullscreen,confirmation,cut_voice_on_advance,transition_wait})out.boolean(v);out.i32(movie_quality);out.i32(window_size);return out.seal("WAP4");
+    for(auto v:{fullscreen,confirmation,cut_voice_on_advance,transition_wait})out.boolean(v);out.i32(movie_quality);out.i32(window_size);out.boolean(menu_alt);return out.seal("WAP5");
 }
 Preferences Preferences::decode(std::span<const std::uint8_t> bytes){
     const auto tag=bytes.size()>=4?std::string_view(reinterpret_cast<const char*>(bytes.data()),4):std::string_view{};
-    const auto legacy=tag=="WAPR",version2=tag=="WAP2",version3=tag=="WAP3";
-    auto in=checkpoint::Reader::open(legacy?"WAPR":version2?"WAP2":version3?"WAP3":"WAP4",bytes);Preferences next;
+    const auto legacy=tag=="WAPR",version2=tag=="WAP2",version3=tag=="WAP3",version4=tag=="WAP4";
+    auto in=checkpoint::Reader::open(legacy?"WAPR":version2?"WAP2":version3?"WAP3":version4?"WAP4":"WAP5",bytes);Preferences next;
     for(auto* field:{&next.master,&next.music,&next.effects,&next.speech,&next.skin,&next.window_alpha,&next.picture_alpha,&next.button_alpha,&next.novel_alpha,&next.text_step,&next.auto_ticks})*field=in.i32();
     for(auto* field:{&next.window,&next.skip_read_only,&next.mute_adult,&next.voice_enabled,&next.captions})*field=in.boolean();
     for(auto& v:next.character_voice)v=in.boolean();
     if(!legacy){next.right_click=in.i32();for(auto& v:next.audio_muted)v=in.boolean();for(auto* v:{&next.fullscreen,&next.confirmation,&next.cut_voice_on_advance,&next.transition_wait})*v=in.boolean();}
     if(!legacy && !version2)next.movie_quality=in.i32();
     if(!legacy && !version2 && !version3)next.window_size=in.i32();
+    if(!legacy && !version2 && !version3 && !version4)next.menu_alt=in.boolean();
     in.finish();next.validate();return next;
 }
 PreferenceStore::PreferenceStore(std::shared_ptr<PreferenceStorage> storage):storage_(std::move(storage)){

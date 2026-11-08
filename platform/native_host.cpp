@@ -25,7 +25,7 @@ int run_native_host(NativeHost host){
     struct MenuLifetime {decltype(host.menu_status) publish;~MenuLifetime(){if(publish)publish({});}} menu_lifetime{host.menu_status};
     const auto epoch=std::chrono::steady_clock::now();const auto clock=[&]{return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()-epoch).count();};
     std::unique_ptr<NativeMenuAdapter> menu;SdlApplication::InputFilter filter;if(host.menu)filter=[&](InputSnapshot& events){if(menu)menu->filter(events);};
-    const auto publish=[&]{const auto state=application->user_menu();if(host.menu_status)host.menu_status(state);if(menu)menu->publish(state);};
+    const auto publish=[&]{const auto state=application->user_menu();if(host.menu_status)host.menu_status(state);if(menu)menu->publish(state,application->preferences().menu_alt);};
     SdlApplication runner(*application,*canvas,host.driver,{},[&]{publish();if(host.submitted)host.submitted();},std::move(filter));
     if(host.menu){menu=host.menu(window.get(),[&]{application->background(true,clock());});if(!menu)throw std::runtime_error("Native host menu adapter is unavailable");}publish();
     runner.run(input,clock,

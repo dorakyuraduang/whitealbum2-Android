@@ -35,7 +35,7 @@ starts. The parser maps original volume/mute/character switches, skip/voice
 policy, opacity, skin, text/transition timing, confirmation, mouse policy,
 movie quality, and window mode/three known window sizes. Source-only Direct3D
 device/debug keys are not portable preferences. Nonstandard timing, wheel
-mode, persisted desktop-menu visibility and window dimensions without native
+mode and window dimensions without native
 support fail explicitly. Import is
 bounded to 64 KiB per file and supports ANSI/UTF-8 and BOM UTF-16 integer keys.
 Synthetic memory/file, bootstrap and Java path/JNI-declaration checks exercise
@@ -1198,7 +1198,7 @@ story owners both apply it to the next external clip. An explicit bootstrap
 suffix is reserved for controlled integrations. Missing quality variants now
 follow the explicitly bounded default-file policy described above; an existing
 variant with a provider or decoder failure remains an error.
-`WAP4` preferences retain `WAPR`, `WAP2` and `WAP3` decoding, with high quality as their
+`WAP5` preferences retain `WAPR`, `WAP2`, `WAP3` and `WAP4` decoding, with high quality as their
 compatible default. The original window-management dialog contains four
 opacity sliders and a visibility switch, already covered by the common native
 options view; it is not a separate skin/colour picker. The three original
@@ -1264,8 +1264,15 @@ menu time, releases ordinary input and applies the selected explicit command
 once. Finite owned-memory SDL tests cover a thirty-second synthetic gap,
 immediate mixer pause, no catch-up, command retention, failure and input release.
 The real Windows entry is compiled/linked but no HWND or menu is opened during
-verification. This adds the default edge-activated command menu; the persisted
-source-only Alt activation option remains explicitly unsupported. It does not
+verification. The common preferences retain original `menu=0/1`: default mode
+follows the top edge, while Alt-only mode opens on a fresh Alt press and stays
+available until the pointer enters and leaves, the menu closes, or focus leaves
+the owner. Held Alt does not repeatedly reopen a dismissed menu. Android retains
+this adapter preference when the selected directory moves between platforms;
+it does not turn it into an Android game-input setting. `WAP5` adds the boolean,
+older formats default to edge activation and ordinary options reset preserves
+this separate desktop preference. Finite checks cover the activation state,
+old-format decoding, malformed flags, import and persisted retry. This does not
 establish actual desktop/device presentation or whole-game compatibility.
 
 Voice-comment pages also share the source menu timing. Their opening/closing

@@ -33,7 +33,7 @@ class WindowsMenu final:public NativeMenuAdapter {
     std::array<HMENU,unsigned(game::UserCommand::count)> parents_{};
     std::function<void()> suspend_;NativeMenuGap gap_;std::exception_ptr error_;
     std::uint64_t state_{std::numeric_limits<std::uint64_t>::max()};std::uint32_t window_id_{};
-    bool registered_{},attached_{},tracking_{},closing_{};
+    bool registered_{},attached_{},tracking_{},closing_{},alt_mode_{};NativeMenuActivation activation_;
     static LRESULT CALLBACK procedure(HWND window,UINT message,WPARAM word,LPARAM parameter)noexcept{
         auto* self=reinterpret_cast<WindowsMenu*>(GetWindowLongPtrW(window,GWLP_USERDATA));
         if(message==WM_NCCREATE){self=static_cast<WindowsMenu*>(reinterpret_cast<CREATESTRUCTW*>(parameter)->lpCreateParams);self->window_=window;SetWindowLongPtrW(window,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(self));}
@@ -47,7 +47,7 @@ class WindowsMenu final:public NativeMenuAdapter {
     }
     void choose(unsigned id){
         if(id<first_command || id>=first_command+parents_.size())throw std::invalid_argument("Unknown native desktop menu command");
-        const auto command=game::UserCommand(id-first_command);hide(true);
+        const auto command=game::UserCommand(id-first_command);activation_.dismiss();hide(true);
         if(!(std::uint32_t(state_)&game::command_bit(command)))return;
         auto event=user_command_event(command);event.user.windowID=window_id_;
         if(SDL_PushEvent(&event)!=1)throw std::runtime_error(std::string("Queue native desktop menu command: ")+SDL_GetError());
@@ -58,11 +58,11 @@ class WindowsMenu final:public NativeMenuAdapter {
     LRESULT message(HWND window,UINT message,WPARAM word,LPARAM parameter){
         switch(message){
         case WM_ENTERMENULOOP:tracking_=true;gap_.enter(suspend_);return 0;
-        case WM_EXITMENULOOP:tracking_=false;hide(true);return 0;
+        case WM_EXITMENULOOP:tracking_=false;activation_.dismiss();hide(true);return 0;
         case WM_COMMAND:if(!closing_ && HIWORD(word)==0)choose(LOWORD(word));return 0;
         case WM_CLOSE:if(!closing_)choose(first_command+unsigned(game::UserCommand::quit));return 0;
-        case WM_KEYDOWN:if(word==VK_ESCAPE){hide(true);return 0;}break;
-        case WM_ACTIVATE:if(LOWORD(word)==WA_INACTIVE && !tracking_)hide(false);break;
+        case WM_KEYDOWN:if(word==VK_ESCAPE){activation_.dismiss();hide(true);return 0;}break;
+        case WM_ACTIVATE:if(LOWORD(word)==WA_INACTIVE && !tracking_){activation_.dismiss();hide(false);}break;
         case WM_DESTROY:detach();break;
         case WM_NCDESTROY:window_=nullptr;SetWindowLongPtrW(window,GWLP_USERDATA,0);break;
         }
@@ -94,8 +94,8 @@ public:
         }catch(...){cleanup();throw;}
     }
     ~WindowsMenu()override{cleanup();}
-    void publish(game::UserMenuState state)override{
-        if(error_)std::rethrow_exception(error_);const auto packed=state.packed();if(state_==packed)return;
+    void publish(game::UserMenuState state,bool alt_activation)override{
+        if(error_)std::rethrow_exception(error_);alt_mode_=alt_activation;const auto packed=state.packed();if(state_==packed)return;
         constexpr auto mask=(1u<<unsigned(game::UserCommand::count))-1;if((state.enabled|state.checked)&~mask)throw std::invalid_argument("Unknown native desktop menu state bit");
         for(unsigned n=0;n<parents_.size();++n){const auto bit=1u<<n;
             if(EnableMenuItem(parents_[n],first_command+n,MF_BYCOMMAND|(state.enabled&bit?MF_ENABLED:MF_GRAYED))==UINT(-1))throw failure("Enable native menu command");
@@ -103,15 +103,18 @@ public:
         state_=packed;if(window_ && IsWindowVisible(window_) && !DrawMenuBar(window_))throw failure("Update native desktop menubar");
     }
     void filter(InputSnapshot& input)override{
-        if(error_)std::rethrow_exception(error_);gap_.filter(input);if(tracking_)return;
+        if(error_)std::rethrow_exception(error_);gap_.filter(input);
         const auto foreground=GetForegroundWindow();
-        if(input.background || input.minimized || !IsWindowVisible(game_) || IsIconic(game_) || (foreground!=game_ && foreground!=window_)){hide(false);return;}
+        const bool alt_down=input.keys[SDL_SCANCODE_LALT] || input.keys[SDL_SCANCODE_RALT];
+        if(input.background || input.minimized || !IsWindowVisible(game_) || IsIconic(game_) || (foreground!=game_ && foreground!=window_)){activation_.update(alt_mode_,false,false,alt_down,tracking_);hide(false);return;}
         RECT client{};POINT origin{},pointer{};if(!GetClientRect(game_,&client) || !ClientToScreen(game_,&origin) || !GetCursorPos(&pointer))throw failure("Locate native desktop menubar");
         const auto height=std::max(1,GetSystemMetrics(SM_CYMENUSIZE));
-        if(pointer.x<origin.x || pointer.x>=origin.x+client.right || pointer.y<origin.y || pointer.y>=origin.y+height){hide(true);return;}
+        const bool top=pointer.x>=origin.x && pointer.x<origin.x+client.right && pointer.y>=origin.y && pointer.y<origin.y+height;
+        const auto action=activation_.update(alt_mode_,true,top,alt_down,tracking_);if(action==MenuActivation::hide){hide(true);return;}
         const auto bar_height=height+2*GetSystemMetrics(SM_CYBORDER);RECT current{};
         if(!GetWindowRect(window_,&current) || current.left!=origin.x || current.top!=origin.y || current.right-current.left!=client.right || current.bottom-current.top!=bar_height || !IsWindowVisible(window_))
             if(!SetWindowPos(window_,HWND_TOP,origin.x,origin.y,client.right,bar_height,SWP_NOACTIVATE|SWP_SHOWWINDOW))throw failure("Position native desktop menubar");
+        if(action==MenuActivation::focus){SetForegroundWindow(window_);SetFocus(window_);input.keys.reset();input.pressed_keys.reset();input.focused=false;}
     }
 };
 }

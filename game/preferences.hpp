@@ -29,6 +29,9 @@ struct Preferences {
     // Original windowed choices: 1280x720, 1024x576 and 800x450. Hosts without
     // resizable windows do not expose these commands; game coordinates stay HD.
     std::int32_t window_size{};
+    // Desktop presentation activation, retained on every platform so that
+    // moving a game directory does not discard the original menu preference.
+    bool menu_alt{};
     bool operator==(const Preferences&)const=default;
     void validate()const;
     float movie_amplitude()const;

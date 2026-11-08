@@ -82,6 +82,10 @@ a synthetic long modal gap, released keys/pointer and exactly-once selected
 commands through the production pump. It never opens a Win32 menu/window or
 polls OS events. Entry/source-closure checks additionally require the Windows
 adapter while both hosts continue compiling identical common game sources.
+The same finite checks cover the source's default edge and Alt-only activation,
+without polling a keyboard. Preference checks import `menu=0/1`, preserve the
+setting through ordinary option changes/reset, read the old `WAP4` format and
+reject malformed `WAP5` flags. Android stores the same preference record.
 
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional
@@ -484,7 +488,7 @@ On its first launch without `native-settings.wa2cfg`, the native host can read
 Android use the same decoder and persist the imported preferences as
 `native-settings.wa2cfg` in that selected game directory. The old INI files remain untouched. Later
 starts do not access those source settings. Unsupported custom pacing, wheel
-mode, desktop-menu visibility or window dimensions produce explicit import errors; Direct3D-only device
+mode or window dimensions produce explicit import errors; Direct3D-only device
 keys do not configure SDL.
 
 Native progress, configuration and manual/quick saves are stored beneath the
