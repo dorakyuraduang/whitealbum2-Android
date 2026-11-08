@@ -14,6 +14,11 @@ old read-only folder grant to allow read/write access. PC system progress and
 supported version-1/version-2 manual saves may be copied into this selection; native
 scene saves use their own format and cannot be loaded by the original PC game.
 This changes the native development target, not the retained 0.2.46 AOT binary.
+When copying old Documents/Leaf folders, the native host also merges the
+introductory Sys.sav into current progress using the original startup rule.
+Source flag 99 is excluded and the original files remain read-only. Unchanged
+repeated launches do not rewrite progress; malformed or unreadable sources
+produce an explicit error while preserving the published main save.
 
 `0.2.46-shared-aot` expands the isolated test profile to all known content:
 chapters/endings, CG differences, music, replay entries, watched movies and read

@@ -33,6 +33,16 @@ State State::decode(std::span<const std::uint8_t> bytes){
     std::copy_n(bytes.begin()+layout::system_flags_offset,result.flags_.size(),result.flags_.begin());
     result.dirty_.fill(false);return result;
 }
+bool State::merge_introductory(const State& source){
+    if(history_.size()!=layout::read_history_bytes || source.history_.size()!=layout::read_history_bytes || gallery_.size()!=layout::gallery_bytes || source.gallery_.size()!=layout::gallery_bytes)throw Error("Invalid progress merge state");
+    bool changed{};const auto merge=[&](std::span<std::uint8_t> target,std::span<const std::uint8_t> other,Block block){bool altered{};
+        for(std::size_t at=0;at<target.size();++at){const auto value=std::uint8_t(target[at]|other[at]);altered|=value!=target[at];target[at]=value;}
+        if(altered){dirty_[slot(block)]=true;changed=true;}
+    };
+    merge(history_,source.history_,Block::history);merge(gallery_,source.gallery_,Block::gallery);
+    merge(std::span(flags_).first(99*4),std::span(source.flags_).first(99*4),Block::flags);
+    merge(std::span(flags_).subspan(100*4),std::span(source.flags_).subspan(100*4),Block::flags);return changed;
+}
 Bytes State::encode()const{
     Bytes result;result.reserve(layout::system_save_bytes);
     for(auto kind:{Block::history,Block::gallery,Block::flags}){const auto data=block(kind);result.insert(result.end(),data.begin(),data.end());}

@@ -492,7 +492,11 @@ PC `Sys.sav` may be copied directly to the selected root. If absent, the common
 adapter imports one `Documents/Leaf/WHITE ALBUM2/Sys.sav` (combined resources)
 or `Documents/Leaf/WHITE ALBUM2 -closing chapter-/Sys.sav` (closing-only resources)
 within that root, validating the exact original length before publishing a
-root copy. It never merges separate introductory progress. Invalid root files
+root copy. The original introductory Documents Sys.sav is then OR-merged into
+that primary progress, excluding source flag 99 and preserving destination
+flag 99. Every other history/gallery/flag byte follows the source merge.
+Original source files stay read-only; an unchanged later launch writes nothing.
+Invalid root files
 and provider failures remain explicit errors; they do not trigger fresh saves.
 Original manual saves retain their read-only inventory and version-1/version-2 state
 converter. Native scene saves remain a different format, with no reverse export.

@@ -11,10 +11,16 @@ public:
     ProgressFile(std::shared_ptr<GameDirectory> directory,bool combined):directory_(std::move(directory)),combined_(combined){if(!directory_)throw std::invalid_argument("Missing selected progress directory");}
     std::optional<progress::Bytes> load()override{
         constexpr auto size=progress::layout::system_save_bytes;
-        if(auto bytes=game_file_read(*directory_,"Sys.sav",size,size))return bytes;
-        // Select one installation; a root file, including corrupt files, wins.
-        const auto name=std::string(resource::legacy_save_directories[combined_?1:2])+"Sys.sav";
-        if(auto bytes=game_file_read(*directory_,name,size,size)){progress::State::decode(*bytes);directory_->replace("Sys.sav",*bytes);return bytes;}return {};
+        auto bytes=game_file_read(*directory_,"Sys.sav",size,size);const bool root=bytes.has_value();
+        // Select one primary installation. Corrupt root files fail before any
+        // fallback or merge. The separate introductory bank is the one source-
+        // proven merge, not a general union of every copied save directory.
+        if(!root)bytes=game_file_read(*directory_,std::string(resource::legacy_save_directories[combined_?1:2])+"Sys.sav",size,size);
+        const auto introductory=game_file_read(*directory_,std::string(resource::legacy_save_directories[3])+"Sys.sav",size,size);
+        if(!introductory){if(bytes && !root){progress::State::decode(*bytes);directory_->replace("Sys.sav",*bytes);}return bytes;}
+        auto merged=bytes?progress::State::decode(*bytes):progress::State{};const auto imported=progress::State::decode(*introductory);
+        const bool changed=merged.merge_introductory(imported);if(root && !changed)return bytes;
+        auto result=merged.encode();directory_->replace("Sys.sav",result);return result;
     }
     void write(progress::Block block,std::span<const std::uint8_t> bytes)override{
         const auto at=progress::offset(block);if(bytes.size()!=progress::size(block))throw progress::Error("Invalid progress write block length");

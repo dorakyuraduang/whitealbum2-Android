@@ -1351,8 +1351,18 @@ root. It never imports or writes normal Sys.sav. Normal root progress has first
 priority, including explicit errors for invalid sizes/provider failures. Only
 when absent may the common adapter import one matching combined/closing
 Documents Sys.sav; it validates exact size and publishes the root copy before
-returning. Separate introductory progress is not merged. Already loaded clean
-progress performs no write; later flag updates retain the 4 KiB block boundary.
+returning. The source's separate introductory Documents bank is then merged:
+history, both gallery banks and all flags are ORed, excluding source flag 99.
+Destination flag 99 and unrelated bits remain intact. Changed results are
+published through one complete replacement, while unchanged later launches
+write nothing. Source files stay read-only. Missing main progress can be
+initialized from this introductory bank; the isolated test profile reads neither
+normal bank. Later ordinary flag updates retain the 4 KiB block boundary.
+
+Twenty-seven constructed-data cases and sixteen failure guards check randomized
+opaque-block merges, exact flag masking, dirtiness of individual blocks, root
+and copied-Documents precedence, source retention, repeat-start write suppression
+and failure before publication. These checks open no user save or game.
 
 Filesystem replacements use the existing exclusive flushed temporary/rename.
 SAF replacements use staged publication with a retained old document and

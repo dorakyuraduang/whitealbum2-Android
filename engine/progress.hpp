@@ -35,6 +35,9 @@ public:
     void set_gallery(std::uint32_t bank,std::uint32_t index,std::uint8_t value);
     bool read(std::uint32_t script,std::uint32_t line) const;
     void mark_read(std::uint32_t script,std::uint32_t line);
+    // The source startup merges an installed introductory game's Sys.sav.
+    // All three blocks are ORed, except source flag 99 is cleared first.
+    bool merge_introductory(const State&);
     void unlock_all_for_testing();
 };
 
