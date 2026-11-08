@@ -12,6 +12,7 @@ namespace wr {
 class Process;
 // Resolve a guest filename under the process data root, including its virtual cwd.
 std::filesystem::path guest_file_path(Process&,const std::string&);
+MutableFiles* mutable_files_for(Process&,const std::filesystem::path&);
 struct Win32State {
     struct HeapBlock {U32 size{},capacity{},pool{};};
     struct HeapPool {U32 live{},largest{};std::map<U32,U32> free;};
@@ -34,6 +35,7 @@ struct Win32State {
     std::uint64_t heap_pool_reuses{},heap_pool_retained{},heap_pool_evictions{};
     std::map<U32,File> files;
     std::shared_ptr<ReadOnlyFiles> read_only_files;
+    std::shared_ptr<MutableFiles> mutable_files;
     std::map<U32,U32> tls;
     std::set<U32> tls_used;
     std::map<std::string,std::string> environment;

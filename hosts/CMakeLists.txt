@@ -21,6 +21,7 @@ if(ANDROID)
     add_library(wa2_android SHARED android_main.cpp
         "${WA2_ROOT}/android/native/android_resources.cpp"
         "${WA2_ROOT}/android/native/compiled_resources.cpp"
+        "${WA2_ROOT}/android/native/compiled_save_files.cpp"
         "${WA2_ROOT}/android/native/frame_metrics.cpp"
         "${WA2_ROOT}/android/native/frame_hud_jni.cpp"
         "${WA2_ROOT}/android/native/frame_metrics_jni.cpp")

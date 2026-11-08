@@ -20,8 +20,9 @@
     "maximum_build_jobs": 1
   },
   "migration": {
-    "target": "shared-native-engine",
-    "target_changed_on": "2026-11-06",
+    "target": "shared-aot",
+    "target_changed_on": "2026-11-08",
+    "native_engine_retained_as_experimental": true,
     "native_game_logic_shared_by_all_platforms": true,
     "native_target_recompiled_game_link_forbidden": true,
     "native_target_guest_cpu_and_memory_forbidden": true,

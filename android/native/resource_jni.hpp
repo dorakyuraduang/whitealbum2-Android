@@ -10,6 +10,7 @@ namespace wa2::android {
 // loader is available. Game-thread JNI calls reuse these cached references.
 bool initialize_resource_jni(JNIEnv* env) noexcept;
 void release_resource_jni(JNIEnv* env) noexcept;
+jclass resource_directory_class()noexcept;
 struct ArchiveMetadata {std::string name;std::uint64_t size{},modified_millis{};};
 std::vector<ArchiveMetadata> resource_metadata();
 std::vector<ArchiveMetadata> legacy_save_metadata();

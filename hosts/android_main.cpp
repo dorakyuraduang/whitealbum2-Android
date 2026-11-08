@@ -11,9 +11,11 @@
 #include <string_view>
 extern "C" int SDL_main(int argc,char** argv){
     try{SDL_SetMainReady();SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON,"1");
+        SDL_SetHint(SDL_HINT_ORIENTATIONS,"LandscapeLeft LandscapeRight");
         char* value=SDL_GetPrefPath("WA2","shared-game");if(!value)throw std::runtime_error(SDL_GetError());wa2::host::Startup startup;
         try{startup.options.data_root=value;SDL_free(value);}catch(...){SDL_free(value);throw;}
         startup.options.allow_file_write=true;
+        startup.files=wa2::android::compiled_save_files();
         for(int n=1;n<argc;++n){const std::string_view argument=argv[n];
             if(argument=="--test-mode")startup.test_mode=true;
             else throw std::runtime_error("Unknown Android launch argument: "+std::string(argument));}

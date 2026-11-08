@@ -114,6 +114,46 @@ final class GameDocuments {
         String[] parts=GameStoragePath.parts(path,true);if(bytes==null || bytes.remaining()>64*1024*1024)throw new IOException("Game save exceeds write bound");
         GameFilePublication.replace(new Files(parent(parts,true)),parts[parts.length-1],bytes);
     }
+    // Seekable descriptors preserve the source program's access, seek,
+    // truncation and close semantics without a private save mirror.
+    int compatibleOpen(String path,int access,int creation) throws IOException {
+        String[] parts=CompatibleStoragePath.parts(path,false);
+        if(access<1 || access>3 || creation<1 || creation>5)return -87;
+        boolean write=(access&2)!=0;
+        if(!write && creation!=3)return -5;
+        Uri parent=parent(parts,false);if(parent==null)return -3;
+        Files files=new Files(parent);String name=parts[parts.length-1];Node file=GameFilePublication.recover(files,name);boolean exists=file!=null;
+        if(exists && creation==1)return -80;if(!exists && (creation==3 || creation==5))return -2;
+        if(!exists)file=files.create(name);
+        if(file.directory)return -5;
+        String mode=!write?"r":creation==2 || creation==5?"rwt":"rw";
+        try(ParcelFileDescriptor fd=resolver.openFileDescriptor(file.uri,mode)){if(fd==null)throw new IOException("Cannot open selected game file");return fd.detachFd();}
+    }
+    String[] compatibleMetadata(String path,boolean list) throws IOException {
+        CompatibleStoragePath.parts(path,list || CompatibleStoragePath.valid(path,true));
+        Uri root=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
+        Node found=inspect(root);
+        if(!path.isEmpty()){String[] parts=path.split("/");for(int n=0;n<parts.length;++n){if(!found.directory)return new String[0];found=n+1==parts.length && CompatibleStoragePath.valid(path,false)?GameFilePublication.recover(new Files(found.uri),parts[n]):child(found.uri,parts[n]);if(found==null)return new String[0];}}
+        ArrayList<Node> entries=new ArrayList<>();if(list){if(!found.directory)return new String[0];Files files=new Files(found.uri);LinkedHashSet<String> names=new LinkedHashSet<>();for(Node item:children(found.uri)){String name=item.name;if(name.endsWith(GameFilePublication.STAGE))name=name.substring(0,name.length()-GameFilePublication.STAGE.length());else if(name.endsWith(GameFilePublication.BACKUP))name=name.substring(0,name.length()-GameFilePublication.BACKUP.length());names.add(name);}for(String name:names){String child=path.isEmpty()?name:path+"/"+name;Node file=CompatibleStoragePath.valid(child,false)?GameFilePublication.recover(files,name):child(found.uri,name);if(file!=null)entries.add(file);}}else entries.add(found);
+        ArrayList<String> result=new ArrayList<>();for(Node item:entries){String child=path.isEmpty()?item.name:path+"/"+item.name;
+            if(list && !CompatibleStoragePath.valid(child,item.directory))continue;
+            if(!item.directory && (item.name.endsWith(GameFilePublication.STAGE) || item.name.endsWith(GameFilePublication.BACKUP)))continue;
+            result.add(item.name);result.add(Long.toString(Math.max(0,item.size)));result.add(Long.toString(item.modified));result.add(item.directory?"16":"128");
+        }
+        return result.toArray(new String[0]);
+    }
+    int compatibleOperation(String path,String target,int operation,int flags) throws IOException {
+        if(operation==0){String[] parts=CompatibleStoragePath.parts(path,true);if(parts.length==0)return 183;Uri parent=parent(parts,false);if(parent==null)return 3;Node prior=child(parent,parts[parts.length-1]);if(prior!=null)return prior.directory?183:5;Uri made=DocumentsContract.createDocument(resolver,parent,DocumentsContract.Document.MIME_TYPE_DIR,parts[parts.length-1]);if(made==null)throw new IOException("Cannot create selected game directory");Node checked=inspect(made);if(!checked.name.equals(parts[parts.length-1]))throw new IOException("Provider changed selected game directory name");return 0;}
+        String[] parts=CompatibleStoragePath.parts(path,operation==2);Uri parent=parent(parts,false);if(parent==null)return 3;Files files=new Files(parent);Node file=child(parent,parts[parts.length-1]);if(file==null)return 2;
+        if(operation==4){if(flags!=0 && flags!=128)return 5;return 0;}
+        if(operation==1 || operation==2){if(file.directory!=(operation==2))return 5;if(file.directory && !children(file.uri).isEmpty())return 145;files.remove(file);return 0;}
+        if(operation==3){String[] destination=CompatibleStoragePath.parts(target,false);Uri next=parent(destination,false);if(next==null)return 3;if(!next.equals(parent))throw new IOException("Cross-directory save rename is unsupported by the selected provider");if(child(next,destination[destination.length-1])!=null)return 183;files.rename(file,destination[destination.length-1]);return 0;}
+        return 87;
+    }
+    void compatibleReplace(String path,ByteBuffer bytes) throws IOException {
+        String[] parts=CompatibleStoragePath.parts(path,false);if(bytes==null || bytes.remaining()>64*1024*1024)throw new IOException("Game file exceeds write bound");
+        Uri parent=parent(parts,false);if(parent==null)throw new IOException("Missing selected game configuration directory");GameFilePublication.replace(new Files(parent),parts[parts.length-1],bytes);
+    }
     void update(String path,long expected,long offset,ByteBuffer bytes) throws IOException {
         String[] parts=GameStoragePath.parts(path,true);if(bytes==null || expected<0 || expected>64*1024*1024 || offset<0 || offset>expected || bytes.remaining()>expected-offset)throw new IOException("Invalid game save update range");
         Uri parent=parent(parts,false);if(parent==null)throw new IOException("Missing game save directory");Node file=GameFilePublication.recover(new Files(parent),parts[parts.length-1]);if(file==null || file.size!=expected)throw new IOException("Game save update requires an existing complete file");writeFile(file,bytes.asReadOnlyBuffer(),expected,offset);

@@ -62,7 +62,7 @@ std::vector<wr::ReadOnlyFileInfo> ResourceMount::list(std::string_view directory
 std::FILE* ResourceMount::open(std::string_view name){const auto found=files_.find(key(name));if(found==files_.end()){errno=ENOENT;return nullptr;}return open_(found->second.name);}
 void install_resource_mount(wr::Process& p,std::shared_ptr<wr::ReadOnlyFiles> mount){
     if(!mount)throw std::invalid_argument("missing resource mount");if(p.entry)throw std::logic_error("resource mount must be installed before image load");
-    if(p.options.allow_file_write && mount->info("IC"))std::filesystem::create_directory(p.options.data_root/"IC");p.state().read_only_files=std::move(mount);
+    if(p.options.allow_file_write && !p.state().mutable_files && mount->info("IC"))std::filesystem::create_directory(p.options.data_root/"IC");p.state().read_only_files=std::move(mount);
 }
 std::shared_ptr<wr::ReadOnlyFiles> local_resource_mount(const std::filesystem::path& root){
     std::vector<wr::ReadOnlyFileInfo> files;
@@ -75,7 +75,13 @@ std::shared_ptr<wr::ReadOnlyFiles> local_resource_mount(const std::filesystem::p
             if(archive_name(key(name)))files.push_back({name,item.file_size(),0,0x21});
         }
     }
-    return std::make_shared<ResourceMount>(std::move(files),[root](std::string_view name){return std::fopen((root/std::filesystem::path(name)).string().c_str(),"rb");});
+    return std::make_shared<ResourceMount>(std::move(files),[root](std::string_view name){
+#ifdef _WIN32
+        return _wfopen((root/std::filesystem::path(name)).c_str(),L"rb");
+#else
+        return std::fopen((root/std::filesystem::path(name)).c_str(),"rb");
+#endif
+    });
 }
 std::optional<wr::ReadOnlyFileInfo> mounted_resource_info(wr::Process& p,const std::filesystem::path& path){
     return p.state().read_only_files?p.state().read_only_files->info(logical(p,path)):std::nullopt;
@@ -86,6 +92,7 @@ std::shared_ptr<resource::Source> open_process_resource(wr::Process& p,const std
         // Mounted PAK names belong to the provider. A missing logical archive
         // must not silently fall through to the unrelated private-save folder.
         if(p.state().read_only_files && archive_name(key(name)))throw resource::NotFound(missing_archive(p,name));
+        if(auto* files=wr::mutable_files_for(p,path)){const auto info=files->info(name);if(!info)throw resource::NotFound("Cannot open selected-directory file: "+name);std::uint32_t error{};auto* file=files->open(name,true,false,3,error);if(!file)throw resource::Error("Cannot open selected-directory file: "+name+" (error "+std::to_string(error)+")");return std::make_shared<StreamSource>(file,info->size);}
         return open_resource_file(path);
     }
     if(info->attributes&16)throw resource::Error("resource archive path names a directory: "+name);

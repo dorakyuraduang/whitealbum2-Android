@@ -1,11 +1,13 @@
 #pragma once
 #include "../../platform/window/host.hpp"
 #include <winrecomp/process.hpp>
+#include <winrecomp/readonly_files.hpp>
 namespace wa2::host {
 struct Startup {
     wr::ProcessOptions options;
     std::shared_ptr<window::Host> window;
     std::function<void(wr::Process&)> mount_resources;
+    std::shared_ptr<wr::MutableFiles> files;
     std::filesystem::path report_file;
     bool test_mode{};
 };

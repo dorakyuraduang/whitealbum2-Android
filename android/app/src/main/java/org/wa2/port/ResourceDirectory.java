@@ -329,6 +329,18 @@ final class ResourceDirectory {
     public static String[] gameSaveMetadata(int token,String directory) throws IOException {
         GameDocuments files=gameDocuments(token);synchronized (STORAGE_LOCK) { return files.saves(directory); }
     }
+    public static int compatibleOpen(String name,int token,int access,int creation) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleOpen(name,access,creation);}
+    }
+    public static String[] compatibleMetadata(String name,int token,boolean list) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleMetadata(name,list);}
+    }
+    public static int compatibleOperation(String name,String target,int token,int operation,int flags) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleOperation(name,target,operation,flags);}
+    }
+    public static void compatibleReplace(String name,int token,ByteBuffer bytes) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){files.compatibleReplace(name,bytes);}
+    }
 
     private static int openLegacyFile(String[] parts) throws IOException {
         final Context application;

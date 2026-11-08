@@ -12,11 +12,12 @@ else()
             set_target_properties(wa2_sdl_host PROPERTIES IMPORTED_LOCATION
                 "${WA2_SHARED_ROOT}/build/android-native-game/sdl2/libSDL2.so")
         elseif(WIN32)
+            set(WA2_SHARED_SDL_ARCHIVE "${WA2_SHARED_ROOT}/build/wa2-win64/wa2_port/sdl2/libSDL2.a" CACHE FILEPATH "Verified existing Windows SDL2 archive")
             add_library(wa2_sdl_host STATIC IMPORTED GLOBAL)
             set_target_properties(wa2_sdl_host PROPERTIES IMPORTED_LOCATION
-                "${WA2_SHARED_ROOT}/build/wa2-win64/wa2_port/sdl2/libSDL2.a")
+                "${WA2_SHARED_SDL_ARCHIVE}")
             set_property(TARGET wa2_sdl_host PROPERTY INTERFACE_LINK_LIBRARIES
-                "setupapi;winmm;imm32;version;ole32;oleaut32;uuid;advapi32;user32;gdi32;shell32")
+                "comctl32;comdlg32;setupapi;winmm;imm32;version;ole32;oleaut32;uuid;advapi32;user32;gdi32;shell32;ws2_32;bcrypt;ntdll")
         else()
             message(FATAL_ERROR "Supply the host's SDL2 target before adding the shared runtime")
         endif()

@@ -1,8 +1,8 @@
-# WHITE ALBUM2 共享引擎移植（开发中）
+# WHITE ALBUM2 共享静态重编译（开发中）
 
-面向 Windows x64 与 Android ARM64 的共享引擎项目。2026-11-06 起，开发目标改为完整的原生 C++ 兼容引擎：两平台共用游戏逻辑，最终应用不依赖重编译函数、原程序寄存器或虚拟内存运行时。原版 PAK 继续外置直接读取。
+面向 Windows x64 与 Android ARM64 的同源静态重编译项目。按用户 2026-11-08 的要求，默认交付恢复为 `shared-aot`：两平台使用同一份生成的静态游戏函数和原生子系统。原版 PAK 继续外置直接读取。
 
-**纯原生版本仍在迁移中。** 当前交付的 `0.2.46-shared-aot` 仍使用原有混合核心；独立原生引擎已有 Windows / Android 完整应用目标和单独的开发包，不链接重编译函数或虚拟 CPU。仍有原版行为要补齐，全剧情与实机表现也尚未验证，不作为已经完成移植的正式版本。
+**当前交付为 `0.2.47-shared-aot`。** 独立原生引擎的代码和 `0.3.x` 开发包保留为实验成果，不再作为默认交付；其剧情兼容与实机表现尚未完成。静态重编译版仍保留源程序的地址/寄存器状态，没有运行时指令译码或 JIT，不能称为已经完成全部原生重建。
 
 ## 版本与分支
 
@@ -10,12 +10,12 @@
 
 | 版本 | 分支 | 实现路线 |
 | --- | --- | --- |
-| **共享 C++ 引擎（原生迁移中）** | [main（默认）](https://github.com/dorakyuraduang/wa2-godot/tree/main) | 新增独立原生核心；现有 shared-aot 版本保留作过渡与对照，两平台共用游戏逻辑。 |
+| **共享静态重编译（当前交付）** | [main（默认）](https://github.com/dorakyuraduang/wa2-godot/tree/main) | 两平台共用静态游戏函数及原生子系统；独立原生引擎保留为实验代码。 |
 | **Godot 移植版** | [godot](https://github.com/dorakyuraduang/wa2-godot/tree/godot) | 此前的 Godot 引擎移植工程，保留原有代码、文档、许可证和提交历史。 |
 
 以下版本说明针对 `main` 当前已交付的静态重编译版本；原生迁移进度见下文。Godot 版的安装、构建和许可范围请查看 [godot 分支 README](https://github.com/dorakyuraduang/wa2-godot/blob/godot/README.md)；两条实现的许可证各自适用。
 
-安装包也请按实现类型区分：已有的 `v0.3b`、`v0.2.9` 等历史 Releases 属于 Godot 版；本分支使用 `shared-aot` 版本标识，当前为 `0.2.46-shared-aot`。两条路线的版本号分别维护。
+安装包也请按实现类型区分：已有的 `v0.3b`、`v0.2.9` 等历史 Releases 属于 Godot 版；本分支当前为 `0.2.47-shared-aot`。`0.3.x-native-development` 是另一个未完成的原生实验，两者的版本号分别维护。
 
 **项目尚未完成。** 当前是“静态重编译主体 + 原生子系统重建”的混合实现，仍保留原游戏的 32 位地址布局、寄存器及部分浮点状态。完整剧情兼容、手机帧率以及接近原版的整体性能尚未验证。
 
@@ -23,15 +23,23 @@
 
 ## 当前版本
 
+`0.2.47-shared-aot` 恢复静态重编译版作为默认交付。存档、游戏 INI 和启动开关读取/保存在当前选择的 Wa2Res，原版格式不经原生存档转换。可直接放入 PC 的 `Sys.sav`、`save_00.sav` 至 `save_99.sav`、`save_Q.sav`、`SYSTEM.ini`、`D3D.ini` 和可选的 `default.ini`。源程序的主 Documents 存档路径映射到所选根目录；完整旧 Documents 主目录作为读取后备，章节专属目录保留独立。测试模式使用同处 `test-mode/`，不改普通进度。
+
+安卓同时生成标准 AOT APK，以及覆盖 `0.3.x` 原生开发版的 `WA2-0.2.47-shared-aot-replace-native.apk`。两者的 DEX/本地库相同，安装身份不同；覆盖包沿用原生开发版的签名和应用 ID，保留授权与原有文件。`native-saves/` 的原生剧情存档仍保留，但不能直接交给 AOT/原版游戏读取。
+
+快进检查没有发现宿主额外设置的固定倍速上限：AOT 调用不使用原生实验引擎的 2 ms/256 tick 调度预算。保留的源代码有正常帧计时、快进绕过条件、主循环的 2 ms 让步和源程序请求的垂直同步；脚本等待及既读条件也仍生效。本次未改动这些时序，未将代码检查当作手机上的快进速度测量。详见 [快进检查记录](docs/AOT_FAST_FORWARD.md)。
+
+下面的独立原生迁移成果作为实验保留，不参与本次 AOT 交付。
+
 原生迁移代码在 `engine/`、`game/` 和独立的平台适配层。现已实现共用剧情脚本引擎、画面/音频子系统、原格式系统进度、原生格式的存读档与缩略图，以及标题、设置、存读档、对话记录、音乐/CG 鉴赏、回想和声优评论页面。回想通过外置 `9999` 脚本及具体编号进入剧情，退出时恢复原页面；从存档重开也能重建对应菜单。原版 version 1/2 手动存档已有受支持状态的单向读取转换；无法恢复的等待状态、剩余原版 UI 行为及全剧情兼容仍未完成。
 
 `scripts/verify_native_core.py` 独立编译并链接 Windows x64 / Android ARM64 的同一原生核心，检查编译清单、链接依赖及符号中没有 AOT、原程序 CPU 或虚拟内存组件。测试只执行合成脚本、合成存档和自有内存画面。完整 SDL 构建定义分别在 `hosts/native` 和 `hosts/native-android`；安卓原生 Java 适配器不包含旧 Win32 控件/文件对话框类，菜单动作仍由共用 C++ 决定。这些检查不会启动游戏，不能证明手机兼容或整体帧率；尚未替换已交付 APK。见 [原生核心与现有版本的边界](docs/ARCHITECTURE.md)。
 
 `scripts/build_native_hosts.py` 构建并检查带实际 SDL 窗口、渲染和设备音频后端的两端应用。`scripts/package_native_preview.py` 生成独立的 `org.wa2.port.nativeengine` 开发 APK、Windows 压缩包及匹配的视频解码库重新链接材料，放在忽略的 `out/native-development` 目录。原生开发版将存档和游戏配置写入当前选择的游戏目录：根部 `Sys.sav`、`native-settings.wa2cfg` 和 `native-saves/`；安卓启动开关保存在同处的 `native-launcher.wa2cfg`；测试模式改用同一目录下的 `native-test/`。可将 PC 的 `Sys.sav`、`save_00.sav` 等放入所选目录读取；新的原生剧情存档不能直接交给原版 PC 程序读取。安卓需要重新授予目录读写权限。旧 AOT 包和原有私有数据保留，PAK 保持外置，不进行安装或运行。构建与打包顺序见 [BUILDING](docs/BUILDING.md)。
 
-`0.2.46-shared-aot`（开发版本）。Windows 与 Android 使用相同的核心源码。
+以下为仍保留在 0.2.47 中的 `0.2.46-shared-aot` 功能与检查记录。Windows 与 Android 使用相同的核心源码。
 
-**本次本地 APK 使用新开发签名。** 旧签名随本地构建目录丢失且无备份，无法覆盖安装旧签名版本。另附 `parallel-test.apk` 并存测试包（应用名“WA2 全内容测试”），可保留旧应用和旧存档，两者的私有数据互不共享。普通新签名包不能当作无损覆盖更新。
+**签名历史：** 0.2.46 曾因旧密钥丢失而更换开发签名，不能覆盖更早的旧签名安装。0.2.47 沿用目前保留的密钥；上面的 `replace-native.apk` 方案用于覆盖同密钥的 0.3.x 原生开发版，不删除其文件。历史并存测试包仍保留为此前交付记录。
 
 - 批量补齐另外 34 个有缓存引用证据的遗漏回调，连同辅助函数和异常续执行入口共 57 个入口、3,282 条指令位置，覆盖虚函数、异常清理及浮点格式转换。生成阶段检查所有已编译的直接调用、分支和返回续执行边界；未知动态目标仍明确报错。两平台使用同一份修复。
 
@@ -78,7 +86,7 @@
 - [第三方许可证](THIRD_PARTY_NOTICES.md) / [MIT](LICENSE)
 - [历史开发记录](docs/DEVELOPMENT_HISTORY.zh-CN.md)
 
-在具备所需私有缓存与工具链的本地工作区，先运行 `python scripts/verify_shared_aot.py`，通过后运行 `python scripts/package_shared_hosts.py`。所有构建和检查必须隐藏、低优先级、单任务执行。当前约束禁止启动原版或游戏、模拟器、UI 自动操作与屏幕监控。
+在具备所需私有缓存与工具链的本地工作区，可使用完整 `scripts/verify_shared_aot.py`；仅修改宿主/存储且保留既有验证回执时，也可使用严格检查缓存来源的 `scripts/verify_shared_refresh.py`，再运行 `scripts/package_shared_hosts.py`。后者明确记录较窄的检查范围，不声称重跑了缺失的历史差分/性能对照；步骤见 BUILDING。所有构建和检查必须隐藏、低优先级、单任务执行。当前约束禁止启动原版或游戏、模拟器、UI 自动操作与屏幕监控。
 
 组件验证覆盖资源输出与字典、ABI、寄存器与浮点状态、绘制数据、内存边界、两平台同源编译、JNI、APK 签名和对齐。**编译或内存组件提速不代表完整游戏兼容或手机帧率提升相同倍数。** 每次本地交付由 `out/build-info.json` 与对应验证记录绑定具体源码和产物。
 
@@ -86,4 +94,4 @@ APK 和 EXE 通过本地构建生成，不作为公共源码的一部分。静�
 
 ## License / English summary
 
-The migration target is a shared native engine reimplementation. The existing 0.2.46 release remains an incomplete static-recompilation/native-subsystem hybrid while the independent native core is developed. Windows x64 and Android ARM64 share game logic; platform-specific game implementations, runtime machine-instruction decoding and JIT are forbidden. Original game files, derived game functions and private cached inputs are not distributed here. New project code is MIT; upstream components keep their licenses. This project is unofficial and does not grant rights to the original game.
+The active delivery returned to shared AOT on 2026-11-08. The 0.2.47 release uses the existing static-recompilation/native-subsystem hybrid; independent native migration sources remain experimental. Windows x64 and Android ARM64 share game logic. Platform-specific game implementations, runtime instruction decoding and JIT remain forbidden. Original game files, derived game functions and private cached inputs are not distributed here. New project code is MIT; upstream components keep their licenses. This unofficial project grants no rights to the original game.

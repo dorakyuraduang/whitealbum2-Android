@@ -87,6 +87,7 @@ static int open_descriptor(std::string_view filename,jmethodID method,bool optio
     if(env->ExceptionCheck())throw resource::Error(consume_error(env));
     if(fd<0 && !optional)throw resource::Error("Android provider returned no archive descriptor");return fd;
 }
+jclass resource_directory_class()noexcept{return directory_class;}
 int open_resource_descriptor(std::string_view filename,bool optional){return open_descriptor(filename,optional?optional_method:open_method,optional);}
 std::shared_ptr<resource::Source> open_resource_bank(std::string_view filename){return platform::adopt_resource_fd(open_resource_descriptor(filename));}
 std::shared_ptr<resource::Source> try_open_resource_bank(std::string_view filename){const auto fd=open_resource_descriptor(filename,true);return fd<0?nullptr:platform::adopt_resource_fd(fd);}

@@ -1,4 +1,27 @@
-# Shared native migration and retained AOT release
+# Active shared AOT and experimental native migration
+
+On 2026-11-08 the user restored shared AOT as the primary delivery. The native
+migration sections below describe retained experimental work; native targets
+still exclude AOT/guest state, while current AOT hosts compile the same static
+game sources. Neither implementation is declared a fully verified game port.
+
+The AOT process now mounts a separate writable selected-directory namespace,
+beside its read-only PAK mount. Shared `platform/compat/save_files.*` owns path
+aliases and test-profile selection; local C++ and Android provider adapters own
+OS operations. Source save bytes are passed through unchanged. Main Documents
+paths map to root saves/INI, nested main files are read fallback, and separate
+chapter directories retain their identities. Normal and test-mode mounts never
+fall through to private app files. Source file handles retain independent seek,
+read/write/truncate/flush and access-sharing semantics, including main-path
+aliases. Picker-authorized paths outside this namespace retain their existing
+host access. Cross-provider atomic moves remain explicitly unsupported.
+
+The profile adapter and movie-quality selection use the same mounted files.
+Android opens seekable local-provider descriptors for regular source writes;
+INI publication uses the existing staged/backup recovery protocol. Directory
+metadata does not scan/decompress PAK payloads. The linked Android entry audits
+the exact Java/JNI method descriptors and landscape-only SDL hint. External
+original-format files, not native scene-save conversion, drive this AOT path.
 
 On 2026-11-06 the user changed the target to a complete native engine
 reimplementation. Windows and Android continue to share game logic, resources

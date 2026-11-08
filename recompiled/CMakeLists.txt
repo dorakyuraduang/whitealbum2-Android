@@ -48,6 +48,7 @@ set(WA2_FUNCTION_RUNTIME_SOURCES
     "${WA2_SHARED_ROOT}/platform/compat/text.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/locale.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/resource_mount.cpp"
+    "${WA2_SHARED_ROOT}/platform/compat/save_files.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/test_profile.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/legacy_display.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/media.cpp"
@@ -140,6 +141,8 @@ if(WA2_SHARED_AOT_CHECKS)
     target_link_libraries(wa2_portable_system_tests PRIVATE wa2_function_process)
     add_executable(wa2_resource_mount_tests "${WA2_SHARED_ROOT}/tests/resource_mount.cpp")
     target_link_libraries(wa2_resource_mount_tests PRIVATE wa2_function_process)
+    add_executable(wa2_selected_save_files_tests "${WA2_SHARED_ROOT}/tests/selected_save_files.cpp")
+    target_link_libraries(wa2_selected_save_files_tests PRIVATE wa2_function_process)
     add_executable(wa2_test_profile_tests "${WA2_SHARED_ROOT}/tests/test_profile.cpp")
     target_link_libraries(wa2_test_profile_tests PRIVATE wa2_function_process)
     add_executable(wa2_script_wait_callback_tests "${WA2_SHARED_ROOT}/tests/script_wait_callback.cpp")

@@ -4,6 +4,8 @@
 #include "../../platform/compat/legacy_display.hpp"
 #include "../../platform/compat/test_profile.hpp"
 #include "../../platform/compat/resource_mount.hpp"
+#include "../../platform/compat/save_files.hpp"
+#include <winrecomp/win32_state.hpp>
 #include <sstream>
 #include <fstream>
 namespace wa2::host {
@@ -15,7 +17,8 @@ void require_imports(wr::Process& process,const wr::Image& image){
 }
 std::uint32_t run(Startup startup){
     if(!startup.window)throw std::invalid_argument("missing window/device adapter");
-    if(startup.test_mode){
+    if(startup.files && !startup.mount_resources){const auto root=startup.options.data_root;startup.mount_resources=[root](wr::Process& p){platform::compat::install_resource_mount(p,platform::compat::local_resource_mount(root));};}
+    if(startup.test_mode && !startup.files){
         if(!startup.options.allow_file_write)throw std::runtime_error("Test mode needs a writable private save directory");
         const auto normal_root=startup.options.data_root;
         startup.options.data_root=platform::compat::select_test_profile(normal_root,true);
@@ -40,6 +43,7 @@ std::uint32_t run(Startup startup){
         if(!output)throw std::runtime_error("Cannot finish runtime report");
     };
     try{const auto image=aot::initial_image();require_imports(process,image);
+        if(startup.files)process.state().mutable_files=platform::compat::save_files(std::move(startup.files),startup.test_mode);
         if(startup.mount_resources)startup.mount_resources(process);
         runtime.load(image);const auto result=runtime.run();report({});return result;
     }catch(const std::exception& error){try{report(error.what());}catch(...){}throw;}

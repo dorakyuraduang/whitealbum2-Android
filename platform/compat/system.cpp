@@ -104,25 +104,26 @@ void install_system(wr::Process& p,ProfileReadHook before_profile_read){
         std::string full="C:\\WinRecomp";if(local!=".")full+='\\'+local.generic_string();std::replace(full.begin(),full.end(),'/','\\');
         if(a[3])q.memory.check(a[3],4,Memory::Write);if(a[1]<=full.size())return U32(full.size()+1);string(q,a[2],full);
         if(a[3])q.memory.store(a[3],a[2]+U32(full.find_last_of('\\')+1),32);return U32(full.size());});
-    kernel("SetCurrentDirectoryA",1,[](Process& q,Args a){const auto path=guest_file_path(q,q.read_string(a[0]));const auto info=mounted_resource_info(q,path);std::error_code ec;
+    kernel("SetCurrentDirectoryA",1,[](Process& q,Args a){const auto path=guest_file_path(q,q.read_string(a[0]));auto info=mounted_resource_info(q,path);if(!info)if(auto* files=wr::mutable_files_for(q,path))info=files->info(path.lexically_relative(q.options.data_root).generic_string());std::error_code ec;
         if(!(info && (info->attributes&16)) && !std::filesystem::is_directory(path,ec))return error(q,3);
         const auto relative=path.lexically_relative(q.options.data_root);if(relative.empty() || *relative.begin()=="..")throw GuestFault(FaultKind::unsupported,q.cpu.eip,"working directory outside process data root");q.state().current_directory=info && (info->attributes&16)?info->name:relative=="."?"":relative.generic_string();return 1u;});
     kernel("CopyFileA",3,[](Process& q,Args a){if(!q.options.allow_file_write)return error(q,5);const auto from=guest_file_path(q,q.read_string(a[0])),to=guest_file_path(q,q.read_string(a[1]));std::error_code ec;
+        auto* destination=wr::mutable_files_for(q,to);if(destination || wr::mutable_files_for(q,from)){const auto name=to.lexically_relative(q.options.data_root).generic_string();if(mounted_resource_info(q,to))return error(q,5);if(a[2] && (destination?destination->info(name).has_value():std::filesystem::exists(to)))return error(q,80);std::shared_ptr<resource::Source> source;try{source=open_process_resource(q,from);}catch(const resource::NotFound&){return error(q,2);}if(source->size()>64u*1024*1024)throw std::runtime_error("Selected-directory copy exceeds its bound");std::vector<std::uint8_t> bytes(std::size_t(source->size()));source->read_at(0,bytes);if(destination)destination->replace(name,bytes);else{std::ofstream output(to,std::ios::binary|std::ios::trunc);output.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));output.close();if(!output)return error(q,5);}return 1u;}
         if(mounted_resource_info(q,to))return error(q,5);const auto result=std::filesystem::copy_file(from,to,a[2]?std::filesystem::copy_options::none:std::filesystem::copy_options::overwrite_existing,ec);
         if(!result)return error(q,ec==std::errc::file_exists?80:ec==std::errc::no_such_file_or_directory?2:5);return 1u;});
     kernel("GetPrivateProfileStringA",6,[](Process& q,Args a){if(!a[4])return 0u;if(a[4]>1048576)throw std::runtime_error("profile output limit");
-        const auto ini=Profile::read(guest_file_path(q,q.read_string(a[5])));if(!a[0])return output_names(q,a[3],a[4],ini.sections());
+        const auto ini=read_profile(q,guest_file_path(q,q.read_string(a[5])));if(!a[0])return output_names(q,a[3],a[4],ini.sections());
         const auto section=q.read_string(a[0]);if(!a[1])return output_names(q,a[3],a[4],ini.keys(section));
         auto value=ini.get(section,q.read_string(a[1]));std::string fallback=a[2]?q.read_string(a[2]):"";while(!fallback.empty() && fallback.back()==' ')fallback.pop_back();
         return output_text(q,a[3],a[4],value?*value:fallback);});
     kernel("GetPrivateProfileIntA",4,[before=std::move(before_profile_read)](Process& q,Args a){if(!a[0] || !a[1])return a[2];
         const auto section=q.read_string(a[0]),key=q.read_string(a[1]);const auto path=guest_file_path(q,q.read_string(a[3]));
-        if(before)before(q,path,section,key);auto ini=Profile::read(path);const auto value=ini.get(section,key);return value?profile_integer(*value,a[2]):a[2];});
+        if(before)before(q,path,section,key);auto ini=read_profile(q,path);const auto value=ini.get(section,key);return value?profile_integer(*value,a[2]):a[2];});
     kernel("WritePrivateProfileStringA",4,[](Process& q,Args a){if(!q.options.allow_file_write)return error(q,5);if(!a[0] && !a[1] && !a[2])return 1u;if(!a[0] || !a[3])return error(q,87);
-        const auto path=guest_file_path(q,q.read_string(a[3]));try{auto ini=Profile::read(path);ini.set(q.read_string(a[0]),nullable_string(q,a[1]),nullable_string(q,a[2]));ini.save(path);return 1u;}catch(const std::filesystem::filesystem_error&){return error(q,5);}});
+        const auto path=guest_file_path(q,q.read_string(a[3]));try{auto ini=read_profile(q,path);ini.set(q.read_string(a[0]),nullable_string(q,a[1]),nullable_string(q,a[2]));save_profile(q,ini,path);return 1u;}catch(const std::filesystem::filesystem_error&){return error(q,5);}});
     for(bool writing:{false,true})kernel(writing?"WritePrivateProfileStructA":"GetPrivateProfileStructA",5,[writing](Process& q,Args a){
-        if(writing && !q.options.allow_file_write)return error(q,5);if(!a[0] || !a[1] || a[3]>1048576)return error(q,87);const auto path=guest_file_path(q,q.read_string(a[4]));auto ini=Profile::read(path);
-        std::vector<std::uint8_t> bytes(a[3]);if(writing){std::optional<std::string> text;if(a[2]){q.memory.copy_out(a[2],bytes);text=encode_profile_struct(bytes);}ini.set(q.read_string(a[0]),q.read_string(a[1]),std::move(text));ini.save(path);return 1u;}
+        if(writing && !q.options.allow_file_write)return error(q,5);if(!a[0] || !a[1] || a[3]>1048576)return error(q,87);const auto path=guest_file_path(q,q.read_string(a[4]));auto ini=read_profile(q,path);
+        std::vector<std::uint8_t> bytes(a[3]);if(writing){std::optional<std::string> text;if(a[2]){q.memory.copy_out(a[2],bytes);text=encode_profile_struct(bytes);}ini.set(q.read_string(a[0]),q.read_string(a[1]),std::move(text));save_profile(q,ini,path);return 1u;}
         if(!a[2])return error(q,87);q.memory.check(a[2],a[3],Memory::Write);const auto text=ini.get(q.read_string(a[0]),q.read_string(a[1]));if(!text || !decode_profile_struct(*text,bytes))return error(q,13);q.memory.copy_in(a[2],bytes);return 1u;
     });
     const auto resources=std::make_shared<Resources>();

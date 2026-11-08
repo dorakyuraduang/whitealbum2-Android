@@ -36,7 +36,7 @@ MovieSettings configure_movie_resources(wr::Process& p,const std::filesystem::pa
     MovieSettings result;result.groups=groups.size();const auto utf8=path.generic_u8string();result.profile_file.assign(utf8.begin(),utf8.end());
     if(groups.empty()){result.reason="no-movie-files-indexed";return result;}
     result.available_variants=7;for(const auto& [name,mask]:groups)result.available_variants&=mask;
-    auto profile=platform::compat::Profile::read(path);
+    auto profile=platform::compat::read_profile(p,path);
     if(const auto text=profile.get("DEFAULT","mov_lv"))result.previous=platform::compat::profile_integer(*text,0xffffffffu);
     if(result.previous)if(const auto variant=suffix(*result.previous);variant && (result.available_variants&(1u<<*variant))){
         result.selected=result.previous;result.reason="preserved-available-setting";return result;
@@ -44,7 +44,7 @@ MovieSettings configure_movie_resources(wr::Process& p,const std::filesystem::pa
     for(const auto level:std::array<std::uint32_t,3>{2,1,0})if(result.available_variants&(1u<<*suffix(level))){result.selected=level;break;}
     if(!result.selected){result.reason="no-complete-movie-variant";return result;}
     if(!p.options.allow_file_write){result.selected.reset();result.reason="profile-write-disabled";return result;}
-    profile.set("DEFAULT","mov_lv",std::to_string(*result.selected));profile.save(path);result.changed=true;
+    profile.set("DEFAULT","mov_lv",std::to_string(*result.selected));platform::compat::save_profile(p,profile,path);result.changed=true;
     result.reason=result.previous?"replaced-unavailable-setting":"selected-from-external-movie-files";return result;
 }
 void prepare_movie_profile(wr::Process& p,const std::filesystem::path& path,std::string_view section,std::string_view key){

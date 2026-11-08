@@ -5,11 +5,11 @@
   game implementations are forbidden.
 - Keep OS, window, input, device audio, resource access and presentation adapters
   separate. Different compilers/backends may compile the common sources.
-- The user changed the migration target on 2026-11-06 to a complete shared
-  native engine reimplementation with no recompiled game functions, guest CPU
-  state or guest-memory runtime in the final application. Retain the existing
-  AOT release as a reference until native replacements are ready. The native
-  story host is incomplete; component builds are not complete game ports.
+- On 2026-11-08 the user switched the primary delivery back to the shared AOT
+  implementation. Retain the native migration sources as experimental work;
+  do not delete them or present their component builds as a complete game.
+  Independent native targets must still exclude recompiled functions, guest
+  CPU state and guest-memory runtime. All AOT hosts use the same static sources.
 - Use existing generated C++/CFG and cached analysis. Do not open, hash, decode,
   disassemble or execute WA2_chs.exe unless the user changes this restriction.
 - Do not monitor/read/capture the screen or operate game UI. Do not launch the

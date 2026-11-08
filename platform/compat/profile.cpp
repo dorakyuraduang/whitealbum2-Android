@@ -6,6 +6,9 @@
 #include <limits>
 #include <stdexcept>
 #include <system_error>
+#include <sstream>
+#include <winrecomp/process.hpp>
+#include <winrecomp/win32_state.hpp>
 namespace wa2::platform::compat {
 namespace {
 char fold(char c){return c>='A' && c<='Z'?char(c+32):c;}
@@ -17,9 +20,17 @@ std::string_view trim(std::string_view text){
 int nibble(char c){if(c>='0' && c<='9')return c-'0';c=fold(c);return c>='a' && c<='f'?c-'a'+10:-1;}
 }
 Profile Profile::read(const std::filesystem::path& path){
-    Profile result;std::ifstream input(path,std::ios::binary);
-    if(!input){std::error_code error;if(!std::filesystem::exists(path,error) && !error)return result;
+    std::ifstream input(path,std::ios::binary);
+    if(!input){std::error_code error;if(!std::filesystem::exists(path,error) && !error)return {};
         throw std::system_error(std::make_error_code(std::errc::io_error),"cannot read profile");}
+    return parse(input);
+}
+Profile Profile::read(std::span<const std::uint8_t> bytes){
+    if(bytes.size()>1024*1024)throw std::runtime_error("profile exceeds one MiB");
+    std::istringstream input(std::string(bytes.begin(),bytes.end()));return parse(input);
+}
+Profile Profile::parse(std::istream& input){
+    Profile result;
     std::string line;Section* current=nullptr;std::size_t total{};
     while(std::getline(input,line)){
         total+=line.size()+1;if(total>1024*1024)throw std::runtime_error("profile exceeds one MiB");
@@ -61,6 +72,20 @@ void Profile::save(const std::filesystem::path& path) const{
         output.flush();if(!output)throw std::runtime_error("cannot write profile");output.close();if(!output)throw std::runtime_error("cannot close profile");
         std::filesystem::rename(temporary,path);
     }catch(...){std::error_code ignored;std::filesystem::remove(temporary,ignored);throw;}
+}
+std::vector<std::uint8_t> Profile::bytes()const{
+    std::ostringstream output;for(const auto& s:sections_){output<<'['<<s.name<<"]\r\n";for(const auto& e:s.entries)output<<e.key<<'='<<e.value<<"\r\n";output<<"\r\n";}
+    const auto text=output.str();if(text.size()>1024*1024)throw std::runtime_error("profile exceeds one MiB");return {text.begin(),text.end()};
+}
+Profile read_profile(wr::Process& process,const std::filesystem::path& path){
+    auto* files=wr::mutable_files_for(process,path);if(!files)return Profile::read(path);
+    const auto name=path.lexically_relative(process.options.data_root).generic_string();std::uint32_t error{};auto* file=files->open(name,true,false,3,error);
+    if(!file){if(error==2 || error==3)return {};throw std::runtime_error("Cannot read selected-directory profile: "+name);}
+    std::unique_ptr<std::FILE,decltype(&std::fclose)> stream(file,std::fclose);std::vector<std::uint8_t> bytes(1024*1024+1);const auto count=std::fread(bytes.data(),1,bytes.size(),file);if(std::ferror(file))throw std::runtime_error("Cannot finish selected-directory profile read: "+name);bytes.resize(count);return Profile::read(bytes);
+}
+void save_profile(wr::Process& process,const Profile& profile,const std::filesystem::path& path){
+    auto* files=wr::mutable_files_for(process,path);if(!files){profile.save(path);return;}
+    files->replace(path.lexically_relative(process.options.data_root).generic_string(),profile.bytes());
 }
 std::string encode_profile_struct(std::span<const std::uint8_t> bytes){
     constexpr char digits[]="0123456789ABCDEF";std::string text;std::uint8_t sum{};text.reserve((bytes.size()+1)*2);

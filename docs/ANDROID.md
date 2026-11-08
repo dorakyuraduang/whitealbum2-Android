@@ -3,6 +3,26 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
+The default delivery returned to **0.2.47-shared-aot** on 2026-11-08. Use the
+standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
+`out/android/WA2-0.2.47-shared-aot-replace-native.apk` to update the experimental
+0.3.x app in place. The latter retains its application ID and signing identity;
+both APKs have identical DEX/native game code. No app is uninstalled by the
+build tools. Native-format manual saves remain present but are not AOT saves.
+
+The AOT host now reads and writes original-format saves and INI files directly
+in the selected Wa2Res through seekable provider descriptors. Root `Sys.sav`,
+`save_00.sav`..`save_99.sav`, `save_Q.sav`, `SYSTEM.ini`, `D3D.ini` and optional
+`default.ini` are accepted. The original main Documents/Leaf/WHITE ALBUM2 path
+aliases this root. Existing files in that full nested PC directory are a
+read fallback when the root file is absent; chapter-specific Documents folders
+remain distinct. There is no private save mirror or fallback to unrelated app
+data. Original PAKs remain read-only. Test mode uses the selected root's
+`test-mode/` and leaves normal files untouched. Disable test mode to use normal
+PC saves. Launcher switches keep using the same directory-bound configuration.
+Directory grants must include persistent read/write access. Synthetic file/API
+and pure Java tests do not establish on-device provider or gameplay behavior.
+
 The separate native migration development package now saves game data in the
 currently selected Wa2Res: root `Sys.sav`, `native-settings.wa2cfg` and
 `native-saves/`. FPS, long-press and test-mode launcher switches are in the

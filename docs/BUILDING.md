@@ -1,5 +1,42 @@
 # Building and verification
 
+## Active AOT host refresh
+
+The primary delivery returned to shared AOT on 2026-11-08; the native core
+below remains an independent experiment. Host/storage-only changes can use
+`scripts/verify_shared_refresh.py` with a previous passing full AOT receipt,
+the matching cached generated sources and a Windows SDL archive whose hash is
+in that receipt. The verifier checks every cached generated file against the
+receipt before building; it never rebuilds a deleted `.incbin` object or opens
+the original executable. It compiles the current shipped unmetered bodies,
+runs finite selected-directory/system/resource/scheduler/shell/save/subtitle
+checks, links both actual host architectures and audits Android JNI signatures.
+It explicitly does not claim the deleted historical oracle/performance suite
+ran. Modified static bodies or math sources require their independent checks.
+
+In a workspace with these private inputs, run serially:
+
+```powershell
+python scripts/verify_native_android_ui.py
+python scripts/verify_shared_refresh.py --reference private/verification-receipts/shared-aot-0.2.46.json --windows-sdl build/test-content-046/materials/windows/archives/libSDL2.a --zig-cache build/test-content-046/zig-cache
+python scripts/package_shared_hosts.py
+```
+
+The receipt/archives above are local examples, excluded from public source.
+Use paths to your own verified inputs. The legacy full verifier remains
+available when its oracle and baseline prerequisites exist. The refresh's
+source-bound report names its narrower scope and does not inherit old test
+results as freshly executed checks. Matching cached math source provenance is
+recorded separately from the newly executed file and host tests.
+
+The packager publishes the ordinary AOT application and an identical-code
+`WA2-0.2.47-shared-aot-replace-native.apk` with the experimental native app's
+installation ID. Version code 49 and the retained development key allow an
+in-place update from native version code 4. The audit compares DEX/native bytes,
+checks both installation identities, versions, signatures and resource-table
+alignment. LGPL relink materials apply to both since their native libraries
+are identical. Neither application is installed or launched by these tools.
+
 ## Independent native migration core
 
 The user selected a shared native engine target on 2026-11-06. Run

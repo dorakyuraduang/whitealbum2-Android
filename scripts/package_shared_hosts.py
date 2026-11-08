@@ -57,7 +57,9 @@ def fresh(path):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--check-only',action='store_true');args=parser.parse_args()
+    parser.add_argument('--check-only',action='store_true')
+    parser.add_argument('--zig-cache',type=Path,default=ROOT/'build/zig-cache')
+    args=parser.parse_args()
     kernel=ctypes.WinDLL('kernel32',use_last_error=True);kernel.GetCurrentProcess.restype=ctypes.c_void_p
     kernel.SetPriorityClass.argtypes=[ctypes.c_void_p,ctypes.c_uint]
     if not kernel.SetPriorityClass(kernel.GetCurrentProcess(),0x4000):raise ctypes.WinError(ctypes.get_last_error())
@@ -66,6 +68,7 @@ def main():
     prepare_app_icon()
     sdk=ROOT/'tools/android-sdk';ndk=sdk/'ndk/27.0.12077973';bt=sdk/'build-tools/34.0.0'
     jdk=ROOT/'tools/source-analysis/jdk-21.0.12.1+1';api=sdk/'platforms/android-35/android.jar'
+    if not api.is_file():api=ROOT/'tools/android-api-35/android.jar'
     cmake=ROOT/'tools/python/cmake/data/bin/cmake.exe';build=ROOT/'build/shared-host-win64'
     proof_path=ROOT/'logs/shared-aot-verification.json'
     proof=fresh(proof_path);native=Path(proof['actual_android_host']['file'])
@@ -75,7 +78,8 @@ def main():
         print('Common AOT checks and actual ARM64 host are current. No game or package was started.');return 0
     env=os.environ.copy();env.update(JAVA_HOME=str(jdk),ANDROID_HOME=str(sdk),ANDROID_SDK_ROOT=str(sdk),
         CMAKE_BUILD_PARALLEL_LEVEL='1',TEMP=str(ROOT/'build/temp'),TMP=str(ROOT/'build/temp'),
-        ZIG_GLOBAL_CACHE_DIR=str(ROOT/'build/zig-cache'),ZIG_LOCAL_CACHE_DIR=str(ROOT/'build/zig-local'))
+        ZIG_GLOBAL_CACHE_DIR=str(args.zig_cache.resolve()),ZIG_LOCAL_CACHE_DIR=str(ROOT/'build/zig-local'))
+    for name in ('TEMP','TMP','ZIG_GLOBAL_CACHE_DIR','ZIG_LOCAL_CACHE_DIR'):Path(env[name]).mkdir(parents=True,exist_ok=True)
     tracked=[Path(__file__),ROOT/'scripts/package_shared_relink.py',ROOT/'scripts/shared_relink.py',
         ROOT/'scripts/verify_shared_package.py',ROOT/'scripts/verify_sdl_jni.py',ROOT/'tests/apk_install_rules.py',ROOT/'config/release.json',ROOT/'android/app/src/main/AndroidManifest.xml',ROOT/'android/CMakeLists.txt',
         ROOT/'LICENSE',ROOT/'NOTICE.md',ROOT/'THIRD_PARTY_NOTICES.md',
@@ -101,7 +105,8 @@ def main():
         run([sys.executable,ROOT/'tests/apk_install_rules.py'])
         print('Building the Windows host from the same common game/AOT sources, one below-normal job.',flush=True)
         run([cmake,'-S',ROOT/'hosts','-B',build,'-G','Ninja','-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),
-            '-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'])
+            '-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
+            '-DWA2_SHARED_SDL_ARCHIVE='+proof.get('windows_sdl_archive',{}).get('file',str(ROOT/'build/wa2-win64/wa2_port/sdl2/libSDL2.a'))])
         run([cmake,'--build',build,'--target','wa2_native','--parallel','1'],2400)
         windows=build/'WA2_SDL2_x64.exe'
         from verify_shared_package import common_sources
@@ -160,6 +165,31 @@ def main():
             '--ks-key-alias','wa2-dev','--ks-pass','pass:android','--key-pass','pass:android','--out',signed,aligned])
         run([jdk/'bin/java.exe','-XX:ActiveProcessorCount=1','-Xmx256m','-jar',bt/'lib/apksigner.jar','verify','--verbose','--print-certs',signed])
         run([bt/'zipalign.exe','-c','4',signed])
+        # Replace the experimental native app without deleting its data. Both
+        # installation identities contain exactly the same AOT DEX/libraries.
+        replacement_manifest=ET.ElementTree(ET.fromstring(ET.tostring(top)))
+        replacement_manifest.getroot().set('package','org.wa2.port.nativeengine')
+        replacement_manifest.getroot().find('application').set('{'+NS+'}label','WA2 静态重编译')
+        for activity in replacement_manifest.getroot().find('application').findall('activity'):
+            name=activity.get('{'+NS+'}name','')
+            if name.startswith('.'):activity.set('{'+NS+'}name','org.wa2.port'+name)
+        replacement_xml=directory/'replace-native-manifest.xml';replacement_manifest.write(replacement_xml,encoding='utf-8',xml_declaration=True)
+        replacement_resources=directory/'replace-native-resources.apk'
+        run([bt/'aapt2.exe','link','--manifest',replacement_xml,'-I',api,compiled_resources,'-o',replacement_resources])
+        replacement_unsigned=directory/'replace-native-unsigned.apk'
+        with zipfile.ZipFile(unsigned) as base,zipfile.ZipFile(replacement_resources) as res,zipfile.ZipFile(replacement_unsigned,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as apk:
+            replaced=set(res.namelist())
+            for info in base.infolist():
+                if info.filename not in replaced:apk.writestr(info.filename,base.read(info),compress_type=info.compress_type)
+            for info in res.infolist():apk.writestr(info.filename,res.read(info),compress_type=zipfile.ZIP_STORED if info.filename=='resources.arsc' else info.compress_type)
+        replacement_aligned=directory/'replace-native-aligned.apk';replacement_signed=directory/'WA2-replace-native.apk'
+        run([bt/'zipalign.exe','-f','4',replacement_unsigned,replacement_aligned])
+        run([jdk/'bin/java.exe','-XX:ActiveProcessorCount=1','-Xmx256m','-jar',bt/'lib/apksigner.jar','sign','--ks',key,
+            '--ks-key-alias','wa2-dev','--ks-pass','pass:android','--key-pass','pass:android','--out',replacement_signed,replacement_aligned])
+        run([jdk/'bin/java.exe','-XX:ActiveProcessorCount=1','-Xmx256m','-jar',bt/'lib/apksigner.jar','verify','--verbose',replacement_signed])
+        run([bt/'zipalign.exe','-c','4',replacement_signed])
+        replacement_badging=subprocess.run(list(map(str,[bt/'aapt2.exe','dump','badging',replacement_signed])),cwd=ROOT,env=env,creationflags=flags,capture_output=True,text=True,encoding='utf-8',errors='replace',check=True,timeout=30).stdout
+        if "launchable-activity: name='org.wa2.port.LauncherActivity'" not in replacement_badging:raise ValueError('Replacement APK must retain the actual Java launcher class')
         for name,sha in bindings.items():
             if digest(ROOT/name)!=sha:raise ValueError('Package input changed: '+name)
         fresh(proof_path)
@@ -167,13 +197,14 @@ def main():
             windows=dict(file=str(windows_stripped),sha256=digest(windows_stripped),bytes=windows_stripped.stat().st_size))
         print('Checking replaceable codec relink materials for both hosts, without launching either.',flush=True)
         relink=package_relink(artifacts,console,env,flags)
-        status=dict(schema='wa2.shared-host-package.v1',source_sha256=bindings,verification_sha256=digest(proof_path),
+        status=dict(schema='wa2.shared-host-package.v1',version=release['name'],version_code=release['code'],source_sha256=bindings,verification_sha256=digest(proof_path),
             verification_report=str(proof_path),libraries=library_records,artifacts=artifacts,relink_materials=str(relink),relink_sha256=digest(relink),
             one_game_source_set=True,legacy_scene_host_linked=False,runtime_instruction_decoder_linked=False,jit_linked=False,
             source_abi_register_state_retained=True,primary_storage_resource_directory='Wa2Res',original_resources_in_apk=False,
             android_launcher_settings=True,android_local_wa2res_selection=True,android_fps_preference=True,
             native_math_function_ports=[item['name'] for item in json.loads((ROOT/'generated/shared-aot/manifest.json').read_text())['native_function_ports']],native_math_checks=proof['crt_math_paths'],
             cached_source_initial_data_included=True,requested_refresh_hz=120,measured_fps=None,android_device_verified=False,game_launched=False,screen_access=False,
+            selected_directory_saves_and_configuration=True,native_replacement=dict(file=str(replacement_signed),sha256=digest(replacement_signed),application_id='org.wa2.port.nativeengine'),
             complete_gameplay_verified=False,partially_admitted_entries=proof['partially_admitted_entries'],
             unsupported_instruction_sites=proof['unsupported_instruction_sites'],maximum_build_jobs=1,passed=True)
         from verify_shared_package import verify
@@ -181,6 +212,8 @@ def main():
         destinations={'android':output/'android/WA2-arm64-dev.apk','windows':output/'WA2_SDL2_x64.exe'}
         for host,path in destinations.items():
             publish_file(artifacts[host]['file'],path);artifacts[host]['file']=str(path)
+        replacement_destination=output/'android'/('WA2-'+release['name']+'-replace-native.apk')
+        publish_file(replacement_signed,replacement_destination);status['native_replacement']['file']=str(replacement_destination)
         notices=output/'licenses/wa2-subtitles';notices.mkdir(parents=True,exist_ok=True)
         for name in ('LICENSE','FONT-NOTICE.txt','README.md','source.json'):
             publish_file(ROOT/'third_party/wa2_subtitles'/name,notices/name)

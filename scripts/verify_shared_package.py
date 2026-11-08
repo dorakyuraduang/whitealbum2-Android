@@ -49,6 +49,9 @@ def verify(status,publish=False):
     if digest(verification)!=status['verification_sha256']:raise ValueError('Compiled verification changed')
     proof=json.loads(verification.read_text())
     if not proof['passed']:raise ValueError('Shared code verification failed')
+    if status.get('selected_directory_saves_and_configuration'):
+        files=proof.get('selected_directory_files',{})
+        if not files.get('passed') or files.get('cases',0)<40 or not files.get('private_fallback_forbidden'):raise ValueError('Missing selected-directory save/configuration checks')
     subtitles=proof['shared_main_story_subtitles']
     if not subtitles['passed'] or subtitles['assets']['special_contents_included'] or subtitles['assets']['cues']!=315:
         raise ValueError('Missing main-only subtitle proof')
@@ -91,6 +94,23 @@ def verify(status,publish=False):
     signer=run([ROOT/'tools/source-analysis/jdk-21.0.12.1+1/bin/java.exe','-XX:ActiveProcessorCount=1','-Xmx256m',
         '-jar',build_tools/'lib/apksigner.jar','verify','--verbose',apk])
     if not re.search(r'Verified using v2 scheme.*: true',signer):raise ValueError('APK v2 signature is required for every supported Android version')
+    if status.get('version'):
+        badging=run([build_tools/'aapt2.exe','dump','badging',apk])
+        if f"versionName='{status['version']}'" not in badging or f"versionCode='{status['version_code']}'" not in badging:raise ValueError('Packaged AOT version does not match its release')
+    replacement=status.get('native_replacement')
+    if replacement:
+        path=Path(replacement['file'])
+        if digest(path)!=replacement['sha256']:raise ValueError('Native replacement APK changed')
+        verify_resource_table(path)
+        badging=run([build_tools/'aapt2.exe','dump','badging',path])
+        if "package: name='org.wa2.port.nativeengine'" not in badging or f"versionCode='{status['version_code']}'" not in badging or f"versionName='{status['version']}'" not in badging:raise ValueError('Wrong native replacement installation identity/version')
+        if "launchable-activity: name='org.wa2.port.LauncherActivity'" not in badging:raise ValueError('Replacement manifest must point to the actual Java launcher class')
+        with zipfile.ZipFile(apk) as standard,zipfile.ZipFile(path) as other:
+            for name in standard.namelist():
+                if name=='classes.dex' or name.endswith('.so'):
+                    if standard.read(name)!=other.read(name):raise ValueError('Replacement must contain identical static game code: '+name)
+        signer2=run([ROOT/'tools/source-analysis/jdk-21.0.12.1+1/bin/java.exe','-XX:ActiveProcessorCount=1','-Xmx256m','-jar',build_tools/'lib/apksigner.jar','verify','--verbose',path])
+        if not re.search(r'Verified using v2 scheme.*: true',signer2):raise ValueError('Native replacement lacks its APK v2 signature')
     run([build_tools/'zipalign.exe','-c','4',apk])
     from verify_sdl_jni import verify as verify_sdl_jni
     sdl=Path(status['libraries']['libSDL2.so']['stripped_file'])
