@@ -55,7 +55,7 @@ public final class LauncherActivity extends Activity {
         choose = new Button(this); choose.setText("选择资源文件夹"); choose.setAllCaps(false); choose.setTextColor(TEXT);
         choose.setBackgroundTintList(ColorStateList.valueOf(0xff30474b)); card.addView(choose, row(14));
         choose.setOnClickListener(view -> pickDirectory());
-        card.addView(text("选择存放原版 PAK 的 Wa2Res 文件夹，并保留 IC 子目录。资源直接读取；存档和游戏配置也保存在所选目录，可放入 PC 版存档。", 13, MUTED), row(8));
+        card.addView(text("选择存放原版 PAK 的文件夹，名称不限，并保留 IC 子目录。资源直接读取；存档和游戏配置也保存在所选目录，可放入 PC 版存档。", 13, MUTED), row(8));
         fps = new Switch(this); fps.setText("显示 FPS 和帧耗时"); fps.setTextColor(TEXT); fps.setTextSize(16); fps.setPadding(0, dp(12), 0, dp(12));
         fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setShowFps(this, checked,this::saved);}});
         content.addView(fps, row(16));
@@ -71,12 +71,15 @@ public final class LauncherActivity extends Activity {
         start.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); content.addView(start, row(16));
         start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));
         status = text("", 13, MUTED); status.setMinHeight(dp(48)); content.addView(status, row(12));
+        Button diagnostics=new Button(this);diagnostics.setText("复制上次运行诊断");diagnostics.setAllCaps(false);diagnostics.setTextColor(TEXT);
+        diagnostics.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(diagnostics,row(8));
+        diagnostics.setOnClickListener(view->{if(!busy)RuntimeDiagnostics.copy(this,status);});
         setContentView(scroll); refresh();Uri remembered=ResourceDirectory.selectedTree(this);if(remembered!=null)prepare(remembered,0,false);
     }
     private void saved(String problem) { runOnUiThread(() -> {if(isFinishing() || isDestroyed() || busy)return;status.setText(problem!=null?"保存启动设置失败："+problem:LaunchSettings.saving(this)?"正在保存启动设置…":"启动设置已保存到所选游戏目录。");}); }
     private void refresh() {
         Uri tree = ResourceDirectory.selectedTree(this);
-        directory.setText(tree == null ? "尚未选择 · 默认位置：内部存储 / Wa2Res" : ResourceDirectory.displayLocation(tree));
+        directory.setText(tree == null ? "尚未选择资源文件夹 · 名称不限" : ResourceDirectory.displayLocation(tree));
         choose.setEnabled(!busy); start.setEnabled(!busy && tree != null && profileReady);
         refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));refreshing=false;
         for(Switch control:new Switch[]{fps,longPress,testMode})control.setEnabled(!busy && profileReady);
@@ -103,7 +106,7 @@ public final class LauncherActivity extends Activity {
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || generation != token) return;
                 busy = false;profileReady=failure==null;refresh();
-                if (failure != null) { status.setText(failure + "\n请重新选择并授权可读写的 Wa2Res 文件夹。"); return; }
+                if (failure != null) { status.setText(failure + "\n请重新选择并授权可读写的游戏资源文件夹，名称不限。"); return; }
                 status.setText("已找到 " + found + " 个资源包。");
                 if (launch) {Intent session=new Intent(this,Wa2Activity.class);LaunchSettings.applySession(this,session);launching = true; busy = true; refresh(); status.setText("正在启动游戏…"); startActivity(session);}
             });

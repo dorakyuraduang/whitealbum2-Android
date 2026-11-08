@@ -18,6 +18,11 @@ Selected-file fixtures also count metadata queries at the common file boundary
 and check changes made between API operations. The Java directory snapshot test
 checks 400 lookups with one provider-directory query, fresh next-operation data,
 publication updates and ambiguity bounds without using an Android provider.
+The save-inventory fixture calls unchanged static reader 0x4234c0 on synthetic
+headers in both memory modes. For 100 slots with two present files, its baseline
+uses 198 metadata queries; the scoped version uses one directory listing and
+still opens both payloads. Further checks cover mutation, frame/age expiry,
+ordinary/worker reads, writer exclusion and providers that cannot list siblings.
 It explicitly does not claim the deleted historical oracle/performance suite
 ran. Modified static bodies or math sources require their independent checks.
 
@@ -37,8 +42,8 @@ results as freshly executed checks. Matching cached math source provenance is
 recorded separately from the newly executed file and host tests.
 
 The packager publishes the ordinary AOT application and an identical-code
-`WA2-0.2.49-shared-aot-replace-native.apk` with the experimental native app's
-installation ID. Version code 51 and the retained development key allow an
+`WA2-0.2.50-shared-aot-replace-native.apk` with the experimental native app's
+installation ID. Version code 52 and the retained development key allow an
 in-place update from native version code 4. The audit compares DEX/native bytes,
 checks both installation identities, versions, signatures and resource-table
 alignment. LGPL relink materials apply to both since their native libraries

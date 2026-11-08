@@ -67,7 +67,7 @@ public final class FileChooser {
         for(File child:found)if(!child.getName().startsWith(".")) { choices.add(child);labels.add(child.getName()); }
         ListView list=new ListView(activity);list.setAdapter(new ArrayAdapter<>(activity,android.R.layout.simple_list_item_1,labels));
         LinearLayout layout=new LinearLayout(activity);layout.setOrientation(LinearLayout.VERTICAL);TextView caption=new TextView(activity);
-        caption.setText(directory.equals(base)?"Wa2Res（当前游戏目录）":base.toPath().relativize(directory.toPath()).toString());caption.setPadding(16,8,16,8);layout.addView(caption);layout.addView(list,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,300));
+        caption.setText(directory.equals(base)?"当前游戏目录":base.toPath().relativize(directory.toPath()).toString());caption.setPadding(16,8,16,8);layout.addView(caption);layout.addView(list,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,300));
         folderDialog=new AlertDialog.Builder(activity).setTitle(request.getString("title")).setView(layout)
             .setPositiveButton("选择此目录",(dialog,which) -> finish(directory.getPath())).setNegativeButton(android.R.string.cancel,(dialog,which) -> finish(null)).setOnCancelListener(dialog -> finish(null)).create();
         list.setOnItemClickListener((parent,view,position,row) -> { try { folderDialog.dismiss();browseFolder(base,choices.get(position)); } catch(Throwable error) { fail(error); } });folderDialog.show();

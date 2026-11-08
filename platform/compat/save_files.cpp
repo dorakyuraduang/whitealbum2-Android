@@ -6,6 +6,7 @@
 #include <chrono>
 #include <fstream>
 #include <map>
+#include <sstream>
 #include <stdexcept>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -31,26 +32,80 @@ std::optional<std::string> mapped(std::string_view value,bool folder=false){
 }
 class Saves final:public wr::MutableFiles {
     std::shared_ptr<wr::MutableFiles> files_;std::string prefix_;
+    SaveReadScope scope_;
+    struct Inventory {
+        std::optional<std::uint64_t> key;std::chrono::steady_clock::time_point expires;
+        std::optional<std::uint64_t> declined_key;std::chrono::steady_clock::time_point declined_until;
+        std::map<std::string,Info> root,legacy;bool legacy_loaded{},have_documents{};
+        std::uint64_t builds{},hits{},declines{},info_calls{},list_calls{},open_calls{},info_ns{},list_ns{},open_ns{};
+        void invalidate(){key.reset();declined_key.reset();}
+        struct Mutation {
+            Inventory& value;
+            explicit Mutation(Inventory& v):value(v){value.invalidate();}
+            ~Mutation(){value.invalidate();}
+        };
+        struct Timer {
+            std::uint64_t& calls;std::uint64_t& total;std::chrono::steady_clock::time_point start=std::chrono::steady_clock::now();
+            Timer(std::uint64_t& c,std::uint64_t& t):calls(c),total(t){++calls;}
+            ~Timer(){total+=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count();}
+        };
+    };
+    std::shared_ptr<Inventory> inventory_=std::make_shared<Inventory>();
     std::string physical(std::string_view name){return name.empty() && !prefix_.empty()?prefix_.substr(0,prefix_.size()-1):prefix_+std::string(name);}
+    std::optional<Info> inspect(std::string_view name){Inventory::Timer timer(inventory_->info_calls,inventory_->info_ns);return files_->info(name);}
+    std::vector<Info> entries(std::string_view name){Inventory::Timer timer(inventory_->list_calls,inventory_->list_ns);return files_->list(name);}
+    bool snapshot(){
+        const auto key=scope_?scope_():std::nullopt;auto& cache=*inventory_;
+        if(!key){cache.invalidate();return false;}
+        const auto now=std::chrono::steady_clock::now();
+        if(cache.declined_key==key && now<cache.declined_until)return false;
+        if(cache.key==key && now<cache.expires){++cache.hits;return true;}
+        cache.invalidate();cache.root.clear();cache.legacy.clear();cache.legacy_loaded=false;cache.have_documents=false;
+        try{for(auto item:entries(physical(""))){const auto name=fold(item.name);
+            if((item.attributes&16) && name=="documents")cache.have_documents=true;
+            if(file_name(name) && !cache.root.emplace(name,std::move(item)).second)throw std::runtime_error("Ambiguous save inventory filename");
+        }}catch(const std::runtime_error&){
+            // An optional directory optimization must not break a backend
+            // that can open the requested file but cannot list its siblings.
+            cache.root.clear();cache.declined_key=key;cache.declined_until=now+std::chrono::milliseconds(250);++cache.declines;return false;
+        }
+        cache.key=key;cache.expires=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);++cache.builds;return true;
+    }
     std::pair<std::string,std::optional<Info>> locate(const std::string& name){
-        auto path=physical(name);auto info=files_->info(path);if(info)return {std::move(path),std::move(info)};
-        if(name.find('/')==name.npos && file_name(name)){const auto legacy=physical(std::string(main_folder)+"/"+name);if(auto found=files_->info(legacy))return {legacy,std::move(found)};}
+        auto path=physical(name);
+        if(name.find('/')==name.npos && file_name(name) && snapshot()){
+            auto& cache=*inventory_;if(auto found=cache.root.find(name);found!=cache.root.end())return {std::move(path),found->second};
+            if(cache.have_documents && !cache.legacy_loaded){
+                try{for(auto item:entries(physical(main_folder))){const auto key=fold(item.name);if(file_name(key) && !cache.legacy.emplace(key,std::move(item)).second)throw std::runtime_error("Ambiguous legacy save inventory filename");}}
+                catch(const std::runtime_error&){
+                    const auto key=cache.key;cache.invalidate();cache.declined_key=key;cache.declined_until=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);++cache.declines;
+                    if(auto info=inspect(path))return {std::move(path),std::move(info)};
+                    const auto legacy=physical(std::string(main_folder)+"/"+name);if(auto info=inspect(legacy))return {legacy,std::move(info)};
+                    return {std::move(path),{}};
+                }
+                cache.legacy_loaded=true;
+            }
+            if(auto found=cache.legacy.find(name);found!=cache.legacy.end())return {physical(std::string(main_folder)+"/"+name),found->second};
+            return {std::move(path),{}};
+        }
+        auto info=inspect(path);if(info)return {std::move(path),std::move(info)};
+        if(name.find('/')==name.npos && file_name(name)){const auto legacy=physical(std::string(main_folder)+"/"+name);if(auto found=inspect(legacy))return {legacy,std::move(found)};}
         return {std::move(path),{}};
     }
     std::string existing(const std::string& name){return locate(name).first;}
 public:
     std::string identity(std::string_view value)override{const auto name=mapped(value);return name?existing(*name):physical(fold(value));}
-    Saves(std::shared_ptr<wr::MutableFiles> files,bool test):files_(std::move(files)),prefix_(test?"test-mode/":""){
+    Saves(std::shared_ptr<wr::MutableFiles> files,bool test,SaveReadScope scope):files_(std::move(files)),prefix_(test?"test-mode/":""),scope_(std::move(scope)){
         if(!files_)throw std::invalid_argument("Missing selected game directory");
         if(test){const auto error=files_->directory("test-mode");if(error && error!=183)throw std::runtime_error("Cannot create selected-directory test profile");}
     }
     std::optional<Info> info(std::string_view value)override{
-        if(auto directory=mapped(value,true)){if(directory->empty() || *directory=="documents" || *directory=="documents/leaf")return Info{std::string(value),0,0,16};auto result=files_->info(physical(*directory));if(result)result->name=std::string(value);return result;}
+        if(auto directory=mapped(value,true)){if(directory->empty() || *directory=="documents" || *directory=="documents/leaf")return Info{std::string(value),0,0,16};auto result=inspect(physical(*directory));if(result)result->name=std::string(value);return result;}
         const auto path=mapped(value);if(!path)return {};auto result=locate(*path).second;if(result)result->name=std::string(value);return result;
     }
     std::vector<Info> list(std::string_view value)override{
         const auto path=mapped(value,true);if(!path)return {};std::map<std::string,Info> result;
-        const auto add=[&](std::string_view directory){for(auto item:files_->list(physical(directory))){const auto logical=path->empty()?item.name:*path+"/"+item.name;if((item.attributes&16)?folder_name(fold(logical)):mapped(logical).has_value())result.try_emplace(fold(item.name),std::move(item));}};
+        const auto add=[&](std::string_view directory){for(auto item:entries(physical(directory))){const auto logical=path->empty()?item.name:*path+"/"+item.name;if((item.attributes&16)?folder_name(fold(logical)):mapped(logical).has_value())result.try_emplace(fold(item.name),std::move(item));}};
         add(*path);if(path->empty())add(main_folder);
         if(path->empty())result.try_emplace("documents",Info{"Documents",0,0,16});
         if(*path=="documents")result.try_emplace("leaf",Info{"Leaf",0,0,16});
@@ -58,21 +113,27 @@ public:
         std::vector<Info> entries;for(auto& [key,item]:result)entries.push_back(std::move(item));return entries;
     }
     std::FILE* open(std::string_view value,bool read,bool write,U32 creation,U32& error)override{
-        const auto path=mapped(value);if(!path){error=5;return nullptr;}return files_->open((creation==3 || creation==4 || creation==5)?existing(*path):physical(*path),read,write,creation,error);
+        std::optional<Inventory::Mutation> mutation;if(write || creation!=3)mutation.emplace(*inventory_);
+        const auto path=mapped(value);if(!path){error=5;return nullptr;}const auto resolved=(creation==3 || creation==4 || creation==5)?existing(*path):physical(*path);
+        Inventory::Timer timer(inventory_->open_calls,inventory_->open_ns);return files_->open(resolved,read,write,creation,error);
     }
     OpenPlan prepare_open(std::string_view value)override{
         const auto name=mapped(value);
         if(!name)return {{},physical(fold(value)),[](bool,bool,U32,U32& error)->std::FILE*{error=5;return nullptr;}};
         auto [found,info]=locate(*name);
-        return {std::move(info),found,[files=files_,existing=found,primary=physical(*name)](bool read,bool write,U32 creation,U32& error){
+        return {std::move(info),found,[files=files_,cache=inventory_,existing=found,primary=physical(*name)](bool read,bool write,U32 creation,U32& error){
+            std::optional<Inventory::Mutation> mutation;if(write || creation!=3)mutation.emplace(*cache);
+            Inventory::Timer timer(cache->open_calls,cache->open_ns);
             return files->open((creation==3 || creation==4 || creation==5)?existing:primary,read,write,creation,error);
         }};
     }
-    U32 directory(std::string_view value)override{const auto path=mapped(value,true);if(!path)return 5;if(path->empty())return 183;std::string parent;std::size_t at{};while((at=path->find('/',at))!=path->npos){parent=path->substr(0,at++);const auto error=files_->directory(physical(parent));if(error && error!=183)return error;}return files_->directory(physical(*path));}
-    U32 remove(std::string_view value,bool directory)override{const auto path=mapped(value,directory);if(!path || directory)return 5;return files_->remove(existing(*path),false);}
-    U32 move(std::string_view from,std::string_view to)override{const auto a=mapped(from),b=mapped(to);if(!a || !b)return 5;if(info(to))return 183;return files_->move(existing(*a),physical(*b));}
-    U32 attributes(std::string_view value,U32 flags)override{const auto path=mapped(value);return path?files_->attributes(existing(*path),flags):5;}
-    void replace(std::string_view value,std::span<const std::uint8_t> bytes)override{const auto path=mapped(value);if(!path || bytes.size()>64u*1024*1024)throw std::runtime_error("Unsupported selected-directory save/configuration path: "+std::string(value));files_->replace(physical(*path),bytes);}
+    U32 directory(std::string_view value)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value,true);if(!path)return 5;if(path->empty())return 183;std::string parent;std::size_t at{};while((at=path->find('/',at))!=path->npos){parent=path->substr(0,at++);const auto error=files_->directory(physical(parent));if(error && error!=183)return error;}return files_->directory(physical(*path));}
+    U32 remove(std::string_view value,bool directory)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value,directory);if(!path || directory)return 5;return files_->remove(existing(*path),false);}
+    U32 move(std::string_view from,std::string_view to)override{Inventory::Mutation mutation(*inventory_);const auto a=mapped(from),b=mapped(to);if(!a || !b)return 5;if(info(to))return 183;return files_->move(existing(*a),physical(*b));}
+    U32 attributes(std::string_view value,U32 flags)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);return path?files_->attributes(existing(*path),flags):5;}
+    void replace(std::string_view value,std::span<const std::uint8_t> bytes)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);if(!path || bytes.size()>64u*1024*1024)throw std::runtime_error("Unsupported selected-directory save/configuration path: "+std::string(value));files_->replace(physical(*path),bytes);}
+    std::string report()const{const auto& c=*inventory_;std::ostringstream out;
+        out<<"{\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
 };
 class Local final:public wr::MutableFiles {
     std::filesystem::path root_;
@@ -100,8 +161,9 @@ public:
 };
 }
 std::shared_ptr<wr::MutableFiles> local_files(const std::filesystem::path& root){return std::make_shared<Local>(root);}
-std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test){
-    auto result=std::make_shared<Saves>(std::move(source),test);
+std::string save_files_report(const std::shared_ptr<wr::MutableFiles>& files){if(auto* saves=dynamic_cast<const Saves*>(files.get()))return saves->report();return "{}";}
+std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope){
+    auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope));
     if(test){for(const auto* folder:{"Documents","Documents/Leaf","Documents/Leaf/WHITE ALBUM2 -closing chapter-","Documents/Leaf/WHITE ALBUM2 -introductory chapter-"}){const auto error=result->directory(folder);if(error && error!=183)throw std::runtime_error("Cannot prepare selected-directory test saves");}
         for(const auto* file:{"Sys.sav","Documents/Leaf/WHITE ALBUM2 -closing chapter-/Sys.sav","Documents/Leaf/WHITE ALBUM2 -introductory chapter-/Sys.sav"}){
             std::vector<std::uint8_t> bytes(testing::system_save_bytes);U32 error{};auto* opened=result->open(file,true,false,3,error);

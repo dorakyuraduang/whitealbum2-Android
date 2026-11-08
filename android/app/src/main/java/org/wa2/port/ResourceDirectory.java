@@ -17,7 +17,7 @@ import java.util.Locale;
 import java.util.ArrayList;
 import java.nio.ByteBuffer;
 
-/** Original PAKs stay in the selected local Wa2Res folder; no resource imports. */
+/** Original PAKs stay in the user-selected folder; no resource imports. */
 final class ResourceDirectory {
     private static final int REQUEST_DIRECTORY = 0x5741;
     private static final Object LOCK = new Object();
@@ -63,9 +63,9 @@ final class ResourceDirectory {
                 LOCK.notifyAll(); return;
             }
         }
-        if (fixedLocation(tree)) load(activity, token, tree, false);
+        if (validTree(tree)) load(activity, token, tree, false);
         else {
-            // Ignore remembered trees outside the local Wa2Res contract.
+            // Discard malformed or non-tree selections, independent of name.
             preferences().edit().remove(TREE_KEY).apply();
             if (tree != null) {
                 try { context.getContentResolver().releasePersistableUriPermission(tree,
@@ -95,20 +95,20 @@ final class ResourceDirectory {
     static Uri selectedTree(Context application) {
         String saved = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).getString(TREE_KEY, null);
         if (saved == null) return null;
-        try { Uri tree = Uri.parse(saved); return fixedLocation(tree) ? tree : null; }
+        try { Uri tree = Uri.parse(saved); return validTree(tree) ? tree : null; }
         catch (RuntimeException error) { return null; }
     }
 
     static String displayLocation(Uri tree) {
         try { return DocumentsContract.getTreeDocumentId(tree).replace("primary:", "内部存储 / ").replace(":", " / "); }
-        catch (RuntimeException error) { return "已选择的 Wa2Res"; }
+        catch (RuntimeException error) { return "已选择的游戏资源目录"; }
     }
 
     // Runs only on a launcher worker. Hand the bounded directory index to the
     // SDL activity, avoiding a second provider scan at game initialization.
     static int prepareSelection(Context application, Uri tree, int grantFlags) throws IOException {
         if (Looper.myLooper() == Looper.getMainLooper()) throw new IOException("目录检查必须在后台执行");
-        if (!fixedLocation(tree)) throw new IOException("请选择本机存储中的 Wa2Res 文件夹，不能选择其父目录或 IC 子目录。");
+        if (!validTree(tree)) throw new IOException("请选择存放原版 PAK 的游戏资源文件夹，名称不限。");
         ContentResolver resolver = application.getContentResolver();
         ArchiveNames<ArchiveDocument> found = scan(resolver, tree);
         SharedPreferences prefs = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
@@ -134,7 +134,7 @@ final class ResourceDirectory {
         synchronized (LOCK) { return owner == activity && generation == token; }
     }
 
-    private static boolean fixedLocation(Uri tree) {
+    private static boolean validTree(Uri tree) {
         if (tree == null || !"content".equals(tree.getScheme()) ||
                 !DocumentsContract.isTreeUri(tree)) return false;
         try {
@@ -144,12 +144,11 @@ final class ResourceDirectory {
 
     private static void choose(Activity activity, int token, String problem) {
         if (!current(activity, token) || activity.isFinishing()) return;
-        String message = "请选择存放原版资源的 Wa2Res 文件夹（默认：内部共享存储根目录 / Wa2Res）。"
-            + "请把原版 .pak 放入 Wa2Res，并保留 IC 子目录。"
-            + "请授权读写 Wa2Res，存档和游戏配置保存在这个目录；以后会沿用该授权。";
+        String message = "请选择存放原版 .pak 的游戏资源文件夹，文件夹名称不限，并保留原有 IC 子目录。"
+            + "请授权读写所选目录，存档和游戏配置也保存在这里；以后会沿用该授权。";
         if (problem != null) message = problem + "\n\n" + message;
         new AlertDialog.Builder(activity).setTitle("游戏资源").setMessage(message)
-            .setPositiveButton("授权 Wa2Res", (dialog, which) -> {
+            .setPositiveButton("选择并授权文件夹", (dialog, which) -> {
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
                 intent.addFlags(TREE_ACCESS |
                     Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION |
@@ -159,8 +158,8 @@ final class ResourceDirectory {
                 try { activity.startActivityForResult(intent, REQUEST_DIRECTORY); }
                 catch (RuntimeException error) { stop(activity, "无法打开系统文件夹选择器"); }
             })
-            .setNegativeButton("退出", (dialog, which) -> stop(activity, "未授权读取 Wa2Res"))
-            .setOnCancelListener(dialog -> stop(activity, "未授权读取 Wa2Res"))
+            .setNegativeButton("退出", (dialog, which) -> stop(activity, "未授权游戏资源目录"))
+            .setOnCancelListener(dialog -> stop(activity, "未授权游戏资源目录"))
             .show();
     }
 
@@ -181,9 +180,9 @@ final class ResourceDirectory {
             token = generation;
         }
         if (result != Activity.RESULT_OK || data == null || data.getData() == null) {
-            stop(activity, "未授权读取 Wa2Res");
-        } else if (!fixedLocation(data.getData())) {
-            choose(activity, token, "目录不符：请选择本机存储中的 Wa2Res，不能选择其父目录或 IC 子目录。");
+            stop(activity, "未授权游戏资源目录");
+        } else if (!validTree(data.getData())) {
+            choose(activity, token, "请选择系统文件夹选择器提供的资源目录，文件夹名称不限。");
         } else {
             boolean persist = (data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0 &&
                 (data.getFlags() & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0;
@@ -204,7 +203,7 @@ final class ResourceDirectory {
             if (cursor == null) throw new IOException("无法读取资源目录");
             int rows = 0;
             while (cursor.moveToNext()) {
-                if (++rows > 10000) throw new IOException("Wa2Res 中的目录条目过多");
+                if (++rows > 10000) throw new IOException("所选资源目录中的条目过多");
                 String id = cursor.getString(0), name = cursor.getString(1), mime = cursor.getString(2);
                 if (id == null || name == null) continue;
                 if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
@@ -236,7 +235,7 @@ final class ResourceDirectory {
         // The game has a separate introductory chapter. Index only its known
         // child directory; other folders and their contents are never scanned.
         if (introductory != null) scanFolder(resolver, tree, introductory, "IC/", found);
-        if (found.size() == 0) throw new IOException("Wa2Res 及其 IC 子目录中没有 .pak 资源包");
+        if (found.size() == 0) throw new IOException("所选目录及其 IC 子目录中没有 .pak 资源包");
         return found;
     }
 
@@ -245,7 +244,7 @@ final class ResourceDirectory {
         Thread worker = new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
-                if (!fixedLocation(tree)) throw new IOException("资源目录必须是本机存储中的 Wa2Res 文件夹");
+                if (!validTree(tree)) throw new IOException("资源目录必须通过系统文件夹选择器授权，名称不限");
                 ContentResolver resolver = application.getContentResolver();
                 ArchiveNames<ArchiveDocument> found = scan(resolver, tree);
                 if (!current(activity, token)) return;
@@ -266,7 +265,7 @@ final class ResourceDirectory {
                 boolean durable = false;
                 for (android.content.UriPermission permission : resolver.getPersistedUriPermissions())
                     if (permission.isReadPermission() && permission.isWritePermission() && tree.equals(permission.getUri())) durable = true;
-                if (!durable) throw new IOException("存档和配置需要 Wa2Res 的持久读写授权，请重新选择文件夹。");
+                if (!durable) throw new IOException("存档和配置需要所选目录的持久读写授权，请重新选择文件夹。");
                 synchronized (LOCK) {
                     if (owner != activity || generation != token) return;
                     archives = found;
@@ -346,7 +345,7 @@ final class ResourceDirectory {
         final Context application;
         final Uri tree;
         synchronized (LOCK) { awaitArchives(); application = context; tree = activeTree; }
-        if (tree == null) throw new IOException("Original files need the authorized Wa2Res directory");
+        if (tree == null) throw new IOException("Original files need an authorized game directory");
         final ContentResolver resolver = application.getContentResolver();
         String parent = DocumentsContract.getTreeDocumentId(tree);
         for (int n = 0; n < parts.length; ++n) {
@@ -365,7 +364,7 @@ final class ResourceDirectory {
     public static String[] legacySaveMetadata() throws IOException {
         final Context application; final Uri tree;
         synchronized (LOCK) { awaitArchives(); application = context; tree = activeTree; }
-        if (tree == null) throw new IOException("Original saves need the authorized Wa2Res directory");
+        if (tree == null) throw new IOException("Original saves need an authorized game directory");
         final ContentResolver resolver = application.getContentResolver();
         final ArrayList<String> result = new ArrayList<>();
         for (String prefix : LegacySavePath.DIRECTORIES) {

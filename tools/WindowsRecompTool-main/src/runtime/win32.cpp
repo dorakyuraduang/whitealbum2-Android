@@ -25,6 +25,15 @@
 namespace wr {
 namespace {
 using ApiFunction=std::function<U32(Process&)>;
+struct FileIoTimes {
+    struct Counts {std::uint64_t calls{},bytes{},ns{},maximum{};} reads,writes;
+    struct Timer {
+        Counts& value;U32& bytes;std::chrono::steady_clock::time_point start=std::chrono::steady_clock::now();
+        Timer(Counts& v,U32& b):value(v),bytes(b){++value.calls;}
+        ~Timer(){const auto elapsed=std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count());value.bytes+=bytes;value.ns+=elapsed;value.maximum=std::max(value.maximum,elapsed);}
+    };
+    std::string report()const{return "{\"read_calls\":"+std::to_string(reads.calls)+",\"read_bytes\":"+std::to_string(reads.bytes)+",\"read_api_ns\":"+std::to_string(reads.ns)+",\"maximum_read_api_ns\":"+std::to_string(reads.maximum)+",\"write_calls\":"+std::to_string(writes.calls)+",\"write_bytes\":"+std::to_string(writes.bytes)+",\"write_api_ns\":"+std::to_string(writes.ns)+",\"maximum_write_api_ns\":"+std::to_string(writes.maximum)+",\"includes_buffer_allocation_and_memory_copy\":true}";}
+};
 U32 arg(Process& p,unsigned n){return p.argument(n);}
 void kernel(Process& p,const std::string& name,unsigned args,ApiFunction function){p.register_api("kernel32.dll",name,args,std::move(function));}
 void zero(Memory& memory,U32 pointer,std::size_t count){std::vector<std::uint8_t> bytes(count);memory.copy_in(pointer,bytes);}
@@ -627,11 +636,13 @@ void install_win32(Process& p) {
             q.set_error(exists?183:0);
 #endif
         }return id;});
-    for(bool write:{false,true})kernel(p,write?"WriteFile":"ReadFile",5,[write](auto& q){auto it=q.state().files.find(arg(q,0));if(it==q.state().files.end()){q.set_error(6);return 0;}auto pointer=arg(q,1),size=arg(q,2),transferred=arg(q,3),overlap=arg(q,4);
+    auto file_io_times=std::make_shared<FileIoTimes>();p.state().reports["file_io"]=[file_io_times]{return file_io_times->report();};
+    for(bool write:{false,true})kernel(p,write?"WriteFile":"ReadFile",5,[write,file_io_times](auto& q){auto it=q.state().files.find(arg(q,0));if(it==q.state().files.end()){q.set_error(6);return 0;}auto pointer=arg(q,1),size=arg(q,2),transferred=arg(q,3),overlap=arg(q,4);
         if(overlap)throw GuestFault(FaultKind::unsupported,q.cpu.eip,"overlapped file I/O not implemented");if(!transferred)throw GuestFault(FaultKind::memory,0,"synchronous file I/O requires byte-count pointer");
         if(size>64u*1024*1024)throw GuestFault(FaultKind::unsupported,q.cpu.eip,"file I/O request exceeds safety bound");q.memory.check(transferred,4,Memory::Write);q.memory.check(pointer,size,write?Memory::Read:Memory::Write);
         auto& f=it->second;if((write && !f.write) || (!write && !f.read)){q.set_error(5);q.memory.store(transferred,0,32);return 0;}
-        std::vector<std::uint8_t> data(size);if(write)q.memory.copy_out(pointer,data);U32 done=0;bool success;
+        U32 done=0;FileIoTimes::Timer timer(write?file_io_times->writes:file_io_times->reads,done);
+        std::vector<std::uint8_t> data(size);if(write)q.memory.copy_out(pointer,data);bool success;
 #ifdef _WIN32
         DWORD count=0;const auto h=file_handle(f);success=(write?::WriteFile(h,data.data(),size,&count,nullptr) : ::ReadFile(h,data.data(),size,&count,nullptr))!=FALSE;
         done=count;if(!success)q.set_error(::GetLastError());

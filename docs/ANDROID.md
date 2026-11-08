@@ -4,15 +4,15 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.49-shared-aot**. Use the
+is **0.2.50-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.49-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.50-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
 
 The AOT host now reads and writes original-format saves and INI files directly
-in the selected Wa2Res through seekable provider descriptors. Root `Sys.sav`,
+in the selected game folder through seekable provider descriptors. Root `Sys.sav`,
 `save_00.sav`..`save_99.sav`, `save_Q.sav`, `SYSTEM.ini`, `D3D.ini` and optional
 `default.ini` are accepted. The original main Documents/Leaf/WHITE ALBUM2 path
 aliases this root. Existing files in that full nested PC directory are a
@@ -28,11 +28,15 @@ In 0.2.49, a common CreateFile operation resolves save aliases and metadata
 once before checking sharing and opening the descriptor. Android indexes each
 directory once inside a storage operation, including save inventory, rather
 than querying all children again for each entry. Snapshots are cleared at the
-next operation; there is no TTL, private save mirror or file-payload cache.
+next operation. In 0.2.50 the common AOT file adapter additionally shares the
+inventory across known source save-reader calls in the same save/load UI
+update. This inventory expires on writes, the next source frame or after at
+most 250 ms. File descriptors and payloads are always opened afresh. Ordinary
+file calls retain fresh per-operation metadata. There is no private save mirror.
 See [save-loading checks](SAVE_LOADING.md) for the observed code paths and limits.
 
 The separate native migration development package now saves game data in the
-currently selected Wa2Res: root `Sys.sav`, `native-settings.wa2cfg` and
+currently selected game folder: root `Sys.sav`, `native-settings.wa2cfg` and
 `native-saves/`. FPS, long-press and test-mode launcher switches are in the
 same root's `native-launcher.wa2cfg`; only the selected directory URI and its
 authorization are remembered by the app. Writes use one background queue and
@@ -76,7 +80,7 @@ an installation signed with the old key. The additional `parallel-test.apk`
 uses application ID `org.wa2.port.test` and launcher name **WA2 全内容测试**, so
 it can be installed beside the old app without uninstalling it. Both packages
 contain identical DEX/native libraries; only the installation identity and label
-differ. The parallel app has separate saves and preferences: select Wa2Res again
+differ. The parallel app has separate saves and preferences: select your game folder again
 and enable **测试模式（解锁全部内容）** there. It does not import old private saves.
 
 `0.2.45-shared-aot` extends the missing-target repair to 34 additional referenced
@@ -97,7 +101,7 @@ still requires gameplay testing. Install the update over the existing app.
 From `0.2.39-shared-aot`, the main-story audio-only captions from nxs7's patch
 are embedded and enabled automatically: 46 audio tracks, 315 timed captions.
 The whole SpecialContents subtitle set is excluded. No subtitle DLL, font file
-or additional subtitle data needs to be placed in Wa2Res. Caption matching and
+or additional subtitle data needs to be placed in the game folder. Caption matching and
 rendering use the same sources on Windows and Android; captions follow the
 existing game viewport instead of stretching to the phone screen. See
 [scope, licenses and verification limits](SUBTITLES.md).
@@ -115,16 +119,21 @@ changing timing. Other inputs retain the existing native floating path. The
 checks compare against cached static drawing and the verified previous native
 library; they do not measure Android gameplay or GPU throughput.
 
-1. Place your own original `.pak` files directly in `Wa2Res` and retain the `IC`
-   child folder. The default location is internal shared storage `/Wa2Res`.
-2. Open the app to its launch settings page. Choose the local `Wa2Res` folder
-   through Android's system directory picker. A nested Wa2Res or SD-card Wa2Res
-   is supported; select the resource folder itself rather than its parent or IC.
+1. Place your own original `.pak` files directly in a folder of your choice and
+   retain the original `IC` child folder. The folder name is unrestricted.
+2. Open the app to its launch settings page and select that folder through
+   Android's system directory picker. The provider must supply persistent
+   read/write grants and seekable file descriptors. Local storage and SD cards
+   normally provide these; opaque provider document IDs are supported.
 3. Set **显示 FPS 和帧耗时**, **长按快进**, and **测试模式（解锁全部内容）** as desired. Long-press fast-forward is
    enabled by default; test mode is off by default. The folder grant and switches are remembered for
    later launches; changing a switch saves it immediately.
 4. Tap **开始游戏**. The folder is checked in a background worker before the game
    initializes. Returning to the launcher allows settings to be changed.
+5. If a load remains slow, exit normally through the game menu, then tap
+   **复制上次运行诊断** on the launcher. It copies a bounded summary of the last
+   run's I/O, resource and scheduler counters/times, plus the release/error.
+   It contains no screen image or save payload and does not monitor the game.
 
 From `0.2.46-shared-aot`, **测试模式（解锁全部内容）** uses a separate test
 profile with all known content gates unlocked. Toggle it on and tap **开始游戏**.
@@ -147,7 +156,7 @@ On each test launch it upgrades existing chapter-only system saves in place:
 The rest of the gallery block, unknown system flags, choice-state flags 99/900,
 and all high bits are preserved. Manual/quick saves and settings are untouched;
 an already-unlocked Sys.sav is not rewritten. The adapter does not create a
-playable scene snapshot or supply content absent from Wa2Res. Original PAKs stay
+playable scene snapshot or supply content absent from the game folder. Original PAKs stay
 external. Windows `--test-mode` uses the same implementation.
 
 Memory checks load synthetic saves with the actual static readers, enumerate

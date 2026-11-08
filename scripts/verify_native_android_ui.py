@@ -62,6 +62,8 @@ def main():
         if storage['cases']<1020 or storage['guards']<24 or not storage['fault_injected_publication'] or not storage['interrupted_write_recovery'] or storage['source_files_opened'] or storage['android_device_verified']:raise ValueError('Incomplete selected-directory publication checks')
         profile=reports['LaunchProfileTest']
         compatible=reports['CompatibleStoragePathTest']
+        location=reports['ResourceLocationTest']
+        if not location['folder_name_unrestricted'] or not location['opaque_document_ids_allowed'] or not location['arbitrary_directory_allowed']:raise ValueError('Folder selection still requires a fixed name/provider')
         directory=reports['DocumentDirectoryTest']
         if directory['lookups']!=400 or directory['same_directory_queries_for_400_lookups']!=1 or not all(directory[key] for key in ('operation_scoped_snapshot','next_operation_sees_external_edits','publication_index_updates','ambiguity_and_size_guards')):raise ValueError('Incomplete operation-scoped document directory checks')
         if compatible['cases']<852 or compatible['guards']<22 or compatible['original_files_opened'] or compatible['android_device_verified']:raise ValueError('Incomplete shared-AOT selected-directory path checks')
