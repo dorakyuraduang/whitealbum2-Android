@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 struct SDL_Window;
@@ -34,5 +35,6 @@ public:
                                             std::uint32_t source_width,std::uint32_t source_height) const;
     virtual void frame_submitted()=0;
 };
-std::shared_ptr<MoviePresenter> install(wr::Process&,std::shared_ptr<SurfaceHost>,std::shared_ptr<subtitles::Playback> subtitles={});
+using PresentationAcceleration=std::function<bool()>;
+std::shared_ptr<MoviePresenter> install(wr::Process&,std::shared_ptr<SurfaceHost>,std::shared_ptr<subtitles::Playback> subtitles={},PresentationAcceleration={});
 }

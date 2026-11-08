@@ -3,9 +3,10 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
-The default delivery returned to **0.2.47-shared-aot** on 2026-11-08. Use the
+The default delivery returned to shared AOT on 2026-11-08; the current version
+is **0.2.48-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.47-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.48-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.

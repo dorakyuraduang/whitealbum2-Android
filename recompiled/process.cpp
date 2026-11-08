@@ -1,4 +1,5 @@
 #include "process.hpp"
+#include "fast_forward.hpp"
 #include "movie_settings.hpp"
 #include "subtitles.hpp"
 #include "../platform/clock.hpp"
@@ -44,7 +45,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     wr::install_wa2_native_resources(process_,true);
     wr::install_wa2_native_vorbis(process_,true);
     wr::install_wa2_registry(process_);
-    wa2::platform::compat::install_scheduler(process_);
+    wa2::platform::compat::install_scheduler(process_,[this](auto ms,auto caller){return source_fast_forward_idle(process_.memory,ms,caller);});
     wa2::platform::compat::install_system(process_,prepare_movie_profile);
     wa2::platform::compat::install_text(process_);
     wa2::platform::compat::install_locale(process_);
@@ -52,7 +53,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     wa2::platform::compat::install_acm(process_);
     wa2::platform::compat::install_shell(process_,wa2::platform::compat::native_shell_services(process_.options.data_root));
     auto sound=wr::install_wa2_audio_service(process_);
-    if(graphics){auto renderer=wa2::graphics::install(process_,std::move(graphics),subtitle_player);
+    if(graphics){auto renderer=wa2::graphics::install(process_,std::move(graphics),subtitle_player,[this]{return process_.state().current_thread_id==1 && source_fast_forward(process_.memory);});
         wa2::platform::compat::install_media(process_,std::move(sound),std::move(renderer));}
     // Exit/error diagnostics only: these are the input calculator's existing
     // cached data contracts, shared by every host. No frame pixels are read.

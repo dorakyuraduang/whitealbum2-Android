@@ -13,6 +13,7 @@
 #include "screen_vertices.hpp"
 #include "texture_batch.hpp"
 #include "frame_metrics.hpp"
+#include "presentation_pacing.hpp"
 #include "../../recompiled/native_sprites.hpp"
 #include "pixel_transfer.hpp"
 #include "../../engine/subtitles.hpp"
@@ -91,6 +92,15 @@ struct DecodedVertex {
 class Graphics final:public wa2::graphics::MoviePresenter {
     Process& p;wa2::platform::compat::InterfaceHandles handles;GlApi gl;SDL_Window* window{};SDL_GLContext context{};MOJOSHADER_glContext* mojo{};
     std::shared_ptr<wa2::graphics::SurfaceHost> host;
+    wa2::graphics::PresentationAcceleration accelerated;
+    wa2::graphics::PresentationPacing presentation_pacing;
+    std::uint64_t coalesced_presents{},swap_interval_changes{};
+    int effective_swap_interval{};
+    void change_swap_interval(const std::optional<int>& interval){
+        if(!interval)return;
+        effective_swap_interval=*interval;++swap_interval_changes;
+        swap_interval_result=SDL_GL_SetSwapInterval(*interval);actual_swap_interval=SDL_GL_GetSwapInterval();
+    }
     std::shared_ptr<wa2::subtitles::Playback> subtitles;
     GLuint subtitle_texture{};MOJOSHADER_glShader* subtitle_shader{};
     const wa2::subtitles::Cue* subtitle_cue{};
@@ -289,11 +299,11 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     void texture_mode(bool enabled){if(texture_batch_mode!=enabled){flush();texture_batch_mode=enabled;applied.reset();}}
     bool batch_textures(std::span<const wa2::graphics::ScreenVertex>,U32,U32,std::span<const U32>);
     U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {});
-    U32 present(Args);D3DCAPS9 caps();
+    U32 present(Args,bool force=false);D3DCAPS9 caps();
     U32 copy(const std::shared_ptr<ImageData>&,RECT,const std::uint8_t*,U32,D3DFORMAT,RECT,U32,U32);
     std::vector<DWORD> shader(U32);U32 compile(U32,U32,Kind);
 public:
-    explicit Graphics(Process& q,std::shared_ptr<wa2::graphics::SurfaceHost> h,std::shared_ptr<wa2::subtitles::Playback> subs):p(q),handles(q),host(std::move(h)),subtitles(std::move(subs)){if(!host)throw std::invalid_argument("graphics surface host required");}~Graphics(){shutdown();}
+    explicit Graphics(Process& q,std::shared_ptr<wa2::graphics::SurfaceHost> h,std::shared_ptr<wa2::subtitles::Playback> subs,wa2::graphics::PresentationAcceleration speed):p(q),handles(q),host(std::move(h)),accelerated(std::move(speed)),subtitles(std::move(subs)){if(!host)throw std::invalid_argument("graphics surface host required");}~Graphics(){shutdown();}
     void install();void shutdown() noexcept;
     void movie_frame(const wa2::movie::VideoFrame&,const wa2::graphics::MovieView&)override;
     void restore_game()override;
@@ -310,7 +320,7 @@ public:
             <<",\"guest_draws\":"<<texture_batch_draws<<",\"driver_submissions\":"<<texture_batch_submissions<<",\"failure\":"<<quote(texture_batch_failure)<<'}'
             <<",\"context_rebinds\":"<<context_rebinds<<",\"context_reuses\":"<<context_reuses<<",\"context_free_calls\":"<<context_free_calls
             <<",\"constant_updates\":"<<constant_updates<<",\"constant_reuses\":"<<constant_reuses<<",\"sampler_parameter_calls\":"<<sampler_parameter_calls<<",\"sampler_parameter_skips\":"<<sampler_parameter_skips
-            <<",\"framebuffer_checks\":"<<framebuffer_checks<<",\"swap_interval\":{\"requested\":"<<requested_swap_interval<<",\"actual\":"<<actual_swap_interval<<",\"result\":"<<swap_interval_result
+            <<",\"framebuffer_checks\":"<<framebuffer_checks<<",\"coalesced_fast_forward_presents\":"<<coalesced_presents<<",\"swap_interval\":{\"requested\":"<<requested_swap_interval<<",\"effective_request\":"<<effective_swap_interval<<",\"changes\":"<<swap_interval_changes<<",\"actual\":"<<actual_swap_interval<<",\"result\":"<<swap_interval_result
             <<"},\"driver\":{\"vendor\":"<<quote(driver_vendor)<<",\"renderer\":"<<quote(driver_renderer)<<",\"version\":"<<quote(driver_version)<<"},\"calls\":{";
         bool first=true;for(const auto& [name,count]:calls){if(!first)out<<',';first=false;out<<quote(name)<<':'<<count;}
         out<<"},\"screen_capture\":false}";return out.str();
@@ -451,6 +461,7 @@ U32 Graphics::init(U32 pp,U32 focus){
     gl.GenBuffers(1,&vertex_buffer);gl.GenBuffers(1,&index_buffer);
     default_vertex=assemble_shader(wa2::graphics::fixed_vertex_assembly());
     requested_swap_interval=presentation[13]==D3DPRESENT_INTERVAL_IMMEDIATE?0:1;
+    effective_swap_interval=requested_swap_interval;presentation_pacing.reset(requested_swap_interval);
     swap_interval_result=SDL_GL_SetSwapInterval(requested_swap_interval);actual_swap_interval=SDL_GL_GetSwapInterval();
     if(!presentation[2])presentation[2]=D3DFMT_X8R8G8B8;
     device_resource=make(Kind::device);backbuffer=surface(new_image(presentation[0],presentation[1],D3DFORMAT(presentation[2]),D3DUSAGE_RENDERTARGET,D3DPOOL_DEFAULT));defaults();
@@ -919,6 +930,8 @@ U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 st
 
 void Graphics::movie_frame(const wa2::movie::VideoFrame& frame,const wa2::graphics::MovieView& view){
     enter();if(!context || !backbuffer)stop("movie presentation requires the game render device");
+    // Movies retain their own real-time clock, frame delivery and source sync.
+    change_swap_interval(presentation_pacing.plan(false,FrameTrace::now()).swap_interval);
     const auto owner=presentation[7]?presentation[7]:focus_window;
     if(view.owner && view.owner!=owner)stop("movie presentation to a different source window");
     if(!view.visible)return;
@@ -954,7 +967,7 @@ void Graphics::movie_frame(const wa2::movie::VideoFrame& frame,const wa2::graphi
     last_movie_source=view.source;last_movie_requested=view.destination;last_movie_destination=destination;
     SDL_GL_SwapWindow(window);host->frame_submitted();
 }
-void Graphics::restore_game(){if(context && backbuffer && !stopped)present(std::array<U32,5>{});}
+void Graphics::restore_game(){if(context && backbuffer && !stopped)present(std::array<U32,5>{},true);}
 void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
     if(!subtitles)return;
     const auto* cue=subtitles->current(wa2::platform::Clock::counter()/1000000);
@@ -1004,7 +1017,7 @@ void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
     // draw reapplies all source state; the overlay never mutates that state.
     applied.reset();
 }
-U32 Graphics::present(Args a){
+U32 Graphics::present(Args a,bool force){
     const auto present_begin=FrameTrace::now();
     frame_trace.source_fp_control=p.cpu.fp.get16(0);
     if(a[4])stop("Present dirty regions");if(a[3] && a[3]!=(presentation[7]?presentation[7]:focus_window))stop("Present to another window");
@@ -1016,6 +1029,14 @@ U32 Graphics::present(Args a){
     const auto layout=wa2::graphics::layout_frame(i->width,i->height,{sr.left,sr.top,sr.right,sr.bottom},destination,viewport);
     if(!layout)return U32(D3DERR_INVALIDCALL);const auto& d=layout->destination;const auto left=d[0],top=d[1],right=d[2],bottom=d[3];
     last_drawable_size={w,h};last_present_source={sr.left,sr.top,sr.right,sr.bottom};last_present_destination={left,top,right,bottom};
+    const auto pacing=presentation_pacing.plan(accelerated && accelerated(),FrameTrace::now(),force);
+    change_swap_interval(pacing.swap_interval);
+    if(!pacing.submit){
+        // Source draws have already been flushed and validated. Never lose an
+        // offscreen update, suppress a GL failure, or retain a growing queue.
+        ++frame_error_checks;const auto error=gl.GetError();if(error)stop("GL frame error "+std::to_string(error));
+        ++coalesced_presents;return 0;
+    }
     gl.Disable(GL_SCISSOR_TEST);gl.ColorMask(1,1,1,1);gl.BindFramebuffer(GL_DRAW_FRAMEBUFFER,0);gl.ClearColor(0,0,0,1);gl.Clear(GL_COLOR_BUFFER_BIT);
     gl.BindFramebuffer(GL_READ_FRAMEBUFFER,i->fbo);
     // Source D3D top rows reside at low texture Y. Flip only presentation.
@@ -1023,6 +1044,7 @@ U32 Graphics::present(Args a){
     draw_subtitles(w,h,last_present_destination);
     const auto before_error=FrameTrace::now();++frame_error_checks;const auto error=gl.GetError();if(error)stop("GL frame error "+std::to_string(error));
     const auto after_error=FrameTrace::now();SDL_GL_SwapWindow(window);const auto after_swap=FrameTrace::now();++presents;
+    presentation_pacing.submitted(after_swap);
     frame_trace.presented(presents,present_begin,before_error,after_error,after_swap,copy_total.total_ns,draws,uploads,
         {p.native_function_entries,p.api_calls,p.direct_leaf_api_calls,p.host_work.sleep_wall_ns,p.host_work.wait_wall_ns,p.host_work.sleep_requested_ms,p.host_work.sleep_zero_calls,p.host_work.function_wall_ns,p.host_work.api_wall_ns,p.host_work.poll_wall_ns});host->frame_submitted();
     if(p.state().stop_after_presents && presents>=p.state().stop_after_presents){p.state().diagnostic_stop=true;p.exit(0);}return 0;
@@ -1113,11 +1135,11 @@ void Graphics::install(){
     });
 }
 } // namespace
-std::shared_ptr<wa2::graphics::MoviePresenter> install_wa2_shared_graphics(Process& p,std::shared_ptr<wa2::graphics::SurfaceHost> host,std::shared_ptr<wa2::subtitles::Playback> subtitles){
-    auto state=std::make_shared<Graphics>(p,std::move(host),std::move(subtitles));state->install();
+std::shared_ptr<wa2::graphics::MoviePresenter> install_wa2_shared_graphics(Process& p,std::shared_ptr<wa2::graphics::SurfaceHost> host,std::shared_ptr<wa2::subtitles::Playback> subtitles,wa2::graphics::PresentationAcceleration speed){
+    auto state=std::make_shared<Graphics>(p,std::move(host),std::move(subtitles),std::move(speed));state->install();
     p.state().shutdown.push_back([state]{state->shutdown();});p.state().reports["direct3d9"]=[state]{return state->report();};
     return state;
 }
 } // namespace wr
-namespace wa2::graphics {std::shared_ptr<MoviePresenter> install(wr::Process& p,std::shared_ptr<SurfaceHost> host,std::shared_ptr<subtitles::Playback> subtitles){return wr::install_wa2_shared_graphics(p,std::move(host),std::move(subtitles));}}
+namespace wa2::graphics {std::shared_ptr<MoviePresenter> install(wr::Process& p,std::shared_ptr<SurfaceHost> host,std::shared_ptr<subtitles::Playback> subtitles,PresentationAcceleration speed){return wr::install_wa2_shared_graphics(p,std::move(host),std::move(subtitles),std::move(speed));}}
 

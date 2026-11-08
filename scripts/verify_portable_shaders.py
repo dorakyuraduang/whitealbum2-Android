@@ -16,7 +16,11 @@ def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def main():
     kernel=ctypes.WinDLL('kernel32');kernel.GetCurrentProcess.restype=ctypes.c_void_p;kernel.SetPriorityClass.argtypes=[ctypes.c_void_p,ctypes.c_uint]
     if not kernel.SetPriorityClass(kernel.GetCurrentProcess(),0x4000):raise ctypes.WinError(ctypes.get_last_error())
-    env=os.environ.copy();env.update(TEMP=str(ROOT/'build/temp'),TMP=str(ROOT/'build/temp'),ZIG_GLOBAL_CACHE_DIR=str(ROOT/'build/zig-cache'),ZIG_LOCAL_CACHE_DIR=str(ROOT/'build/zig-local'),CMAKE_BUILD_PARALLEL_LEVEL='1')
+    env=os.environ.copy();env['CMAKE_BUILD_PARALLEL_LEVEL']='1'
+    # Reuse a caller's verified build cache instead of forcing a cold compiler
+    # runtime rebuild inside the serial shared-host verification step.
+    for name,default in (('TEMP',ROOT/'build/temp'),('TMP',ROOT/'build/temp'),('ZIG_GLOBAL_CACHE_DIR',ROOT/'build/zig-cache'),('ZIG_LOCAL_CACHE_DIR',ROOT/'build/zig-local')):
+        env.setdefault(name,str(default));Path(env[name]).mkdir(parents=True,exist_ok=True)
     flags=subprocess.BELOW_NORMAL_PRIORITY_CLASS|subprocess.CREATE_NO_WINDOW
     x64=ROOT/'build/portable-shaders-x64';arm=ROOT/'build/portable-shaders-arm64';x64.mkdir(parents=True,exist_ok=True);arm.mkdir(parents=True,exist_ok=True)
     source=ROOT/'tests/portable-shaders';cmake=ROOT/'tools/python/cmake/data/bin/cmake.exe';ndk=ROOT/'tools/android-sdk/ndk/27.0.12077973';acmake=ROOT/'tools/android-sdk/cmake/3.22.1/bin/cmake.exe'
@@ -37,7 +41,7 @@ def main():
                 except subprocess.TimeoutExpired:
                     subprocess.run(['taskkill','/PID',str(child.pid),'/T','/F'],creationflags=flags,stdout=console,stderr=subprocess.STDOUT,timeout=20);child.wait(20);raise
                 if status:raise subprocess.CalledProcessError(status,command)
-        run([cmake,'-S',source,'-B',x64,'-G','Ninja','-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'])
+        run([cmake,'-S',source,'-B',x64,'-G','Ninja','-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'],900)
         run([cmake,'--build',x64,'--target','wa2_portable_shader_tests','--parallel','1'],900)
         run([x64/'wa2_portable_shader_tests.exe',x64/'checks.json',x64/'translated'],60)
         checks=json.loads((x64/'checks.json').read_text());sources=checks.pop('translated_sources')

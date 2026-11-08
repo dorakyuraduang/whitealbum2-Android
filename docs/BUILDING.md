@@ -9,8 +9,11 @@ the matching cached generated sources and a Windows SDL archive whose hash is
 in that receipt. The verifier checks every cached generated file against the
 receipt before building; it never rebuilds a deleted `.incbin` object or opens
 the original executable. It compiles the current shipped unmetered bodies,
-runs finite selected-directory/system/resource/scheduler/shell/save/subtitle
-checks, links both actual host architectures and audits Android JNI signatures.
+runs finite selected-directory/system/resource/scheduler/shell/save/subtitle,
+fast-forward policy and script-wait callback checks, links both actual host
+architectures and audits Android JNI signatures. The fast-forward predicate is
+compared with the unchanged static function on 7,680 own-memory inputs; window
+submission cadence uses a controlled clock and opens no graphics device.
 It explicitly does not claim the deleted historical oracle/performance suite
 ran. Modified static bodies or math sources require their independent checks.
 
@@ -30,8 +33,8 @@ results as freshly executed checks. Matching cached math source provenance is
 recorded separately from the newly executed file and host tests.
 
 The packager publishes the ordinary AOT application and an identical-code
-`WA2-0.2.47-shared-aot-replace-native.apk` with the experimental native app's
-installation ID. Version code 49 and the retained development key allow an
+`WA2-0.2.48-shared-aot-replace-native.apk` with the experimental native app's
+installation ID. Version code 50 and the retained development key allow an
 in-place update from native version code 4. The audit compares DEX/native bytes,
 checks both installation identities, versions, signatures and resource-table
 alignment. LGPL relink materials apply to both since their native libraries

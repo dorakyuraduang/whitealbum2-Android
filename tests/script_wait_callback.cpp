@@ -19,14 +19,16 @@ int main(int argc,char** argv){try{
         const auto argument=p.allocate_bytes(128);
         for(unsigned n=0;n<4;++n){CHECK(wa2::aot::find(U32(m.load(0x4c27c0+n*4,32))));++table_entries;}
         CHECK(m.load(0x4c27d0,32)==0 && m.load(0x4c27c0,32)==Entry);
-        // Exercise the actual indirect call instruction used for extensions,
-        // stopping at its boundary before any script/menu loop can execute.
+        // Diagnostic builds can stop on one instruction. The shipped
+        // unmetered build exercises the complete callback below instead.
+#if WA2_AOT_DIAGNOSTICS
         {
             wa2::aot::Program program(m);auto cpu=p.cpu;cpu.eip=0x453fdb;cpu.r[wr::EDX]=Entry;
             wr::push(cpu,m,argument);const auto stack=cpu.r[wr::ESP];std::uint64_t budget=1;
             CHECK(program.invoke(cpu,budget));CHECK(cpu.eip==Entry && cpu.r[wr::ESP]==stack-4);
             CHECK(m.load(cpu.r[wr::ESP],32)==0x453fdd && m.load(cpu.r[wr::ESP]+4,32)==argument);++dispatches;
         }
+#endif
         auto reset=[&](U32 duration,U32 timed,U32 suppress,U32 cancel){
             for(U32 at:std::array<U32,12>{Counter,Deadline,0x4be03c,0x4be018,0x4c2240,0x4be00c,0xa39788,0xa39778,0xa397b0,0x4be048,0xa391f4,0xa391e4})m.store(at,0,32);
             m.store(0xa391e8,0xffffffffu,32);
@@ -82,6 +84,7 @@ int main(int argc,char** argv){try{
         <<",\"memory_clock_configurations\":4,\"scenarios\":"<<scenarios<<",\"completed_calls\":"<<calls
         <<",\"indirect_dispatches\":"<<dispatches<<",\"registered_extension_entries\":"<<table_entries
         <<",\"guard_cases\":"<<guards<<",\"controlled_clock_calls\":"<<clock_calls
+        <<",\"instruction_boundary_metering_tested\":"<<(WA2_AOT_DIAGNOSTICS?"true":"false")
         <<",\"source_wait_logic_preserved\":true,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS shared script wait callback: "<<scenarios<<" scenarios, "<<calls<<" calls.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

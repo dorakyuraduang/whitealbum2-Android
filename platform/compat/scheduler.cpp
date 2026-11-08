@@ -23,6 +23,8 @@ struct Thread {
 };
 class Scheduler {
     Process& p;
+    IdleSleepPolicy accelerated_idle;
+    std::uint64_t accelerated_idle_calls{},accelerated_idle_ms{};
     std::shared_ptr<Hub> hub=std::make_shared<Hub>();
     std::map<U32,std::weak_ptr<Event>> event_objects;
     std::map<std::string,std::weak_ptr<Win32State::NativeEvent>> names;
@@ -114,7 +116,7 @@ class Scheduler {
         const auto found=threads.find(handle);if(found==threads.end() || !p.state().events.contains(handle))return nullptr;return found->second.get();
     }
 public:
-    explicit Scheduler(Process& process):p(process){}
+    explicit Scheduler(Process& process,IdleSleepPolicy idle):p(process),accelerated_idle(std::move(idle)){}
     U32 create(Args a){
         if(a[0] || (a[4]&~0x10004u)){p.set_error(87);return 0;}
         // Idle housekeeping is amortized, but a newly created worker must
@@ -168,10 +170,17 @@ public:
             restore();
         }catch(...){auto failure=std::current_exception();restore();std::rethrow_exception(failure);}
     }
-    void sleep(U32 ms){
+    void sleep(U32 ms,U32 caller=0){
         if(active){active->wake=deadline(ms);yield(false);return;}
         ++main_sleep_calls;main_sleep_requested_ms+=ms;WaitTimer timing{main_sleep_wall_ns};
         if(!ms){++p.host_work.sleep_zero_calls;poll();std::this_thread::yield();return;}
+        if(p.state().current_thread_id==1 && accelerated_idle && accelerated_idle(ms,caller)){
+            ++accelerated_idle_calls;accelerated_idle_ms+=ms;
+            // Retain worker/input/audio polling and one OS scheduling yield.
+            // No virtual time is advanced and no object wait is completed.
+            for(auto& callback:p.state().poll)callback();
+            std::this_thread::yield();return;
+        }
         const auto until=deadline(ms);
         while(!p.exited()){
             for(auto& callback:p.state().poll)callback();const auto time=now();if(time>=until)return;
@@ -238,7 +247,7 @@ public:
         bind("WaitForMultipleObjects",4,[this](Process&,Args a)->U32{if(!a[0] || a[0]>64){p.set_error(87);return Failed;}std::array<U32,64> handles;const auto values=std::span(handles).first(a[0]);p.memory.copy_out(a[1],{reinterpret_cast<std::uint8_t*>(values.data()),values.size_bytes()});return wait(values,a[2]!=0,a[3]);});
         bind("CreateThread",6,[this](Process&,Args a){return create(a);});
         bind("ExitThread",1,[this](Process&,Args a)->U32{if(!active){p.exit(a[0]);return 0;}active->exit_code=a[0];active->exiting=true;yield(false);return 0;});
-        bind("Sleep",1,[this](Process&,Args a)->U32{sleep(a[0]);return 0;});
+        bind("Sleep",1,[this](Process&,Args a)->U32{sleep(a[0],accelerated_idle?p.memory.load(p.cpu.r[ESP],32):0);return 0;});
         bind("SetThreadPriority",2,[this](Process&,Args a)->U32{
             const auto value=std::bit_cast<std::int32_t>(a[1]);if((value<-2 || value>2) && value!=-15 && value!=15){p.set_error(87);return 0;}
             if(a[0]==0xfffffffe && !active){main_priority=value;return 1;}auto* thread=find(a[0]);if(!thread){p.set_error(6);return 0;}thread->priority=value;return 1;
@@ -250,12 +259,12 @@ public:
         p.state().sleep_thread=[this](U32 ms){sleep(ms);};p.state().wait_critical=[this](U32 at){critical(at);};
     }
     std::string report()const{return "{\"backend\":\"portable-compiled-functions\",\"created\":"+std::to_string(created)+",\"completed\":"+std::to_string(completed)+",\"switches\":"+std::to_string(switches)+",\"waits\":"+std::to_string(waits)+",\"yields\":"+std::to_string(yields)+
-        ",\"poll_calls\":"+std::to_string(poll_calls)+",\"idle_poll_skips\":"+std::to_string(idle_poll_skips)+",\"main_sleep_calls\":"+std::to_string(main_sleep_calls)+",\"main_sleep_requested_ms\":"+std::to_string(main_sleep_requested_ms)+",\"main_sleep_wall_ns\":"+std::to_string(main_sleep_wall_ns)+",\"main_wait_calls\":"+std::to_string(main_wait_calls)+",\"main_wait_wall_ns\":"+std::to_string(main_wait_wall_ns)+"}";}
+        ",\"poll_calls\":"+std::to_string(poll_calls)+",\"idle_poll_skips\":"+std::to_string(idle_poll_skips)+",\"main_sleep_calls\":"+std::to_string(main_sleep_calls)+",\"main_sleep_requested_ms\":"+std::to_string(main_sleep_requested_ms)+",\"main_sleep_wall_ns\":"+std::to_string(main_sleep_wall_ns)+",\"accelerated_idle_calls\":"+std::to_string(accelerated_idle_calls)+",\"accelerated_idle_requested_ms\":"+std::to_string(accelerated_idle_ms)+",\"main_wait_calls\":"+std::to_string(main_wait_calls)+",\"main_wait_wall_ns\":"+std::to_string(main_wait_wall_ns)+"}";}
 };
 }
-void install_scheduler(wr::Process& process){
+void install_scheduler(wr::Process& process,IdleSleepPolicy idle){
     if(!process.function_execution())throw std::logic_error("portable scheduler requires static function execution");
-    auto state=std::make_shared<Scheduler>(process);state->install();
+    auto state=std::make_shared<Scheduler>(process,std::move(idle));state->install();
     process.state().poll.push_back([state]{state->poll();});process.state().shutdown.push_back([state]{state->shutdown();});
     process.state().reports["scheduler"]=[state]{return state->report();};
 }

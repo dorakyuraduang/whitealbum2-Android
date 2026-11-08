@@ -1,4 +1,4 @@
-"""Refresh unchanged verified static sources after host/storage changes.
+"""Refresh unchanged verified static sources after host/storage/pacing changes.
 
 The original EXE and deleted oracle/baseline objects are never opened or
 regenerated. This records its narrower checks explicitly rather than claiming
@@ -81,7 +81,7 @@ def main():
         except (OSError,ValueError):
             run([sys.executable,ROOT/'scripts/verify_portable_shaders.py']);shaders=fresh(ROOT/'logs/portable-shader-verification.json')
         tracked=[Path(__file__),ROOT/'tests/shared-host-refresh/CMakeLists.txt',reference_path,archive,ROOT/'config/porting_contract.json',ROOT/'config/release.json']
-        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell')]
+        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback')]
         tracked += [ROOT/'scripts/verify_subtitles.py',ROOT/'scripts/verify_shared_package.py',ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/shared-aot-android/CMakeLists.txt',ROOT/'tests/shared-aot-android/entry.cpp']
         for folder in ('recompiled','engine','platform','hosts','android/native','generated/shared-aot','generated/static-data','generated/codepages','generated/graphics-abi','third_party/wa2_subtitles','tools/WindowsRecompTool-main/include/winrecomp'):
             tracked += [path for path in (ROOT/folder).rglob('*') if path.is_file() and path.suffix in ('.cpp','.hpp','.h','.inc','.cmake','.txt','.json')]
@@ -91,7 +91,7 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -99,6 +99,8 @@ def main():
             if not report.get('passed') or report.get('game_launched') or report.get('screen_access') or report.get('source_executable_opened'):raise ValueError('Finite memory/file test failed: '+name)
             reports[name]=report
         saves=reports['selected_save_files']
+        skip=reports['fast_forward']
+        if skip['static_predicate_comparisons']<7000 or not all(skip[key] for key in ('unchanged_static_predicate','unread_policy_preserved','worker_and_object_waits_preserved','game_clock_unscaled','source_sync_restored','presentation_only_coalescing')):raise ValueError('Incomplete fast-forward scheduling checks')
         if saves['cases']<40 or not all(saves[key] for key in ('root_pc_files_read','source_path_aliases','alias_sharing_preserved','random_access_writes','profile_roundtrip','nested_pc_fallback','test_profile_isolated','private_fallback_forbidden')):raise ValueError('Incomplete selected-directory file checks')
         subtitle=verify_subtitles(build/'subtitles.json',ROOT/'generated/shared-aot/manifest.json')
         print('Building the same AOT sources and actual Android entry on ARM64; no application starts.',flush=True)
@@ -124,8 +126,8 @@ def main():
         manifest=json.loads((ROOT/'generated/shared-aot/manifest.json').read_text());sdl=sdl_build/'sdl2/libSDL2.so'
         bindings[sdl.relative_to(ROOT).as_posix()]=digest(sdl)
         proof=dict(schema='wa2.shared-aot-refresh.v1',source_sha256=bindings,reference_receipt=str(reference_path),reference_receipt_sha256=digest(reference_path),cached_generated_sha256=generated,
-            verification_scope='unchanged verified AOT sources, fresh unmetered shared-host builds, selected memory/file tests and Java/JNI audit',historical_oracle_and_performance_suite_rerun=False,
-            current_tests=reports,selected_directory_files=saves,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
+            verification_scope='unchanged verified AOT sources, fresh unmetered shared-host builds, selected memory/file and fast-forward scheduling tests, Java/JNI audit',historical_oracle_and_performance_suite_rerun=False,
+            current_tests=reports,selected_directory_files=saves,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
             crt_math_paths=dict(passed=True,source_unchanged=True,reference_receipt_sha256=digest(reference_path),independent_math_test_rerun=False,source_sha256=unchanged_math),
             manifest_sha256=digest(ROOT/'generated/shared-aot/manifest.json'),admitted_functions=manifest['admitted_functions'],instruction_locations=manifest['unique_instruction_locations'],
             partially_admitted_entries=manifest['partially_admitted_entries'],unsupported_instruction_sites=manifest['unsupported_instruction_sites'],
