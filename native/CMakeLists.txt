@@ -52,6 +52,8 @@ add_executable(wa2_native_progress_tests "${WA2_ROOT}/tests/native_progress.cpp"
 target_link_libraries(wa2_native_progress_tests PRIVATE wa2_script wa2_native_progress_storage)
 add_executable(wa2_native_progress_merge_tests "${WA2_ROOT}/tests/native_progress_merge.cpp")
 target_link_libraries(wa2_native_progress_merge_tests PRIVATE wa2_native_progress_storage)
+add_executable(wa2_native_progress_range_tests "${WA2_ROOT}/tests/native_progress_ranges.cpp")
+target_link_libraries(wa2_native_progress_range_tests PRIVATE wa2_native_progress_storage)
 add_executable(wa2_native_game_directory_tests "${WA2_ROOT}/tests/native_game_directory.cpp")
 target_link_libraries(wa2_native_game_directory_tests PRIVATE wa2_native_application)
 add_executable(wa2_native_legacy_v1_tests "${WA2_ROOT}/tests/native_legacy_v1.cpp")

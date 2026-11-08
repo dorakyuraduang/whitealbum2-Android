@@ -84,6 +84,7 @@ def main():
     inputs += [ROOT/'tests/native_character_palettes.cpp']
     inputs += [ROOT/'tests/native_legacy_v1.cpp']
     inputs += [ROOT/'tests/native_progress_merge.cpp']
+    inputs += [ROOT/'tests/native_progress_ranges.cpp']
     inputs += [ROOT/'tests/native_game_directory.cpp',ROOT/'platform/game_directory.cpp',ROOT/'platform/game_directory.hpp']
     inputs += [ROOT/'tests/native_frame_driver.cpp',ROOT/'tests/native_audio_binding.cpp',ROOT/'tests/native_sdl_application.cpp',ROOT/'tests/native_input.cpp',
         ROOT/'platform/audio_output.hpp',ROOT/'platform/audio_binding.hpp',ROOT/'platform/audio_binding.cpp',ROOT/'platform/sdl_audio.hpp',ROOT/'platform/sdl_audio.cpp',
@@ -132,6 +133,7 @@ def main():
             if host=='windows':targets+=['wa2_native_scene_context_tests']
             if host=='windows':targets+=['wa2_native_game_directory_tests']
             if host=='windows':targets+=['wa2_native_progress_merge_tests']
+            if host=='windows':targets+=['wa2_native_progress_range_tests']
             if host=='windows':targets+=['wa2_native_bitmap_state_tests']
             if host=='windows':targets+=['wa2_native_weather_checkpoint_tests']
             if host=='windows':targets+=['wa2_native_audio_checkpoint_tests']
@@ -214,6 +216,7 @@ def main():
             allowed+=('tests/native_character_palettes.cpp',)
             allowed+=('tests/native_legacy_v1.cpp',)
             allowed+=('tests/native_progress_merge.cpp',)
+            allowed+=('tests/native_progress_ranges.cpp',)
             allowed+=('tests/native_game_directory.cpp','platform/game_directory.cpp')
             allowed+=('tests/native_frame_driver.cpp','tests/native_audio_binding.cpp','tests/native_sdl_application.cpp','tests/native_input.cpp',
                 'platform/audio_binding.cpp','platform/sdl_audio.cpp','platform/sdl_input.cpp','platform/sdl_application.cpp')
@@ -319,6 +322,9 @@ def main():
                 run([directory/'wa2_native_progress_merge_tests.exe',directory/'native-progress-merge.json'],console,90)
                 progress_merge=json.loads((directory/'native-progress-merge.json').read_text())
                 if not progress_merge['passed'] or progress_merge['cases']<27 or progress_merge['guards']<16 or not all(progress_merge[key] for key in ('source_block_or_policy','source_flag_99_excluded','destination_flag_99_preserved','unchanged_blocks_stay_clean','read_only_source_retained','repeat_startup_writes_nothing','failed_merge_preserves_root','test_profile_isolated','synthetic_files_only')) or any(progress_merge[key] for key in ('original_saves_opened','game_launched','screen_access')):raise ValueError('Original introductory progress merge checks failed')
+                run([directory/'wa2_native_progress_range_tests.exe',directory/'native-progress-ranges.json'],console,90)
+                progress_ranges=json.loads((directory/'native-progress-ranges.json').read_text())
+                if not progress_ranges['passed'] or progress_ranges['cases']<22 or progress_ranges['guards']<15 or progress_ranges['gallery_update_bytes']!=1 or progress_ranges['reading_update_bytes']!=1 or progress_ranges['flag_update_bytes']!=4 or not all(progress_ranges[key] for key in ('range_union_checked','failed_ranges_retryable','unknown_bytes_preserved','writes_read_no_existing_payload','full_block_adapter_fallback','missing_file_initialized_fully','test_directory_isolated','synthetic_memory_only')) or any(progress_ranges[key] for key in ('original_saves_opened','game_launched','screen_access')):raise ValueError('Native progress range-write checks failed')
                 run([directory/'wa2_native_legacy_v1_tests.exe',directory/'native-legacy-v1.json'],console,90)
                 legacy_v1=json.loads((directory/'native-legacy-v1.json').read_text())
                 if not legacy_v1['passed'] or legacy_v1['cases']<18 or legacy_v1['guards']<19 or not all(legacy_v1[key] for key in ('old_dimensions_not_percentages','integer_character_positions','bounded_old_speaker_names','source_choice_history_fallback','source_voice_reset_policy','unchanged_bitmap_load_semantics','shared_script_packet_import','native_checkpoint_round_trip','failed_restore_keeps_live_scene','synthetic_data_only')) or any(legacy_v1[key] for key in ('original_resources_opened','original_saves_opened','devices_opened','game_launched','screen_access')):raise ValueError('Original version-1 native scene conversion checks failed')
@@ -629,6 +635,7 @@ def main():
     report['legacy_v1']=legacy_v1
     report['game_directory']=game_directory
     report['progress_merge']=progress_merge
+    report['progress_ranges']=progress_ranges
     report['frame_driver']=frame_driver
     report['audio_binding']=audio_binding
     report['sdl_application']=sdl_application

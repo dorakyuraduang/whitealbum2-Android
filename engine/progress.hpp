@@ -12,16 +12,19 @@ namespace wa2::progress {
 using Bytes=std::vector<std::uint8_t>;
 class Error : public std::runtime_error {using std::runtime_error::runtime_error;};
 enum class Block : unsigned { history, gallery, flags };
+struct DirtyRange {std::size_t begin{},end{};bool operator==(const DirtyRange&)const=default;};
 std::size_t offset(Block block);
 std::size_t size(Block block);
 
-// Owns ordinary engine state. Byte blocks are retained to round-trip unknown
-// save fields and write only the affected format block, with no machine ABI.
+// Owns ordinary engine state. Byte blocks round-trip unknown save fields;
+// transient changed ranges narrow persistence without changing the file ABI.
 class State {
     Bytes history_,gallery_;
     std::array<std::uint8_t,layout::system_flags_bytes> flags_{};
     std::array<bool,3> dirty_{true,true,true};
+    std::array<DirtyRange,3> changes_{};
     void clean(Block block);
+    void touch(Block,std::size_t begin,std::size_t end);
     friend class Store;
 public:
     State();
@@ -29,6 +32,7 @@ public:
     Bytes encode() const;
     std::span<const std::uint8_t> block(Block block) const;
     bool dirty(Block block) const;
+    DirtyRange dirty_range(Block block)const;
     std::int32_t flag(std::uint32_t index) const;
     void set_flag(std::uint32_t index,std::int32_t value);
     std::uint8_t gallery(std::uint32_t bank,std::uint32_t index) const;
@@ -49,6 +53,11 @@ public:
     virtual ~Storage()=default;
     virtual std::optional<Bytes> load()=0;
     virtual void write(Block block,std::span<const std::uint8_t> bytes)=0;
+    // Old adapters can retain whole-block writes. Range-aware adapters receive
+    // the complete current block plus its changed, relative half-open span.
+    virtual void write_range(Block block,std::span<const std::uint8_t> bytes,DirtyRange range){
+        if(bytes.size()!=size(block) || range.begin>=range.end || range.end>bytes.size())throw Error("Invalid progress write range");write(block,bytes);
+    }
 };
 class Store {
     std::shared_ptr<Storage> storage_;

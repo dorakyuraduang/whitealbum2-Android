@@ -89,6 +89,13 @@ reject malformed `WAP5` flags. Android stores the same preference record.
 `native-music-view.json` also checks the selected name/information sprites from
 their separate sheets, all sixty-three row bounds, page retention and stopped
 visibility using constructed atlas data only.
+`native-progress-ranges.json` checks existing-file updates of one byte for a
+single CG/read change and four bytes for one flag. It also covers coalesced
+spans, the last byte of every block, complete missing-file initialization,
+old-adapter fallback, partial-write retry and unknown-field retention. All data
+and directory services are constructed in memory; no user save or device is
+opened. The ordinary file adapter remains covered by the existing owned-file
+progress and selected-directory checks.
 
 Native script state checks additionally cover exact float payloads, nested call
 resumption, local/global values, pending host-command continuations, transactional

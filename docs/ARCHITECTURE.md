@@ -62,8 +62,8 @@ round-tripped, and the full-content test profile uses the shared unlock list.
 
 An injected Storage adapter separates persistence from game state. The ordinary
 file adapter opens Sys.sav in the selected game directory. It preserves
-manual saves/settings and writes only dirty original-format blocks (4 KiB for
-system flags). Failed blocks remain dirty for retry. Whole-file/multi-block
+manual saves/settings and writes changed spans inside the original-format
+blocks, including the 4 KiB system-flags region. Failed spans remain dirty for retry. Whole-file/multi-block
 atomicity and a complete scene-save snapshot are not claimed. A scene without
 progress storage fails explicitly if it encounters a progress command.
 
@@ -1406,7 +1406,7 @@ Destination flag 99 and unrelated bits remain intact. Changed results are
 published through one complete replacement, while unchanged later launches
 write nothing. Source files stay read-only. Missing main progress can be
 initialized from this introductory bank; the isolated test profile reads neither
-normal bank. Later ordinary flag updates retain the 4 KiB block boundary.
+normal bank. Later ordinary flag updates remain inside the 4 KiB flags region.
 
 Twenty-seven constructed-data cases and sixteen failure guards check randomized
 opaque-block merges, exact flag masking, dirtiness of individual blocks, root
@@ -1419,6 +1419,19 @@ interruption recovery before the next read. Synthetic provider faults cover
 write, rename, cleanup, failed rollback and retry. These are finite memory/file
 checks, not a provider/device or whole-game compatibility claim. The retained
 AOT release binary remains unchanged.
+
+System progress additionally retains a half-open changed-byte span for each
+block. On an existing valid Sys.sav, one changed CG/read byte writes one byte,
+and one changed integer flag writes four bytes. Multiple pending edits coalesce
+within their own block; successful spans are acknowledged independently and
+failed spans remain retryable. This removes the former synchronous full-gallery
+write of about 2 MB for a single new CG. No previous file payload is read during
+these writes, and the original file size/layout and untouched bytes are retained.
+Missing files still receive complete initialization. Older Storage adapters can
+use the full-block fallback. Twenty-two own-memory cases and fifteen guards
+check boundary bytes, range union, partial failures/retry, randomized final-byte
+equality, unknown fields and isolated test directories. These are byte/I/O-policy
+checks, not measured startup, frame rate or Android-provider performance.
 
 The Android launcher separately stores its three adapter switches in
 `native-launcher.wa2cfg` under the selected root. Its small versioned/checksummed

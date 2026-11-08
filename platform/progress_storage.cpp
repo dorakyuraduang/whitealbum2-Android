@@ -23,10 +23,13 @@ public:
         auto result=merged.encode();directory_->replace("Sys.sav",result);return result;
     }
     void write(progress::Block block,std::span<const std::uint8_t> bytes)override{
-        const auto at=progress::offset(block);if(bytes.size()!=progress::size(block))throw progress::Error("Invalid progress write block length");
+        write_range(block,bytes,{0,bytes.size()});
+    }
+    void write_range(progress::Block block,std::span<const std::uint8_t> bytes,progress::DirtyRange range)override{
+        const auto at=progress::offset(block);if(bytes.size()!=progress::size(block) || range.begin>=range.end || range.end>bytes.size())throw progress::Error("Invalid progress write block/range length");
         constexpr auto size=progress::layout::system_save_bytes;auto source=directory_->open("Sys.sav");
         if(!source){progress::Bytes initial(size);std::copy(bytes.begin(),bytes.end(),initial.begin()+at);directory_->replace("Sys.sav",initial);return;}
-        if(source->size()!=size)throw progress::Error("Unsupported Sys.sav length");source.reset();directory_->update("Sys.sav",size,at,bytes);
+        if(source->size()!=size)throw progress::Error("Unsupported Sys.sav length");source.reset();directory_->update("Sys.sav",size,at+range.begin,bytes.subspan(range.begin,range.end-range.begin));
     }
 };
 }
