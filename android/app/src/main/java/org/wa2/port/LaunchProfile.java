@@ -11,6 +11,7 @@ import java.util.zip.CRC32;
 final class LaunchProfile {
     static final int FPS=1, LONG_PRESS=2, TEST_MODE=4, CHINESE_SUBTITLES=8;
     static final int CHINESE=0, JAPANESE=1;
+    private static final int VERSION=5;
     // Retain the larger legacy v3 read bound for migration.
     static final int MAX_BYTES=20+128*2+4096;
     final int flags, language;
@@ -49,11 +50,11 @@ final class LaunchProfile {
     @Override public int hashCode(){return Objects.hash(flags,language,subtitle);}
     byte[] encode(){
         byte[] uri=subtitle.getBytes(StandardCharsets.UTF_8),data=new byte[16+uri.length];
-        data[0]='W';data[1]='A';data[2]='L';data[3]='S';data[4]=4;data[5]=(byte)flags;data[6]=(byte)language;
+        data[0]='W';data[1]='A';data[2]='L';data[3]='S';data[4]=VERSION;data[5]=(byte)flags;data[6]=(byte)language;
         data[8]=(byte)uri.length;data[9]=(byte)(uri.length>>8);System.arraycopy(uri,0,data,12,uri.length);
         CRC32 crc=new CRC32();crc.update(data,0,data.length-4);long sum=crc.getValue();for(int n=0;n<4;++n)data[data.length-4+n]=(byte)(sum>>(n*8));return data;
     }
-    static boolean needsUpgrade(byte[] data){return data==null || data[4]!=4;}
+    static boolean needsUpgrade(byte[] data){return data==null || data[4]!=VERSION;}
     private static String uri(byte[] data,int offset,int count)throws IOException{
         String value=new String(data,offset,count,StandardCharsets.UTF_8);
         if(!Arrays.equals(value.getBytes(StandardCharsets.UTF_8),Arrays.copyOfRange(data,offset,offset+count)))throw new IOException("Invalid UTF-8 subtitle document URI");return value;
@@ -67,11 +68,6 @@ final class LaunchProfile {
         for(int n=0;n<leaf.length();++n){char c=leaf.charAt(n);if(!((c>='a' && c<='z') || (c>='0' && c<='9') || c=='_' || c=='-' || c=='.'))throw new IOException("Invalid legacy PAK filename");}
         return value;
     }
-    private static int oldLanguage(String script,String font){
-        if(script.equals("script.pak") || script.equals("ic/script.pak"))return JAPANESE;
-        if(script.isEmpty() && (font.equals("fnt.pak") || font.equals("ic/fnt.pak")))return JAPANESE;
-        return CHINESE;
-    }
     static LaunchProfile decode(byte[] data)throws IOException{
         if(data==null || data.length<16 || data.length>MAX_BYTES || data[0]!='W' || data[1]!='A' || data[2]!='L' || data[3]!='S')throw new IOException("Unsupported launcher configuration");
         CRC32 crc=new CRC32();crc.update(data,0,data.length-4);long expected=0;for(int n=0;n<4;++n)expected|=(data[data.length-4+n]&255L)<<(n*8);if(crc.getValue()!=expected)throw new IOException("Damaged launcher configuration");
@@ -79,14 +75,19 @@ final class LaunchProfile {
         try{
             if(version==1){if(data.length!=16 || flags>7)throw new IOException("Unsupported legacy launcher configuration");for(int n=6;n<12;++n)if(data[n]!=0)throw new IOException("Unknown legacy launcher fields");return new LaunchProfile(flags|CHINESE_SUBTITLES);}
             if(flags>15 || data[7]!=0)throw new IOException("Unknown launcher fields");
-            if(version==4){
-                int size=(data[8]&255)|((data[9]&255)<<8);if(size>4096 || data.length!=16+size || data[10]!=0 || data[11]!=0)throw new IOException("Invalid language configuration fields");return new LaunchProfile(flags,data[6]&255,uri(data,12,size));
+            if(version==4 || version==VERSION){
+                int size=(data[8]&255)|((data[9]&255)<<8),language=data[6]&255;
+                if(size>4096 || data.length!=16+size || data[10]!=0 || data[11]!=0 || (language!=CHINESE && language!=JAPANESE))throw new IOException("Invalid language configuration fields");
+                // v4 could infer Japanese from old filenames. Start older
+                // profiles in Chinese once; v5 keeps the player's next choice.
+                return new LaunchProfile(flags,version==VERSION?language:CHINESE,uri(data,12,size));
             }
             if((version!=2 && version!=3) || data[6]!=0)throw new IOException("Unsupported launcher configuration version");
             int a=(data[8]&255)|((data[9]&255)<<8),b=(data[10]&255)|((data[11]&255)<<8),c=0,offset=version==3?16:12;
             if(version==3){if(data.length<20 || data[14]!=0 || data[15]!=0)throw new IOException("Unknown legacy subtitle fields");c=(data[12]&255)|((data[13]&255)<<8);}
             if(a>128 || b>128 || c>4096 || data.length!=offset+4+a+b+c)throw new IOException("Invalid legacy launcher lengths");
-            return new LaunchProfile(flags,oldLanguage(oldArchive(data,offset,a),oldArchive(data,offset+a,b)),uri(data,offset+a+b,c));
+            oldArchive(data,offset,a);oldArchive(data,offset+a,b);
+            return new LaunchProfile(flags,CHINESE,uri(data,offset+a+b,c));
         }catch(IllegalArgumentException error){throw new IOException("Invalid launcher language configuration",error);}
     }
 }

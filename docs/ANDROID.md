@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.60-shared-aot**. Use the
+is **0.2.61-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.60-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.61-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -108,9 +108,10 @@ whole-game Android fast-forward ratios.
 Simplified Chinese (default) pairs `ck-gal.pak` with `fon.pak`; Japanese pairs
 `script.pak` with `fnt.pak` and installs matching default-name strings before
 game execution. The same common C++ profiles serve both hosts, without changing
-glyph lookup tables or copying PAK payloads. Launcher records v1/v2/v3 migrate to
-v4, retaining toggle values and external subtitle URIs; a legacy selection of
-`script.pak` with `fon.pak` becomes the matched Japanese pair. Missing required
+glyph lookup tables or copying PAK payloads. In 0.2.61, launcher records v1-v4
+migrate to v5 with Chinese selected once, retaining toggle values and external
+subtitle URIs. Old filenames no longer imply Japanese; subsequent explicit
+language choices persist across restarts. Missing required
 PAKs produce an explicit error. The supplementary-caption toggle is independent
 and remains enabled by default. This does not translate bitmap menu assets or
 implement arbitrary Unicode scripts / TTF/OTF fonts. See

@@ -72,6 +72,7 @@ def main():
         if profile['cases']<17 or profile['guards']<34 or not all(profile[key] for key in ('directory_isolation','unchanged_writes_suppressed','failed_write_retry','inflight_edit_not_lost')) or profile['source_files_opened'] or profile['android_device_verified']:raise ValueError('Incomplete external launcher-configuration checks')
         if profile['language_roundtrips']!=32 or profile['legacy_migrations']!=8 or not all(profile[key] for key in ('language_arguments_exact','language_edits_preserve_flags','automatic_matched_pairs','legacy_mixed_pair_corrected','upgrade_write_retry')):raise ValueError('Incomplete launcher language/migration checks')
         if profile['v2_migrations']!=96 or profile['v3_migrations']!=288 or profile['external_subtitle_roundtrips']!=96 or not profile['external_subtitle_write_retry']:raise ValueError('Incomplete external subtitle configuration checks')
+        if profile['v4_migrations']!=96 or not profile['older_profiles_default_chinese'] or not profile['explicit_language_retained_after_upgrade']:raise ValueError('Incomplete Chinese-default upgrade checks')
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Android UI input changed during verification: '+name)
     report=dict(schema='wa2.native-android-ui.v1',source_sha256=inputs,source_sets=records,api_jar_sha256=digest(api),javac_sha256=digest(jdk/'bin/javac.exe'),d8_sha256=digest(bt/'lib/d8.jar'),
