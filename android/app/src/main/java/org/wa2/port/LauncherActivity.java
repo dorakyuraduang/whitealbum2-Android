@@ -4,13 +4,13 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.ColorStateList;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Process;
 import android.provider.DocumentsContract;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -23,7 +23,7 @@ import android.widget.TextView;
 public final class LauncherActivity extends Activity {
     private static final int PICK_DIRECTORY = 0x5742, PICK_SUBTITLE=0x5743;
     private static final int TEXT = 0xffedf4f3, MUTED = 0xffa4b7b6, ACCENT = 0xff76d6c4;
-    private TextView directory, status, languageResources;
+    private TextView directory, status;
     private Button choose, start, language, subtitle;
     private Switch fps, longPress, testMode, chineseSubtitles;
     private boolean busy, launching, refreshing, profileReady;
@@ -37,69 +37,77 @@ public final class LauncherActivity extends Activity {
     private LinearLayout.LayoutParams row(int top) {
         LinearLayout.LayoutParams result = new LinearLayout.LayoutParams(-1, -2); result.topMargin = dp(top); return result;
     }
+    private Button button(String label) {
+        Button view=new Button(this);view.setText(label);view.setAllCaps(false);view.setTextSize(14);view.setTextColor(TEXT);
+        view.setMinWidth(0);view.setMinimumWidth(0);view.setMinHeight(dp(48));view.setMinimumHeight(dp(48));
+        view.setPadding(dp(12),dp(4),dp(12),dp(4));view.setMaxLines(2);view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));return view;
+    }
+    private Switch toggle(String label) {
+        Switch view=new Switch(this);view.setText(label);view.setTextColor(TEXT);view.setTextSize(16);
+        view.setMinHeight(dp(48));view.setPadding(0,dp(4),0,dp(4));view.setSwitchPadding(dp(8));return view;
+    }
+    private void pair(LinearLayout parent,View left,View right,int top) {
+        LinearLayout line=new LinearLayout(this);line.setGravity(Gravity.CENTER_VERTICAL);
+        line.addView(left,new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,-2,1);second.leftMargin=dp(12);line.addView(right,second);
+        parent.addView(line,row(top));
+    }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(0xff10191c); getWindow().setNavigationBarColor(0xff10191c);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(0xff10191c);
         LinearLayout outer = new LinearLayout(this); outer.setOrientation(LinearLayout.VERTICAL); outer.setGravity(Gravity.CENTER);
-        outer.setPadding(dp(24), dp(28), dp(24), dp(28)); scroll.addView(outer, new ScrollView.LayoutParams(-1, -1));
+        outer.setPadding(dp(16), dp(12), dp(16), dp(12)); scroll.addView(outer, new ScrollView.LayoutParams(-1, -1));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
-        int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(48), dp(560));
+        int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(560));
         outer.addView(content, new LinearLayout.LayoutParams(width, -2));
-        TextView title = text("WHITE ALBUM2", 30, TEXT); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD); content.addView(title);
-        content.addView(text("启动设置", 16, MUTED), row(6));
-        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(20), dp(20), dp(20), dp(20));
-        GradientDrawable background = new GradientDrawable(); background.setColor(0xff1b292d); background.setCornerRadius(dp(16)); card.setBackground(background);
-        content.addView(card, row(28));
-        card.addView(text("游戏资源", 18, TEXT));
-        directory = text("", 14, MUTED); directory.setTextIsSelectable(true); card.addView(directory, row(10));
-        choose = new Button(this); choose.setText("选择资源文件夹"); choose.setAllCaps(false); choose.setTextColor(TEXT);
-        choose.setBackgroundTintList(ColorStateList.valueOf(0xff30474b)); card.addView(choose, row(14));
-        choose.setOnClickListener(view -> pickDirectory());
-        card.addView(text("选择存放原版 PAK 的文件夹，名称不限，并保留 IC 子目录。资源直接读取；存档和游戏配置也保存在所选目录，可放入 PC 版存档。", 13, MUTED), row(8));
-        content.addView(text("游戏语言", 18, TEXT), row(24));
-        language = new Button(this);language.setAllCaps(false);language.setTextColor(TEXT);language.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(language,row(8));
-        language.setOnClickListener(view -> chooseLanguage());
-        languageResources=text("",13,MUTED);content.addView(languageResources,row(6));
-        content.addView(text("默认简体中文。程序按所选语言自动匹配脚本、游戏字库和内置姓名；对应 PAK 需放在所选资源目录根目录。更改后重新启动游戏生效。", 13, MUTED), row(6));
-        chineseSubtitles = new Switch(this);chineseSubtitles.setText("正篇补充字幕");chineseSubtitles.setTextColor(TEXT);chineseSubtitles.setTextSize(16);chineseSubtitles.setPadding(0,dp(12),0,dp(12));
-        chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));chineseSubtitles.setOnCheckedChangeListener((button,checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setChineseSubtitles(this,checked,this::saved);}});
-        content.addView(chineseSubtitles,row(8));
-        content.addView(text("控制只有声音的正篇补充字幕，不影响剧情正文和语音。默认开启，使用内置中文字幕；也可选择相同格式的外置 sub.yaml。",13,MUTED),row(4));
-        subtitle=new Button(this);subtitle.setAllCaps(false);subtitle.setTextColor(TEXT);subtitle.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(subtitle,row(8));
-        subtitle.setOnClickListener(view -> chooseSubtitle());
-        content.addView(text("外置文件需为 UTF-8 的 sub.yaml 格式，包含 soundEffect 和 voice 分组，最多 1 MiB。选中后检查格式、编号、时间轴和文字；字幕设置在下次启动时生效。",13,MUTED),row(4));
-        fps = new Switch(this); fps.setText("显示 FPS 和帧耗时"); fps.setTextColor(TEXT); fps.setTextSize(16); fps.setPadding(0, dp(12), 0, dp(12));
-        fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setShowFps(this, checked,this::saved);}});
-        content.addView(fps, row(16));
-        longPress = new Switch(this); longPress.setText("长按快进"); longPress.setTextColor(TEXT); longPress.setTextSize(16); longPress.setPadding(0, dp(12), 0, dp(12));
-        longPress.setChecked(LaunchSettings.longPressFastForward(this)); longPress.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setLongPressFastForward(this, checked,this::saved);}});
-        content.addView(longPress, row(4));
-        content.addView(text("单指长按画面快进，松手停止。双指轻点画面可隐藏或显示右上角菜单按钮。", 13, MUTED), row(4));
-        testMode = new Switch(this); testMode.setText("测试模式（解锁全部内容）"); testMode.setTextColor(TEXT); testMode.setTextSize(16); testMode.setPadding(0, dp(12), 0, dp(12));
-        testMode.setChecked(LaunchSettings.testMode(this)); testMode.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setTestMode(this, checked,this::saved);}});
-        content.addView(testMode, row(12));
-        content.addView(text("解锁全部章节、结局、CG 差分、音乐和回想，并标记影片已观看、文本已读。使用独立测试存档，旧测试进度会自动补齐；关闭后恢复普通存档。切换后从本页重新启动生效。", 13, MUTED), row(4));
-        start = new Button(this); start.setText("开始游戏"); start.setAllCaps(false); start.setTextColor(0xff102723);
-        start.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); content.addView(start, row(16));
-        start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));
-        status = text("", 13, MUTED); status.setMinHeight(dp(48)); content.addView(status, row(12));
-        Button diagnostics=new Button(this);diagnostics.setText("复制上次运行诊断");diagnostics.setAllCaps(false);diagnostics.setTextColor(TEXT);
-        diagnostics.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(diagnostics,row(8));
+        LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);content.addView(heading);
+        TextView title = text("WHITE ALBUM2", 26, TEXT); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);title.setSingleLine();title.setEllipsize(TextUtils.TruncateAt.END);
+        heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+        Button diagnostics=button("复制诊断");diagnostics.setContentDescription("复制上次运行诊断");
+        LinearLayout.LayoutParams diagnosticPosition=new LinearLayout.LayoutParams(dp(88),-2);diagnosticPosition.leftMargin=dp(8);heading.addView(diagnostics,diagnosticPosition);
         diagnostics.setOnClickListener(view->{if(!busy)RuntimeDiagnostics.copy(this,status);});
+        LinearLayout card = new LinearLayout(this);card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(12),dp(8),dp(12),dp(8));
+        GradientDrawable background = new GradientDrawable(); background.setColor(0xff1b292d); background.setCornerRadius(dp(12)); card.setBackground(background);
+        content.addView(card, row(8));
+        directory = text("", 14, MUTED);directory.setTextIsSelectable(true);directory.setMaxLines(2);directory.setEllipsize(TextUtils.TruncateAt.END);
+        card.addView(directory,new LinearLayout.LayoutParams(0,-2,1));
+        choose = button("选择目录");
+        LinearLayout.LayoutParams directoryPosition=new LinearLayout.LayoutParams(dp(96),-2);directoryPosition.leftMargin=dp(8);card.addView(choose,directoryPosition);
+        choose.setOnClickListener(view -> pickDirectory());
+        language = button("");
+        language.setOnClickListener(view -> chooseLanguage());
+        subtitle=button("");subtitle.setOnClickListener(view -> chooseSubtitle());pair(content,language,subtitle,8);
+        chineseSubtitles = toggle("正篇补充字幕");
+        chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));chineseSubtitles.setOnCheckedChangeListener((button,checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setChineseSubtitles(this,checked,this::saved);}});
+        content.addView(chineseSubtitles,row(4));
+        fps = toggle("显示 FPS");fps.setContentDescription("显示 FPS 和帧耗时");
+        fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setShowFps(this, checked,this::saved);}});
+        longPress = toggle("长按快进");
+        longPress.setChecked(LaunchSettings.longPressFastForward(this)); longPress.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setLongPressFastForward(this, checked,this::saved);}});
+        pair(content,fps,longPress,0);
+        testMode = toggle("测试模式（解锁全部）");
+        testMode.setChecked(LaunchSettings.testMode(this)); testMode.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setTestMode(this, checked,this::saved);}});
+        content.addView(testMode, row(0));
+        start = button("开始游戏");start.setTextSize(16);start.setTextColor(0xff102723);
+        start.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); content.addView(start, row(8));
+        start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));
+        status = text("", 13, MUTED);status.setMinHeight(dp(20));content.addView(status,row(6));
         setContentView(scroll); refresh();Uri remembered=ResourceDirectory.selectedTree(this);if(remembered!=null)prepare(remembered,0,false);
     }
-    private void saved(String problem) { runOnUiThread(() -> {if(isFinishing() || isDestroyed() || busy)return;refresh();status.setText(problem!=null?"保存启动设置失败："+problem:LaunchSettings.saving(this)?"正在保存启动设置…":"启动设置已保存到所选游戏目录，重新启动游戏生效。");}); }
+    private void saved(String problem) { runOnUiThread(() -> {if(isFinishing() || isDestroyed() || busy)return;refresh();status.setText(problem!=null?"保存启动设置失败："+problem:LaunchSettings.saving(this)?"正在保存启动设置…":"已保存，下次启动生效。");}); }
     private void refresh() {
         Uri tree = ResourceDirectory.selectedTree(this);
-        directory.setText(tree == null ? "尚未选择资源文件夹 · 名称不限" : ResourceDirectory.displayLocation(tree));
+        String location=tree==null?"未选择游戏目录":ResourceDirectory.displayLocation(tree);
+        directory.setText(location);directory.setContentDescription("游戏目录："+location);directory.setTooltipText(location);
         choose.setEnabled(!busy); start.setEnabled(!busy && tree != null && profileReady);
         refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));refreshing=false;
         for(Switch control:new Switch[]{fps,longPress,testMode,chineseSubtitles})control.setEnabled(!busy && profileReady);
-        language.setText("游戏语言："+LaunchSettings.languageLabel(this));language.setEnabled(!busy && profileReady);
-        languageResources.setText("自动使用："+LaunchSettings.script(this)+" + "+LaunchSettings.font(this));
-        subtitle.setText("字幕来源："+ExternalSubtitles.display(LaunchSettings.subtitle(this)));subtitle.setEnabled(!busy && profileReady);
-        if (!busy) status.setText(tree == null ? "请先选择并授权游戏资源文件夹。" : "启动设置、游戏配置和存档保存在所选游戏目录。");
+        language.setText("语言："+LaunchSettings.languageLabel(this));language.setEnabled(!busy && profileReady);
+        String source=LaunchSettings.subtitle(this);subtitle.setText("字幕："+(source.isEmpty()?"内置":"外置"));
+        subtitle.setContentDescription("字幕来源："+ExternalSubtitles.display(source));subtitle.setTooltipText(ExternalSubtitles.display(source));subtitle.setEnabled(!busy && profileReady);
+        if (!busy) status.setText(tree == null ? "请先选择游戏目录。" : "设置和存档保存在所选目录。");
     }
     private void chooseLanguage() {
         if(busy || !profileReady)return;

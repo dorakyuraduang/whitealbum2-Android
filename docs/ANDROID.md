@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.61-shared-aot**. Use the
+is **0.2.62-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.61-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.62-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -216,15 +216,23 @@ library; they do not measure Android gameplay or GPU throughput.
    Android's system directory picker. The provider must supply persistent
    read/write grants and seekable file descriptors. Local storage and SD cards
    normally provide these; opaque provider document IDs are supported.
-3. Set **显示 FPS 和帧耗时**, **长按快进**, and **测试模式（解锁全部内容）** as desired. Long-press fast-forward is
+3. Set **显示 FPS**, **长按快进**, and **测试模式（解锁全部）** as desired. Long-press fast-forward is
    enabled by default; test mode is off by default. The folder grant and switches are remembered for
    later launches; changing a switch saves it immediately.
 4. Tap **开始游戏**. The folder is checked in a background worker before the game
    initializes. Returning to the launcher allows settings to be changed.
 5. If a load remains slow, exit normally through the game menu, then tap
-   **复制上次运行诊断** on the launcher. It copies a bounded summary of the last
+   **复制诊断** at the top of the launcher. It copies a bounded summary of the last
    run's I/O, resource and scheduler counters/times, plus the release/error.
    It contains no screen image or save payload and does not monitor the game.
+
+0.2.62 removes the long explanatory paragraphs and reduces padding. Language /
+subtitle source and FPS / long-press controls share rows. Folder names are
+limited to two visible lines; long-press the folder or subtitle button for its
+full name. All buttons and switches retain at least 48 dp touch height. The
+scroll fallback remains for small windows, enlarged fonts and long errors.
+Java/DEX compilation does not verify on-device layout; no activity was launched
+or screen inspected during this change.
 
 From `0.2.46-shared-aot`, **测试模式（解锁全部内容）** uses a separate test
 profile with all known content gates unlocked. Toggle it on and tap **开始游戏**.
