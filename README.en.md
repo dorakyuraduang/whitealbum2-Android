@@ -15,8 +15,8 @@ is not required.
 
 Requirements: **Android 8.0+, ARM64 and OpenGL ES 3.0**.
 
-1. Install `WA2-arm64-<release-name>.apk`. The English game-resource profile
-   requires **0.2.67 or newer**.
+1. Install `WA2-arm64-<release-name>.apk`. English resources require **0.2.67+**;
+   Ukrainian resources and external Todokanai captions require **0.2.70+**.
 2. Copy your complete game resources to any folder on your phone. Keep the `IC`
    subfolder. **Any folder name is accepted; leave the PAK files packed.**
 3. Open the app, select that folder and grant read/write access.
@@ -46,11 +46,22 @@ Back up an existing `fon_en.pak` before generation. Renaming the Chinese font
 pack does not produce the matching English fonts.
 See [resource and patch details](docs/LANGUAGE_RESOURCES.md).
 
-Ukrainian uses the two external packs prepared from the UA 0.1.5 patch; retain
-the original resources. Select **Українська** under **Game language**. Supplementary
-captions can be selected separately as `sub.yaml` or Todokanai block-format files;
-the patch's caption file is not selected automatically. See the
-[Ukrainian setup guide](docs/UKRAINIAN_SUPPORT.md).
+Ukrainian support targets the UA **0.1.5** patch. Select **Українська** under
+**Game language**. Prepare these two archives using the game's **KCAP format**:
+
+- **`ua.pak`**: Keep the `bak` and `grp` groups from the patch's `en.pak`.
+  Use its `script` group as the base and overlay the Ukrainian `script/` files.
+  Store `IC/script/` in a separate **`ic/script`** group to preserve scenes with
+  identical filenames.
+- **`font_ua.pak`**: Combine the two large font atlases from the patch's `fnt/`
+  folder with the two small atlases from the `fnt` group in its `en.pak`.
+  Put all four directly inside the font archive, preserving their filenames.
+
+Keep the original script encoding and `.txt`/`.bnr` pairs. The
+[resource preparation tool](scripts/prepare_ukrainian_resources.py) generates
+both packs from the original 0.1.5 ZIP. Put them in the selected game folder's
+root and retain the original `script.pak`, `IC` subfolder and other game resources. See the
+[preparation guide](docs/UKRAINIAN_SUPPORT.md) for the procedure.
 
 ### Windows
 
@@ -61,8 +72,9 @@ or specify the game folder:
 .\WA2_SDL2_x64.exe --root "D:\Games\WHITE ALBUM2" --language en-US
 ```
 
-Omit `--language` for Chinese; use `--language ja-JP` for Japanese. In a prepared
-local workspace, `run.cmd` uses the `res/` folder.
+Omit `--language` for Chinese; use `--language ja-JP` for Japanese or
+`--language uk-UA` for Ukrainian. In a prepared local workspace, `run.cmd`
+uses the `res/` folder.
 
 ## Saves, settings and captions
 
@@ -70,14 +82,22 @@ Saves and settings are stored in the selected game folder. You can copy original
 PC files such as `Sys.sav`, `save_00.sav`, `SYSTEM.ini` and `D3D.ini` there. Test
 mode uses its own `test-mode/` folder; disable it when using normal saves.
 
-Embedded main-story supplementary captions are Chinese by default, independently
-of game language. Disable them or select a translated external `sub.yaml`.
-External captions replace the complete embedded set; ordinary story dialogue
-comes from the selected scripts and fonts.
+Embedded main-story supplementary captions are Chinese by default. The
+**Extra captions** switch controls their display. External captions support
+**UTF-8 `sub.yaml` and the original Todokanai format**: select a file under
+**Caption source**, such as the patch's `todokanai/subtitles`, and enable
+**Extra captions**. Todokanai files work directly without YAML conversion.
+
+Caption files are separate from the script packs; their text determines their
+language. The UA 0.1.5 caption file contains English text and can be translated
+before selection. External captions replace the complete embedded set and are
+never selected automatically. Ordinary story dialogue comes from the selected
+scripts and fonts.
 
 ## Documentation and development
 
 - [Android setup](docs/ANDROID.md)
+- [Ukrainian resource preparation and captions](docs/UKRAINIAN_SUPPORT.md)
 - [External caption format](docs/EXTERNAL_SUBTITLES.en.md)
 - [Building](docs/BUILDING.md) / [Architecture](docs/ARCHITECTURE.md)
 

@@ -12,7 +12,7 @@
 
 要求：**Android 8.0 及以上、ARM64、OpenGL ES 3.0**。
 
-1. 安装 `WA2-arm64-<版本名>.apk`。English 游戏资源配置需要 **0.2.67 或更新版本**。
+1. 安装 `WA2-arm64-<版本名>.apk`。英文资源支持从 **0.2.67** 起，乌克兰语与 Todokanai 外置字幕支持从 **0.2.70** 起。
 2. 将完整游戏资源复制到手机的任意文件夹，保留原有 `IC` 子目录。**文件夹名称不限，PAK 不用解压。**
 3. 打开应用，选择这个游戏文件夹，并授予读写权限。
 4. 选择游戏语言，按需设置 FPS、长按快进和补充字幕，点击 **“开始游戏”**。
@@ -32,7 +32,12 @@
 
 英文字库应从同一份 `en.pak` 生成。请先备份已有的 `fon_en.pak`；把中文字库改名不能得到配套英文字库。
 
-乌克兰语使用由补丁 0.1.5 准备的两个外置包，保留原版资源；见[乌克兰语说明](docs/UKRAINIAN_SUPPORT.md)。字幕支持玩家自行选择 `sub.yaml` 或 Todokanai 格式文件，不会自动选用补丁字幕。
+乌克兰语已适配 UA 补丁 **0.1.5**，在启动页的“游戏语言”中选择 **Українська**。两个配套文件使用游戏的 **KCAP 格式**，制作内容如下：
+
+- **`ua.pak`**：保留补丁 `en.pak` 中的 `bak`、`grp` 分组，以其 `script` 分组为基础覆盖乌克兰语 `script/` 文件；将 `IC/script/` 单独放入 **`ic/script`** 分组，避免同名场景互相覆盖。
+- **`font_ua.pak`**：将补丁 `fnt/` 中的两张大号字体图集，与 `en.pak` 的 `fnt` 分组中的两张小号图集合并，四张图直接放在包内，保留原文件名。
+
+脚本保留原编码和 `.txt`/`.bnr` 配对。可用[资源准备工具](scripts/prepare_ukrainian_resources.py)从原始 0.1.5 ZIP 生成两个包，放到所选游戏目录根目录，并保留原版 `script.pak`、`IC` 子目录等完整资源；具体步骤见[乌克兰语说明](docs/UKRAINIAN_SUPPORT.md)。
 
 ### Windows
 
@@ -42,18 +47,21 @@
 .\WA2_SDL2_x64.exe --root "D:\Games\WHITE ALBUM2"
 ```
 
-默认中文；日语加 `--language ja-JP`，英语加 `--language en-US`。本地工作区也可在准备好 `res/` 资源后使用 `run.cmd`。
+默认中文；日语加 `--language ja-JP`，英语加 `--language en-US`，乌克兰语加 `--language uk-UA`。本地工作区也可在准备好 `res/` 资源后使用 `run.cmd`。
 
 ## 存档、配置与字幕
 
 存档和配置读写到当前选择的游戏目录。可将 PC 的 `Sys.sav`、`save_00.sav` 等原版存档及 `SYSTEM.ini`、`D3D.ini` 复制到该目录；测试模式使用独立的 `test-mode/`，读取普通存档时请关闭测试模式。
 
-默认内置正篇中文字幕，也可以关闭或选择自己的 `sub.yaml`。外置字幕替换整份内置补充字幕，普通剧情对白由所选脚本和字库提供。
+默认内置正篇中文字幕，可通过“补充字幕”开关控制显示。外置字幕支持 **UTF-8 的 `sub.yaml` 和原 Todokanai 格式**：在启动页的 **“字幕来源”** 中手动选择文件，例如补丁的 `todokanai/subtitles`，并开启补充字幕。原 Todokanai 文件可直接使用，无需转换为 YAML。
+
+字幕文件独立于脚本包，字幕语言由文件内容决定；UA 0.1.5 附带的字幕为英文，可自行翻译后选择。外置字幕替换整份内置补充字幕，不会自动选用补丁文件；普通剧情对白仍由所选脚本和字库提供。
 
 ## 文档与开发
 
 - [Android 安装与目录授权](docs/ANDROID.md)
 - [游戏语言与汉化补丁适配](docs/LANGUAGE_RESOURCES.md)
+- [乌克兰语资源打包与字幕使用](docs/UKRAINIAN_SUPPORT.md)
 - [外置字幕规则（中文）](docs/EXTERNAL_SUBTITLES.md) / [English](docs/EXTERNAL_SUBTITLES.en.md)
 - [构建与验证](docs/BUILDING.md) / [架构](docs/ARCHITECTURE.md) / [开发记录](docs/DEVELOPMENT_HISTORY.zh-CN.md)
 
