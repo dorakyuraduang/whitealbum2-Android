@@ -23,8 +23,8 @@ import android.widget.TextView;
 public final class LauncherActivity extends Activity {
     private static final int PICK_DIRECTORY = 0x5742, PICK_SUBTITLE=0x5743;
     private static final int TEXT = 0xffedf4f3, MUTED = 0xffa4b7b6, ACCENT = 0xff76d6c4;
-    private TextView directory, status;
-    private Button choose, start, script, font, refreshLanguages, subtitle;
+    private TextView directory, status, languageResources;
+    private Button choose, start, language, subtitle;
     private Switch fps, longPress, testMode, chineseSubtitles;
     private boolean busy, launching, refreshing, profileReady;
     private int generation;
@@ -57,14 +57,11 @@ public final class LauncherActivity extends Activity {
         choose.setBackgroundTintList(ColorStateList.valueOf(0xff30474b)); card.addView(choose, row(14));
         choose.setOnClickListener(view -> pickDirectory());
         card.addView(text("选择存放原版 PAK 的文件夹，名称不限，并保留 IC 子目录。资源直接读取；存档和游戏配置也保存在所选目录，可放入 PC 版存档。", 13, MUTED), row(8));
-        content.addView(text("剧情语言与字体", 18, TEXT), row(24));
-        script = new Button(this);script.setAllCaps(false);script.setTextColor(TEXT);script.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(script,row(8));
-        script.setOnClickListener(view -> chooseLanguage(false));
-        font = new Button(this);font.setAllCaps(false);font.setTextColor(TEXT);font.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(font,row(6));
-        font.setOnClickListener(view -> chooseLanguage(true));
-        content.addView(text("默认沿用当前脚本和字库。把兼容的其他语言 PAK 放入所选游戏目录或 IC 后，分别选择脚本与配套字库。字库使用游戏 PAK 格式，不是手机 TTF/OTF 字体；更改后重新启动游戏生效。", 13, MUTED), row(6));
-        refreshLanguages = new Button(this);refreshLanguages.setText("刷新资源列表");refreshLanguages.setAllCaps(false);refreshLanguages.setTextColor(TEXT);refreshLanguages.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(refreshLanguages,row(6));
-        refreshLanguages.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this),0,false));
+        content.addView(text("游戏语言", 18, TEXT), row(24));
+        language = new Button(this);language.setAllCaps(false);language.setTextColor(TEXT);language.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(language,row(8));
+        language.setOnClickListener(view -> chooseLanguage());
+        languageResources=text("",13,MUTED);content.addView(languageResources,row(6));
+        content.addView(text("默认简体中文。程序按所选语言自动匹配脚本、游戏字库和内置姓名；对应 PAK 需放在所选资源目录根目录。更改后重新启动游戏生效。", 13, MUTED), row(6));
         chineseSubtitles = new Switch(this);chineseSubtitles.setText("正篇补充字幕");chineseSubtitles.setTextColor(TEXT);chineseSubtitles.setTextSize(16);chineseSubtitles.setPadding(0,dp(12),0,dp(12));
         chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));chineseSubtitles.setOnCheckedChangeListener((button,checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setChineseSubtitles(this,checked,this::saved);}});
         content.addView(chineseSubtitles,row(8));
@@ -99,24 +96,18 @@ public final class LauncherActivity extends Activity {
         choose.setEnabled(!busy); start.setEnabled(!busy && tree != null && profileReady);
         refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));refreshing=false;
         for(Switch control:new Switch[]{fps,longPress,testMode,chineseSubtitles})control.setEnabled(!busy && profileReady);
-        script.setText("剧情脚本："+(LaunchSettings.script(this).isEmpty()?"当前资源（默认）":LaunchSettings.script(this)));
-        font.setText("游戏字库："+(LaunchSettings.font(this).isEmpty()?"当前资源（默认）":LaunchSettings.font(this)));
-        script.setEnabled(!busy && profileReady);font.setEnabled(!busy && profileReady);refreshLanguages.setEnabled(!busy && profileReady);
+        language.setText("游戏语言："+LaunchSettings.languageLabel(this));language.setEnabled(!busy && profileReady);
+        languageResources.setText("自动使用："+LaunchSettings.script(this)+" + "+LaunchSettings.font(this));
         subtitle.setText("字幕来源："+ExternalSubtitles.display(LaunchSettings.subtitle(this)));subtitle.setEnabled(!busy && profileReady);
         if (!busy) status.setText(tree == null ? "请先选择并授权游戏资源文件夹。" : "启动设置、游戏配置和存档保存在所选游戏目录。");
     }
-    private void chooseLanguage(boolean isFont) {
+    private void chooseLanguage() {
         if(busy || !profileReady)return;
-        String[] names=ResourceDirectory.preparedPakNames(this);String selected=isFont?LaunchSettings.font(this):LaunchSettings.script(this);
-        java.util.ArrayList<String> values=new java.util.ArrayList<>();values.add("");java.util.Collections.addAll(values,names);
-        if(!values.contains(selected))values.add(selected);
-        String[] labels=new String[values.size()];labels[0]="当前资源（默认）";
-        for(int n=1;n<labels.length;++n)labels[n]=values.get(n)+(java.util.Arrays.asList(names).contains(values.get(n))?"":"（未找到）");
-        new AlertDialog.Builder(this).setTitle(isFont?"选择配套字库 PAK":"选择剧情脚本 PAK")
-            .setSingleChoiceItems(labels,values.indexOf(selected),(dialog,which) -> {
-                String name=values.get(which);dialog.dismiss();status.setText("正在保存语言资源选择…");
-                LaunchSettings.setArchive(this,isFont,name,this::saved);refresh();
-                if(LaunchSettings.saving(this))status.setText("正在保存语言资源选择…");
+        new AlertDialog.Builder(this).setTitle("选择游戏语言")
+            .setSingleChoiceItems(new String[]{"简体中文","日本語"},LaunchSettings.language(this),(dialog,which) -> {
+                dialog.dismiss();status.setText("正在保存游戏语言…");
+                LaunchSettings.setLanguage(this,which,this::saved);refresh();
+                if(LaunchSettings.saving(this))status.setText("正在保存游戏语言…");
             }).setNegativeButton("取消",null).show();
     }
     private void pickDirectory() {

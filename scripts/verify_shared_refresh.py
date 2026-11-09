@@ -83,7 +83,7 @@ def main():
         except (OSError,ValueError):
             run([sys.executable,ROOT/'scripts/verify_portable_shaders.py']);shaders=fresh(ROOT/'logs/portable-shader-verification.json')
         tracked=[Path(__file__),ROOT/'tests/shared-host-refresh/CMakeLists.txt',reference_path,archive,ROOT/'config/porting_contract.json',ROOT/'config/release.json']
-        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','external_subtitles')]
+        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','external_subtitles')]
         tracked += [ROOT/'scripts/prepare_shared_chroma.py',ROOT/chroma['reference_file']]
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/verify_subtitles.py',ROOT/'scripts/verify_shared_package.py',ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/shared-aot-android/CMakeLists.txt',ROOT/'tests/shared-aot-android/entry.cpp']
@@ -95,7 +95,7 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','external_subtitles')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','external_subtitles')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -107,7 +107,9 @@ def main():
         language=reports['language_resources']
         external=reports['external_subtitles']
         if external['exact_embedded_cues']!=315 or external['exact_embedded_glyphs']!=6462 or external['rejections']<45 or not all(external[key] for key in ('bom_crlf_checked','shared_audio_binding_checked','external_replaces_embedded_tracks','new_character_atlas_checked','legacy_bitmap_reused','bounded_yaml_only')):raise ValueError('Incomplete external sub.yaml parser/playback checks')
-        if language['archive_aliases']!=6 or language['shared_argument_combinations']!=8 or language['guards']<18 or not all(language[key] for key in ('default_mount_unchanged','independent_script_and_font','root_ic_and_file_apis_checked','patch_priority_preserved','invalid_selection_not_published')):raise ValueError('Incomplete selected language resource checks')
+        if language['archive_aliases']!=6 or language['shared_argument_combinations']!=4 or language['guards']<24 or not all(language[key] for key in ('default_chinese_pair','automatic_matched_pairs','root_ic_and_file_apis_checked','patch_priority_preserved','invalid_selection_not_published')):raise ValueError('Incomplete selected language resource checks')
+        names=reports['language_names']
+        if names['changed_slots']!=20 or names['preserved_slots']!=12 or names['guards']<9 or names['static_function_entries'] or names['instruction_step_calls'] or not all(names[key] for key in ('default_chinese_unchanged','source_strings_unchanged','glyph_tables_and_code_unchanged','alias_identity_preserved','invalid_contract_not_published')):raise ValueError('Incomplete language-specific default-name checks')
         host=reports['host_progress']
         if host['burst_queries']!=3072 or host['device_pumps']!=12 or host['transport_roundtrips']<4 or not host['blocking_waits_bypass'] or not host['frame_summary_exact']:raise ValueError('Incomplete event cadence/progress checks')
         image_chroma=reports['image_chroma']

@@ -5,13 +5,15 @@
 #include <string_view>
 
 namespace wa2::resource {
-// Empty selections preserve the existing root/IC/patch resource order. These
-// are original-format PAKs, including their encoded text and atlas ordering.
+enum class GameLanguage {chinese,japanese};
+struct LanguageProfile {std::string_view tag,script,font;};
+const LanguageProfile& language_profile(GameLanguage);
+GameLanguage parse_language(std::string_view);
+// A language selects one verified resource pair and matching default names.
 struct LanguageResources {
-    std::string script, font;
+    GameLanguage language{GameLanguage::chinese};
     bool chinese_subtitles{true};
 };
-std::string language_archive_name(std::string_view);
 void validate_language_resources(const LanguageResources&);
 // Common launch options; each OS entry only supplies its argument strings.
 bool language_launch_option(std::span<const std::string_view>,std::size_t& at,LanguageResources&);

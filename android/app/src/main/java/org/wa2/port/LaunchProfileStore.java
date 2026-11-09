@@ -11,14 +11,14 @@ final class LaunchProfileStore {
     private long revision;
     LaunchProfileStore(Storage storage,LaunchProfile fallback) throws IOException {
         if(storage==null || fallback==null)throw new IllegalArgumentException("Missing launcher storage");this.storage=storage;
-        byte[] bytes=storage.read();current=bytes==null?fallback:LaunchProfile.decode(bytes);dirty=bytes==null;
+        byte[] bytes=storage.read();current=bytes==null?fallback:LaunchProfile.decode(bytes);dirty=LaunchProfile.needsUpgrade(bytes);
     }
     synchronized LaunchProfile current() { return current; }
     synchronized boolean dirty() { return dirty; }
     synchronized boolean set(int flag,boolean value) {
         return update(current.with(flag,value));
     }
-    synchronized boolean setArchive(boolean font,String name) { return update(current.withArchive(font,name)); }
+    synchronized boolean setLanguage(int value) {return update(current.withLanguage(value));}
     synchronized boolean setSubtitle(String uri) {return update(current.withSubtitle(uri));}
     private boolean update(LaunchProfile next) {if(next.equals(current))return false;current=next;dirty=true;++revision;return true;}
     void flush() throws IOException {
@@ -30,6 +30,6 @@ final class LaunchProfileStore {
     void reload() throws IOException {
         final long version;synchronized(this){if(dirty)throw new IOException("Launcher configuration still has unsaved edits");version=revision;}
         byte[] bytes=storage.read();LaunchProfile next=bytes==null?LaunchProfile.defaults():LaunchProfile.decode(bytes);
-        synchronized(this){if(revision!=version)throw new IOException("Launcher configuration changed during reload");current=next;dirty=bytes==null;}
+        synchronized(this){if(revision!=version)throw new IOException("Launcher configuration changed during reload");current=next;dirty=LaunchProfile.needsUpgrade(bytes);}
     }
 }

@@ -1,6 +1,7 @@
 #include "startup.hpp"
 #include "../../recompiled/process.hpp"
 #include "../../recompiled/save_read_scope.hpp"
+#include "../../recompiled/language_names.hpp"
 #include "../../platform/window/gui.hpp"
 #include "../../platform/compat/legacy_display.hpp"
 #include "../../platform/compat/test_profile.hpp"
@@ -50,7 +51,7 @@ std::uint32_t run(Startup startup){
             process.state().reports["selected_directory_io"]=[&process]{return platform::compat::save_files_report(process.state().mutable_files);};}
         if(startup.mount_resources)startup.mount_resources(process);
         platform::compat::select_language_resources(process,startup.language);
-        runtime.load(image);platform::compat::install_io_diagnostics(process,startup.report_file,WA2_HOST_VERSION,std::move(startup.io_diagnostic_sink));
+        runtime.load(image);aot::configure_language_names(process,startup.language.language);platform::compat::install_io_diagnostics(process,startup.report_file,WA2_HOST_VERSION,std::move(startup.io_diagnostic_sink));
         const auto result=runtime.run();report({});return result;
     }catch(const std::exception& error){try{report(error.what());}catch(...){}throw;}
 }

@@ -29,7 +29,7 @@ int main(int argc,char** argv){
             else if(argument=="--test-mode")startup.test_mode=true;
             else if(argument=="--subtitles" && n+1<arguments.size())external_subtitles=std::filesystem::u8path(arguments[++n]);
             else if(wa2::resource::language_launch_option(arguments,n,startup.language))continue;
-            else if(argument=="--help"){std::cout<<"Place this program beside the original PAKs, or use --root <resource directory>.\n--test-mode uses separate chapter-unlocked saves.\n--script-pak <file.pak> and --font-pak <file.pak> select compatible external language resources.\n--no-chinese-subtitles disables the embedded main-story Chinese captions.\n";return 0;}else throw std::runtime_error("Unknown launch argument: "+argument);}
+            else if(argument=="--help"){std::cout<<"Place this program beside the original PAKs, or use --root <resource directory>.\n--test-mode uses separate chapter-unlocked saves.\n--language zh-CN|ja-JP selects the matching script, font and default names (default zh-CN).\n--no-chinese-subtitles disables the supplementary captions.\n";return 0;}else throw std::runtime_error("Unknown launch argument: "+argument);}
         if(!external_subtitles.empty() && startup.language.chinese_subtitles)startup.captions=wa2::platform::subtitle_file(external_subtitles.is_absolute()?external_subtitles:startup.options.data_root/external_subtitles);
         startup.files=wa2::platform::compat::local_files(startup.options.data_root);
         wa2::window::SdlHostOptions options;options.widgets=wa2::window::native_widgets();startup.window=wa2::window::sdl_host(std::move(options));

@@ -20,7 +20,7 @@ public:
     explicit SelectedResources(std::shared_ptr<wr::ReadOnlyFiles> original):original_(std::move(original)){}
     void select(std::string_view physical,std::array<std::string_view,2> targets){
         if(physical.empty())return;
-        const auto name=resource::language_archive_name(physical);
+        const auto name=std::string(physical);
         const auto info=original_->info(name);
         if(!info || (info->attributes&16))throw resource::NotFound("Selected language PAK is missing: "+name);
         for(const auto target:targets)for(const auto prefix:{"","IC/"}){
@@ -80,17 +80,18 @@ void check_pack(wr::Process& process,const std::string& name,bool font){
 void select_language_resources(wr::Process& process,const resource::LanguageResources& selection){
     resource::validate_language_resources(selection);
     if(process.entry)throw std::logic_error("Language resources must be selected before image load");
-    if(!selection.script.empty() || !selection.font.empty()){
+    const auto profile=resource::language_profile(selection.language);
+    {
         if(!process.state().read_only_files)throw resource::Error("Language PAK selection needs a mounted game directory");
         // Validate against the unmodified mount before publishing any alias.
-        check_pack(process,resource::language_archive_name(selection.script),false);
-        check_pack(process,resource::language_archive_name(selection.font),true);
+        check_pack(process,std::string(profile.script),false);
+        check_pack(process,std::string(profile.font),true);
         auto selected=std::make_shared<SelectedResources>(process.state().read_only_files);
-        selected->select(selection.script,{"ck-gal.pak","script.pak"});
-        selected->select(selection.font,{"fon.pak","fnt.pak"});
+        selected->select(profile.script,{"ck-gal.pak","script.pak"});
+        selected->select(profile.font,{"fon.pak","fnt.pak"});
         install_resource_mount(process,std::move(selected));
     }
-    process.state().reports["language_resources"]=[selection]{return "{\"script\":"+wr::quote(selection.script)+",\"font\":"+wr::quote(selection.font)+
+    process.state().reports["language_resources"]=[selection,profile]{return "{\"language\":"+wr::quote(std::string(profile.tag))+",\"script\":"+wr::quote(std::string(profile.script))+",\"font\":"+wr::quote(std::string(profile.font))+
         ",\"chinese_subtitles\":"+(selection.chinese_subtitles?"true":"false")+",\"patch_priority_preserved\":true,\"resource_payloads_copied\":false}";};
 }
 }

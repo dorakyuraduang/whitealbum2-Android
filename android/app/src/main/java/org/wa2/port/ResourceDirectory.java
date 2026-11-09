@@ -98,18 +98,12 @@ final class ResourceDirectory {
         try { Uri tree = Uri.parse(saved); return validTree(tree) ? tree : null; }
         catch (RuntimeException error) { return null; }
     }
-    // Launcher-only metadata snapshot. Never wait for SDL, query a provider or
-    // touch an archive on the UI thread just to show language choices.
-    static String[] preparedPakNames(Context application) {
-        Uri tree=selectedTree(application);
-        synchronized(LOCK){return tree!=null && tree.equals(preparedTree) && preparedArchives!=null?preparedArchives.names():new String[0];}
-    }
     static void validatePreparedLanguages(Context application,String script,String font) throws IOException {
         Uri tree=selectedTree(application);
         synchronized(LOCK){
             if(tree==null || !tree.equals(preparedTree) || preparedArchives==null)throw new IOException("请先重新检查游戏资源文件夹。");
             for(String name:new String[]{script,font})if(!name.isEmpty() && preparedArchives.find(name)==null)
-                throw new IOException("找不到已选择的语言包："+name+"。请更改脚本/字库选择，或把文件放回所选游戏目录。");
+                throw new IOException("所选游戏语言缺少资源包："+name+"。请把对应 PAK 放入游戏目录根目录，或选择其他游戏语言。");
         }
     }
 
