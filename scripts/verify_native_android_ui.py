@@ -25,7 +25,7 @@ def main():
     if digest(api)!=official['android_jar_sha256']:raise ValueError('Android API stubs changed')
     source_sets={backend:java_sources(backend) for backend in ('shared-aot','native')}
     sdl=sorted((ROOT/'tools/SDL-release-2.32.10/android-project/app/src/main/java').rglob('*.java'))
-    tests=[ROOT/'tests/android/org/wa2/port'/name for name in ('TouchGesturesTest.java','ResourceLocationTest.java','LegacySettingsPathTest.java','LegacySavePathTest.java','GameStorageTest.java','LaunchProfileTest.java','CompatibleStoragePathTest.java','DocumentDirectoryTest.java','RuntimeReportFileTest.java')]
+    tests=[ROOT/'tests/android/org/wa2/port'/name for name in ('TouchGesturesTest.java','ResourceLocationTest.java','LegacySettingsPathTest.java','LegacySavePathTest.java','GameStorageTest.java','LaunchProfileTest.java','LauncherTextTest.java','CompatibleStoragePathTest.java','DocumentDirectoryTest.java','RuntimeReportFileTest.java')]
     inputs={path.relative_to(ROOT).as_posix():digest(path) for path in {*sdl,*tests,*[path for sources in source_sets.values() for path in sources],Path(__file__),ROOT/'scripts/android_source_sets.py',ROOT/'android/app/src/main/AndroidManifest.xml'}}
     identity=hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()[:16];directory=ROOT/'build/native-android-ui'/identity;directory.mkdir(parents=True,exist_ok=True)
     flags=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS;records={}
@@ -73,6 +73,8 @@ def main():
         if profile['language_roundtrips']!=32 or profile['legacy_migrations']!=8 or not all(profile[key] for key in ('language_arguments_exact','language_edits_preserve_flags','automatic_matched_pairs','legacy_mixed_pair_corrected','upgrade_write_retry')):raise ValueError('Incomplete launcher language/migration checks')
         if profile['v2_migrations']!=96 or profile['v3_migrations']!=288 or profile['external_subtitle_roundtrips']!=96 or not profile['external_subtitle_write_retry']:raise ValueError('Incomplete external subtitle configuration checks')
         if profile['v4_migrations']!=96 or not profile['older_profiles_default_chinese'] or not profile['explicit_language_retained_after_upgrade']:raise ValueError('Incomplete Chinese-default upgrade checks')
+        text=reports['LauncherTextTest']
+        if text['languages']!=28 or text['translated_messages']!=1148 or text['formatted_message_cases']!=252 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=15 or not all(text[key] for key in ('default_chinese','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue checks')
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Android UI input changed during verification: '+name)
     report=dict(schema='wa2.native-android-ui.v1',source_sha256=inputs,source_sets=records,api_jar_sha256=digest(api),javac_sha256=digest(jdk/'bin/javac.exe'),d8_sha256=digest(bt/'lib/d8.jar'),

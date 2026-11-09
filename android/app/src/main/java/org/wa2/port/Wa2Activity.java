@@ -2,6 +2,8 @@ package org.wa2.port;
 
 import android.os.Bundle;
 import android.content.Intent;
+import android.content.Context;
+import android.content.res.Configuration;
 import android.view.WindowManager;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -9,6 +11,11 @@ import org.libsdl.app.SDLActivity;
 
 public final class Wa2Activity extends SDLActivity {
     private GameTouchControls touchControls;
+    @Override protected void attachBaseContext(Context base){
+        Configuration game=new Configuration(base.getResources().getConfiguration());
+        game.setLayoutDirection(java.util.Locale.ROOT);
+        super.attachBaseContext(base.createConfigurationContext(game));
+    }
     private void finishNormally() { super.finish(); }
     @Override public void finish() {
         if (!ResourceDirectory.finishGame(this, this::finishNormally)) super.finish();
@@ -29,6 +36,9 @@ public final class Wa2Activity extends SDLActivity {
     }
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        // Launcher RTL is a presentation preference; the original game UI
+        // keeps its source coordinate direction and common input adapter.
+        getWindow().getDecorView().setLayoutDirection(android.view.View.LAYOUT_DIRECTION_LTR);
         if (SDLActivity.mBrokenLibraries) return;
         if(!LaunchSettings.sessionValid(this)){startActivity(new Intent(this,LauncherActivity.class));finishNormally();return;}
         ResourceDirectory.attach(this);
