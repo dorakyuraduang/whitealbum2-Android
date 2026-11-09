@@ -8,11 +8,14 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.os.Process;
 import android.provider.DocumentsContract;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -58,6 +61,52 @@ public final class LauncherActivity extends Activity {
         LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,-2,1);second.setMarginStart(dp(12));line.addView(right,second);
         parent.addView(line,row(top));
     }
+    private void fitContent(LinearLayout content){
+        if(root.getWidth()==0)return;
+        int available=Math.max(0,root.getWidth()-root.getPaddingLeft()-root.getPaddingRight()-dp(32));
+        int width=Math.min(available,dp(560));
+        android.view.ViewGroup.LayoutParams position=content.getLayoutParams();
+        if(position.width!=width){position.width=width;content.setLayoutParams(position);}
+    }
+    private void installSafeArea(LinearLayout content){
+        // Own all four inset edges so the decor and this root cannot both pad
+        // the same status/navigation bar on older Android versions.
+        if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
+        else{
+            View decor=getWindow().getDecorView();
+            decor.setSystemUiVisibility(decor.getSystemUiVisibility()|View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
+        }
+        if(Build.VERSION.SDK_INT>=28){
+            WindowManager.LayoutParams attributes=getWindow().getAttributes();
+            attributes.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(attributes);
+        }
+        root.setClipToPadding(true);
+        root.setOnApplyWindowInsetsListener((view,insets) -> {
+            int left,top,right,bottom;
+            if(Build.VERSION.SDK_INT>=30){
+                android.graphics.Insets safe=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+                left=safe.left;top=safe.top;right=safe.right;bottom=safe.bottom;
+            }else{
+                left=insets.getSystemWindowInsetLeft();top=insets.getSystemWindowInsetTop();right=insets.getSystemWindowInsetRight();bottom=insets.getSystemWindowInsetBottom();
+                if(Build.VERSION.SDK_INT>=28 && insets.getDisplayCutout()!=null){
+                    android.view.DisplayCutout cutout=insets.getDisplayCutout();
+                    left=Math.max(left,cutout.getSafeInsetLeft());top=Math.max(top,cutout.getSafeInsetTop());
+                    right=Math.max(right,cutout.getSafeInsetRight());bottom=Math.max(bottom,cutout.getSafeInsetBottom());
+                }
+            }
+            // Absolute edges keep a physical left/right cutout on the same
+            // side when the interface language changes to RTL.
+            if(root.getPaddingLeft()!=left || root.getPaddingTop()!=top || root.getPaddingRight()!=right || root.getPaddingBottom()!=bottom)root.setPadding(left,top,right,bottom);
+            fitContent(content);return insets;
+        });
+        root.addOnLayoutChangeListener((view,left,top,right,bottom,oldLeft,oldTop,oldRight,oldBottom) -> fitContent(content));
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
+            @Override public void onViewAttachedToWindow(View view){view.requestApplyInsets();}
+            @Override public void onViewDetachedFromWindow(View view){}
+        });
+        root.requestApplyInsets();
+    }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         ui=LauncherLocale.load(this);
@@ -66,8 +115,7 @@ public final class LauncherActivity extends Activity {
         LinearLayout outer = new LinearLayout(this);outer.setOrientation(LinearLayout.VERTICAL);outer.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);
         outer.setPadding(dp(16),dp(4),dp(16),dp(8));root.addView(outer,new ScrollView.LayoutParams(-1,-1));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
-        int width = Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(560));
-        outer.addView(content, new LinearLayout.LayoutParams(width, -2));
+        outer.addView(content,new LinearLayout.LayoutParams(-1,-2));
         LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);content.addView(heading);
         TextView title = text("WHITE ALBUM2",22,TEXT);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setSingleLine();title.setEllipsize(TextUtils.TruncateAt.END);title.setTextDirection(View.TEXT_DIRECTION_LTR);
         heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
@@ -102,7 +150,7 @@ public final class LauncherActivity extends Activity {
         start.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); content.addView(start, row(8));
         start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));
         status = text("", 13, MUTED);status.setMinHeight(dp(20));content.addView(status,row(6));
-        setContentView(root);refresh();Uri remembered=ResourceDirectory.selectedTree(this);if(remembered!=null)prepare(remembered,0,false);
+        installSafeArea(content);setContentView(root);refresh();Uri remembered=ResourceDirectory.selectedTree(this);if(remembered!=null)prepare(remembered,0,false);
     }
     private void saved(String problem) {runOnUiThread(() -> {if(isFinishing() || isDestroyed() || busy)return;refresh();status.setText(problem!=null?t(SAVE_ERROR,problem):LaunchSettings.saving(this)?t(SAVING):t(SAVED));});}
     private String folderLocation(Uri tree){

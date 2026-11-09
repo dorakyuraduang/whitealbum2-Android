@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.63-shared-aot**. Use the
+is **0.2.64-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.63-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.64-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -243,6 +243,19 @@ layout, while the game activity retains its original coordinate direction.
 Interface language lives in app preferences and is separate from the game
 script/font choice and selected-directory save settings. No global process
 locale is changed. See [launcher languages](LAUNCHER_LANGUAGES.md).
+
+0.2.64 adds launcher safe-area handling for all four physical edges. Android 11+
+uses the union of `systemBars()` and `displayCutout()` insets; Android 8–10 uses
+system window insets and, on Android 9+, the maximum of each bar/cutout edge.
+The launcher explicitly owns edge-to-edge layout so decor and content do not
+both apply the same padding. Repeated inset events replace padding instead of
+accumulating it. The original 4 dp top spacing is applied after the safe area.
+Content width is capped at 560 dp inside the measured safe viewport, including
+resize/rotation, and RTL does not swap a physical cutout to the opposite side.
+The game activity uses its existing separate window configuration. See the
+[Android inset guidance](https://developer.android.com/develop/ui/views/layout/edge-to-edge).
+Compilation checks do not establish on-device notch/gesture-bar layout; the app
+was not launched or inspected during development.
 
 From `0.2.46-shared-aot`, **测试模式（解锁全部内容）** uses a separate test
 profile with all known content gates unlocked. Toggle it on and tap **开始游戏**.
