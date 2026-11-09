@@ -1,9 +1,12 @@
 #include "profile.hpp"
+#include "save_files.hpp"
 #include <algorithm>
 #include <atomic>
 #include <charconv>
+#include <chrono>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <stdexcept>
 #include <system_error>
 #include <sstream>
@@ -86,6 +89,41 @@ Profile read_profile(wr::Process& process,const std::filesystem::path& path){
 void save_profile(wr::Process& process,const Profile& profile,const std::filesystem::path& path){
     auto* files=wr::mutable_files_for(process,path);if(!files){profile.save(path);return;}
     files->replace(path.lexically_relative(process.options.data_root).generic_string(),profile.bytes());
+}
+struct ProfileReader::State {
+    struct Entry {Profile profile;std::shared_ptr<wr::MutableFiles> files;std::uint64_t scope{},revision{},used{};std::chrono::steady_clock::time_point expires;};
+    ProfileReadScope scope;
+    std::map<std::filesystem::path,Entry> entries;
+    std::uint64_t reads{},hits{},loads{},load_ns{},maximum_load_ns{},serial{},declines{};
+};
+ProfileReader::ProfileReader(ProfileReadScope scope):state_(std::make_shared<State>()){state_->scope=std::move(scope);}
+Profile ProfileReader::read(wr::Process& process,const std::filesystem::path& path){
+    auto& state=*state_;++state.reads;
+    const auto load=[&]{
+        const auto start=std::chrono::steady_clock::now();++state.loads;
+        struct Timer {State& state;std::chrono::steady_clock::time_point start;~Timer(){const auto ns=std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count());state.load_ns+=ns;state.maximum_load_ns=std::max(state.maximum_load_ns,ns);}} timer{state,start};
+        return read_profile(process,path);
+    };
+    const auto scope=state.scope?state.scope(process):std::nullopt;
+    const auto* files=wr::mutable_files_for(process,path);const auto revision=save_files_revision(files);
+    if(!scope || !revision){state.entries.clear();return load();}
+    const auto now=std::chrono::steady_clock::now();auto found=state.entries.find(path);
+    if(found!=state.entries.end()){
+        auto& entry=found->second;
+        if(entry.files.get()==files && entry.scope==*scope && entry.revision==*revision && now<entry.expires){++state.hits;entry.used=++state.serial;return entry.profile;}
+        state.entries.erase(found);
+    }
+    auto profile=load();
+    // Keep unusual/large INIs on the original path rather than retaining
+    // potentially large parsed string tables on lower-memory devices.
+    if(profile.bytes().size()>256*1024){++state.declines;return profile;}
+    if(state.entries.size()>=4){auto oldest=std::min_element(state.entries.begin(),state.entries.end(),[](const auto& a,const auto& b){return a.second.used<b.second.used;});state.entries.erase(oldest);}
+    state.entries.emplace(path,State::Entry{profile,process.state().mutable_files,*scope,*revision,++state.serial,std::chrono::steady_clock::now()+std::chrono::milliseconds(250)});
+    return profile;
+}
+void ProfileReader::clear(){state_->entries.clear();}
+std::string ProfileReader::report()const{
+    const auto& s=*state_;return "{\"reads\":"+std::to_string(s.reads)+",\"snapshot_hits\":"+std::to_string(s.hits)+",\"physical_loads\":"+std::to_string(s.loads)+",\"physical_load_ns\":"+std::to_string(s.load_ns)+",\"maximum_physical_load_ns\":"+std::to_string(s.maximum_load_ns)+",\"large_profile_declines\":"+std::to_string(s.declines)+",\"cached_profiles\":"+std::to_string(s.entries.size())+",\"maximum_age_ms\":250,\"maximum_profiles\":4,\"writes_deferred\":false}";
 }
 std::string encode_profile_struct(std::span<const std::uint8_t> bytes){
     constexpr char digits[]="0123456789ABCDEF";std::string text;std::uint8_t sum{};text.reserve((bytes.size()+1)*2);

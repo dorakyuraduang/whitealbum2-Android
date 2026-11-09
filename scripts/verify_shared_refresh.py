@@ -81,7 +81,7 @@ def main():
         except (OSError,ValueError):
             run([sys.executable,ROOT/'scripts/verify_portable_shaders.py']);shaders=fresh(ROOT/'logs/portable-shader-verification.json')
         tracked=[Path(__file__),ROOT/'tests/shared-host-refresh/CMakeLists.txt',reference_path,archive,ROOT/'config/porting_contract.json',ROOT/'config/release.json']
-        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory')]
+        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch')]
         tracked += [ROOT/'scripts/verify_subtitles.py',ROOT/'scripts/verify_shared_package.py',ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/shared-aot-android/CMakeLists.txt',ROOT/'tests/shared-aot-android/entry.cpp']
         for folder in ('recompiled','engine','platform','hosts','android/native','generated/shared-aot','generated/static-data','generated/codepages','generated/graphics-abi','third_party/wa2_subtitles','tools/WindowsRecompTool-main/include/winrecomp'):
             tracked += [path for path in (ROOT/folder).rglob('*') if path.is_file() and path.suffix in ('.cpp','.hpp','.h','.inc','.cmake','.txt','.json')]
@@ -91,7 +91,7 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -100,6 +100,8 @@ def main():
             reports[name]=report
         saves=reports['selected_save_files']
         inventory=reports['save_inventory']
+        profiles=reports['profile_batch']
+        if profiles['static_profile_getter_calls']<400 or profiles['batched_descriptor_opens']!=1 or not all(profiles[key] for key in ('same_static_getter','writes_immediate','flush_and_revision_invalidation','frame_and_age_bounded','ordinary_and_worker_reads_fresh','namespace_isolation','failed_read_retry')):raise ValueError('Incomplete external profile read batch checks')
         if inventory['actual_static_reader_calls']<400 or inventory['scoped_directory_lists_per_fixture']!=1 or not all(inventory[key] for key in ('same_static_save_reader','payload_reads_fresh','write_invalidation','source_frame_invalidation','ordinary_and_worker_reads_fresh','inventory_lifetime_bounded')):raise ValueError('Incomplete source save inventory checks')
         if not all(saves[key] for key in ('single_lookup_open_plan','next_operation_sees_external_edits','sharing_checked_before_truncation')) or saves['fixture_root_opens']!=saves['fixture_root_metadata_queries']:raise ValueError('Repeated or stale save-open metadata queries')
         skip=reports['fast_forward']
@@ -130,7 +132,7 @@ def main():
         bindings[sdl.relative_to(ROOT).as_posix()]=digest(sdl)
         proof=dict(schema='wa2.shared-aot-refresh.v1',source_sha256=bindings,reference_receipt=str(reference_path),reference_receipt_sha256=digest(reference_path),cached_generated_sha256=generated,
             verification_scope='unchanged verified AOT sources, fresh unmetered shared-host builds, selected memory/file and fast-forward scheduling tests, Java/JNI audit',historical_oracle_and_performance_suite_rerun=False,
-            current_tests=reports,selected_directory_files=saves,save_inventory=inventory,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
+            current_tests=reports,selected_directory_files=saves,save_inventory=inventory,profile_batches=profiles,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
             crt_math_paths=dict(passed=True,source_unchanged=True,reference_receipt_sha256=digest(reference_path),independent_math_test_rerun=False,source_sha256=unchanged_math),
             manifest_sha256=digest(ROOT/'generated/shared-aot/manifest.json'),admitted_functions=manifest['admitted_functions'],instruction_locations=manifest['unique_instruction_locations'],
             partially_admitted_entries=manifest['partially_admitted_entries'],unsupported_instruction_sites=manifest['unsupported_instruction_sites'],

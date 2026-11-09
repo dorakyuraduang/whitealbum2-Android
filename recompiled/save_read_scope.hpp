@@ -1,9 +1,20 @@
 #pragma once
+#include "functions.hpp"
 #include <winrecomp/process.hpp>
 #include <winrecomp/win32_state.hpp>
 #include <optional>
 
 namespace wa2::aot {
+inline std::optional<std::uint64_t> profile_read_scope(wr::Process& p) noexcept {
+    if(p.state().current_thread_id!=1)return {};
+    for(const auto& [handle,file]:p.state().files)
+        if(file.owned && file.write && !file.path.empty())return {};
+    try{
+        auto m=p.memory.execution_scope();
+        if(!locate(m.load<32>(p.cpu.r[wr::ESP])).function)return {};
+        return m.load<32>(0xa3a130);
+    }catch(const wr::GuestFault&){return {};}
+}
 // The source enumerates save slots by opening each filename, including absent
 // slots. Share one directory inventory within that source update.
 // Only known read-only helper calls in the save/load UI qualify; payloads

@@ -88,7 +88,9 @@ std::string format_text(Process& p,U32 format,U32 arguments){
     return output;
 }
 }
-void install_system(wr::Process& p,ProfileReadHook before_profile_read){
+void install_system(wr::Process& p,ProfileReadHook before_profile_read,ProfileReadScope profile_scope){
+    const auto profiles=std::make_shared<ProfileReader>(std::move(profile_scope));
+    p.state().reports["profile_io"]=[profiles]{return profiles->report();};
     auto kernel=[&](const std::string& name,unsigned count,std::function<U32(Process&,Args)> fn){bind(p,"kernel32.dll",name,count,std::move(fn));};
     kernel("lstrlenA",1,[](Process& q,Args a){return a[0]?q.string_length(a[0]):0;});
     kernel("lstrcpyA",2,[](Process& q,Args a){string(q,a[0],q.read_string(a[1]));return a[0];});
@@ -111,18 +113,18 @@ void install_system(wr::Process& p,ProfileReadHook before_profile_read){
         auto* destination=wr::mutable_files_for(q,to);if(destination || wr::mutable_files_for(q,from)){const auto name=to.lexically_relative(q.options.data_root).generic_string();if(mounted_resource_info(q,to))return error(q,5);if(a[2] && (destination?destination->info(name).has_value():std::filesystem::exists(to)))return error(q,80);std::shared_ptr<resource::Source> source;try{source=open_process_resource(q,from);}catch(const resource::NotFound&){return error(q,2);}if(source->size()>64u*1024*1024)throw std::runtime_error("Selected-directory copy exceeds its bound");std::vector<std::uint8_t> bytes(std::size_t(source->size()));source->read_at(0,bytes);if(destination)destination->replace(name,bytes);else{std::ofstream output(to,std::ios::binary|std::ios::trunc);output.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));output.close();if(!output)return error(q,5);}return 1u;}
         if(mounted_resource_info(q,to))return error(q,5);const auto result=std::filesystem::copy_file(from,to,a[2]?std::filesystem::copy_options::none:std::filesystem::copy_options::overwrite_existing,ec);
         if(!result)return error(q,ec==std::errc::file_exists?80:ec==std::errc::no_such_file_or_directory?2:5);return 1u;});
-    kernel("GetPrivateProfileStringA",6,[](Process& q,Args a){if(!a[4])return 0u;if(a[4]>1048576)throw std::runtime_error("profile output limit");
-        const auto ini=read_profile(q,guest_file_path(q,q.read_string(a[5])));if(!a[0])return output_names(q,a[3],a[4],ini.sections());
+    kernel("GetPrivateProfileStringA",6,[profiles](Process& q,Args a){if(!a[4])return 0u;if(a[4]>1048576)throw std::runtime_error("profile output limit");
+        const auto ini=profiles->read(q,guest_file_path(q,q.read_string(a[5])));if(!a[0])return output_names(q,a[3],a[4],ini.sections());
         const auto section=q.read_string(a[0]);if(!a[1])return output_names(q,a[3],a[4],ini.keys(section));
         auto value=ini.get(section,q.read_string(a[1]));std::string fallback=a[2]?q.read_string(a[2]):"";while(!fallback.empty() && fallback.back()==' ')fallback.pop_back();
         return output_text(q,a[3],a[4],value?*value:fallback);});
-    kernel("GetPrivateProfileIntA",4,[before=std::move(before_profile_read)](Process& q,Args a){if(!a[0] || !a[1])return a[2];
+    kernel("GetPrivateProfileIntA",4,[profiles,before=std::move(before_profile_read)](Process& q,Args a){if(!a[0] || !a[1])return a[2];
         const auto section=q.read_string(a[0]),key=q.read_string(a[1]);const auto path=guest_file_path(q,q.read_string(a[3]));
-        if(before)before(q,path,section,key);auto ini=read_profile(q,path);const auto value=ini.get(section,key);return value?profile_integer(*value,a[2]):a[2];});
-    kernel("WritePrivateProfileStringA",4,[](Process& q,Args a){if(!q.options.allow_file_write)return error(q,5);if(!a[0] && !a[1] && !a[2])return 1u;if(!a[0] || !a[3])return error(q,87);
+        if(before)before(q,path,section,key);auto ini=profiles->read(q,path);const auto value=ini.get(section,key);return value?profile_integer(*value,a[2]):a[2];});
+    kernel("WritePrivateProfileStringA",4,[profiles](Process& q,Args a){if(!q.options.allow_file_write)return error(q,5);profiles->clear();if(!a[0] && !a[1] && !a[2])return 1u;if(!a[0] || !a[3])return error(q,87);
         const auto path=guest_file_path(q,q.read_string(a[3]));try{auto ini=read_profile(q,path);ini.set(q.read_string(a[0]),nullable_string(q,a[1]),nullable_string(q,a[2]));save_profile(q,ini,path);return 1u;}catch(const std::filesystem::filesystem_error&){return error(q,5);}});
-    for(bool writing:{false,true})kernel(writing?"WritePrivateProfileStructA":"GetPrivateProfileStructA",5,[writing](Process& q,Args a){
-        if(writing && !q.options.allow_file_write)return error(q,5);if(!a[0] || !a[1] || a[3]>1048576)return error(q,87);const auto path=guest_file_path(q,q.read_string(a[4]));auto ini=read_profile(q,path);
+    for(bool writing:{false,true})kernel(writing?"WritePrivateProfileStructA":"GetPrivateProfileStructA",5,[writing,profiles](Process& q,Args a){
+        if(writing && !q.options.allow_file_write)return error(q,5);if(!a[0] || !a[1] || a[3]>1048576)return error(q,87);const auto path=guest_file_path(q,q.read_string(a[4]));if(writing)profiles->clear();auto ini=writing?read_profile(q,path):profiles->read(q,path);
         std::vector<std::uint8_t> bytes(a[3]);if(writing){std::optional<std::string> text;if(a[2]){q.memory.copy_out(a[2],bytes);text=encode_profile_struct(bytes);}ini.set(q.read_string(a[0]),q.read_string(a[1]),std::move(text));save_profile(q,ini,path);return 1u;}
         if(!a[2])return error(q,87);q.memory.check(a[2],a[3],Memory::Write);const auto text=ini.get(q.read_string(a[0]),q.read_string(a[1]));if(!text || !decode_profile_struct(*text,bytes))return error(q,13);q.memory.copy_in(a[2],bytes);return 1u;
     });

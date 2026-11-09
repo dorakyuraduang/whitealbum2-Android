@@ -1,7 +1,9 @@
 #pragma once
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <iosfwd>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -29,6 +31,17 @@ private:
 };
 Profile read_profile(wr::Process&,const std::filesystem::path&);
 void save_profile(wr::Process&,const Profile&,const std::filesystem::path&);
+using ProfileReadScope=std::function<std::optional<std::uint64_t>(wr::Process&)>;
+// Read-only snapshots for a caller-defined configuration batch. Explicit
+// writes are never delayed; storage revisions and ordinary callers invalidate.
+class ProfileReader {
+    struct State;std::shared_ptr<State> state_;
+public:
+    explicit ProfileReader(ProfileReadScope={});
+    Profile read(wr::Process&,const std::filesystem::path&);
+    void clear();
+    std::string report()const;
+};
 std::string encode_profile_struct(std::span<const std::uint8_t>);
 bool decode_profile_struct(std::string_view,std::span<std::uint8_t>);
 std::uint32_t profile_integer(std::string_view,std::uint32_t fallback);

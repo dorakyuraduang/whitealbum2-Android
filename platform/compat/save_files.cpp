@@ -37,12 +37,12 @@ class Saves final:public wr::MutableFiles {
         std::optional<std::uint64_t> key;std::chrono::steady_clock::time_point expires;
         std::optional<std::uint64_t> declined_key;std::chrono::steady_clock::time_point declined_until;
         std::map<std::string,Info> root,legacy;bool legacy_loaded{},have_documents{};
-        std::uint64_t builds{},hits{},declines{},info_calls{},list_calls{},open_calls{},info_ns{},list_ns{},open_ns{};
+        std::uint64_t revision{},builds{},hits{},declines{},info_calls{},list_calls{},open_calls{},info_ns{},list_ns{},open_ns{};
         void invalidate(){key.reset();declined_key.reset();}
         struct Mutation {
             Inventory& value;
-            explicit Mutation(Inventory& v):value(v){value.invalidate();}
-            ~Mutation(){value.invalidate();}
+            explicit Mutation(Inventory& v):value(v){value.invalidate();++value.revision;}
+            ~Mutation(){value.invalidate();++value.revision;}
         };
         struct Timer {
             std::uint64_t& calls;std::uint64_t& total;std::chrono::steady_clock::time_point start=std::chrono::steady_clock::now();
@@ -132,6 +132,7 @@ public:
     U32 move(std::string_view from,std::string_view to)override{Inventory::Mutation mutation(*inventory_);const auto a=mapped(from),b=mapped(to);if(!a || !b)return 5;if(info(to))return 183;return files_->move(existing(*a),physical(*b));}
     U32 attributes(std::string_view value,U32 flags)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);return path?files_->attributes(existing(*path),flags):5;}
     void replace(std::string_view value,std::span<const std::uint8_t> bytes)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);if(!path || bytes.size()>64u*1024*1024)throw std::runtime_error("Unsupported selected-directory save/configuration path: "+std::string(value));files_->replace(physical(*path),bytes);}
+    std::uint64_t revision()const{return inventory_->revision;}
     std::string report()const{const auto& c=*inventory_;std::ostringstream out;
         out<<"{\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
 };
@@ -162,6 +163,7 @@ public:
 }
 std::shared_ptr<wr::MutableFiles> local_files(const std::filesystem::path& root){return std::make_shared<Local>(root);}
 std::string save_files_report(const std::shared_ptr<wr::MutableFiles>& files){if(auto* saves=dynamic_cast<const Saves*>(files.get()))return saves->report();return "{}";}
+std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->revision();return {};}
 std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope){
     auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope));
     if(test){for(const auto* folder:{"Documents","Documents/Leaf","Documents/Leaf/WHITE ALBUM2 -closing chapter-","Documents/Leaf/WHITE ALBUM2 -introductory chapter-"}){const auto error=result->directory(folder);if(error && error!=183)throw std::runtime_error("Cannot prepare selected-directory test saves");}
