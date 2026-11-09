@@ -39,6 +39,10 @@ only the probe after collecting its output; keep the game and its data intact.
 
 `report` reads selected counters from the last saved `wa2-runtime.json`; check
 its release and date because installing a new APK does not refresh that report.
+It returns `completed_run` separately from the newest `last_run` progress/exit
+snapshot, so a later teardown progress write cannot hide a full exit report.
+The selected renderer timing and static-work counters contain no pixels or
+game UI input, and no Activity is started.
 `measure` compares repeated reads of the same small INI through the actual
 installed adapter and a temporary private-cache fixture. It reports timings and
 byte counts, never the INI contents or authorized URI. The adapter ordinarily
