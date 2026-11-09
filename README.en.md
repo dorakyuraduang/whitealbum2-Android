@@ -3,7 +3,7 @@
 [简体中文](README.md) · **English**
 
 A shared static-recompilation project for **Android ARM64 / Windows x64**.
-Current development version: **0.2.68-shared-aot**. Both platforms compile the
+Current development version: **0.2.69-shared-aot**. Both platforms compile the
 same game logic. Supply your own original PAK resources; whole-archive extraction
 is not required.
 

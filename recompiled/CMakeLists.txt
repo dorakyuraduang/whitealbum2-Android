@@ -46,6 +46,7 @@ set(WA2_FUNCTION_RUNTIME_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/subtitles.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/movie_settings.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/language_names.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/language_prompts.cpp"
     "${WA2_SHARED_ROOT}/port/native_resources.cpp"
     "${WA2_SHARED_ROOT}/port/native_vorbis.cpp"
     "${WA2_SHARED_ROOT}/port/registry.cpp"
