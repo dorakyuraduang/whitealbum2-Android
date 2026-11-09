@@ -161,7 +161,7 @@ def main():
         key=ROOT/'private/android-signing/wa2-native-dev.p12'
         if not key.is_file():key=ROOT/'build/android-signing/wa2-native-dev.p12'
         if not key.is_file():raise ValueError('The existing development signing identity is missing')
-        signed=directory/'WA2-arm64-dev.apk'
+        signed=directory/('WA2-arm64-'+release['name']+'.apk')
         run([jdk/'bin/java.exe','-XX:ActiveProcessorCount=1','-Xmx256m','-jar',bt/'lib/apksigner.jar','sign','--ks',key,
             '--ks-key-alias','wa2-dev','--ks-pass','pass:android','--key-pass','pass:android','--out',signed,aligned])
         run([jdk/'bin/java.exe','-XX:ActiveProcessorCount=1','-Xmx256m','-jar',bt/'lib/apksigner.jar','verify','--verbose','--print-certs',signed])
@@ -210,9 +210,12 @@ def main():
             unsupported_instruction_sites=proof['unsupported_instruction_sites'],maximum_build_jobs=1,passed=True)
         from verify_shared_package import verify
         verify(status,publish=False)
-        destinations={'android':output/'android/WA2-arm64-dev.apk','windows':output/'WA2_SDL2_x64.exe'}
+        destinations={'android':output/'android'/signed.name,'windows':output/'WA2_SDL2_x64.exe'}
         for host,path in destinations.items():
             publish_file(artifacts[host]['file'],path);artifacts[host]['file']=str(path)
+        latest=output/'android/WA2-arm64-dev.apk'
+        publish_file(artifacts['android']['file'],latest)
+        status['android_latest_alias']=dict(file=str(latest),sha256=artifacts['android']['sha256'],bytes=artifacts['android']['bytes'])
         replacement_destination=output/'android'/('WA2-'+release['name']+'-replace-native.apk')
         publish_file(replacement_signed,replacement_destination);status['native_replacement']['file']=str(replacement_destination)
         notices=output/'licenses/wa2-subtitles';notices.mkdir(parents=True,exist_ok=True)

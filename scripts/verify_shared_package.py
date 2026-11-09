@@ -61,6 +61,12 @@ def verify(status,publish=False):
     for host,artifact in status['artifacts'].items():
         if digest(Path(artifact['file']))!=artifact['sha256']:raise ValueError('Packaged artifact changed: '+host)
     apk=Path(status['artifacts']['android']['file']);libraries=[]
+    if status.get('version') and apk.name!='WA2-arm64-'+status['version']+'.apk':raise ValueError('Standard APK filename must contain the release version')
+    latest=status.get('android_latest_alias')
+    if latest:
+        path=Path(latest['file'])
+        if path.name!='WA2-arm64-dev.apk' or path.resolve().parent!=apk.resolve().parent or path.resolve()==apk.resolve():raise ValueError('Invalid latest APK alias')
+        if latest['sha256']!=status['artifacts']['android']['sha256'] or digest(path)!=latest['sha256'] or path.stat().st_size!=latest['bytes']:raise ValueError('Latest APK alias differs from the versioned APK')
     resource_table=verify_resource_table(apk)
     with zipfile.ZipFile(apk) as package:
         names=package.namelist()
@@ -154,6 +160,7 @@ def verify(status,publish=False):
         for name,item in manifest['materials'].items():
             if hashlib.sha256(archive.read(name)).hexdigest()!=item['sha256']:raise ValueError('Damaged relink member: '+name)
     result=dict(schema='wa2.shared-package-audit.v1',artifacts=status['artifacts'],libraries=libraries,
+        android_versioned_filename=apk.name,android_latest_alias=latest,
         android_resource_table=resource_table,
         application_icons=application_icons,
         android_signature_v2_verified=True,android_zip_alignment_verified=True,
@@ -168,7 +175,8 @@ def verify(status,publish=False):
         readme=('WHITE ALBUM2 共用静态重编译开发包\n\n'
             'Windows x64 和 Android ARM64 编译同一套游戏静态函数、资源、音频和渲染代码，从保留的原版入口执行。'
             '此包已替换旧的独立剧情演示实现。\n\n'
-            'Android：安装 WA2-arm64-dev.apk，要求 Android 8.0+、ARM64、OpenGL ES 3.0。'
+            f'Android：安装 {apk.name}，要求 Android 8.0+、ARM64、OpenGL ES 3.0。'
+            'WA2-arm64-dev.apk 是同一安装包的最新版固定名称，供兼容脚本使用。'
             '启动页选择原版资源文件夹，名称不限，保留 IC 子目录；可保存目录授权和 FPS 显示开关，再点击开始游戏。'
             'APK 不包含游戏资源，不需要批量解包或转码。点击对应鼠标左键，返回键对应 Escape；原版菜单操作由共用游戏代码处理。'
             '开启帧数显示后，左上角显示实际提交帧的 FPS 和平均帧间隔；请求 120 Hz 不代表已经达到 120 FPS。\n\n'

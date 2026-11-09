@@ -5,11 +5,17 @@ external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
 is **0.2.66-shared-aot**. Use the
-standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
+standard `out/android/WA2-arm64-0.2.66-shared-aot.apk` for the retained AOT application, or
 `out/android/WA2-0.2.66-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+Standard APKs are named `WA2-arm64-<release name>.apk`, using the version from
+`config/release.json`. `WA2-arm64-dev.apk` remains an identical latest-file alias
+for existing installation scripts. The package report points to the versioned
+file and verifies that the alias has the same SHA-256. Replacement APKs retain
+their existing versioned `WA2-<release name>-replace-native.apk` names.
 
 The AOT host now reads and writes original-format saves and INI files directly
 in the selected game folder through seekable provider descriptors. Root `Sys.sav`,

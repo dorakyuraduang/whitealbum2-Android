@@ -278,7 +278,7 @@ verifies JNI/signature/alignment and checks matching LGPL relink materials.
 Signing identities belong in ignored local build storage; never commit one.
 
 Outputs in a complete local workspace are `out/WA2_SDL2_x64.exe`,
-`out/android/WA2-arm64-dev.apk`, `out/WA2-shared-relink.zip` and
+`out/android/WA2-arm64-<release name>.apk`, `out/WA2-shared-relink.zip` and
 `out/build-info.json`. Generated reports bind the exact source/library hashes.
 They are local artifacts and are not public source fixtures.
 
