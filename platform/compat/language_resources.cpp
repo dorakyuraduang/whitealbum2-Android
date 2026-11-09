@@ -12,6 +12,9 @@ std::string fold(std::string_view value){
     std::string name(value);for(auto& c:name){if(c=='\\')c='/';else if(c>='A' && c<='Z')c=char(c+32);}
     while(name.starts_with("./"))name.erase(0,2);return name;
 }
+static constexpr std::array<std::string_view,4> font_members{
+    "\x96\x7b\x91\xcc" "80.tga","\x91\xdc\x89\x65" "80.tga",
+    "14pt\x96\x7b\x91\xcc.tga","14pt\x91\xdc.tga"};
 class SelectedResources final:public wr::ReadOnlyFiles {
     std::shared_ptr<wr::ReadOnlyFiles> original_;
     struct Alias {std::string physical;wr::ReadOnlyFileInfo info;};
@@ -28,6 +31,24 @@ public:
         std::sort(markers.begin(),markers.end());
         for(std::size_t n=0;n<markers.size();++n){
             if(!directories_.emplace(markers[n].second,std::pair{markers[n].first+1,n+1<markers.size()?markers[n+1].first:std::uint32_t(members.size())}).second)throw resource::Error("Duplicate English PAK directory");
+        }
+        if(const auto range=directories_.find("fnt");range!=directories_.end()){
+            const auto font=resource::Archive::open(open_process_resource(process,process.options.data_root/"fon_en.pak"));
+            if(!font.is_kcap())throw resource::Error("fon_en.pak must be the KCAP font pack prepared from this en.pak");
+            for(const auto name:font_members){
+                const resource::Member* expected{};
+                for(const auto& item:members)if(item.source_index>=range->second.first && item.source_index<range->second.second && !resource::compare_names(item.name,name)){
+                    if(expected)throw resource::Error("Duplicate font atlas in English fnt directory");expected=&item;
+                }
+                const auto index=font.find_first(name);
+                if(!expected || index==resource::Archive::missing)throw resource::Error("English font pack is missing a matching game atlas");
+                const auto& actual=font.members()[index];
+                // Compare index metadata only: no startup decompression or
+                // whole-font hashing. Repacking may change the stored lengths;
+                // the supported preparation tool preserves the source members.
+                if(actual.compressed!=expected->compressed || actual.stored_size!=expected->stored_size)
+                    throw resource::Error("fon_en.pak does not match the packed fonts in en.pak. Back up the old font and run scripts/prepare_english_font.py for this game folder");
+            }
         }
         if(original_->info("script.pak"))base_script_=resource::Archive::open(open_process_resource(process,process.options.data_root/"script.pak"));
         if(original_->info("IC/script.pak"))ic_script_=resource::Archive::open(open_process_resource(process,process.options.data_root/"IC/script.pak"));
@@ -96,10 +117,7 @@ void check_pack(wr::Process& process,const std::string& name,bool font){
         // Only the index is read here, never a script/atlas payload. The game
         // keeps its own codecs and filename/character ordering unchanged.
         if(font){
-            static constexpr std::array<std::string_view,4> names{
-                "\x96\x7b\x91\xcc" "80.tga","\x91\xdc\x89\x65" "80.tga",
-                "14pt\x96\x7b\x91\xcc.tga","14pt\x91\xdc.tga"};
-            for(const auto member:names)if(archive.find_first(member)==resource::Archive::missing)
+            for(const auto member:font_members)if(archive.find_first(member)==resource::Archive::missing)
                 throw resource::Error("Font PAK is missing a required original atlas; TTF/OTF fonts are not supported");
         }else{
             bool pair=false;

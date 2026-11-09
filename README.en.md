@@ -3,7 +3,7 @@
 [简体中文](README.md) · **English**
 
 A shared static-recompilation project for **Android ARM64 / Windows x64**.
-Current development version: **0.2.67-shared-aot**. Both platforms compile the
+Current development version: **0.2.68-shared-aot**. Both platforms compile the
 same game logic. Supply your own original PAK resources; whole-archive extraction
 is not required.
 
@@ -41,6 +41,8 @@ For English, retain the original `script.pak` for base script data and select
 atlases. If your English `en.pak` contains an `fnt` directory, generate a separate
 font pack with `python scripts/prepare_english_font.py --root "your game folder"`.
 This copies packed font members without decompressing them or changing `en.pak`.
+Back up an existing `fon_en.pak` before generation. Renaming the Chinese font
+pack does not produce the matching English fonts.
 See [resource and patch details](docs/LANGUAGE_RESOURCES.md).
 
 ### Windows
