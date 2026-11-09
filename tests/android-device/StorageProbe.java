@@ -65,7 +65,7 @@ public final class StorageProbe extends Instrumentation {
         JSONObject original;try(InputStream input=new FileInputStream(file)){original=new JSONObject(new String(bytes(input,2*1024*1024),"UTF-8"));}
         result.put("host_release",original.opt("host_release"));result.put("modified_ms",file.lastModified());
         String error=original.optString("error","");result.put("error",error.substring(0,Math.min(4096,error.length())));
-        JSONObject process=original.optJSONObject("process");if(process!=null)for(String key:new String[]{"selected_directory_io","file_io","profile_io","native_resources","resource_graphics","scheduler","static_cpu_work"})if(process.has(key))result.put(key,process.get(key));
+        JSONObject process=original.optJSONObject("process");if(process!=null)for(String key:new String[]{"selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler","static_cpu_work"})if(process.has(key))result.put(key,process.get(key));
         return result;
     }
     private JSONObject measure(String path,boolean present,int count)throws Exception{

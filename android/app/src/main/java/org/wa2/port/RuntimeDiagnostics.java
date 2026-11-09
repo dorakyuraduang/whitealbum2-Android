@@ -33,7 +33,7 @@ final class RuntimeDiagnostics {
                 String error=original.optString("error","");report.put("error",error.substring(0,Math.min(error.length(),4096)));
                 JSONObject process=original.optJSONObject("process");
                 if(process==null)throw new IOException("运行诊断格式不完整");
-                for(String key:new String[]{"static_function_entries","api_calls","selected_directory_io","file_io","profile_io","native_resources","resource_graphics","scheduler","static_cpu_work"})
+                for(String key:new String[]{"static_function_entries","api_calls","selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler","static_cpu_work"})
                     if(process.has(key))report.put(key,process.get(key));
                 result=report.toString(2);if(result.length()>65536)throw new IOException("诊断摘要超过复制大小限制");
             }catch(Exception error){problem=error.getMessage()==null?"无法读取上次运行诊断":error.getMessage();}

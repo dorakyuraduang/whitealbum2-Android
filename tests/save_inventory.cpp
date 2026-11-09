@@ -35,7 +35,7 @@ Result exercise(const std::filesystem::path& root,bool linear,bool scoped){
     wr::ProcessOptions options;options.prefer_linear_memory=linear;options.allow_file_write=true;options.data_root=selected/"private";CHECK(std::filesystem::create_directory(options.data_root));
     wa2::aot::Runtime runtime(options);auto& p=runtime.process();auto& m=p.memory;
     auto backend=std::make_shared<Counted>(c::local_files(selected));
-    p.state().mutable_files=c::save_files(backend,false,scoped?c::SaveReadScope([&]{return wa2::aot::save_read_scope(p);}):c::SaveReadScope{});
+    p.state().mutable_files=c::save_files(backend,false,scoped?wa2::aot::traced_save_read_scope(p):c::SaveReadScope{});
     runtime.load();CHECK(!p.gui() && !p.directdraw());
     const std::string prefix="C:\\WinRecomp";m.copy_in(0xa39d28,{reinterpret_cast<const std::uint8_t*>(prefix.c_str()),prefix.size()+1});
     m.store(0xa39208,7,32);m.store(0xa3a130,25,32);Result result;
@@ -61,8 +61,14 @@ Result exercise(const std::filesystem::path& root,bool linear,bool scoped){
     CHECK(p.state().mutable_files->remove("save_01.sav",false)==0);reader(1,false,0);++result.guards;
     CHECK(p.state().mutable_files->move("save_00.sav","save_02.sav")==0);reader(0,false,0);reader(2,true,41);++result.guards;
     std::vector<std::uint8_t> replacement(0x10058,61);p.state().mutable_files->replace("save_02.sav",replacement);reader(2,true,61);++result.guards;
-    // Ordinary story calls and worker calls use fresh per-operation metadata.
-    m.store(0xa39208,0,32);write(selected/"save_03.sav",33);const auto old_queries=backend->queries;reader(3,true,33);CHECK(backend->queries>old_queries);++result.guards;
+    // Title-menu readers do not enter story substates 6/7. They still share
+    // a source-update inventory, and a state change creates a new snapshot.
+    m.store(0xa39208,0,32);write(selected/"save_03.sav",33);const auto old_lists=backend->lists;reader(3,true,33);CHECK(backend->lists>old_lists);++result.guards;
+    const auto title_lists=backend->lists;reader(3,true,33);CHECK(backend->lists==title_lists);++result.guards;
+    // Ordinary API calls remain fresh even while a source inventory exists.
+    write(selected/"save_07.sav",77);const auto old_queries=backend->queries;
+    const auto fresh=p.callback(p.resolve("kernel32.dll","CreateFileA"),std::array<U32,7>{p.put_string("save_07.sav"),0x80000000,7,0,3,128,0});CHECK(fresh!=0xffffffff && backend->queries>old_queries);
+    CHECK(p.callback(p.resolve("kernel32.dll","CloseHandle"),std::array<U32,1>{fresh})==1);++result.guards;
     m.store(0xa39208,7,32);p.state().current_thread_id=2;const auto worker_queries=backend->queries;reader(3,true,33);CHECK(backend->queries>worker_queries);p.state().current_thread_id=1;++result.guards;
     // An open writer disables the shared inventory until its handle closes.
     const auto name=p.put_string("save_09.sav");const auto handle=p.callback(p.resolve("kernel32.dll","CreateFileA"),std::array<U32,7>{name,0xc0000000,7,0,3,128,0});CHECK(handle!=0xffffffff);
@@ -73,6 +79,7 @@ Result exercise(const std::filesystem::path& root,bool linear,bool scoped){
     std::this_thread::sleep_for(std::chrono::milliseconds(260));reader(4,true,44);CHECK(backend->lists>before_timeout);++result.guards;
     backend->fail_listing=true;m.store(0xa3a130,28,32);const auto before_decline=backend->lists;reader(2,true,61);reader(3,true,33);CHECK(backend->lists==before_decline+1);backend->fail_listing=false;++result.guards;
     CHECK(std::filesystem::create_directory(selected/"save_06.sav"));m.store(0xa3a130,29,32);reader(6,false,0);CHECK(p.last_error==5);++result.guards;
+    CHECK(p.state().reports.at("save_read_scope")().find("\"contexts\":[{")!=std::string::npos);
     CHECK(!p.gui() && !p.directdraw());return result;
 }
 int main(int argc,char** argv){try{
@@ -80,6 +87,6 @@ int main(int argc,char** argv){try{
     unsigned readers{},guards{};for(bool linear:{false,true}){const auto baseline=exercise(root,linear,false),scoped=exercise(root,linear,true);readers+=baseline.readers+scoped.readers;guards+=scoped.guards;}
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.save-inventory.v1\",\"actual_static_reader_calls\":"<<readers<<",\"guard_cases\":"<<guards
         <<",\"slots_per_fixture\":100,\"present_slots\":2,\"baseline_metadata_queries_per_fixture\":198,\"scoped_metadata_queries_per_fixture\":0,\"scoped_directory_lists_per_fixture\":1,\"descriptor_opens_per_fixture\":2"
-          ",\"same_static_save_reader\":true,\"payload_reads_fresh\":true,\"write_invalidation\":true,\"source_frame_invalidation\":true,\"ordinary_and_worker_reads_fresh\":true,\"inventory_lifetime_bounded\":true,\"original_saves_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
+          ",\"same_static_save_reader\":true,\"title_reader_batch\":true,\"scope_audit_checked\":true,\"payload_reads_fresh\":true,\"write_invalidation\":true,\"source_frame_invalidation\":true,\"ordinary_and_worker_reads_fresh\":true,\"inventory_lifetime_bounded\":true,\"original_saves_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS unchanged static save reader: per-slot metadata lookup replaced by one inventory for 100 own-fixture slots; guards and fresh payload reads.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

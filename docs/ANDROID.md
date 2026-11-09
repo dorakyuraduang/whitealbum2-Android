@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.51-shared-aot**. Use the
+is **0.2.52-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.51-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.52-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -43,6 +43,12 @@ Ordinary/worker calls and open writers keep fresh reads. The runtime summary
 adds `profile_io` counters. A separate same-signature, Activity-free device
 probe can time the actual authorized provider without game or screen access;
 its file-component results do not establish complete scene-load latency.
+
+0.2.52 also admits the known read-only save helpers outside story save/load
+substates, covering title-menu reads. State changes still invalidate the
+inventory; ordinary API calls and writers do not qualify. `save_read_scope`
+records at most 32 caller/thread/state/writer-count contexts, without payloads,
+to reveal when the actual source path declines batching.
 
 The separate native migration development package now saves game data in the
 currently selected game folder: root `Sys.sav`, `native-settings.wa2cfg` and
