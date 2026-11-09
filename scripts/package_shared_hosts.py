@@ -15,6 +15,7 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 import zipfile
+from prepare_shared_chroma import prepare as prepare_chroma
 from package_shared_relink import package as package_relink
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -71,7 +72,7 @@ def main():
     if not api.is_file():api=ROOT/'tools/android-api-35/android.jar'
     cmake=ROOT/'tools/python/cmake/data/bin/cmake.exe';build=ROOT/'build/shared-host-win64'
     proof_path=ROOT/'logs/shared-aot-verification.json'
-    proof=fresh(proof_path);native=Path(proof['actual_android_host']['file'])
+    prepare_chroma();proof=fresh(proof_path);native=Path(proof['actual_android_host']['file'])
     release=json.loads((ROOT/'config/release.json').read_text())
     if digest(native)!=proof['actual_android_host']['sha256']:raise ValueError('Actual Android host changed after verification')
     if args.check_only:

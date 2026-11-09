@@ -33,6 +33,18 @@ metadata and resolved-read JNI methods alongside ordinary mutable operations.
 It explicitly does not claim the deleted historical oracle/performance suite
 ran. Modified static bodies or math sources require their independent checks.
 
+From 0.2.57, `scripts/prepare_shared_chroma.py` derives two common units under
+`generated/shared-aot/native/` from byte-identical cached inputs. It inserts six
+unmetered preheader hooks and adjusts relative includes; the original bodies
+stay present for declined layouts. The refresh and packager run preparation
+automatically. Run it before a direct CMake configure. CMake verifies input,
+recipe and output hashes, then replaces exactly the two source paths on both
+architectures. The cached original units are not overwritten or re-disassembled.
+The own-memory test compares complete CPU/flags/stack/pixels against exact
+reference functions extracted from those untouched cached units, including
+metered stops at all six loop exits and partial-fault paths. The reference
+library is test-only and is rejected if linked into the Android application.
+
 In a workspace with these private inputs, run serially:
 
 ```powershell
@@ -49,8 +61,8 @@ results as freshly executed checks. Matching cached math source provenance is
 recorded separately from the newly executed file and host tests.
 
 The packager publishes the ordinary AOT application and an identical-code
-`WA2-0.2.56-shared-aot-replace-native.apk` with the experimental native app's
-installation ID. Version code 56 and the retained development key allow an
+`WA2-0.2.57-shared-aot-replace-native.apk` with the experimental native app's
+installation ID. Version code 59 and the retained development key allow an
 in-place update from native version code 4. The audit compares DEX/native bytes,
 checks both installation identities, versions, signatures and resource-table
 alignment. LGPL relink materials apply to both since their native libraries

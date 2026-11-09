@@ -9,14 +9,21 @@ if(NOT WA2_SHARED_CODE_REQUIRED)
     message(FATAL_ERROR "All host architectures must use one shared AOT source set")
 endif()
 include("${WA2_SHARED_ROOT}/generated/shared-aot/sources.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/chroma_sources.cmake")
 add_library(wa2_initial_data STATIC "${WA2_SHARED_ROOT}/generated/static-data/image.cpp")
 target_include_directories(wa2_initial_data PUBLIC "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
 target_compile_features(wa2_initial_data PUBLIC cxx_std_20)
 set_target_properties(wa2_initial_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
-add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp transcend.cpp native_gateways.cpp native_math.cpp native_string.cpp image_colours.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp native_sprites.cpp
+add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp transcend.cpp native_gateways.cpp native_math.cpp native_string.cpp image_colours.cpp image_chroma.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp native_sprites.cpp
     "${WA2_SHARED_ROOT}/port/sprite_sort.cpp"
     "${WA2_SHARED_ROOT}/port/vertex_batch.cpp" ${WA2_SHARED_AOT_SOURCES})
-target_link_libraries(wa2_shared_aot PUBLIC wa2_initial_data)
+target_link_libraries(wa2_shared_aot PUBLIC wa2_initial_data wa2_engine)
+add_library(wa2_chroma_reference STATIC EXCLUDE_FROM_ALL "${WA2_SHARED_ROOT}/build/chroma-reference/reference.cpp")
+target_compile_features(wa2_chroma_reference PRIVATE cxx_std_20)
+target_include_directories(wa2_chroma_reference PRIVATE "${CMAKE_CURRENT_LIST_DIR}" "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(wa2_chroma_reference PRIVATE -Oz)
+endif()
 target_compile_features(wa2_shared_aot PUBLIC cxx_std_20)
 target_include_directories(wa2_shared_aot PUBLIC
     "${CMAKE_CURRENT_LIST_DIR}"
@@ -98,7 +105,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Keep the bounded word-fill loop vectorized. Some size-oriented bundled
     # C runtimes implement large memset with a byte loop.
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/native_string.cpp" APPEND PROPERTY COMPILE_OPTIONS "-fno-builtin-memset")
-    set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/image_colours.cpp" PROPERTIES COMPILE_OPTIONS "-O3")
+    set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/image_colours.cpp" "${CMAKE_CURRENT_LIST_DIR}/image_chroma.cpp" PROPERTIES COMPILE_OPTIONS "-O3")
     # Resource admission/snapshots run on every new image/script load. Keep
     # these native loops optimized on both hosts without expanding AOT bodies.
     set_source_files_properties("${WA2_SHARED_ROOT}/port/native_resources.cpp" PROPERTIES COMPILE_OPTIONS "-O3")
@@ -160,6 +167,8 @@ if(WA2_SHARED_AOT_CHECKS)
     target_link_libraries(wa2_resource_reuse_tests PRIVATE wa2_function_process)
     add_executable(wa2_host_progress_tests "${WA2_SHARED_ROOT}/tests/host_progress.cpp")
     target_link_libraries(wa2_host_progress_tests PRIVATE wa2_function_process)
+    add_executable(wa2_image_chroma_tests "${WA2_SHARED_ROOT}/tests/image_chroma.cpp")
+    target_link_libraries(wa2_image_chroma_tests PRIVATE wa2_function_process wa2_chroma_reference)
     add_executable(wa2_cached_callback_tests "${WA2_SHARED_ROOT}/tests/cached_callbacks.cpp")
     target_link_libraries(wa2_cached_callback_tests PRIVATE wa2_function_process)
     add_executable(wa2_native_resource_memory_tests "${WA2_SHARED_ROOT}/tests/native_resource_memory.cpp")

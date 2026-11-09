@@ -4,6 +4,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 add_library(wa2_engine STATIC pcm_audio.cpp pcm_stream.cpp resource_archive.cpp resource_catalog.cpp image_reference.cpp vorbis_stream.cpp ogg_reader.cpp wave_reader.cpp stream_voice.cpp system_sounds.cpp raster_image.cpp image_colours.cpp sprite_animation.cpp sprite_atlas.cpp scene_geometry.cpp image_store.cpp font_glyphs.cpp text_layout.cpp text_checkpoint.cpp subtitles.cpp)
 target_sources(wa2_engine PRIVATE audio_resources.cpp)
+target_sources(wa2_engine PRIVATE image_chroma.cpp)
 target_compile_features(wa2_engine PUBLIC cxx_std_20)
 target_include_directories(wa2_engine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 add_library(wa2_pixel_transfer STATIC pixel_transfer.cpp)
@@ -20,6 +21,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     # Preserve operation order; never trade PCM values for fast-math.
     set_source_files_properties(pcm_audio.cpp vorbis_stream.cpp PROPERTIES COMPILE_OPTIONS "-O3;-ffp-contract=off")
     set_source_files_properties(resource_archive.cpp PROPERTIES COMPILE_OPTIONS "-O3")
+    set_source_files_properties(image_chroma.cpp PROPERTIES COMPILE_OPTIONS "-O3")
     target_compile_options(wa2_scalar_math PRIVATE -O2 -ffp-contract=off -frounding-math)
     # One ordinary byte-conversion loop benefits from vectorization on both
     # x64 and ARM64; the generated game bodies retain their size settings.

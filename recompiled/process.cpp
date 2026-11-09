@@ -9,6 +9,7 @@
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
 #include "image_colours.hpp"
+#include "image_chroma.hpp"
 #include "scalar_math.hpp"
 #include "../port/native_resources.hpp"
 #include "../port/native_vorbis.hpp"
@@ -44,6 +45,10 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     auto subtitle_player=bind_source_subtitles(process_.memory);
     process_.state().shutdown.push_back([subtitle_player,memory=&process_.memory]{unbind_source_subtitles(*memory,subtitle_player.get());subtitle_player->reset();});
     wr::install_wa2_native_resources(process_,true);
+    // Cached image copies can run chroma work without a new archive access.
+    // Keep progress counters fresh for that same resource-preparation phase.
+    auto archive_activity=process_.state().resource_io_activity;
+    process_.state().resource_io_activity=[archive_activity=std::move(archive_activity)]{return (archive_activity?archive_activity():0)+image_chroma_counts().completed;};
     wr::install_wa2_native_vorbis(process_,true);
     wr::install_wa2_registry(process_);
     wa2::platform::compat::install_scheduler(process_,[this](auto ms,auto caller){return source_fast_forward_idle(process_.memory,ms,caller);});
@@ -79,6 +84,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
             ",\"fp_declined\":"+std::to_string(s.fp_declined)+",\"adapter_declined\":"+std::to_string(s.adapter_declined)+",\"retained_command_cache\":false}";};
     process_.state().reports["native_glyph_commands"]=[]{const auto s=native_glyph_counts();
         return "{\"accepted\":"+std::to_string(s.accepted)+",\"declined\":"+std::to_string(s.declined)+",\"tiles\":"+std::to_string(s.tiles)+",\"retained_command_cache\":false}";};
+    process_.state().reports["native_image_chroma"]=[]{const auto s=image_chroma_counts();return "{\"attempts\":"+std::to_string(s.attempts)+",\"completed\":"+std::to_string(s.completed)+",\"pixels\":"+std::to_string(s.pixels)+",\"grey_pixels\":"+std::to_string(s.grey_pixels)+"}";};
     process_.state().reports["native_image_colours"]=[]{const auto s=image_colour_counts();
         return "{\"attempts\":"+std::to_string(s.attempts)+",\"completed\":"+std::to_string(s.completed)+",\"pixels\":"+std::to_string(s.pixels)+",\"retained_tables\":false}";};
     process_.state().reports["heap_pool_cache"]=[this]{const auto& state=process_.state();

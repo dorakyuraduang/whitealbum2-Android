@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.56-shared-aot**. Use the
+is **0.2.57-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.56-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.57-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -93,6 +93,16 @@ counter data survives devices that truncate a single log print. Run
 `python scripts/read_android_counters.py --serial DEVICE` to read that app UID's
 counter tag only; incomplete records are not presented as current counters.
 No game launch, process stop, UI control or screen access occurs in this tool.
+
+0.2.57 replaces the per-pixel compatibility work in the measured image-chroma
+hotspots with ordinary C++ shared by both hosts. It preserves original lookup
+bytes, RGB/BGR order, alpha, registers/flags and checked fallback behavior.
+`native_image_chroma` counts admitted loops/pixels in the private counter stream.
+This targets image preparation after archive decoding, rather than increasing
+the resource cache budget or extracting PAK contents. The same two derived AOT
+units are compiled on x64 and ARM64 from unchanged cached C++ inputs and one
+recorded preparation recipe; see BUILDING. Component timings are not measured
+whole-game Android fast-forward ratios.
 
 The separate native migration development package now saves game data in the
 currently selected game folder: root `Sys.sav`, `native-settings.wa2cfg` and
