@@ -36,6 +36,7 @@ struct ResourceState {
     std::deque<LoadTrace> load_trace;
     std::uint64_t lookups{},loads{},decodes{},image_decodes{},single_pass_images{},image_loads{},image_checks{},missing_archives{},bytes{},declined{},errors{},index_opens{},index_hits{},cache_clock{};
     std::uint64_t direct_resource_decodes{},resource_staging_bytes_avoided{};
+    std::uint64_t image_payload_reads{},image_payload_bytes{};
     U32 heap_alloc{},heap_free{},get_heap{},debug_string{};
     bool supported(Process& p,U32 entry) {
         if(p.input_sha256=="246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327" && wa2_native_code_verified(p.memory,entry))return true;
@@ -122,6 +123,7 @@ struct ResourceState {
 }
 void install_wa2_native_resources(Process& p,bool image_directory_functions) {
     auto state=std::make_shared<ResourceState>();
+    p.state().resource_io_activity=[state]{return state->loads+state->lookups+state->image_decodes+state->image_checks+state->missing_archives+state->errors+state->declined;};
     state->heap_alloc=p.resolve("kernel32.dll","HeapAlloc");state->heap_free=p.resolve("kernel32.dll","HeapFree");
     state->get_heap=p.resolve("kernel32.dll","GetProcessHeap");
     state->debug_string=p.resolve("kernel32.dll","OutputDebugStringA");
@@ -202,7 +204,7 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
             if(archive.members()[member].compressed)q.memory.copy_out(dictionary+0xfee,input_tail);
             {ResourceState::Timer time(state->timing["image_cache_lookup"]);cached=state->decoded_images.find(cache_key,input_tail);}
             if(cached){stored.expanded_size=U32(cached->bytes.size());stored.compressed=cached->compressed;stored.dictionary_fill=archive.members()[member].dictionary_fill;}
-            else{ResourceState::Timer time(state->timing["image_read"]);stored=archive.read(member);}
+            else{ResourceState::Timer time(state->timing["image_read"]);stored=archive.read(member);++state->image_payload_reads;state->image_payload_bytes+=stored.bytes.size()+(stored.compressed?8:0);}
         } catch(const std::filesystem::filesystem_error& error) {
             if(error.code()==std::errc::no_such_file_or_directory){++state->missing_archives;q.set_error(2);return 0;}
             ++state->declined;return std::nullopt;
@@ -246,6 +248,7 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
                     // Re-read/decode for that input, retaining this allocation.
                     const auto expected=stored.expanded_size;
                     ResourceState::Timer time(state->timing["image_read"]);stored=state->get(q,image_path).archive.read(image_member);cached.reset();
+                    ++state->image_payload_reads;state->image_payload_bytes+=stored.bytes.size()+8;
                     if(stored.expanded_size!=expected)throw wa2::resource::Error("image archive changed during allocation");
                 }
                 std::vector<std::uint8_t> staged_output;if(!base)staged_output.resize(stored.expanded_size);
@@ -253,8 +256,9 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
                 if(cached){ResourceState::Timer time(state->timing["image_cache_copy"]);std::memcpy(produced.data(),cached->bytes.data(),produced.size());
                     wa2::resource::finish_lzss_dictionary(produced,ring);flags=cached->flags;
                 }else{
-                    {ResourceState::Timer time(state->timing["decode"]);flags=wa2::resource::decode_lzss_dictionary(stored.bytes,produced,ring,&tail_reads);}
-                    try{state->decoded_images.capture(cache_key,produced,true,flags,tail_reads,input_tail);}catch(const std::bad_alloc&){}
+                    auto& decode_time=state->timing["decode"];const auto before=decode_time.total;
+                    {ResourceState::Timer time(decode_time);flags=wa2::resource::decode_lzss_dictionary(stored.bytes,produced,ring,&tail_reads);}
+                    try{ResourceState::Timer time(state->timing["image_cache_store"]);state->decoded_images.capture(cache_key,produced,true,flags,tail_reads,input_tail,decode_time.total-before);}catch(const std::bad_alloc&){}
                 }
                 if(!base)q.memory.copy_in(pointer,staged_output);q.memory.copy_in(dictionary,ring);
             }else {
@@ -288,6 +292,7 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
     });
     p.register_native_function(0x458050,3,[state](Process& q)->std::optional<U32> {
         if(!state->supported(q,0x458050))return std::nullopt;
+        ResourceState::Timer total(state->timing["resource_load"]);
         const auto manager=q.cpu.r[ECX],index=q.argument(0),member=q.argument(1),output=q.argument(2);
         try {
             const auto* archive=state->get(q,manager,index);
@@ -296,10 +301,12 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
             }
             // This legacy loader uses a zero dictionary, even when a fixture
             // exposes KCAP data through its normalized record format.
-            auto stored=archive->read(member,128u*1024*1024);
+            wa2::resource::StoredResource stored;
+            {ResourceState::Timer time(state->timing["resource_read"]);stored=archive->read(member,128u*1024*1024);}
             const bool direct=stored.compressed && state->direct_resource_memory(q);
-            if(direct)wa2::resource::validate_lzss(stored.bytes,stored.expanded_size);
+            if(direct){ResourceState::Timer time(state->timing["resource_validate"]);wa2::resource::validate_lzss(stored.bytes,stored.expanded_size);}
             else if(stored.compressed){
+                ResourceState::Timer time(state->timing["resource_decode"]);
                 std::vector<std::uint8_t> decoded(stored.expanded_size);wa2::resource::decode_lzss(stored.bytes,decoded);
                 stored.bytes=std::move(decoded);
             }
@@ -308,7 +315,8 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
             if(!wa2::platform::seek_stream(q.state().files.at(handle).stream,entry.offset+entry.stored_size)) {
                 ++state->errors;q.memory.store(output,0,32);return 0;
             }
-            const auto result=state->allocate(q,stored.bytes,output,direct?std::optional<U32>(stored.expanded_size):std::nullopt);
+            U32 result{};
+            {ResourceState::Timer time(state->timing["resource_allocate_and_copy"]);result=state->allocate(q,stored.bytes,output,direct?std::optional<U32>(stored.expanded_size):std::nullopt);}
             if(result || !stored.expanded_size){++state->loads;state->bytes+=stored.expanded_size;if(entry.compressed)++state->decodes;}
             return result;
         } catch(const wa2::resource::Error&) {++state->errors;q.memory.store(output,0,32);return 0;}
@@ -316,6 +324,7 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
     });
     p.register_native_function(0x457010,3,[state](Process& q)->std::optional<U32> {
         if(!state->supported(q,0x457010))return std::nullopt;
+        ResourceState::Timer total(state->timing["resource_buffer_load"]);
         const auto compressed=q.argument(0),input=q.argument(1),output=q.argument(2);
         q.memory.check(output,4,Memory::Write);
         try {
@@ -347,6 +356,10 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
             ",\"image_index_cache_hits\":"+std::to_string(state->index_hits)+",\"image_cached_archives\":"+std::to_string(state->path_archives.size())+
             ",\"image_decoded_cache_hits\":"+std::to_string(state->decoded_images.stats.hits)+",\"image_decoded_cache_misses\":"+std::to_string(state->decoded_images.stats.misses)+
             ",\"image_decoded_cache_evictions\":"+std::to_string(state->decoded_images.stats.evictions)+",\"image_decoded_cache_bytes\":"+std::to_string(state->decoded_images.stats.bytes)+
+            ",\"image_decoded_cache_cold_captures\":"+std::to_string(state->decoded_images.stats.cold_captures)+
+            ",\"image_payload_reads\":"+std::to_string(state->image_payload_reads)+",\"image_payload_bytes\":"+std::to_string(state->image_payload_bytes)+
+            ",\"image_decoded_cache_maximum_entry_bytes\":"+std::to_string(wa2::resource::DecodedResourceCache::MaximumEntryBytes)+
+            ",\"image_decoded_cache_cold_decode_threshold_ns\":"+std::to_string(wa2::resource::DecodedResourceCache::ColdDecodeThresholdNs)+
             ",\"image_decoded_cache_maximum_bytes\":"+std::to_string(wa2::resource::DecodedResourceCache::MaximumBytes)+
             ",\"decoded_bytes\":"+std::to_string(state->bytes)+",\"declined\":"+std::to_string(state->declined)+
             ",\"errors\":"+std::to_string(state->errors)+",\"cached_archives\":"+std::to_string(state->archives.size())+",\"timing\":"+detail.str()+"}";

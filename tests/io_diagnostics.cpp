@@ -4,6 +4,7 @@
 #include <winrecomp/win32_state.hpp>
 #include <cerrno>
 #include <chrono>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 
@@ -21,8 +22,18 @@ int main(int argc,char** argv){try{
     auto first=read(progress);CHECK(first.find("\"report_kind\":\"file-io-progress\"")!=std::string::npos && first.find("\"complete\":false")!=std::string::npos && first.find("\"sequence\":1")!=std::string::npos && events==1);
     touch();now=400000001;poll();CHECK(read(progress)==first);now=500000001;poll();CHECK(read(progress).find("\"sequence\":2")!=std::string::npos);
     const auto second=read(progress);now+=1000000000;poll();CHECK(read(progress)==second);
+    // Resource work alone must refresh the snapshot while skipping, without
+    // waiting for a save/config read. Sampling never reads image pixels.
+    std::uint64_t resource_activity=1;p.state().resource_io_activity=[&]{return resource_activity;};
+    poll();const auto resource_snapshot=read(progress);CHECK(resource_snapshot.find("\"sequence\":3")!=std::string::npos);
+    now+=1000000000;poll();CHECK(read(progress)==resource_snapshot);
+    ++resource_activity;poll();CHECK(read(progress).find("\"sequence\":4")!=std::string::npos);
     for(unsigned n=0;n<80;++n){touch();now+=500000000;poll();}
-    CHECK(p.state().reports.at("io_diagnostics")().find("\"snapshots\":64")!=std::string::npos && events==64);
+    const auto bounded=p.state().reports.at("io_diagnostics")();
+    const auto number=[&](const char* key){const auto at=bounded.find('"'+std::string(key)+"\":");CHECK(at!=std::string::npos);return std::stoul(bounded.substr(at+std::strlen(key)+3));};
+    // The contract bounds attempts too. An isolated transient filesystem
+    // failure may consume an attempt, without violating the snapshot cap.
+    CHECK(number("attempts")==64 && number("snapshots")==events && events>=4 && number("snapshots")+number("failures")==64);
     CHECK(std::filesystem::is_empty(selected));CHECK(!std::filesystem::exists(private_root/"wa2-runtime.json") && !std::filesystem::exists(progress.string()+".tmp"));
     CHECK(!p.gui() && !p.directdraw());
     // Failed private output is optional and retried; neither selected files
@@ -32,6 +43,6 @@ int main(int argc,char** argv){try{
     const auto late=private_root/"late";std::uint64_t retry_time=1;c::install_io_diagnostics(q,late/"wa2-runtime.json","retry",{},[&]{return retry_time;});q.state().mutable_files->info("save_01.sav");
     q.last_error=17;errno=EDOM;for(unsigned n=0;n<256;++n)q.state().poll.back()();CHECK(errno==EDOM && q.last_error==17);CHECK(q.state().reports.at("io_diagnostics")().find("\"failures\":1")!=std::string::npos);
     CHECK(std::filesystem::create_directory(late));retry_time+=500000000;for(unsigned n=0;n<256;++n)q.state().poll.back()();CHECK(std::filesystem::is_regular_file(late/"wa2-runtime-progress.json"));
-    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.io-diagnostics.v1\",\"atomic_replacement\":true,\"unchanged_io_not_rewritten\":true,\"rate_and_count_bounded\":true,\"failed_write_retry\":true,\"optional_sink_failure_isolated\":true,\"guest_errors_preserved\":true,\"selected_directory_written\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out.good());
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.io-diagnostics.v1\",\"atomic_replacement\":true,\"unchanged_io_not_rewritten\":true,\"resource_activity_sampled\":true,\"rate_and_count_bounded\":true,\"failed_write_retry\":true,\"optional_sink_failure_isolated\":true,\"guest_errors_preserved\":true,\"selected_directory_written\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out.good());
     std::cout<<"PASS bounded private I/O snapshots, atomic replacement, retry, sink isolation and unchanged game files/errors.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

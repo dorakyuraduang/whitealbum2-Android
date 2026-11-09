@@ -46,6 +46,9 @@ struct Win32State {
     std::function<std::uintptr_t(U32)> native_pidl;
     std::vector<std::function<void()>> shutdown;
     std::map<std::string,std::function<std::string()>> reports;
+    // Optional read-only resource activity sample; progress diagnostics avoid
+    // serializing reports when no archive work or selected-file I/O changed.
+    std::function<std::uint64_t()> resource_io_activity;
     std::vector<std::function<void()>> poll;
     unsigned main_poll_interval{4096};
     bool sample_fallback{};

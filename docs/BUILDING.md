@@ -49,7 +49,7 @@ results as freshly executed checks. Matching cached math source provenance is
 recorded separately from the newly executed file and host tests.
 
 The packager publishes the ordinary AOT application and an identical-code
-`WA2-0.2.54-shared-aot-replace-native.apk` with the experimental native app's
+`WA2-0.2.55-shared-aot-replace-native.apk` with the experimental native app's
 installation ID. Version code 56 and the retained development key allow an
 in-place update from native version code 4. The audit compares DEX/native bytes,
 checks both installation identities, versions, signatures and resource-table

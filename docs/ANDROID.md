@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.54-shared-aot**. Use the
+is **0.2.55-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.54-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.55-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -69,6 +69,17 @@ progress or exit report, marking progress records `complete:false`. Android
 also emits bounded `WA2IO` counter records for owner-authorized wireless
 diagnosis without stopping a running game. These are diagnostics, not game
 saves/configuration; the latter remain in the selected folder.
+
+0.2.55 also samples resource activity, so skip-time resource counters can
+advance without a save/config read. The same 500 ms/64-snapshot limits apply.
+Image archive reads, decode work and capture-copy time have separate counters.
+Compressed images whose decode takes at least 0.5 ms can enter the shared
+read-only cache on first use; cheaper data keeps repeat-only admission.
+Individual images up to 8 MiB now fit, while total retained bytes remain capped
+at 8 MiB/32 entries. Cache entries contain owned bytes, never mutable game
+buffers. No resources are extracted into the APK or written to the folder.
+First-time/evicted/oversize resources still read and decode normally; component
+reuse checks do not measure whole-game fast-forward speed on a phone.
 
 The separate native migration development package now saves game data in the
 currently selected game folder: root `Sys.sav`, `native-settings.wa2cfg` and
