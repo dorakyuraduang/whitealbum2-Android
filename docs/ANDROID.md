@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.65-shared-aot**. Use the
+is **0.2.66-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.65-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.66-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -268,6 +268,15 @@ the same preference. Configuration v6 adds a hide-menu bit; v5 records preserve
 all existing language, subtitle and switch values, with the menu shown by
 default. Memory-only checks cover persistence, upgrade and failed-write retry;
 the game/menu UI was not launched or operated.
+
+0.2.66 displays the selected game language's script and font archive paths
+directly beneath its selector. `./` refers to the authorized game folder, whose
+name remains unrestricted. Chinese uses `./ck-gal.pak` and `./fon.pak`; Japanese
+uses `./script.pak` and `./fnt.pak`. These hints update with the selected game
+profile, use all 28 interface languages, and remain separate from the interface
+language preference. They do not enable a new game language or import PC EXE /
+DLL changes. See [patch resource options](LANGUAGE_RESOURCES.md) for compatible
+archive replacement, custom naming and full-build prerequisites.
 
 From `0.2.46-shared-aot`, **测试模式（解锁全部内容）** uses a separate test
 profile with all known content gates unlocked. Toggle it on and tap **开始游戏**.

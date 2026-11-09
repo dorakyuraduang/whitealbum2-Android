@@ -75,7 +75,7 @@ def main():
         if profile['v4_migrations']!=96 or not profile['older_profiles_default_chinese'] or not profile['explicit_language_retained_after_upgrade']:raise ValueError('Incomplete Chinese-default upgrade checks')
         if profile['v5_migrations']!=96 or not all(profile[key] for key in ('v5_language_preserved','menu_visibility_persisted','menu_preference_write_retry','menu_edits_preserve_game_args')):raise ValueError('Incomplete menu-visibility preference checks')
         text=reports['LauncherTextTest']
-        if text['languages']!=28 or text['translated_messages']!=1176 or text['formatted_message_cases']!=252 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=15 or not all(text[key] for key in ('default_chinese','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue checks')
+        if text['languages']!=28 or text['translated_messages']!=1232 or text['formatted_message_cases']!=308 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=15 or not all(text[key] for key in ('default_chinese','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue checks')
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Android UI input changed during verification: '+name)
     report=dict(schema='wa2.native-android-ui.v1',source_sha256=inputs,source_sets=records,api_jar_sha256=digest(api),javac_sha256=digest(jdk/'bin/javac.exe'),d8_sha256=digest(bt/'lib/d8.jar'),

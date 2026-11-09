@@ -27,7 +27,7 @@ import static org.wa2.port.LauncherText.Key.*;
 public final class LauncherActivity extends Activity {
     private static final int PICK_DIRECTORY = 0x5742, PICK_SUBTITLE=0x5743;
     private static final int TEXT = 0xffedf4f3, MUTED = 0xffa4b7b6, ACCENT = 0xff76d6c4;
-    private TextView directory, status;
+    private TextView directory, status, languagePaths;
     private Button choose, start, language, subtitle, uiLanguage, diagnostics;
     private ScrollView root;
     private LauncherText ui;
@@ -123,6 +123,7 @@ public final class LauncherActivity extends Activity {
         choose.setOnClickListener(view -> pickDirectory());
         language = button("");
         language.setOnClickListener(view -> chooseLanguage());content.addView(language,row(8));
+        languagePaths=text("",13,MUTED);languagePaths.setTextIsSelectable(true);content.addView(languagePaths,row(4));
         subtitle=button("");subtitle.setOnClickListener(view -> chooseSubtitle());content.addView(subtitle,row(4));
         chineseSubtitles = toggle(t(CAPTIONS));
         chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));chineseSubtitles.setOnCheckedChangeListener((button,checked) -> {if(!refreshing){status.setText(t(SAVING));LaunchSettings.setChineseSubtitles(this,checked,this::saved);}});
@@ -165,6 +166,7 @@ public final class LauncherActivity extends Activity {
         refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));showMenu.setChecked(LaunchSettings.showMenu(this));refreshing=false;
         for(Switch control:new Switch[]{fps,longPress,testMode,chineseSubtitles,showMenu})control.setEnabled(!busy && profileReady);
         language.setText(t(PICK_GAME)+" · "+LaunchSettings.languageLabel(this));language.setEnabled(!busy && profileReady);
+        languagePaths.setText(t(SCRIPT_PATH,"./"+LaunchSettings.script(this))+"\n"+t(FONT_PATH,"./"+LaunchSettings.font(this)));
         String source=LaunchSettings.subtitle(this);subtitle.setText(t(SUBTITLE_FMT,t(source.isEmpty()?BUILT_IN:EXTERNAL)));
         String sourceName=source.isEmpty()?t(BUILT_IN):source;subtitle.setContentDescription(t(SUBTITLE_FMT,sourceName));subtitle.setTooltipText(sourceName);subtitle.setEnabled(!busy && profileReady);
         if(!busy)status.setText(t(tree==null?NEED_FOLDER:LOCATION_HINT));
