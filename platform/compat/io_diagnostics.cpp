@@ -13,7 +13,7 @@ namespace wa2::platform::compat {namespace {
 struct State {
     std::filesystem::path path;std::string release;IoDiagnosticSink sink;IoDiagnosticClock now;
     std::uint64_t polls{},attempts{},snapshots{},failures{},last_activity{},last_resources{},last_attempt{};
-    std::string report()const{return "{\"snapshots\":"+std::to_string(snapshots)+",\"attempts\":"+std::to_string(attempts)+",\"failures\":"+std::to_string(failures)+",\"maximum_snapshots\":64,\"minimum_interval_ms\":500,\"screen_access\":false}";}
+    std::string report()const{return "{\"snapshots\":"+std::to_string(snapshots)+",\"attempts\":"+std::to_string(attempts)+",\"failures\":"+std::to_string(failures)+",\"maximum_snapshots\":64,\"minimum_interval_ms\":500,\"minimum_resource_interval_ms\":2000,\"screen_access\":false}";}
     void emit(std::string_view key,std::string_view json)noexcept{if(sink)try{sink(release+" #"+std::to_string(snapshots)+" "+std::string(key),json);}catch(...){}}
     void poll(wr::Process& process)noexcept{
         if((++polls&255) || attempts>=64)return;
@@ -22,10 +22,11 @@ struct State {
             const auto activity=save_files_activity(process.state().mutable_files.get()).value_or(0);
             const auto resources=process.state().resource_io_activity?process.state().resource_io_activity():0;
             if(activity==last_activity && resources==last_resources)return;
-            const auto time=now();if(attempts && (time<last_attempt || time-last_attempt<500000000ull))return;
+            const auto interval=activity==last_activity?2000000000ull:500000000ull;
+            const auto time=now();if(attempts && (time<last_attempt || time-last_attempt<interval))return;
             ++attempts;last_attempt=time;
             std::map<std::string,std::string> records;
-            for(const auto* key:{"selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler"}){
+            for(const auto* key:{"selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler","host_event_pump","frame_work","static_cpu_work"}){
                 const auto found=process.state().reports.find(key);if(found!=process.state().reports.end())records.emplace(key,found->second());
             }
             std::ostringstream text;text<<"{\"host_release\":"<<wr::quote(release)<<",\"report_kind\":\"file-io-progress\",\"complete\":false,\"error\":\"\",\"sequence\":"<<snapshots+1<<",\"process\":{";bool comma=false;
@@ -35,7 +36,7 @@ struct State {
             try{std::ofstream out(temporary,std::ios::binary|std::ios::trunc);out.write(bytes.data(),std::streamsize(bytes.size()));out.close();if(!out)throw std::runtime_error("Cannot write I/O progress report");std::filesystem::rename(temporary,path);}
             catch(...){std::error_code ignored;std::filesystem::remove(temporary,ignored);throw;}
             ++snapshots;last_activity=activity;last_resources=resources;
-            for(const auto* key:{"selected_directory_io","save_read_scope","native_resources"})if(auto found=records.find(key);found!=records.end())emit(key,found->second);
+            for(const auto* key:{"selected_directory_io","save_read_scope","native_resources","scheduler","host_event_pump","frame_work","static_cpu_work"})if(auto found=records.find(key);found!=records.end())emit(key,found->second);
         }catch(...){++failures;emit("snapshot_error","{\"write_failed\":true}");}
     }
 };

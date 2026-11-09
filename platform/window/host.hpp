@@ -54,6 +54,7 @@ public:
     virtual int show_cursor(bool)=0;
     virtual std::uint16_t key(std::uint32_t)=0;
     virtual std::string input_report() const{return "{}";}
+    virtual std::string event_pump_report()const{return "{}";}
     // Only events belonging to this process. A positive timeout waits for one.
     virtual std::vector<Event> events(unsigned timeout_ms)=0;
     virtual std::uint32_t message_box(std::u16string_view text,std::u16string_view title,std::uint32_t flags)=0;

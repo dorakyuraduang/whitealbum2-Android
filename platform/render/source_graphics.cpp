@@ -1067,6 +1067,7 @@ void Graphics::install(){
         }
     }
     p.state().reports["frame_timing"]=[this]{return frame_trace.report();};
+    p.state().reports["frame_work"]=[this]{auto text=frame_trace.summary();text.pop_back();return text+",\"coalesced_fast_forward_presents\":"+std::to_string(coalesced_presents)+",\"swap_interval_requested\":"+std::to_string(effective_swap_interval)+",\"swap_interval_actual\":"+std::to_string(actual_swap_interval)+",\"swap_interval_result\":"+std::to_string(swap_interval_result)+"}";};
     p.state().reports["resource_graphics"]=[this]{return "{\"surface_load_calls\":"+std::to_string(copy_total.calls)+
         ",\"pixels_processed\":"+std::to_string(copy_total.pixels)+",\"surface_load_ns\":"+std::to_string(copy_total.total_ns)+
         ",\"readback_ns\":"+std::to_string(copy_total.readback_ns)+",\"direct_source_copies\":"+std::to_string(direct_source_copies)+

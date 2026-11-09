@@ -35,6 +35,7 @@ class Scheduler {
     U32 next_id{2};unsigned baseline{};int main_priority{};bool in_poll{},stopped{};
     std::uint64_t created{},completed{},switches{},waits{},yields{};
     std::uint64_t poll_calls{},idle_poll_skips{},idle_serial{};
+    std::uint64_t sleep_poll_ns{},sleep_os_wait_ns{},sleep_os_wait_calls{};
     std::uint64_t &main_sleep_calls{p.host_work.sleep_calls},&main_sleep_requested_ms{p.host_work.sleep_requested_ms},&main_sleep_wall_ns{p.host_work.sleep_wall_ns},&main_wait_calls{p.host_work.wait_calls},&main_wait_wall_ns{p.host_work.wait_wall_ns};
     static std::uint64_t now(){return std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());}
     static std::uint64_t deadline(U32 ms){return ms==Infinite?std::numeric_limits<std::uint64_t>::max():now()+std::uint64_t(ms)*1000000;}
@@ -173,18 +174,19 @@ public:
     void sleep(U32 ms,U32 caller=0){
         if(active){active->wake=deadline(ms);yield(false);return;}
         ++main_sleep_calls;main_sleep_requested_ms+=ms;WaitTimer timing{main_sleep_wall_ns};
+        const auto pump=[&]{WaitTimer work{sleep_poll_ns};for(auto& callback:p.state().poll)callback();};
         if(!ms){++p.host_work.sleep_zero_calls;poll();std::this_thread::yield();return;}
         if(p.state().current_thread_id==1 && accelerated_idle && accelerated_idle(ms,caller)){
             ++accelerated_idle_calls;accelerated_idle_ms+=ms;
             // Retain worker/input/audio polling and one OS scheduling yield.
             // No virtual time is advanced and no object wait is completed.
-            for(auto& callback:p.state().poll)callback();
+            pump();
             std::this_thread::yield();return;
         }
         const auto until=deadline(ms);
         while(!p.exited()){
-            for(auto& callback:p.state().poll)callback();const auto time=now();if(time>=until)return;
-            std::unique_lock lock(hub->mutex);hub->changed.wait_for(lock,std::chrono::nanoseconds(std::min<std::uint64_t>(until-time,2000000)));
+            pump();const auto time=now();if(time>=until)return;
+            std::unique_lock lock(hub->mutex);++sleep_os_wait_calls;WaitTimer waiting{sleep_os_wait_ns};hub->changed.wait_for(lock,std::chrono::nanoseconds(std::min<std::uint64_t>(until-time,2000000)));
         }
     }
     U32 wait(std::span<const U32> handles,bool all,U32 ms){
@@ -259,7 +261,7 @@ public:
         p.state().sleep_thread=[this](U32 ms){sleep(ms);};p.state().wait_critical=[this](U32 at){critical(at);};
     }
     std::string report()const{return "{\"backend\":\"portable-compiled-functions\",\"created\":"+std::to_string(created)+",\"completed\":"+std::to_string(completed)+",\"switches\":"+std::to_string(switches)+",\"waits\":"+std::to_string(waits)+",\"yields\":"+std::to_string(yields)+
-        ",\"poll_calls\":"+std::to_string(poll_calls)+",\"idle_poll_skips\":"+std::to_string(idle_poll_skips)+",\"main_sleep_calls\":"+std::to_string(main_sleep_calls)+",\"main_sleep_requested_ms\":"+std::to_string(main_sleep_requested_ms)+",\"main_sleep_wall_ns\":"+std::to_string(main_sleep_wall_ns)+",\"accelerated_idle_calls\":"+std::to_string(accelerated_idle_calls)+",\"accelerated_idle_requested_ms\":"+std::to_string(accelerated_idle_ms)+",\"main_wait_calls\":"+std::to_string(main_wait_calls)+",\"main_wait_wall_ns\":"+std::to_string(main_wait_wall_ns)+"}";}
+        ",\"poll_calls\":"+std::to_string(poll_calls)+",\"idle_poll_skips\":"+std::to_string(idle_poll_skips)+",\"main_sleep_calls\":"+std::to_string(main_sleep_calls)+",\"main_sleep_requested_ms\":"+std::to_string(main_sleep_requested_ms)+",\"main_sleep_wall_ns\":"+std::to_string(main_sleep_wall_ns)+",\"sleep_poll_wall_ns\":"+std::to_string(sleep_poll_ns)+",\"sleep_os_wait_ns\":"+std::to_string(sleep_os_wait_ns)+",\"sleep_os_wait_calls\":"+std::to_string(sleep_os_wait_calls)+",\"accelerated_idle_calls\":"+std::to_string(accelerated_idle_calls)+",\"accelerated_idle_requested_ms\":"+std::to_string(accelerated_idle_ms)+",\"main_wait_calls\":"+std::to_string(main_wait_calls)+",\"main_wait_wall_ns\":"+std::to_string(main_wait_wall_ns)+"}";}
 };
 }
 void install_scheduler(wr::Process& process,IdleSleepPolicy idle){

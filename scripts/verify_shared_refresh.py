@@ -81,7 +81,8 @@ def main():
         except (OSError,ValueError):
             run([sys.executable,ROOT/'scripts/verify_portable_shaders.py']);shaders=fresh(ROOT/'logs/portable-shader-verification.json')
         tracked=[Path(__file__),ROOT/'tests/shared-host-refresh/CMakeLists.txt',reference_path,archive,ROOT/'config/porting_contract.json',ROOT/'config/release.json']
-        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading')]
+        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress')]
+        tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/verify_subtitles.py',ROOT/'scripts/verify_shared_package.py',ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/shared-aot-android/CMakeLists.txt',ROOT/'tests/shared-aot-android/entry.cpp']
         for folder in ('recompiled','engine','platform','hosts','android/native','generated/shared-aot','generated/static-data','generated/codepages','generated/graphics-abi','third_party/wa2_subtitles','tools/WindowsRecompTool-main/include/winrecomp'):
             tracked += [path for path in (ROOT/folder).rglob('*') if path.is_file() and path.suffix in ('.cpp','.hpp','.h','.inc','.cmake','.txt','.json')]
@@ -91,13 +92,17 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
             path=build/(name+'.json');run([build/(target+'.exe'),path],120);report=json.loads(path.read_text())
             if not report.get('passed') or report.get('game_launched') or report.get('screen_access') or report.get('source_executable_opened'):raise ValueError('Finite memory/file test failed: '+name)
             reports[name]=report
+        reader_path=build/'counter_reader.json';run([sys.executable,ROOT/'tests/android_counters.py',reader_path]);reports['counter_reader']=json.loads(reader_path.read_text())
+        if not reports['counter_reader']['passed'] or reports['counter_reader']['parser_cases']<12:raise ValueError('Incomplete bounded counter assembly checks')
+        host=reports['host_progress']
+        if host['burst_queries']!=3072 or host['device_pumps']!=12 or host['transport_roundtrips']<4 or not host['blocking_waits_bypass'] or not host['frame_summary_exact']:raise ValueError('Incomplete event cadence/progress checks')
         saves=reports['selected_save_files']
         inventory=reports['save_inventory']
         if inventory['actual_static_index_calls']<1600 or not all(inventory[key] for key in ('chapter_index_batch','chapter_namespace_separate','missing_chapter_queries_batched')):raise ValueError('Incomplete initial chapter-index checks')

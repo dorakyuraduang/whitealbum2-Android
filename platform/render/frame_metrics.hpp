@@ -39,6 +39,13 @@ struct FrameMetrics {
         previous_counter=after_swap;last_copy=copy;last_draws=draws;last_uploads=uploads;draw=apply=flush=upload=0;
         last_work=work;
     }
+    std::string summary()const{
+        std::ostringstream out;const auto array=[&](const auto& values){out<<'[';bool first=true;for(const auto value:values){if(!first)out<<',';first=false;out<<value;}out<<']';};
+        out<<"{\"frames\":"<<frames<<",\"intervals\":"<<intervals<<",\"interval_total_ns\":"<<interval_total<<",\"interval_max_ns\":"<<interval_max
+            <<",\"stage_total_columns\":[\"draw_inclusive\",\"apply_inclusive\",\"flush\",\"upload\",\"surface_copy\",\"error_check\",\"swap\"],\"stage_total_ns\":";array(total_stages);
+        out<<",\"work_columns\":[\"static_function_entries\",\"api_calls\",\"direct_leaf_api_calls\",\"main_sleep_wall_ns\",\"main_wait_wall_ns\",\"main_sleep_requested_ms\",\"main_sleep_zero_calls\",\"function_boundary_wall_ns\",\"api_boundary_wall_ns\",\"poll_wall_ns\"],\"last_present_work\":";array(last_work);
+        out<<",\"work_times_are_inclusive\":true,\"screen_capture\":false}";return out.str();
+    }
     std::string report() const {
         const auto anchor=now();std::ostringstream out;
         const auto array=[&](const auto& values){out<<'[';bool first=true;for(const auto value:values){if(!first)out<<',';first=false;out<<value;}out<<']';};

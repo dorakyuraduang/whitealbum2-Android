@@ -25,9 +25,10 @@ int main(int argc,char** argv){try{
     // Resource work alone must refresh the snapshot while skipping, without
     // waiting for a save/config read. Sampling never reads image pixels.
     std::uint64_t resource_activity=1;p.state().resource_io_activity=[&]{return resource_activity;};
+    now+=2000000000;
     poll();const auto resource_snapshot=read(progress);CHECK(resource_snapshot.find("\"sequence\":3")!=std::string::npos);
     now+=1000000000;poll();CHECK(read(progress)==resource_snapshot);
-    ++resource_activity;poll();CHECK(read(progress).find("\"sequence\":4")!=std::string::npos);
+    ++resource_activity;poll();CHECK(read(progress)==resource_snapshot);now+=1000000000;poll();CHECK(read(progress).find("\"sequence\":4")!=std::string::npos);
     for(unsigned n=0;n<80;++n){touch();now+=500000000;poll();}
     const auto bounded=p.state().reports.at("io_diagnostics")();
     const auto number=[&](const char* key){const auto at=bounded.find('"'+std::string(key)+"\":");CHECK(at!=std::string::npos);return std::stoul(bounded.substr(at+std::strlen(key)+3));};

@@ -35,6 +35,7 @@ std::uint32_t run(Startup startup){
     backends.directdraw=[host=startup.window](wr::Process& p){return platform::compat::install_legacy_display(p,host);};
     aot::Runtime runtime(std::move(startup.options),std::move(backends),startup.window);
     auto& process=runtime.process();
+    process.state().reports["host_event_pump"]=[host=startup.window]{return host->event_pump_report();};
     const auto report=[&](std::string_view error){
         if(startup.report_file.empty())return;
         if(startup.report_file.extension()!=".json")throw std::invalid_argument("Runtime reports require a .json filename");

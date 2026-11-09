@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.55-shared-aot**. Use the
+is **0.2.56-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.55-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.56-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -80,6 +80,19 @@ at 8 MiB/32 entries. Cache entries contain owned bytes, never mutable game
 buffers. No resources are extracted into the APK or written to the folder.
 First-time/evicted/oversize resources still read and decode normally; component
 reuse checks do not measure whole-game fast-forward speed on a phone.
+
+0.2.56 coalesces nonblocking SDL/widget event pumps over at most 1 ms, while
+positive-timeout requests always pump. Key-edge consumption stays per query;
+events remain queued until a pump. The same adapter policy runs on both hosts.
+Progress counters include `host_event_pump`, compact `frame_work` totals and
+sampled `static_cpu_work`; Sleep counters distinguish callback work from actual
+condition-variable waiting. Resource-only progress uses a 2 s minimum interval
+(selected-file changes still use 500 ms), retaining the 64-attempt cap.
+Long `WA2IO` records are split into UTF-8 pieces of at most 640 bytes, so bounded
+counter data survives devices that truncate a single log print. Run
+`python scripts/read_android_counters.py --serial DEVICE` to read that app UID's
+counter tag only; incomplete records are not presented as current counters.
+No game launch, process stop, UI control or screen access occurs in this tool.
 
 The separate native migration development package now saves game data in the
 currently selected game folder: root `Sys.sav`, `native-settings.wa2cfg` and

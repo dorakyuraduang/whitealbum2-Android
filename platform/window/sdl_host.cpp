@@ -2,11 +2,13 @@
 #include "sdl_host.hpp"
 #include "hidden_popups.hpp"
 #include "pointer_coordinates.hpp"
+#include "event_pump.hpp"
 #include "../compat/codepage.hpp"
 #include <SDL.h>
 #include <algorithm>
 #include <bitset>
 #include <cmath>
+#include <chrono>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -37,6 +39,7 @@ class SdlHost final:public Host {
     WindowSpec spec;std::map<std::uint32_t,DialogState> dialogs;
     std::array<std::uint32_t,2> render_extent{};
     HiddenPopups popups;
+    EventPump event_pump;
     const std::thread::id owner{std::this_thread::get_id()};bool initialized{},has_focus{true};int cursor_count{};
     std::array<std::uint16_t,256> keys{};std::array<int,2> mouse{};std::array<bool,5> buttons{};
     std::optional<std::pair<SDL_TouchID,SDL_FingerID>> finger;
@@ -107,12 +110,12 @@ public:
         const auto extent=backbuffer_size(source,width,height,windowed);if(!extent)throw std::runtime_error("invalid source backbuffer dimensions");render_extent=*extent;
         if(!options.mobile && !windowed && SDL_SetWindowFullscreen(window,SDL_WINDOW_FULLSCREEN_DESKTOP))throw std::runtime_error(SDL_GetError());return window;}
     void frame_submitted()override{if(options.frame_submitted)options.frame_submitted();}
-    void create(const WindowSpec& value)override{enter();if(window){popups.create(value,id);return;}if(value.parent)throw std::runtime_error("main SDL window cannot have a source owner");initialize();spec=value;id=value.token;
+    void create(const WindowSpec& value)override{enter();event_pump.reset();if(window){popups.create(value,id);return;}if(value.parent)throw std::runtime_error("main SDL window cannot have a source owner");initialize();spec=value;id=value.token;
         auto flags=std::uint32_t(SDL_WINDOW_OPENGL|SDL_WINDOW_ALLOW_HIGHDPI);if(options.mobile)flags|=SDL_WINDOW_FULLSCREEN_DESKTOP;else flags|=SDL_WINDOW_RESIZABLE;
         if(!(value.style&0x10000000))flags|=SDL_WINDOW_HIDDEN;
         window=SDL_CreateWindow(utf8(value.title).c_str(),value.bounds.x<0?SDL_WINDOWPOS_CENTERED:value.bounds.x,value.bounds.y<0?SDL_WINDOWPOS_CENTERED:value.bounds.y,value.bounds.width,value.bounds.height,flags);
         if(!window)throw std::runtime_error(SDL_GetError());sdl_id=SDL_GetWindowID(window);options.widgets->parent(window,id);SDL_StartTextInput();}
-    void destroy(std::uint32_t target)override{enter();if(const auto found=dialogs.find(target);found!=dialogs.end()){options.widgets->destroy(target);dialogs.erase(found);return;}
+    void destroy(std::uint32_t target)override{enter();event_pump.reset();if(const auto found=dialogs.find(target);found!=dialogs.end()){options.widgets->destroy(target);dialogs.erase(found);return;}
         if(popups.contains(target)){popups.destroy(target);return;}
         if(target!=id || !window)throw std::runtime_error("unknown SDL window");SDL_StopTextInput();SDL_HideWindow(window);retired_windows.push_back(window);popups.clear();window=nullptr;render_extent={};id=sdl_id=0;}
     void show(std::uint32_t target,bool visible)override{enter();if(dialogs.contains(target)){dialogs.at(target).visible=visible;options.widgets->show(target,visible);return;}if(popups.contains(target)){popups.show(target,visible);return;}if(target!=id || !window)throw std::runtime_error("unknown SDL window");if(visible)SDL_ShowWindow(window);else SDL_HideWindow(window);}
@@ -136,7 +139,11 @@ public:
         const auto count=std::min<std::uint64_t>(click_count,click_samples.size());for(std::uint64_t n=0;n<count;++n){if(n)out<<',';sample(click_samples[(click_count-count+n)%click_samples.size()]);}
         out<<"],\"own_window_events_only\":true,\"screen_access\":false}";return out.str();
     }
-    std::vector<Event> events(unsigned timeout)override{enter();std::vector<Event> result;if(initialized){SDL_Event event;if(timeout && SDL_WaitEventTimeout(&event,int(std::min(timeout,50u))))consume(event,result);while(SDL_PollEvent(&event))consume(event,result);}auto widgets=options.widgets->events();result.insert(result.end(),std::make_move_iterator(widgets.begin()),std::make_move_iterator(widgets.end()));return result;}
+    std::string event_pump_report()const override{enter();return event_pump.report();}
+    std::vector<Event> events(unsigned timeout)override{enter();
+        const auto now=std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
+        if(!event_pump.due(timeout,now))return {};
+        std::vector<Event> result;if(initialized){SDL_Event event;if(timeout && SDL_WaitEventTimeout(&event,int(std::min(timeout,50u))))consume(event,result);while(SDL_PollEvent(&event))consume(event,result);}auto widgets=options.widgets->events();result.insert(result.end(),std::make_move_iterator(widgets.begin()),std::make_move_iterator(widgets.end()));return result;}
     std::uint32_t message_box(std::u16string_view text,std::u16string_view title,std::uint32_t flags)override{enter();initialize();std::vector<SDL_MessageBoxButtonData> buttons;
         const auto add=[&](int id,const char* label){buttons.push_back({id==1 || id==6?SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT:0u,id,label});};
         switch(flags&15){case 0:add(1,"OK");break;case 1:add(1,"OK");add(2,"Cancel");break;case 2:add(3,"Abort");add(4,"Retry");add(5,"Ignore");break;case 3:add(6,"Yes");add(7,"No");add(2,"Cancel");break;case 4:add(6,"Yes");add(7,"No");break;case 5:add(4,"Retry");add(2,"Cancel");break;default:throw std::runtime_error("unsupported message box button set");}
