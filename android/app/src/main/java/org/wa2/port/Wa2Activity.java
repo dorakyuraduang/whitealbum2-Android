@@ -14,7 +14,7 @@ public final class Wa2Activity extends SDLActivity {
         if (!ResourceDirectory.finishGame(this, this::finishNormally)) super.finish();
     }
     @Override protected String[] getLibraries() { return PortUi.libraries(); }
-    @Override protected String[] getArguments() { return LaunchSettings.testMode(this) ? new String[] { "--test-mode" } : new String[0]; }
+    @Override protected String[] getArguments() { return LaunchSettings.gameArguments(this); }
     @Override protected void resumeNativeThread() {
         // A restored task must retain its verified folder/profile pairing.
         // If it cannot, return through the launcher before SDL_main can run.

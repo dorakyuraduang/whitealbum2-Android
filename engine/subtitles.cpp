@@ -65,6 +65,7 @@ std::vector<GlyphQuad> layout(const Cue& cue,FontSpec spec,std::size_t glyphs){
     return out;
 }
 bool Playback::play(std::uint32_t key,Kind kind,std::uint32_t slot,std::uint64_t now,bool replace){
+    if(!enabled_)return false;
     (void)current(now);
     const auto* next=find_track(key);
     if(!next || (track_ && !replace))return false;
@@ -75,7 +76,7 @@ void Playback::stop(Kind kind,std::uint32_t slot) noexcept {
     if(track_ && kind_==kind && slot_==slot)reset();
 }
 const Cue* Playback::current(std::uint64_t now) noexcept {
-    if(!track_)return nullptr;
+    if(!enabled_ || !track_)return nullptr;
     const auto elapsed=now>=started_?now-started_:0;
     if(elapsed>=track_->cues.back().end_ms){reset();return nullptr;}
     const auto cues=track_->cues;

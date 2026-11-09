@@ -27,6 +27,7 @@ void unbind_source_subtitles(wr::Memory& memory,const subtitles::Playback* playe
 }
 void source_subtitle_return(subtitles::Playback& playback,std::uint32_t entry,
     const wr::Cpu&,wr::Memory& memory,std::uint32_t args,std::uint64_t now){
+    if(!playback.enabled())return;
     using subtitles::Kind;
     const auto argument=[&](unsigned n){
         const auto address=std::uint64_t(args)+n*4;

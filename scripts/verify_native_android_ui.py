@@ -70,6 +70,7 @@ def main():
         if directory['lookups']!=400 or directory['same_directory_queries_for_400_lookups']!=1 or not all(directory[key] for key in ('operation_scoped_snapshot','next_operation_sees_external_edits','publication_index_updates','ambiguity_and_size_guards')):raise ValueError('Incomplete operation-scoped document directory checks')
         if compatible['cases']<852 or compatible['guards']<22 or compatible['original_files_opened'] or compatible['android_device_verified']:raise ValueError('Incomplete shared-AOT selected-directory path checks')
         if profile['cases']<17 or profile['guards']<34 or not all(profile[key] for key in ('directory_isolation','unchanged_writes_suppressed','failed_write_retry','inflight_edit_not_lost')) or profile['source_files_opened'] or profile['android_device_verified']:raise ValueError('Incomplete external launcher-configuration checks')
+        if profile['language_roundtrips']!=144 or profile['legacy_migrations']!=8 or not profile['language_arguments_exact'] or not profile['language_edits_preserve_flags']:raise ValueError('Incomplete launcher language/subtitle compatibility checks')
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Android UI input changed during verification: '+name)
     report=dict(schema='wa2.native-android-ui.v1',source_sha256=inputs,source_sets=records,api_jar_sha256=digest(api),javac_sha256=digest(jdk/'bin/javac.exe'),d8_sha256=digest(bt/'lib/d8.jar'),

@@ -20,11 +20,13 @@ int main(int argc,char** argv){
     try{SDL_SetMainReady();char* value=SDL_GetBasePath();if(!value)throw std::runtime_error(SDL_GetError());std::filesystem::path base;
         try{base=std::filesystem::u8path(value);SDL_free(value);}catch(...){SDL_free(value);throw;}
         wa2::host::Startup startup;startup.options.data_root=resource_root(base);startup.options.allow_file_write=true;
-        for(int n=1;n<argc;++n){const std::string argument=argv[n];if(argument=="--root" && n+1<argc)startup.options.data_root=std::filesystem::u8path(argv[++n]);
-            else if(argument=="--report" && n+1<argc)startup.report_file=std::filesystem::u8path(argv[++n]);
+        std::vector<std::string_view> arguments;for(int n=1;n<argc;++n)arguments.emplace_back(argv[n]);
+        for(std::size_t n=0;n<arguments.size();++n){const std::string argument(arguments[n]);if(argument=="--root" && n+1<arguments.size())startup.options.data_root=std::filesystem::u8path(arguments[++n]);
+            else if(argument=="--report" && n+1<arguments.size())startup.report_file=std::filesystem::u8path(arguments[++n]);
             else if(argument=="--no-pause")continue;
             else if(argument=="--test-mode")startup.test_mode=true;
-            else if(argument=="--help"){std::cout<<"Place this program beside the original PAKs, or use --root <resource directory>.\n--test-mode uses separate chapter-unlocked saves.\n";return 0;}else throw std::runtime_error("Unknown launch argument: "+argument);}
+            else if(wa2::resource::language_launch_option(arguments,n,startup.language))continue;
+            else if(argument=="--help"){std::cout<<"Place this program beside the original PAKs, or use --root <resource directory>.\n--test-mode uses separate chapter-unlocked saves.\n--script-pak <file.pak> and --font-pak <file.pak> select compatible external language resources.\n--no-chinese-subtitles disables the embedded main-story Chinese captions.\n";return 0;}else throw std::runtime_error("Unknown launch argument: "+argument);}
         startup.files=wa2::platform::compat::local_files(startup.options.data_root);
         wa2::window::SdlHostOptions options;options.widgets=wa2::window::native_widgets();startup.window=wa2::window::sdl_host(std::move(options));
         return int(wa2::host::run(std::move(startup)));

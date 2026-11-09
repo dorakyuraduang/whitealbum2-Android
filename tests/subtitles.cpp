@@ -15,7 +15,7 @@
 #define CHECK(x) do{++checks;if(!(x))throw std::runtime_error(std::string("check failed: ")+#x);}while(false)
 namespace sub=wa2::subtitles;
 unsigned checks{},time_checks{},layout_checks{},abi_checks{},static_returns{},rejected{};
-unsigned projection_cases{},projected_cues{},projected_glyphs{},invalid_viewports{};
+unsigned projection_cases{},projected_cues{},projected_glyphs{},invalid_viewports{},toggle_cases{};
 template<class F>void reject(F f){bool failed{};try{f();}catch(const std::exception&){failed=true;}CHECK(failed);++rejected;}
 const sub::Cue* reference(const sub::Track& track,std::uint64_t elapsed){
     for(const auto& cue:track.cues)if(cue.begin_ms<=elapsed && elapsed<cue.end_ms)return &cue;
@@ -224,6 +224,18 @@ void source_abi(bool linear){
 }
 int main(int argc,char** argv){try{
     CHECK(argc==2);times_and_layout();presentation_layout();source_abi(false);source_abi(true);
+    for(const auto& track:sub::main_story_tracks()){
+        sub::Playback player;CHECK(player.enabled());const auto kind=track.key<65536?sub::Kind::effect:sub::Kind::voice;
+        CHECK(player.play(track.key,kind,0,1000));const auto generation=player.generation();player.enabled(false);
+        CHECK(!player.enabled() && player.generation()==generation+1 && !player.current(1000+track.cues[0].begin_ms));
+        CHECK(!player.play(track.key,kind,0,2000,true));player.enabled(false);CHECK(player.generation()==generation+1);
+        player.enabled(true);CHECK(player.enabled() && !player.current(2000+track.cues[0].begin_ms));
+        CHECK(player.play(track.key,kind,0,3000) && player.current(3000+track.cues[0].begin_ms)==&track.cues[0]);++toggle_cases;
+    }
+    {sub::Playback disabled;disabled.enabled(false);wr::Memory inaccessible;wr::Cpu cpu;
+        for(const auto event:{0x40f400u,0x40eda0u,0x406270u,0x40f590u,0x40ec30u}){
+            wa2::aot::source_subtitle_return(disabled,event,cpu,inaccessible,0xffffffffu,0);CHECK(!disabled.current(0));++toggle_cases;
+        }}
     const auto spec=sub::font_spec();const auto font=sub::decode_font(sub::font_coverage(),spec,891);
     CHECK(font.width==spec.cell*spec.columns && font.height==spec.cell*spec.rows);
     std::uint64_t hash=14695981039346656037ull,visible{};
@@ -240,6 +252,7 @@ int main(int argc,char** argv){try{
         <<",\"generated_static_returns\":"<<static_returns
         <<",\"presentation_cases\":"<<projection_cases<<",\"projected_cues\":"<<projected_cues<<",\"projected_glyphs\":"<<projected_glyphs
         <<",\"invalid_viewports\":"<<invalid_viewports<<",\"backbuffer_independent_projection\":true"
+        <<",\"subtitle_toggle_cases\":"<<toggle_cases<<",\"disabled_captions_skip_guest_reads\":true"
         <<",\"rejections\":"<<rejected<<",\"tracks\":46,\"cues\":315,\"characters\":891,\"font_rgba_bytes\":"<<font.rgba.size()
         <<",\"font_rgba_fnv64\":\""<<hash<<"\",\"special_contents_included\":false,\"source_executable_opened\":false,\"game_launched\":false,\"graphics_device_opened\":false,\"screen_access\":false,\"passed\":true}\n";
     CHECK(output);std::cout<<"PASS main-story subtitles: "<<checks<<" checks, 315 cues, both source-memory layouts, embedded coverage and geometry.\n";return 0;

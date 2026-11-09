@@ -26,7 +26,7 @@ final class LaunchSettings {
     private LaunchSettings() { }
     private static LaunchProfile previous(Context context) {
         android.content.SharedPreferences old=context.getSharedPreferences("launcher",Context.MODE_PRIVATE);
-        return new LaunchProfile((old.getBoolean("show-fps",true)?LaunchProfile.FPS:0) | (old.getBoolean("long-press-fast-forward",true)?LaunchProfile.LONG_PRESS:0) | (old.getBoolean("test-mode",false)?LaunchProfile.TEST_MODE:0));
+        return new LaunchProfile(LaunchProfile.CHINESE_SUBTITLES | (old.getBoolean("show-fps",true)?LaunchProfile.FPS:0) | (old.getBoolean("long-press-fast-forward",true)?LaunchProfile.LONG_PRESS:0) | (old.getBoolean("test-mode",false)?LaunchProfile.TEST_MODE:0));
     }
     private static String key(Context context) { Uri tree=ResourceDirectory.selectedTree(context);return tree==null?null:tree.toString(); }
     private static LaunchProfileStore store(Context context) { synchronized(LOCK){return profiles.get(key(context));} }
@@ -44,6 +44,10 @@ final class LaunchSettings {
     static boolean showFps(Context context) { return profile(context).enabled(LaunchProfile.FPS); }
     static boolean longPressFastForward(Context context) { return profile(context).enabled(LaunchProfile.LONG_PRESS); }
     static boolean testMode(Context context) { return profile(context).enabled(LaunchProfile.TEST_MODE); }
+    static boolean chineseSubtitles(Context context) { return profile(context).enabled(LaunchProfile.CHINESE_SUBTITLES); }
+    static String script(Context context) { return profile(context).script; }
+    static String font(Context context) { return profile(context).font; }
+    static String[] gameArguments(Context context) { return profile(context).gameArguments(); }
     static boolean saving(Context context) {LaunchProfileStore current=store(context);return current!=null && current.dirty();}
     // Called after read/write authorization on a launcher worker. Queueing on
     // the same executor drains earlier toggle writes before reload/game start.
@@ -58,8 +62,8 @@ final class LaunchSettings {
                     @Override public byte[] read() throws IOException {
                         int descriptor=documents.open(FILE);if(descriptor<0)return null;
                         try(ParcelFileDescriptor.AutoCloseInputStream input=new ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.adoptFd(descriptor))) {
-                            byte[] bytes=new byte[16];int at=0;while(at<bytes.length){int count=input.read(bytes,at,bytes.length-at);if(count<0)throw new IOException("Truncated launcher configuration");if(count==0)throw new IOException("Short launcher configuration read");at+=count;}
-                            if(input.read()!=-1)throw new IOException("Launcher configuration exceeds its size bound");return bytes;
+                            java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();byte[] buffer=new byte[LaunchProfile.MAX_BYTES+1];
+                            for(;;){int count=input.read(buffer,0,buffer.length);if(count<0)break;if(count==0)throw new IOException("Short launcher configuration read");if(bytes.size()+count>LaunchProfile.MAX_BYTES)throw new IOException("Launcher configuration exceeds its size bound");bytes.write(buffer,0,count);}return bytes.toByteArray();
                         }
                     }
                     @Override public void replace(byte[] bytes) throws IOException { documents.replace(FILE,ByteBuffer.wrap(bytes)); }
@@ -78,4 +82,10 @@ final class LaunchSettings {
     static void setShowFps(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.FPS,value,completed); }
     static void setLongPressFastForward(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.LONG_PRESS,value,completed); }
     static void setTestMode(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.TEST_MODE,value,completed); }
+    static void setChineseSubtitles(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.CHINESE_SUBTITLES,value,completed); }
+    static void setArchive(Context context,boolean font,String name,Consumer<String> completed) {
+        final LaunchProfileStore store=store(context);if(store==null){completed.accept("请先选择并检查游戏文件夹。");return;}
+        if(!store.setArchive(font,name)){completed.accept(null);return;}
+        IO.execute(() -> {String problem=null;try{store.flush();}catch(IOException | RuntimeException error){problem=error.getMessage();if(problem==null)problem="无法保存语言资源选择";}completed.accept(problem);});
+    }
 }

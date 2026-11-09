@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.57-shared-aot**. Use the
+is **0.2.58-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.57-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.58-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -103,6 +103,17 @@ the resource cache budget or extracting PAK contents. The same two derived AOT
 units are compiled on x64 and ARM64 from unchanged cached C++ inputs and one
 recorded preparation recipe; see BUILDING. Component timings are not measured
 whole-game Android fast-forward ratios.
+
+0.2.58 adds independent script/font PAK choices and an embedded main-story
+Chinese-caption switch to the launcher. Default selections preserve the current
+resource lookup and fonts; captions stay enabled. Compatible external language
+PAKs can coexist under different filenames in the selected root/IC directory.
+The same common C++ mount/parser is used on Windows and Android, without
+extracting or importing PAK payloads. Launcher configuration remains directory
+bound; all old toggle values survive the version-1 record migration. This does
+not implement arbitrary Unicode scripts or TTF/OTF rendering. See
+[language resource settings](LANGUAGE_RESOURCES.md) for supported formats,
+patch precedence and Windows options.
 
 The separate native migration development package now saves game data in the
 currently selected game folder: root `Sys.sav`, `native-settings.wa2cfg` and

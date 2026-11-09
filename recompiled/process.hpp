@@ -11,7 +11,7 @@ class Runtime {
     wr::Process process_;
 public:
     explicit Runtime(wr::ProcessOptions options={},wr::ProcessBackends backends={},
-                     std::shared_ptr<graphics::SurfaceHost> graphics={});
+                     std::shared_ptr<graphics::SurfaceHost> graphics={},bool chinese_subtitles=true);
     wr::Process& process() noexcept{return process_;}
     void load(){process_.load(initial_image());}
     void load(const wr::Image& image){process_.load(image);}

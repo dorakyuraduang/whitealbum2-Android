@@ -17,6 +17,7 @@ def verify(report_path, manifest_path=None):
         report['glyph_quads']!=glyphs or report['source_audio_events']<20 or report['generated_static_returns']!=4 or
         report['presentation_cases']!=16 or report['projected_cues']!=315*16 or report['projected_glyphs']!=glyphs*16 or
         report['invalid_viewports']!=9 or report['backbuffer_independent_projection'] is not True or
+        report.get('subtitle_toggle_cases')!=51 or report.get('disabled_captions_skip_guest_reads') is not True or
         report['rejections']<8 or report['special_contents_included'] is not False or
         report['source_executable_opened'] or report['game_launched'] or report['graphics_device_opened'] or report['screen_access']):
         raise ValueError('Main-story subtitle memory checks are incomplete')

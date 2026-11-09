@@ -3,6 +3,7 @@
 #include <winrecomp/process.hpp>
 #include <winrecomp/readonly_files.hpp>
 #include "../../platform/compat/io_diagnostics.hpp"
+#include "../../engine/language_resources.hpp"
 namespace wa2::host {
 struct Startup {
     wr::ProcessOptions options;
@@ -12,6 +13,7 @@ struct Startup {
     std::filesystem::path report_file;
     platform::compat::IoDiagnosticSink io_diagnostic_sink;
     bool test_mode{};
+    resource::LanguageResources language;
 };
 // This is the only game startup/run path. Platform entry files select device
 // adapters and resource access, then enter the same preserved source program.

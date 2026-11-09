@@ -1,6 +1,7 @@
 package org.wa2.port;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -23,8 +24,8 @@ public final class LauncherActivity extends Activity {
     private static final int PICK_DIRECTORY = 0x5742;
     private static final int TEXT = 0xffedf4f3, MUTED = 0xffa4b7b6, ACCENT = 0xff76d6c4;
     private TextView directory, status;
-    private Button choose, start;
-    private Switch fps, longPress, testMode;
+    private Button choose, start, script, font, refreshLanguages;
+    private Switch fps, longPress, testMode, chineseSubtitles;
     private boolean busy, launching, refreshing, profileReady;
     private int generation;
 
@@ -56,6 +57,18 @@ public final class LauncherActivity extends Activity {
         choose.setBackgroundTintList(ColorStateList.valueOf(0xff30474b)); card.addView(choose, row(14));
         choose.setOnClickListener(view -> pickDirectory());
         card.addView(text("选择存放原版 PAK 的文件夹，名称不限，并保留 IC 子目录。资源直接读取；存档和游戏配置也保存在所选目录，可放入 PC 版存档。", 13, MUTED), row(8));
+        content.addView(text("剧情语言与字体", 18, TEXT), row(24));
+        script = new Button(this);script.setAllCaps(false);script.setTextColor(TEXT);script.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(script,row(8));
+        script.setOnClickListener(view -> chooseLanguage(false));
+        font = new Button(this);font.setAllCaps(false);font.setTextColor(TEXT);font.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(font,row(6));
+        font.setOnClickListener(view -> chooseLanguage(true));
+        content.addView(text("默认沿用当前脚本和字库。把兼容的其他语言 PAK 放入所选游戏目录或 IC 后，分别选择脚本与配套字库。字库使用游戏 PAK 格式，不是手机 TTF/OTF 字体；更改后重新启动游戏生效。", 13, MUTED), row(6));
+        refreshLanguages = new Button(this);refreshLanguages.setText("刷新资源列表");refreshLanguages.setAllCaps(false);refreshLanguages.setTextColor(TEXT);refreshLanguages.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));content.addView(refreshLanguages,row(6));
+        refreshLanguages.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this),0,false));
+        chineseSubtitles = new Switch(this);chineseSubtitles.setText("正篇补充中文字幕");chineseSubtitles.setTextColor(TEXT);chineseSubtitles.setTextSize(16);chineseSubtitles.setPadding(0,dp(12),0,dp(12));
+        chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));chineseSubtitles.setOnCheckedChangeListener((button,checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setChineseSubtitles(this,checked,this::saved);}});
+        content.addView(chineseSubtitles,row(8));
+        content.addView(text("控制只有声音的正篇片段所补充的中文字幕，不影响剧情正文和语音，也不包含 Special Contents。默认开启。",13,MUTED),row(4));
         fps = new Switch(this); fps.setText("显示 FPS 和帧耗时"); fps.setTextColor(TEXT); fps.setTextSize(16); fps.setPadding(0, dp(12), 0, dp(12));
         fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText("正在保存启动设置…");LaunchSettings.setShowFps(this, checked,this::saved);}});
         content.addView(fps, row(16));
@@ -76,14 +89,31 @@ public final class LauncherActivity extends Activity {
         diagnostics.setOnClickListener(view->{if(!busy)RuntimeDiagnostics.copy(this,status);});
         setContentView(scroll); refresh();Uri remembered=ResourceDirectory.selectedTree(this);if(remembered!=null)prepare(remembered,0,false);
     }
-    private void saved(String problem) { runOnUiThread(() -> {if(isFinishing() || isDestroyed() || busy)return;status.setText(problem!=null?"保存启动设置失败："+problem:LaunchSettings.saving(this)?"正在保存启动设置…":"启动设置已保存到所选游戏目录。");}); }
+    private void saved(String problem) { runOnUiThread(() -> {if(isFinishing() || isDestroyed() || busy)return;refresh();status.setText(problem!=null?"保存启动设置失败："+problem:LaunchSettings.saving(this)?"正在保存启动设置…":"启动设置已保存到所选游戏目录，重新启动游戏生效。");}); }
     private void refresh() {
         Uri tree = ResourceDirectory.selectedTree(this);
         directory.setText(tree == null ? "尚未选择资源文件夹 · 名称不限" : ResourceDirectory.displayLocation(tree));
         choose.setEnabled(!busy); start.setEnabled(!busy && tree != null && profileReady);
-        refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));refreshing=false;
-        for(Switch control:new Switch[]{fps,longPress,testMode})control.setEnabled(!busy && profileReady);
+        refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));refreshing=false;
+        for(Switch control:new Switch[]{fps,longPress,testMode,chineseSubtitles})control.setEnabled(!busy && profileReady);
+        script.setText("剧情脚本："+(LaunchSettings.script(this).isEmpty()?"当前资源（默认）":LaunchSettings.script(this)));
+        font.setText("游戏字库："+(LaunchSettings.font(this).isEmpty()?"当前资源（默认）":LaunchSettings.font(this)));
+        script.setEnabled(!busy && profileReady);font.setEnabled(!busy && profileReady);refreshLanguages.setEnabled(!busy && profileReady);
         if (!busy) status.setText(tree == null ? "请先选择并授权游戏资源文件夹。" : "启动设置、游戏配置和存档保存在所选游戏目录。");
+    }
+    private void chooseLanguage(boolean isFont) {
+        if(busy || !profileReady)return;
+        String[] names=ResourceDirectory.preparedPakNames(this);String selected=isFont?LaunchSettings.font(this):LaunchSettings.script(this);
+        java.util.ArrayList<String> values=new java.util.ArrayList<>();values.add("");java.util.Collections.addAll(values,names);
+        if(!values.contains(selected))values.add(selected);
+        String[] labels=new String[values.size()];labels[0]="当前资源（默认）";
+        for(int n=1;n<labels.length;++n)labels[n]=values.get(n)+(java.util.Arrays.asList(names).contains(values.get(n))?"":"（未找到）");
+        new AlertDialog.Builder(this).setTitle(isFont?"选择配套字库 PAK":"选择剧情脚本 PAK")
+            .setSingleChoiceItems(labels,values.indexOf(selected),(dialog,which) -> {
+                String name=values.get(which);dialog.dismiss();status.setText("正在保存语言资源选择…");
+                LaunchSettings.setArchive(this,isFont,name,this::saved);refresh();
+                if(LaunchSettings.saving(this))status.setText("正在保存语言资源选择…");
+            }).setNegativeButton("取消",null).show();
     }
     private void pickDirectory() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
@@ -99,14 +129,14 @@ public final class LauncherActivity extends Activity {
         final android.content.Context application = getApplicationContext();
         new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
-            String problem = null; int count = 0;
-            try {Uri previous=ResourceDirectory.selectedTree(application);count = ResourceDirectory.prepareSelection(application, tree, flags);LaunchSettings.prepare(application,tree,tree.equals(previous));}
+            String problem = null; int count = 0;boolean ready=false;
+            try {Uri previous=ResourceDirectory.selectedTree(application);count = ResourceDirectory.prepareSelection(application, tree, flags);LaunchSettings.prepare(application,tree,tree.equals(previous));ready=true;if(launch)ResourceDirectory.validatePreparedLanguages(application,LaunchSettings.script(application),LaunchSettings.font(application));}
             catch (Exception error) { problem = error.getMessage(); if (problem == null) problem = "无法读取所选资源目录。"; }
-            final String failure = problem; final int found = count;
+            final String failure = problem; final int found = count;final boolean loaded=ready;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || generation != token) return;
-                busy = false;profileReady=failure==null;refresh();
-                if (failure != null) { status.setText(failure + "\n请重新选择并授权可读写的游戏资源文件夹，名称不限。"); return; }
+                busy = false;profileReady=loaded;refresh();
+                if (failure != null) { status.setText(failure + (loaded?"":"\n请重新选择并授权可读写的游戏资源文件夹，名称不限。")); return; }
                 status.setText("已找到 " + found + " 个资源包。");
                 if (launch) {Intent session=new Intent(this,Wa2Activity.class);LaunchSettings.applySession(this,session);launching = true; busy = true; refresh(); status.setText("正在启动游戏…"); startActivity(session);}
             });
@@ -120,6 +150,6 @@ public final class LauncherActivity extends Activity {
     @Override protected void onDestroy() { ++generation; super.onDestroy(); }
     @Override protected void onResume() {
         super.onResume();
-        if (launching) { launching = false; busy = false; refresh(); }
+        if (launching) { launching = false; busy = false;refresh();Uri tree=ResourceDirectory.selectedTree(this);if(tree!=null)prepare(tree,0,false); }
     }
 }

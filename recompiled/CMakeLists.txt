@@ -55,6 +55,7 @@ set(WA2_FUNCTION_RUNTIME_SOURCES
     "${WA2_SHARED_ROOT}/platform/compat/text.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/locale.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/resource_mount.cpp"
+    "${WA2_SHARED_ROOT}/platform/compat/language_resources.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/save_files.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/io_diagnostics.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/test_profile.cpp"

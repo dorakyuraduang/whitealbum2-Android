@@ -1495,7 +1495,7 @@ check boundary bytes, range union, partial failures/retry, randomized final-byte
 equality, unknown fields and isolated test directories. These are byte/I/O-policy
 checks, not measured startup, frame rate or Android-provider performance.
 
-The Android launcher separately stores its three adapter switches in
+The Android launcher separately stores its adapter settings in
 `native-launcher.wa2cfg` under the selected root. Its small versioned/checksummed
 record is distinct from game preferences. Queue serialization prevents an older
 toggle write from overtaking a newer one, and failed writes retain dirty state

@@ -1050,7 +1050,7 @@ U32 Graphics::present(Args a,bool force){
     if(p.state().stop_after_presents && presents>=p.state().stop_after_presents){p.state().diagnostic_stop=true;p.exit(0);}return 0;
 }
 void Graphics::install(){
-    p.state().reports["main_story_subtitles"]=[this]{return "{\"tracks\":46,\"cues\":315,\"special_contents_included\":false,\"draws\":"+
+    p.state().reports["main_story_subtitles"]=[this]{return std::string("{\"enabled\":")+(subtitles && subtitles->enabled()?"true":"false")+",\"tracks\":46,\"cues\":315,\"special_contents_included\":false,\"draws\":"+
         std::to_string(subtitle_draws)+",\"layouts\":"+std::to_string(subtitle_layouts)+",\"font_uploads\":"+std::to_string(subtitle_font_uploads)+"}";};
     sprite_service.emplace(p.memory,[](const wa2::aot::SpriteCommand& command,void* owner){return static_cast<Graphics*>(owner)->sprite_command(command);},this);
     // Bind implementations before load so their leaf contracts belong to

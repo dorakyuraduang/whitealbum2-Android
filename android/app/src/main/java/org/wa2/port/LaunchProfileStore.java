@@ -16,8 +16,10 @@ final class LaunchProfileStore {
     synchronized LaunchProfile current() { return current; }
     synchronized boolean dirty() { return dirty; }
     synchronized boolean set(int flag,boolean value) {
-        LaunchProfile next=current.with(flag,value);if(next.flags==current.flags)return false;current=next;dirty=true;++revision;return true;
+        return update(current.with(flag,value));
     }
+    synchronized boolean setArchive(boolean font,String name) { return update(current.withArchive(font,name)); }
+    private boolean update(LaunchProfile next) {if(next.equals(current))return false;current=next;dirty=true;++revision;return true;}
     void flush() throws IOException {
         final LaunchProfile profile;final long version;
         synchronized(this){if(!dirty)return;profile=current;version=revision;}
