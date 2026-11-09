@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.64-shared-aot**. Use the
+is **0.2.65-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.64-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.65-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -222,7 +222,7 @@ library; they do not measure Android gameplay or GPU throughput.
 4. Tap **开始游戏**. The folder is checked in a background worker before the game
    initializes. Returning to the launcher allows settings to be changed.
 5. If a load remains slow, exit normally through the game menu, then tap
-   **复制诊断** at the top of the launcher. It copies a bounded summary of the last
+   **复制上次运行诊断** on the launcher. It copies a bounded summary of the last
    run's I/O, resource and scheduler counters/times, plus the release/error.
    It contains no screen image or save payload and does not monitor the game.
 
@@ -256,6 +256,18 @@ The game activity uses its existing separate window configuration. See the
 [Android inset guidance](https://developer.android.com/develop/ui/views/layout/edge-to-edge).
 Compilation checks do not establish on-device notch/gesture-bar layout; the app
 was not launched or inspected during development.
+
+0.2.65 places every launcher function on its own full-width row. FPS and
+long-press no longer share a row. Interface language is an explicit text button
+showing the selected language; buttons wrap labels instead of ellipsizing them.
+The new **显示右上角菜单** switch defaults to on and is saved in the selected
+game folder. It sets the game menu button's initial visibility on next launch;
+the two-finger gesture still toggles visibility for the current session. Menu
+refreshes preserve that session state. Both retained Android adapter sets read
+the same preference. Configuration v6 adds a hide-menu bit; v5 records preserve
+all existing language, subtitle and switch values, with the menu shown by
+default. Memory-only checks cover persistence, upgrade and failed-write retry;
+the game/menu UI was not launched or operated.
 
 From `0.2.46-shared-aot`, **测试模式（解锁全部内容）** uses a separate test
 profile with all known content gates unlocked. Toggle it on and tap **开始游戏**.

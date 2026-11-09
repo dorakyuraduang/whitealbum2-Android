@@ -29,12 +29,13 @@ final class PortUi implements GameTouchControls.Menu {
     static void attach(Activity owner) {
         if(owner==null)throw new IllegalArgumentException("Missing native menu activity");
         if(activity!=null)detach(activity);
-        activity=owner;hidden=false;
+        activity=owner;hidden=!LaunchSettings.showMenu(owner);
         button=new TextView(owner);button.setText("\u22ee");button.setTextSize(28);button.setGravity(Gravity.CENTER);
         button.setTextColor(0xffeeeeee);button.setBackgroundColor(0x70404040);button.setContentDescription("\u6e38\u620f\u83dc\u5355");
         int size=Math.round(44*owner.getResources().getDisplayMetrics().density);
         FrameLayout.LayoutParams layout=new FrameLayout.LayoutParams(size,size,Gravity.TOP|Gravity.RIGHT);
         owner.addContentView(button,layout);
+        button.setVisibility(hidden?View.GONE:View.VISIBLE);
         button.setOnClickListener(view -> open(owner,view));
     }
     private static void open(Activity owner,View anchor) {

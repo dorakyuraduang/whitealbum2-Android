@@ -61,7 +61,7 @@ public final class NativeWidgets {
         if(menuButton!=null && menuButton.getParent() instanceof ViewGroup)((ViewGroup)menuButton.getParent()).removeView(menuButton);
         menuButton = null;menuHidden=false;currentMenu=new JSONArray();menuOwner=0;
     }
-    public static void attach(Activity owner) { if(session.attach(owner)){activity=owner;clearWidgets();} }
+    public static void attach(Activity owner) {if(session.attach(owner)){activity=owner;clearWidgets();menuHidden=!LaunchSettings.showMenu(owner);}}
     public static void detach(Activity owner) {
         if(session.detach(owner)){activity=null;clearWidgets();}
     }

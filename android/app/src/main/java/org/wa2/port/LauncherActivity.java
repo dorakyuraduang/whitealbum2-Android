@@ -31,7 +31,7 @@ public final class LauncherActivity extends Activity {
     private Button choose, start, language, subtitle, uiLanguage, diagnostics;
     private ScrollView root;
     private LauncherText ui;
-    private Switch fps, longPress, testMode, chineseSubtitles;
+    private Switch fps, longPress, testMode, chineseSubtitles, showMenu;
     private boolean busy, launching, refreshing, profileReady;
     private int generation;
 
@@ -48,18 +48,12 @@ public final class LauncherActivity extends Activity {
     private Button button(String label) {
         Button view=new Button(this);view.setText(label);view.setAllCaps(false);view.setTextSize(14);view.setTextColor(TEXT);
         view.setMinWidth(0);view.setMinimumWidth(0);view.setMinHeight(dp(48));view.setMinimumHeight(dp(48));
-        view.setPadding(dp(12),dp(4),dp(12),dp(4));view.setMaxLines(2);view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setPadding(dp(12),dp(4),dp(12),dp(4));view.setSingleLine(false);view.setEllipsize(null);
         view.setBackgroundTintList(ColorStateList.valueOf(0xff30474b));return view;
     }
     private Switch toggle(String label) {
         Switch view=new Switch(this);view.setText(label);view.setTextColor(TEXT);view.setTextSize(16);
         view.setMinHeight(dp(48));view.setPadding(0,dp(4),0,dp(4));view.setSwitchPadding(dp(8));return view;
-    }
-    private void pair(LinearLayout parent,View left,View right,int top) {
-        LinearLayout line=new LinearLayout(this);line.setGravity(Gravity.CENTER_VERTICAL);
-        line.addView(left,new LinearLayout.LayoutParams(0,-2,1));
-        LinearLayout.LayoutParams second=new LinearLayout.LayoutParams(0,-2,1);second.setMarginStart(dp(12));line.addView(right,second);
-        parent.addView(line,row(top));
     }
     private void fitContent(LinearLayout content){
         if(root.getWidth()==0)return;
@@ -116,39 +110,40 @@ public final class LauncherActivity extends Activity {
         outer.setPadding(dp(16),dp(4),dp(16),dp(8));root.addView(outer,new ScrollView.LayoutParams(-1,-1));
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         outer.addView(content,new LinearLayout.LayoutParams(-1,-2));
-        LinearLayout heading=new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);content.addView(heading);
         TextView title = text("WHITE ALBUM2",22,TEXT);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setSingleLine();title.setEllipsize(TextUtils.TruncateAt.END);title.setTextDirection(View.TEXT_DIRECTION_LTR);
-        heading.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        uiLanguage=button("🌐");uiLanguage.setTextSize(22);uiLanguage.setOnClickListener(view -> chooseInterfaceLanguage());
-        LinearLayout.LayoutParams localePosition=new LinearLayout.LayoutParams(dp(48),-2);localePosition.setMarginStart(dp(4));heading.addView(uiLanguage,localePosition);
-        diagnostics=button(t(LOGS));
-        LinearLayout.LayoutParams diagnosticPosition=new LinearLayout.LayoutParams(dp(64),-2);diagnosticPosition.setMarginStart(dp(4));heading.addView(diagnostics,diagnosticPosition);
-        diagnostics.setOnClickListener(view->{if(!busy)RuntimeDiagnostics.copy(this,status);});
-        LinearLayout card = new LinearLayout(this);card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(dp(12),dp(8),dp(12),dp(8));
+        content.addView(title);
+        uiLanguage=button(t(UI_LANGUAGE));uiLanguage.setOnClickListener(view -> chooseInterfaceLanguage());content.addView(uiLanguage,row(4));
+        LinearLayout card = new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(12),dp(8),dp(12),dp(8));
         GradientDrawable background = new GradientDrawable(); background.setColor(0xff1b292d); background.setCornerRadius(dp(12)); card.setBackground(background);
         content.addView(card, row(8));
         directory = text("", 14, MUTED);directory.setTextIsSelectable(true);directory.setMaxLines(2);directory.setEllipsize(TextUtils.TruncateAt.END);
-        card.addView(directory,new LinearLayout.LayoutParams(0,-2,1));
+        card.addView(directory,row(0));
         choose = button(t(PICK_FOLDER));
-        LinearLayout.LayoutParams directoryPosition=new LinearLayout.LayoutParams(dp(96),-2);directoryPosition.setMarginStart(dp(8));card.addView(choose,directoryPosition);
+        card.addView(choose,row(4));
         choose.setOnClickListener(view -> pickDirectory());
         language = button("");
-        language.setOnClickListener(view -> chooseLanguage());
-        subtitle=button("");subtitle.setOnClickListener(view -> chooseSubtitle());pair(content,language,subtitle,8);
+        language.setOnClickListener(view -> chooseLanguage());content.addView(language,row(8));
+        subtitle=button("");subtitle.setOnClickListener(view -> chooseSubtitle());content.addView(subtitle,row(4));
         chineseSubtitles = toggle(t(CAPTIONS));
         chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));chineseSubtitles.setOnCheckedChangeListener((button,checked) -> {if(!refreshing){status.setText(t(SAVING));LaunchSettings.setChineseSubtitles(this,checked,this::saved);}});
         content.addView(chineseSubtitles,row(4));
         fps = toggle(t(FPS));
         fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText(t(SAVING));LaunchSettings.setShowFps(this, checked,this::saved);}});
+        content.addView(fps,row(0));
         longPress = toggle(t(LONG_PRESS));
         longPress.setChecked(LaunchSettings.longPressFastForward(this)); longPress.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText(t(SAVING));LaunchSettings.setLongPressFastForward(this, checked,this::saved);}});
-        pair(content,fps,longPress,0);
+        content.addView(longPress,row(0));
+        showMenu=toggle(t(SHOW_MENU));showMenu.setChecked(LaunchSettings.showMenu(this));
+        showMenu.setOnCheckedChangeListener((button,checked) -> {if(!refreshing){status.setText(t(SAVING));LaunchSettings.setShowMenu(this,checked,this::saved);}});
+        content.addView(showMenu,row(0));
         testMode = toggle(t(TEST_MODE));
         testMode.setChecked(LaunchSettings.testMode(this)); testMode.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText(t(SAVING));LaunchSettings.setTestMode(this, checked,this::saved);}});
         content.addView(testMode, row(0));
         start = button(t(START));start.setTextSize(16);start.setTextColor(0xff102723);
         start.setBackgroundTintList(ColorStateList.valueOf(ACCENT)); content.addView(start, row(8));
         start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));
+        diagnostics=button(t(COPY_LOG));content.addView(diagnostics,row(4));
+        diagnostics.setOnClickListener(view->{if(!busy)RuntimeDiagnostics.copy(this,status);});
         status = text("", 13, MUTED);status.setMinHeight(dp(20));content.addView(status,row(6));
         installSafeArea(content);setContentView(root);refresh();Uri remembered=ResourceDirectory.selectedTree(this);if(remembered!=null)prepare(remembered,0,false);
     }
@@ -162,14 +157,14 @@ public final class LauncherActivity extends Activity {
         root.setLayoutDirection(ui.rtl()?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);
         String location=tree==null?t(FOLDER_NONE):folderLocation(tree);
         directory.setText(location);directory.setContentDescription(t(FOLDER_FMT,location));directory.setTooltipText(location);
-        uiLanguage.setContentDescription(t(UI_LANGUAGE));uiLanguage.setTooltipText(t(UI_LANGUAGE)+" · "+ui.name());uiLanguage.setEnabled(!busy);
-        diagnostics.setText(t(LOGS));diagnostics.setContentDescription(t(COPY_LOG));diagnostics.setEnabled(!busy);
+        uiLanguage.setText(t(UI_LANGUAGE)+" · "+ui.name());uiLanguage.setContentDescription(t(UI_LANGUAGE));uiLanguage.setTooltipText(t(UI_LANGUAGE)+" · "+ui.name());uiLanguage.setEnabled(!busy);
+        diagnostics.setText(t(COPY_LOG));diagnostics.setContentDescription(t(COPY_LOG));diagnostics.setEnabled(!busy);
         choose.setText(t(PICK_FOLDER));start.setText(t(START));
-        fps.setText(t(FPS));fps.setContentDescription(t(FPS_DETAIL));longPress.setText(t(LONG_PRESS));testMode.setText(t(TEST_MODE));chineseSubtitles.setText(t(CAPTIONS));
+        fps.setText(t(FPS));fps.setContentDescription(t(FPS_DETAIL));longPress.setText(t(LONG_PRESS));testMode.setText(t(TEST_MODE));chineseSubtitles.setText(t(CAPTIONS));showMenu.setText(t(SHOW_MENU));
         choose.setEnabled(!busy); start.setEnabled(!busy && tree != null && profileReady);
-        refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));refreshing=false;
-        for(Switch control:new Switch[]{fps,longPress,testMode,chineseSubtitles})control.setEnabled(!busy && profileReady);
-        language.setText(t(GAME_FMT,LaunchSettings.languageLabel(this)));language.setEnabled(!busy && profileReady);
+        refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));showMenu.setChecked(LaunchSettings.showMenu(this));refreshing=false;
+        for(Switch control:new Switch[]{fps,longPress,testMode,chineseSubtitles,showMenu})control.setEnabled(!busy && profileReady);
+        language.setText(t(PICK_GAME)+" · "+LaunchSettings.languageLabel(this));language.setEnabled(!busy && profileReady);
         String source=LaunchSettings.subtitle(this);subtitle.setText(t(SUBTITLE_FMT,t(source.isEmpty()?BUILT_IN:EXTERNAL)));
         String sourceName=source.isEmpty()?t(BUILT_IN):source;subtitle.setContentDescription(t(SUBTITLE_FMT,sourceName));subtitle.setTooltipText(sourceName);subtitle.setEnabled(!busy && profileReady);
         if(!busy)status.setText(t(tree==null?NEED_FOLDER:LOCATION_HINT));

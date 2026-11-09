@@ -9,16 +9,16 @@ import java.util.zip.CRC32;
 
 /** One language choice; resource pairs are selected by the common game host. */
 final class LaunchProfile {
-    static final int FPS=1, LONG_PRESS=2, TEST_MODE=4, CHINESE_SUBTITLES=8;
+    static final int FPS=1, LONG_PRESS=2, TEST_MODE=4, CHINESE_SUBTITLES=8, HIDE_MENU=16;
     static final int CHINESE=0, JAPANESE=1;
-    private static final int VERSION=5;
+    private static final int VERSION=6;
     // Retain the larger legacy v3 read bound for migration.
     static final int MAX_BYTES=20+128*2+4096;
     final int flags, language;
     final String subtitle;
     LaunchProfile(int flags) {this(flags,CHINESE,"");}
     LaunchProfile(int flags,int language,String subtitle) {
-        if(flags<0 || flags>15)throw new IllegalArgumentException("Unknown launcher setting");
+        if(flags<0 || flags>31)throw new IllegalArgumentException("Unknown launcher setting");
         if(language!=CHINESE && language!=JAPANESE)throw new IllegalArgumentException("Unsupported game language");
         this.flags=flags;this.language=language;this.subtitle=subtitleUri(subtitle);
     }
@@ -35,7 +35,7 @@ final class LaunchProfile {
     static LaunchProfile defaults(){return new LaunchProfile(FPS|LONG_PRESS|CHINESE_SUBTITLES);}
     boolean enabled(int flag){return (flags&flag)!=0;}
     LaunchProfile with(int flag,boolean value){
-        if(flag!=FPS && flag!=LONG_PRESS && flag!=TEST_MODE && flag!=CHINESE_SUBTITLES)throw new IllegalArgumentException("Unknown launcher setting");
+        if(flag!=FPS && flag!=LONG_PRESS && flag!=TEST_MODE && flag!=CHINESE_SUBTITLES && flag!=HIDE_MENU)throw new IllegalArgumentException("Unknown launcher setting");
         return new LaunchProfile(value?flags|flag:flags&~flag,language,subtitle);
     }
     LaunchProfile withLanguage(int value){return new LaunchProfile(flags,value,subtitle);}
@@ -74,13 +74,14 @@ final class LaunchProfile {
         int version=data[4]&255,flags=data[5]&255;
         try{
             if(version==1){if(data.length!=16 || flags>7)throw new IOException("Unsupported legacy launcher configuration");for(int n=6;n<12;++n)if(data[n]!=0)throw new IOException("Unknown legacy launcher fields");return new LaunchProfile(flags|CHINESE_SUBTITLES);}
-            if(flags>15 || data[7]!=0)throw new IOException("Unknown launcher fields");
-            if(version==4 || version==VERSION){
+            if(flags>(version==VERSION?31:15) || data[7]!=0)throw new IOException("Unknown launcher fields");
+            if(version==4 || version==5 || version==VERSION){
                 int size=(data[8]&255)|((data[9]&255)<<8),language=data[6]&255;
                 if(size>4096 || data.length!=16+size || data[10]!=0 || data[11]!=0 || (language!=CHINESE && language!=JAPANESE))throw new IOException("Invalid language configuration fields");
                 // v4 could infer Japanese from old filenames. Start older
-                // profiles in Chinese once; v5 keeps the player's next choice.
-                return new LaunchProfile(flags,version==VERSION?language:CHINESE,uri(data,12,size));
+                // profiles in Chinese once; v5+ retain the player's choice.
+                // Older records have no hide-menu bit, so the menu stays shown.
+                return new LaunchProfile(flags,version>=5?language:CHINESE,uri(data,12,size));
             }
             if((version!=2 && version!=3) || data[6]!=0)throw new IOException("Unsupported launcher configuration version");
             int a=(data[8]&255)|((data[9]&255)<<8),b=(data[10]&255)|((data[11]&255)<<8),c=0,offset=version==3?16:12;

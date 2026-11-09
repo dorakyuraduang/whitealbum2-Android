@@ -45,6 +45,7 @@ final class LaunchSettings {
     static boolean longPressFastForward(Context context) { return profile(context).enabled(LaunchProfile.LONG_PRESS); }
     static boolean testMode(Context context) { return profile(context).enabled(LaunchProfile.TEST_MODE); }
     static boolean chineseSubtitles(Context context) { return profile(context).enabled(LaunchProfile.CHINESE_SUBTITLES); }
+    static boolean showMenu(Context context) {return !profile(context).enabled(LaunchProfile.HIDE_MENU);}
     static int language(Context context) {return profile(context).language;}
     static String languageLabel(Context context) {return profile(context).languageLabel();}
     static String script(Context context) { return profile(context).scriptArchive(); }
@@ -86,6 +87,7 @@ final class LaunchSettings {
     static void setLongPressFastForward(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.LONG_PRESS,value,completed); }
     static void setTestMode(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.TEST_MODE,value,completed); }
     static void setChineseSubtitles(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.CHINESE_SUBTITLES,value,completed); }
+    static void setShowMenu(Context context,boolean value,Consumer<String> completed) {set(context,LaunchProfile.HIDE_MENU,!value,completed);}
     static void setLanguage(Context context,int language,Consumer<String> completed) {
         final LaunchProfileStore store=store(context);if(store==null){completed.accept("请先选择并检查游戏文件夹。");return;}
         if(!store.setLanguage(language)){completed.accept(null);return;}
