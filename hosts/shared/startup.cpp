@@ -47,7 +47,8 @@ std::uint32_t run(Startup startup){
         if(startup.files){process.state().mutable_files=platform::compat::save_files(std::move(startup.files),startup.test_mode,aot::traced_save_read_scope(process));
             process.state().reports["selected_directory_io"]=[&process]{return platform::compat::save_files_report(process.state().mutable_files);};}
         if(startup.mount_resources)startup.mount_resources(process);
-        runtime.load(image);const auto result=runtime.run();report({});return result;
+        runtime.load(image);platform::compat::install_io_diagnostics(process,startup.report_file,WA2_HOST_VERSION,std::move(startup.io_diagnostic_sink));
+        const auto result=runtime.run();report({});return result;
     }catch(const std::exception& error){try{report(error.what());}catch(...){}throw;}
 }
 }

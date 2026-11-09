@@ -37,7 +37,8 @@ class Saves final:public wr::MutableFiles {
         std::optional<std::uint64_t> key;std::chrono::steady_clock::time_point expires;
         std::optional<std::uint64_t> declined_key;std::chrono::steady_clock::time_point declined_until;
         std::map<std::string,Info> root,legacy;bool legacy_loaded{},have_documents{};
-        std::uint64_t revision{},builds{},hits{},declines{},info_calls{},list_calls{},open_calls{},prepared_reads{},info_ns{},list_ns{},open_ns{};
+        std::map<std::string,std::map<std::string,Info>> chapters;
+        std::uint64_t revision{},builds{},hits{},chapter_builds{},chapter_hits{},declines{},info_calls{},list_calls{},open_calls{},prepared_reads{},info_ns{},list_ns{},open_ns{};
         void invalidate(){key.reset();declined_key.reset();}
         struct Mutation {
             Inventory& value;
@@ -60,7 +61,7 @@ class Saves final:public wr::MutableFiles {
         const auto now=std::chrono::steady_clock::now();
         if(cache.declined_key==key && now<cache.declined_until)return false;
         if(cache.key==key && now<cache.expires){++cache.hits;return true;}
-        cache.invalidate();cache.root.clear();cache.legacy.clear();cache.legacy_loaded=false;cache.have_documents=false;
+        cache.invalidate();cache.root.clear();cache.legacy.clear();cache.chapters.clear();cache.legacy_loaded=false;cache.have_documents=false;
         try{for(auto item:entries(physical(""))){const auto name=fold(item.name);
             if((item.attributes&16) && name=="documents")cache.have_documents=true;
             if(file_name(name) && !cache.root.emplace(name,std::move(item)).second)throw std::runtime_error("Ambiguous save inventory filename");
@@ -73,6 +74,23 @@ class Saves final:public wr::MutableFiles {
     }
     std::pair<std::string,std::optional<Info>> locate(const std::string& name){
         auto path=physical(name);
+        const auto slash=name.find_last_of('/');
+        if(slash!=name.npos && file_name(name.substr(slash+1)) && snapshot()){
+            auto& cache=*inventory_;const auto directory=name.substr(0,slash),leaf=name.substr(slash+1);
+            // A chapter cannot exist below a missing Documents directory.
+            // The source's first list scan probes every chapter slot, even
+            // when that chapter folder has never been created.
+            if(directory.starts_with("documents/") && !cache.have_documents){++cache.chapter_hits;return {std::move(path),{}};}
+            auto found=cache.chapters.find(directory);
+            if(found==cache.chapters.end()){
+                std::map<std::string,Info> index;
+                try{for(auto item:entries(physical(directory))){const auto key=fold(item.name);if(file_name(key) && !index.emplace(key,std::move(item)).second)throw std::runtime_error("Ambiguous chapter save inventory filename");}}
+                catch(const std::runtime_error&){const auto key=cache.key;cache.invalidate();cache.declined_key=key;cache.declined_until=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);++cache.declines;return {std::move(path),inspect(physical(name))};}
+                found=cache.chapters.emplace(directory,std::move(index)).first;++cache.chapter_builds;
+            }else ++cache.chapter_hits;
+            if(auto item=found->second.find(leaf);item!=found->second.end())return {std::move(path),item->second};
+            return {std::move(path),{}};
+        }
         if(name.find('/')==name.npos && file_name(name) && snapshot()){
             auto& cache=*inventory_;if(auto found=cache.root.find(name);found!=cache.root.end())return {std::move(path),found->second};
             if(cache.have_documents && !cache.legacy_loaded){
@@ -138,8 +156,9 @@ public:
     U32 attributes(std::string_view value,U32 flags)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);return path?files_->attributes(existing(*path),flags):5;}
     void replace(std::string_view value,std::span<const std::uint8_t> bytes)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);if(!path || bytes.size()>64u*1024*1024)throw std::runtime_error("Unsupported selected-directory save/configuration path: "+std::string(value));files_->replace(physical(*path),bytes);}
     std::uint64_t revision()const{return inventory_->revision;}
+    std::uint64_t activity()const{const auto& c=*inventory_;return c.revision+c.info_calls+c.list_calls+c.open_calls+c.hits+c.chapter_hits;}
     std::string report()const{const auto& c=*inventory_;std::ostringstream out;
-        out<<"{\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
+        out<<"{\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"chapter_inventory_builds\":"<<c.chapter_builds<<",\"chapter_inventory_hits\":"<<c.chapter_hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
 };
 class Local final:public wr::MutableFiles {
     std::filesystem::path root_;
@@ -169,6 +188,7 @@ public:
 std::shared_ptr<wr::MutableFiles> local_files(const std::filesystem::path& root){return std::make_shared<Local>(root);}
 std::string save_files_report(const std::shared_ptr<wr::MutableFiles>& files){if(auto* saves=dynamic_cast<const Saves*>(files.get()))return saves->report();return "{}";}
 std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->revision();return {};}
+std::optional<std::uint64_t> save_files_activity(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->activity();return {};}
 std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope){
     auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope));
     if(test){for(const auto* folder:{"Documents","Documents/Leaf","Documents/Leaf/WHITE ALBUM2 -closing chapter-","Documents/Leaf/WHITE ALBUM2 -introductory chapter-"}){const auto error=result->directory(folder);if(error && error!=183)throw std::runtime_error("Cannot prepare selected-directory test saves");}

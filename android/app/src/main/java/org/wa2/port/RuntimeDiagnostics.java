@@ -13,7 +13,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
-/** Copy bounded counters from the last completed run; never reads the screen. */
+/** Copy bounded completed/progress counters; never reads the screen. */
 final class RuntimeDiagnostics {
     static void copy(Activity activity,TextView status){
         status.setText("正在读取上次运行诊断…");
@@ -21,7 +21,7 @@ final class RuntimeDiagnostics {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             String result=null,problem=null;
             try{
-                File file=new File(activity.getFilesDir(),"wa2-runtime.json");
+                File file=RuntimeReportFile.latest(activity.getFilesDir());
                 if(!file.isFile())throw new IOException("还没有运行诊断。请读档后从游戏菜单正常退出，再复制诊断。");
                 ByteArrayOutputStream bytes=new ByteArrayOutputStream();
                 try(FileInputStream input=new FileInputStream(file)){
@@ -30,6 +30,7 @@ final class RuntimeDiagnostics {
                 }
                 JSONObject original=new JSONObject(new String(bytes.toByteArray(),StandardCharsets.UTF_8));
                 JSONObject report=new JSONObject();report.put("host_release",original.opt("host_release"));report.put("report_modified_ms",file.lastModified());
+                report.put("report_kind",original.optString("report_kind","completed"));report.put("complete",original.optBoolean("complete",true));
                 String error=original.optString("error","");report.put("error",error.substring(0,Math.min(error.length(),4096)));
                 JSONObject process=original.optJSONObject("process");
                 if(process==null)throw new IOException("运行诊断格式不完整");

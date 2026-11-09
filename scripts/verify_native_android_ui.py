@@ -25,7 +25,7 @@ def main():
     if digest(api)!=official['android_jar_sha256']:raise ValueError('Android API stubs changed')
     source_sets={backend:java_sources(backend) for backend in ('shared-aot','native')}
     sdl=sorted((ROOT/'tools/SDL-release-2.32.10/android-project/app/src/main/java').rglob('*.java'))
-    tests=[ROOT/'tests/android/org/wa2/port'/name for name in ('TouchGesturesTest.java','ResourceLocationTest.java','LegacySettingsPathTest.java','LegacySavePathTest.java','GameStorageTest.java','LaunchProfileTest.java','CompatibleStoragePathTest.java','DocumentDirectoryTest.java')]
+    tests=[ROOT/'tests/android/org/wa2/port'/name for name in ('TouchGesturesTest.java','ResourceLocationTest.java','LegacySettingsPathTest.java','LegacySavePathTest.java','GameStorageTest.java','LaunchProfileTest.java','CompatibleStoragePathTest.java','DocumentDirectoryTest.java','RuntimeReportFileTest.java')]
     inputs={path.relative_to(ROOT).as_posix():digest(path) for path in {*sdl,*tests,*[path for sources in source_sets.values() for path in sources],Path(__file__),ROOT/'scripts/android_source_sets.py',ROOT/'android/app/src/main/AndroidManifest.xml'}}
     identity=hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()[:16];directory=ROOT/'build/native-android-ui'/identity;directory.mkdir(parents=True,exist_ok=True)
     flags=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS;records={}
@@ -65,6 +65,8 @@ def main():
         location=reports['ResourceLocationTest']
         if not location['folder_name_unrestricted'] or not location['opaque_document_ids_allowed'] or not location['arbitrary_directory_allowed']:raise ValueError('Folder selection still requires a fixed name/provider')
         directory=reports['DocumentDirectoryTest']
+        report_choice=reports['RuntimeReportFileTest']
+        if report_choice['cases']<6 or not report_choice['newest_private_report_selected'] or not report_choice['complete_preferred_on_tie']:raise ValueError('Incomplete private runtime report selection checks')
         if directory['lookups']!=400 or directory['same_directory_queries_for_400_lookups']!=1 or not all(directory[key] for key in ('operation_scoped_snapshot','next_operation_sees_external_edits','publication_index_updates','ambiguity_and_size_guards')):raise ValueError('Incomplete operation-scoped document directory checks')
         if compatible['cases']<852 or compatible['guards']<22 or compatible['original_files_opened'] or compatible['android_device_verified']:raise ValueError('Incomplete shared-AOT selected-directory path checks')
         if profile['cases']<17 or profile['guards']<34 or not all(profile[key] for key in ('directory_isolation','unchanged_writes_suppressed','failed_write_retry','inflight_edit_not_lost')) or profile['source_files_opened'] or profile['android_device_verified']:raise ValueError('Incomplete external launcher-configuration checks')

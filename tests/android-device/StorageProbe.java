@@ -65,6 +65,7 @@ public final class StorageProbe extends Instrumentation {
         JSONObject result=new JSONObject();result.put("available",file.isFile());if(!file.isFile())return result;
         JSONObject original;try(InputStream input=new FileInputStream(file)){original=new JSONObject(new String(bytes(input,2*1024*1024),"UTF-8"));}
         result.put("host_release",original.opt("host_release"));result.put("modified_ms",file.lastModified());
+        result.put("report_kind",original.optString("report_kind","completed"));result.put("complete",original.optBoolean("complete",true));
         String error=original.optString("error","");result.put("error",error.substring(0,Math.min(4096,error.length())));
         JSONObject process=original.optJSONObject("process");if(process!=null)for(String key:new String[]{"selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler","static_cpu_work"})if(process.has(key))result.put(key,process.get(key));
         return result;
@@ -116,7 +117,9 @@ public final class StorageProbe extends Instrumentation {
     }
     @Override public void onStart(){Bundle output=new Bundle();int status=Activity.RESULT_OK;
         try{Context context=getTargetContext();JSONObject result=new JSONObject();result.put("schema","wa2.android-storage-probe.v1");result.put("game_launched",false);result.put("screen_access",false);result.put("selected_directory_written",false);
-            result.put("last_run",summary(new File(context.getFilesDir(),"wa2-runtime.json")));
+            File report=new File(context.getFilesDir(),"wa2-runtime.json"),progress=new File(context.getFilesDir(),"wa2-runtime-progress.json");
+            if(progress.isFile() && (!report.isFile() || progress.lastModified()>report.lastModified()))report=progress;
+            result.put("last_run",summary(report));
             if(!"report".equals(arguments.getString("mode"))){
                 String saved=context.getSharedPreferences("resource-directory",Context.MODE_PRIVATE).getString("tree-uri",null);if(saved==null)throw new IllegalStateException("No selected game directory");Uri tree=Uri.parse(saved);
                 requireCleanPublication(context,tree);

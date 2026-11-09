@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.53-shared-aot**. Use the
+is **0.2.54-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.53-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.54-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -58,6 +58,17 @@ Writes/creates use the original path, and frame/state/age/mutation guards still
 bound metadata reuse. References must belong to the current tree/session;
 retired document IDs retry normal filename resolution, and unusually long
 references decline this optimization. `prepared_read_opens` records actual use.
+
+0.2.54 applies the same update-scoped inventory to chapter-specific save
+directories, including absent directories and empty slots in the first list
+scan. Main/root and chapter namespaces remain distinct. Private progress
+diagnostics are coalesced after file activity, at most once per 500 ms and 64
+times per run. They contain bounded I/O/resource counters and no frame pixels,
+save payloads or selected-directory URI. The launcher selects the newer private
+progress or exit report, marking progress records `complete:false`. Android
+also emits bounded `WA2IO` counter records for owner-authorized wireless
+diagnosis without stopping a running game. These are diagnostics, not game
+saves/configuration; the latter remain in the selected folder.
 
 The separate native migration development package now saves game data in the
 currently selected game folder: root `Sys.sav`, `native-settings.wa2cfg` and

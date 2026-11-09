@@ -84,11 +84,46 @@ Result exercise(const std::filesystem::path& root,bool linear,bool scoped,bool r
     CHECK(p.state().reports.at("save_read_scope")().find("\"contexts\":[{")!=std::string::npos);
     CHECK(!p.gui() && !p.directdraw());return result;
 }
+unsigned chapter_index(const std::filesystem::path& root,bool linear,bool scoped,bool missing){
+    const auto selected=root/(std::string("index-")+(linear?"linear-":"paged-")+(scoped?"batch-":"baseline-")+(missing?"absent":"present"));CHECK(std::filesystem::create_directory(selected));
+    write(selected/"save_00.sav",0x11);write(selected/"save_09.sav",0x19);
+    const std::string ic="Documents/Leaf/WHITE ALBUM2 -introductory chapter-",cc="Documents/Leaf/WHITE ALBUM2 -closing chapter-";
+    if(!missing){CHECK(std::filesystem::create_directories(selected/ic));write(selected/ic/"save_00.sav",0xa1);write(selected/ic/"save_09.sav",0xa9);}
+    wr::ProcessOptions options;options.data_root=selected/"private";options.prefer_linear_memory=linear;options.allow_file_write=true;CHECK(std::filesystem::create_directory(options.data_root));
+    wa2::aot::Runtime runtime(options);auto& p=runtime.process();auto& m=p.memory;
+    auto backend=std::make_shared<Counted>(c::local_files(selected),true);
+    p.state().mutable_files=c::save_files(backend,false,scoped?wa2::aot::traced_save_read_scope(p):c::SaveReadScope{});runtime.load();
+    const auto set_path=[&](U32 address,std::string text){m.copy_in(address,{reinterpret_cast<const std::uint8_t*>(text.c_str()),text.size()+1});};
+    set_path(0xa39d28,"C:\\WinRecomp");set_path(0xa39270,"C:\\WinRecomp\\"+ic);m.store(0xa3a130,37,32);m.store(0xa39208,7,32);
+    const auto output=p.allocate_bytes(16);unsigned calls{};
+    const auto read=[&](U32 slot,U32 chapter,bool exists,U32 byte){
+        // The actual first-list timestamp helper reads 24 bytes, unlike the
+        // 65624-byte preview helper used by the earlier fixture.
+        CHECK(p.callback(0x4233c0,std::array<U32,3>{slot,output,chapter},false)==U32(exists));++calls;
+        if(exists)for(unsigned n=0;n<16;++n)CHECK(m.load(output+n,8)==byte);
+    };
+    for(U32 n=0;n<100;++n)read(n,0,n==0 || n==9,n==0?0x11:0x19);
+    for(U32 n=0;n<100;++n)read(n,1,!missing && (n==0 || n==9),n==0?0xa1:0xa9);
+    CHECK(backend->opens==(missing?2u:4u));
+    if(scoped)CHECK(backend->queries==0 && backend->lists==(missing?1u:3u));
+    else CHECK(backend->queries==298 && backend->lists==0);
+    if(scoped && !missing){
+        write(selected/ic/"save_00.sav",0xb1);read(0,1,true,0xb1);read(0,0,true,0x11);
+        CHECK(std::filesystem::create_directories(selected/cc));write(selected/cc/"save_00.sav",0xc1);set_path(0xa39270,"C:\\WinRecomp\\"+cc);read(0,1,true,0xc1);
+        set_path(0xa39270,"C:\\WinRecomp\\"+ic);read(0,1,true,0xb1);
+        std::vector<std::uint8_t> next(0x10058,0xb2);p.state().mutable_files->replace(ic+"/save_01.sav",next);read(1,1,true,0xb2);
+        write(selected/ic/"save_02.sav",0xb3);m.store(0xa3a130,38,32);read(2,1,true,0xb3);
+        backend->fail_listing=true;m.store(0xa3a130,39,32);read(0,1,true,0xb1);backend->fail_listing=false;
+    }
+    CHECK(!p.gui() && !p.directdraw());return calls;
+}
 int main(int argc,char** argv){try{
     CHECK(argc==2);const auto root=std::filesystem::path(argv[1]).parent_path()/("save-inventory-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(std::filesystem::create_directory(root));
     unsigned readers{},guards{};for(bool linear:{false,true})for(bool references:{false,true}){const auto baseline=exercise(root,linear,false,references),scoped=exercise(root,linear,true,references);readers+=baseline.readers+scoped.readers;guards+=scoped.guards;}
+    unsigned index_calls{};for(bool linear:{false,true})for(bool scoped:{false,true})for(bool missing:{false,true})index_calls+=chapter_index(root,linear,scoped,missing);
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.save-inventory.v1\",\"actual_static_reader_calls\":"<<readers<<",\"guard_cases\":"<<guards
-        <<",\"slots_per_fixture\":100,\"present_slots\":2,\"baseline_metadata_queries_per_fixture\":198,\"scoped_metadata_queries_per_fixture\":0,\"scoped_directory_lists_per_fixture\":1,\"descriptor_opens_per_fixture\":2"
+        <<",\"actual_static_index_calls\":"<<index_calls<<",\"chapter_index_batch\":true,\"chapter_namespace_separate\":true,\"missing_chapter_queries_batched\":true,\"baseline_two_namespace_metadata_queries\":298,\"batched_two_namespace_directory_queries\":3,\"batched_absent_chapter_directory_queries\":1"
+          ",\"slots_per_fixture\":100,\"present_slots\":2,\"baseline_metadata_queries_per_fixture\":198,\"scoped_metadata_queries_per_fixture\":0,\"scoped_directory_lists_per_fixture\":1,\"descriptor_opens_per_fixture\":2"
           ",\"same_static_save_reader\":true,\"prepared_reads_checked\":true,\"writers_bypass_read_reference\":true,\"title_reader_batch\":true,\"scope_audit_checked\":true,\"payload_reads_fresh\":true,\"write_invalidation\":true,\"source_frame_invalidation\":true,\"ordinary_and_worker_reads_fresh\":true,\"inventory_lifetime_bounded\":true,\"original_saves_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS unchanged static save reader: per-slot metadata lookup replaced by one inventory for 100 own-fixture slots; guards and fresh payload reads.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

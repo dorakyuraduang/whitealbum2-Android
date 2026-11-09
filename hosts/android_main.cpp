@@ -20,6 +20,7 @@ extern "C" int SDL_main(int argc,char** argv){
             if(argument=="--test-mode")startup.test_mode=true;
             else throw std::runtime_error("Unknown Android launch argument: "+std::string(argument));}
         startup.report_file=startup.options.data_root/"wa2-runtime.json";
+        startup.io_diagnostic_sink=[](std::string_view label,std::string_view json){__android_log_print(ANDROID_LOG_INFO,"WA2IO","%.*s %.*s",int(label.size()),label.data(),int(json.size()),json.data());};
         wa2::window::SdlHostOptions options;options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();options.frame_submitted=wa2::android::frame_presented;
         startup.window=wa2::window::sdl_host(std::move(options));startup.mount_resources=wa2::android::mount_compiled_resources;
         return int(wa2::host::run(std::move(startup)));

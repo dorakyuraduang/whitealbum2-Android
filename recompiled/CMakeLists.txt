@@ -49,6 +49,7 @@ set(WA2_FUNCTION_RUNTIME_SOURCES
     "${WA2_SHARED_ROOT}/platform/compat/locale.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/resource_mount.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/save_files.cpp"
+    "${WA2_SHARED_ROOT}/platform/compat/io_diagnostics.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/test_profile.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/legacy_display.cpp"
     "${WA2_SHARED_ROOT}/platform/compat/media.cpp"
@@ -153,6 +154,8 @@ if(WA2_SHARED_AOT_CHECKS)
     target_link_libraries(wa2_save_inventory_tests PRIVATE wa2_function_process)
     add_executable(wa2_profile_batch_tests "${WA2_SHARED_ROOT}/tests/profile_batch.cpp")
     target_link_libraries(wa2_profile_batch_tests PRIVATE wa2_function_process)
+    add_executable(wa2_io_diagnostics_tests "${WA2_SHARED_ROOT}/tests/io_diagnostics.cpp")
+    target_link_libraries(wa2_io_diagnostics_tests PRIVATE wa2_function_process)
     add_executable(wa2_cached_callback_tests "${WA2_SHARED_ROOT}/tests/cached_callbacks.cpp")
     target_link_libraries(wa2_cached_callback_tests PRIVATE wa2_function_process)
     add_executable(wa2_native_resource_memory_tests "${WA2_SHARED_ROOT}/tests/native_resource_memory.cpp")
