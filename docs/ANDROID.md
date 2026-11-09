@@ -4,14 +4,21 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.70-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.70-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.70-shared-aot-replace-native.apk` to update the experimental
+is **0.2.71-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.71-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.71-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
 
-0.2.70 adds **Game language → Українська**, selecting external `ua.pak` and
+0.2.71 removes repeated system-save writes from the title extras menu's music
+registration. Changed flags still save immediately; unchanged music requests
+are acknowledged only after an earlier complete write and successful close,
+with the same flags, path and selected-directory revision. Other source save
+callers and workers keep their existing I/O. This also applies outside test
+mode. File-only checks do not establish whole-game frame rates.
+
+0.2.70 added **Game language → Українська**, selecting external `ua.pak` and
 `font_ua.pak`. Main and IC scripts stay in distinct groups inside `ua.pak`.
 The v8 launcher record retains v7's language, switches and selected subtitle
 URI. Caption selection now accepts the original Todokanai block format as well

@@ -593,7 +593,10 @@ void install_win32(Process& p) {
     kernel(p,"SetStdHandle",2,[](auto& q){auto at=arg(q,1);switch(arg(q,0)){case 0xfffffff6:q.state().stdin_handle=at;return 1;case 0xfffffff5:q.state().stdout_handle=at;return 1;case 0xfffffff4:q.state().stderr_handle=at;return 1;default:q.set_error(87);return 0;}});
     kernel(p,"GetFileType",1,[](auto& q){auto it=q.state().files.find(arg(q,0));if(it==q.state().files.end()){q.set_error(6);return 0u;}return it->second.type;});
     kernel(p,"SetHandleCount",1,[](auto& q){return arg(q,0);}); // obsolete Win32 API returns its input
-    kernel(p,"CloseHandle",1,[](auto& q){auto it=q.state().files.find(arg(q,0));if(it!=q.state().files.end()){if(it->second.owned && it->second.stream)std::fclose(it->second.stream);q.state().files.erase(it);return 1;}if(q.state().mutexes.erase(arg(q,0)))return 1;if(q.state().events.erase(arg(q,0)))return 1;q.set_error(6);return 0;});
+    kernel(p,"CloseHandle",1,[](auto& q){auto it=q.state().files.find(arg(q,0));if(it!=q.state().files.end()){
+        const bool failed=it->second.owned && it->second.stream && std::fclose(it->second.stream)!=0;const auto error=errno;
+        q.state().files.erase(it);if(failed){q.set_error(file_error(error));return 0;}return 1;
+    }if(q.state().mutexes.erase(arg(q,0)))return 1;if(q.state().events.erase(arg(q,0)))return 1;q.set_error(6);return 0;});
     kernel(p,"CreateFileA",7,[](auto& q){const auto name=q.read_string(arg(q,0));const auto path=guest_path(q,name);auto access=arg(q,1),share=arg(q,2),security=arg(q,3),creation=arg(q,4),flags=arg(q,5),templ=arg(q,6);
         if(security || templ || flags&~0x80u || share&~7u || access&~0xc0000000u)throw GuestFault(FaultKind::unsupported,q.cpu.eip,"unsupported CreateFileA flags/security/template");
         const bool write=(access&0x40000000u)!=0,read=(access&0x80000000u)!=0;

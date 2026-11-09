@@ -35,7 +35,7 @@ final class RuntimeDiagnostics {
                 String error=original.optString("error","");report.put("error",error.substring(0,Math.min(error.length(),4096)));
                 JSONObject process=original.optJSONObject("process");
                 if(process==null)throw new IOException("Incomplete diagnostic report");
-                for(String key:new String[]{"static_function_entries","api_calls","selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler","static_cpu_work"})
+                for(String key:new String[]{"static_function_entries","api_calls","selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler","static_cpu_work","music_flag_saves"})
                     if(process.has(key))report.put(key,process.get(key));
                 result=report.toString(2);if(result.length()>65536)throw new IOException("Diagnostic summary exceeds its copy limit");
             }catch(Exception error){problem=error.getMessage()==null?error.toString():error.getMessage();}

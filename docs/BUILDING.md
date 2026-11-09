@@ -56,6 +56,18 @@ the four affected character values, CPU flags, nested policy scopes and other
 languages. Resource conversion uses the separate offline `wa2_prepare_lzss`
 target, which is never linked into the game; see [Ukrainian setup](UKRAINIAN_SUPPORT.md).
 
+From 0.2.71, `scripts/prepare_shared_progress.py` derives `functions_0.cpp` and
+`functions_7.cpp` from the same immutable cache. Three bounded persistence
+hooks cover the music-unlock writer and its write/close acknowledgement.
+The music flag setter and plugin notification still execute on every request.
+Only duplicate music-registration writes may be omitted; the flags block,
+source filename, selected backend and mutation revision must match a completed
+4096-byte write with a successful close. Failed or partial writes retry.
+The refresh prepares these units automatically. Run the preparation before a
+direct CMake configure; both hosts use the same derived units. Finite fixtures
+compare normal and fully unlocked saves in both memory modes and preserve
+nonflag save bytes. They do not run the title UI or measure game frame rates.
+
 In a workspace with these private inputs, run serially:
 
 ```powershell

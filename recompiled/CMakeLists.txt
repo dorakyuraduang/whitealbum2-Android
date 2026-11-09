@@ -11,11 +11,12 @@ endif()
 include("${WA2_SHARED_ROOT}/generated/shared-aot/sources.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/chroma_sources.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/language_sources.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/progress_sources.cmake")
 add_library(wa2_initial_data STATIC "${WA2_SHARED_ROOT}/generated/static-data/image.cpp")
 target_include_directories(wa2_initial_data PUBLIC "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
 target_compile_features(wa2_initial_data PUBLIC cxx_std_20)
 set_target_properties(wa2_initial_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
-add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp transcend.cpp native_gateways.cpp native_math.cpp native_string.cpp image_colours.cpp image_chroma.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp native_sprites.cpp
+add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp transcend.cpp native_gateways.cpp native_math.cpp native_string.cpp image_colours.cpp image_chroma.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp native_sprites.cpp music_flag_save.cpp
     "${WA2_SHARED_ROOT}/port/sprite_sort.cpp"
     "${WA2_SHARED_ROOT}/port/vertex_batch.cpp" ${WA2_SHARED_AOT_SOURCES})
 target_link_libraries(wa2_shared_aot PUBLIC wa2_initial_data wa2_engine)

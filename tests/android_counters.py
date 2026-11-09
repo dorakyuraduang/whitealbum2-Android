@@ -24,6 +24,8 @@ assert not parse([line(1,'native_resources','part 1/1 '+('x'*641))])['available'
 assert not parse([line(1,'native_resources','[]')])['available'];cases+=1
 assert not parse([line(1,'unknown_key','{}')])['available'];cases+=1
 assert not parse([old.replace('fixture','other-release')])['available'];cases+=1
+music={'duplicate_writes_avoided':119,'committed':1}
+assert parse([line(1,'music_flag_saves',json.dumps(music))])['latest']['music_flag_saves']==music;cases+=1
 report=dict(schema='wa2.counter-reader.v1',parser_cases=cases,game_launched=False,screen_access=False,passed=True)
 if len(sys.argv)>1:Path(sys.argv[1]).write_text(json.dumps(report)+'\n',encoding='utf-8')
 print(json.dumps(report),flush=True)

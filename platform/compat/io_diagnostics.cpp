@@ -26,7 +26,7 @@ struct State {
             const auto time=now();if(attempts && (time<last_attempt || time-last_attempt<interval))return;
             ++attempts;last_attempt=time;
             std::map<std::string,std::string> records;
-            for(const auto* key:{"selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma"}){
+            for(const auto* key:{"selected_directory_io","save_read_scope","file_io","profile_io","native_resources","resource_graphics","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves"}){
                 const auto found=process.state().reports.find(key);if(found!=process.state().reports.end())records.emplace(key,found->second());
             }
             std::ostringstream text;text<<"{\"host_release\":"<<wr::quote(release)<<",\"report_kind\":\"file-io-progress\",\"complete\":false,\"error\":\"\",\"sequence\":"<<snapshots+1<<",\"process\":{";bool comma=false;
@@ -36,7 +36,7 @@ struct State {
             try{std::ofstream out(temporary,std::ios::binary|std::ios::trunc);out.write(bytes.data(),std::streamsize(bytes.size()));out.close();if(!out)throw std::runtime_error("Cannot write I/O progress report");std::filesystem::rename(temporary,path);}
             catch(...){std::error_code ignored;std::filesystem::remove(temporary,ignored);throw;}
             ++snapshots;last_activity=activity;last_resources=resources;
-            for(const auto* key:{"selected_directory_io","save_read_scope","native_resources","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma"})if(auto found=records.find(key);found!=records.end())emit(key,found->second);
+            for(const auto* key:{"selected_directory_io","save_read_scope","native_resources","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves"})if(auto found=records.find(key);found!=records.end())emit(key,found->second);
         }catch(...){++failures;emit("snapshot_error","{\"write_failed\":true}");}
     }
 };

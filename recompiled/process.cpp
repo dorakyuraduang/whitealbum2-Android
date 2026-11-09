@@ -4,6 +4,7 @@
 #include "movie_settings.hpp"
 #include "subtitles.hpp"
 #include "language_text.hpp"
+#include "music_flag_save.hpp"
 #include "../platform/clock.hpp"
 #include "work_samples.hpp"
 #include "geometry_cache.hpp"
@@ -17,6 +18,7 @@
 #include "../port/wa2_win32.hpp"
 #include "../platform/compat/scheduler.hpp"
 #include "../platform/compat/system.hpp"
+#include "../platform/compat/save_files.hpp"
 #include "../platform/compat/text.hpp"
 #include "../platform/compat/locale.hpp"
 #include "../platform/render/surface_host.hpp"
@@ -28,12 +30,20 @@
 namespace wr {void install_wa2_exceptions(Process&);}
 namespace wa2::aot {
 Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> graphics,bool chinese_subtitles,std::shared_ptr<const subtitles::Catalogue> captions):
-    process_(wr::FunctionExecutor{[this,samples=std::make_shared<FunctionWorkSamples>(functions()),subtitle_player=std::shared_ptr<subtitles::Playback>{},ukrainian=false](Context& context,wr::Memory& memory) mutable {
-        if(!program_){program_=std::make_unique<Program>(memory);process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};}
+    process_(wr::FunctionExecutor{[this,samples=std::make_shared<FunctionWorkSamples>(functions()),music_flags=std::make_shared<MusicFlagSaves>(),subtitle_player=std::shared_ptr<subtitles::Playback>{},ukrainian=false](Context& context,wr::Memory& memory) mutable {
+        if(!program_){program_=std::make_unique<Program>(memory);process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};process_.state().reports["music_flag_saves"]=[music_flags]{return music_flags->report();};}
         // Resolve once, then use the captured owner directly at all subsequent
         // host boundaries. No registry lookup or mutex runs per audio event.
         if(!subtitle_player){subtitle_player=find_source_subtitles(memory);if(!subtitle_player)throw std::logic_error("missing native subtitle binding");ukrainian=process_.state().reports.contains("ukrainian_text");}
         SourceTextScope text_language{memory,ukrainian};
+        MusicFlagScope music_saves{*music_flags,memory,[](void* owner)->std::optional<MusicFlagStamp>{
+            const auto& state=static_cast<wr::Process*>(owner)->state();
+            if(state.current_thread_id!=1)return {};
+            for(const auto& [id,file]:state.files)if(file.owned && file.stream && file.write)return {};
+            const auto revision=platform::compat::save_files_revision(state.mutable_files.get());
+            if(!revision)return {};
+            return MusicFlagStamp{state.mutable_files.get(),*revision};
+        },&process_};
         FunctionWorkScope sampled_work{samples.get()};
         SubtitleEventScope subtitle_events{memory,[](std::uint32_t entry,const wr::Cpu& cpu,wr::Memory& ram,std::uint32_t arguments,void* owner){
             source_subtitle_return(*static_cast<subtitles::Playback*>(owner),entry,cpu,ram,arguments,platform::Clock::counter()/1000000);
