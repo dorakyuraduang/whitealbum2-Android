@@ -1,8 +1,10 @@
 # WHITE ALBUM2 静态重编译
 
-面向 **Android ARM64 / Windows x64** 的同源静态重编译项目，两平台共用游戏逻辑。当前版本：**0.2.66-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
+**简体中文** · [English](README.en.md)
 
-**[下载 Android APK](https://github.com/dorakyuraduang/whitealbum2-Android/releases/download/r0.2.57/WA2-arm64-0.2.66-shared-aot.apk)** · [发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)
+面向 **Android ARM64 / Windows x64** 的同源静态重编译项目，两平台共用游戏逻辑。当前开发版本：**0.2.67-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
+
+**[下载与发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
 
 ## 快速启动
 
@@ -10,7 +12,7 @@
 
 要求：**Android 8.0 及以上、ARM64、OpenGL ES 3.0**。
 
-1. 下载并安装上方的 `WA2-arm64-0.2.66-shared-aot.apk`。
+1. 安装 `WA2-arm64-<版本名>.apk`。English 游戏资源配置需要 **0.2.67 或更新版本**。
 2. 将完整游戏资源复制到手机的任意文件夹，保留原有 `IC` 子目录。**文件夹名称不限，PAK 不用解压。**
 3. 打开应用，选择这个游戏文件夹，并授予读写权限。
 4. 选择游戏语言，按需设置 FPS、长按快进和补充字幕，点击 **“开始游戏”**。
@@ -21,8 +23,11 @@
 | --- | --- | --- |
 | 简体中文（默认） | `ck-gal.pak` | `fon.pak` |
 | 日本語 | `script.pak` | `fnt.pak` |
+| English | `en.pak` | `fon_en.pak` |
 
 这两类包还需配合完整的背景、立绘、音频、影片等原版资源。启动器界面语言与游戏语言分别设置。
+
+英文补丁还需保留原版 `script.pak` 作为基础数据后备。在启动页选择 **English** 即应用英文资源；`fon_en.pak` 必须是配套游戏字库 PAK。已有带 `fnt` 分组的英文 `en.pak` 可用 `python scripts/prepare_english_font.py --root "游戏目录"` 生成独立字库，原包保持不变，详见[语言资源说明](docs/LANGUAGE_RESOURCES.md)。
 
 ### Windows
 
@@ -32,7 +37,7 @@
 .\WA2_SDL2_x64.exe --root "D:\Games\WHITE ALBUM2"
 ```
 
-默认中文；日语在命令末尾加 `--language ja-JP`。本地工作区也可在准备好 `res/` 资源后使用 `run.cmd`。
+默认中文；日语加 `--language ja-JP`，英语加 `--language en-US`。本地工作区也可在准备好 `res/` 资源后使用 `run.cmd`。
 
 ## 存档、配置与字幕
 

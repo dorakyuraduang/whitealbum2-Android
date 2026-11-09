@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.66-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.66-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.66-shared-aot-replace-native.apk` to update the experimental
+is **0.2.67-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.67-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.67-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -16,6 +16,16 @@ Standard APKs are named `WA2-arm64-<release name>.apk`, using the version from
 for existing installation scripts. The package report points to the versioned
 file and verifies that the alias has the same SHA-256. Replacement APKs retain
 their existing versioned `WA2-<release name>-replace-native.apk` names.
+
+From 0.2.67, **Game language → English** selects `en.pak` and `fon_en.pak`.
+Keep the original `script.pak` for base script data. The mixed English patch's
+script and graphics directories are read as scoped overrides; the dedicated
+font pack is required. `scripts/prepare_english_font.py --root <game-folder>`
+can copy the patch's packed font entries into external `fon_en.pak` without
+decompression. v7 launcher settings retain v5/v6 language choices and switches.
+See [the English quick start](../README.en.md) and
+[resource details](LANGUAGE_RESOURCES.md). This is independent of interface
+language and does not automatically translate embedded Chinese extra captions.
 
 The AOT host now reads and writes original-format saves and INI files directly
 in the selected game folder through seekable provider descriptors. Root `Sys.sav`,

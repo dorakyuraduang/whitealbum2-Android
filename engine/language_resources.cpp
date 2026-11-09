@@ -3,11 +3,11 @@
 
 namespace wa2::resource {
 const LanguageProfile& language_profile(GameLanguage language){
-    static constexpr LanguageProfile chinese{"zh-CN","ck-gal.pak","fon.pak"},japanese{"ja-JP","script.pak","fnt.pak"};
-    switch(language){case GameLanguage::chinese:return chinese;case GameLanguage::japanese:return japanese;}
+    static constexpr LanguageProfile chinese{"zh-CN","ck-gal.pak","fon.pak"},japanese{"ja-JP","script.pak","fnt.pak"},english{"en-US","en.pak","fon_en.pak"};
+    switch(language){case GameLanguage::chinese:return chinese;case GameLanguage::japanese:return japanese;case GameLanguage::english:return english;}
     throw std::invalid_argument("Unsupported game language");
 }
-GameLanguage parse_language(std::string_view value){if(value=="zh-CN")return GameLanguage::chinese;if(value=="ja-JP")return GameLanguage::japanese;throw std::invalid_argument("Unsupported game language: "+std::string(value)+" (use zh-CN or ja-JP)");}
+GameLanguage parse_language(std::string_view value){if(value=="zh-CN")return GameLanguage::chinese;if(value=="ja-JP")return GameLanguage::japanese;if(value=="en-US")return GameLanguage::english;throw std::invalid_argument("Unsupported game language: "+std::string(value)+" (use zh-CN, ja-JP or en-US)");}
 void validate_language_resources(const LanguageResources& value){
     (void)language_profile(value.language);
 }

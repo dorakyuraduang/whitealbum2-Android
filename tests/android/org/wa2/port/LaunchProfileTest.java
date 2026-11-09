@@ -28,47 +28,54 @@ public final class LaunchProfileTest {
     }
     static void paired(LaunchProfile p,int expected){
         check(p.language==expected);
-        check(p.languageTag().equals(expected==1?"ja-JP":"zh-CN"));
-        check(p.scriptArchive().equals(expected==1?"script.pak":"ck-gal.pak"));
-        check(p.fontArchive().equals(expected==1?"fnt.pak":"fon.pak"));
+        check(p.languageTag().equals(expected==2?"en-US":expected==1?"ja-JP":"zh-CN"));
+        check(p.scriptArchive().equals(expected==2?"en.pak":expected==1?"script.pak":"ck-gal.pak"));
+        check(p.fontArchive().equals(expected==2?"fon_en.pak":expected==1?"fnt.pak":"fon.pak"));
     }
     public static void main(String[] args)throws Exception{
-        int languages=0,v1=0,v2=0,v3=0,v4=0,v5=0,subtitles=0;
+        int languages=0,v1=0,v2=0,v3=0,v4=0,v5=0,v6=0,subtitles=0;
         String[] uris={"","content://provider/document/opaque_123","content://provider/document/目录%2F字幕.yaml"};
-        for(int flags=0;flags<32;++flags)for(int language=0;language<2;++language){
-            LaunchProfile p=new LaunchProfile(flags,language,"");paired(p,language);check(p.encode().length==16 && p.encode()[4]==6 && !LaunchProfile.needsUpgrade(p.encode()));
+        for(int flags=0;flags<32;++flags)for(int language=0;language<3;++language){
+            LaunchProfile p=new LaunchProfile(flags,language,"");paired(p,language);check(p.encode().length==16 && p.encode()[4]==7 && !LaunchProfile.needsUpgrade(p.encode()));
             LaunchProfile decoded=LaunchProfile.decode(p.encode());check(decoded.equals(p) && p.hashCode()==decoded.hashCode());
             for(int flag:new int[]{1,2,4,8,16}){LaunchProfile changed=p.with(flag,!p.enabled(flag));paired(changed,language);check(changed.enabled(flag)!=p.enabled(flag) && (changed.flags^p.flags)==flag);}
-            java.util.ArrayList<String> expected=new java.util.ArrayList<>();if(p.enabled(4))expected.add("--test-mode");if(!p.enabled(8))expected.add("--no-chinese-subtitles");expected.add("--language");expected.add(language==1?"ja-JP":"zh-CN");
+            java.util.ArrayList<String> expected=new java.util.ArrayList<>();if(p.enabled(4))expected.add("--test-mode");if(!p.enabled(8))expected.add("--no-chinese-subtitles");expected.add("--language");expected.add(p.languageTag());
             check(Arrays.asList(p.gameArguments()).equals(expected));++languages;++cases;
         }
         paired(LaunchProfile.defaults(),0);check(LaunchProfile.defaults().flags==11 && !LaunchProfile.defaults().enabled(LaunchProfile.HIDE_MENU));
-        for(int flags=0;flags<32;++flags)for(int language=0;language<2;++language)for(String uri:uris){
+        for(int flags=0;flags<32;++flags)for(int language=0;language<3;++language)for(String uri:uris){
             LaunchProfile p=new LaunchProfile(flags,language,uri);check(LaunchProfile.decode(p.encode()).equals(p));
             for(int flag:new int[]{1,2,4,8,16})check(p.with(flag,!p.enabled(flag)).subtitle.equals(uri));
-            LaunchProfile changed=p.withLanguage(1-language);check(changed.flags==flags && changed.subtitle.equals(uri));paired(changed,1-language);++subtitles;++cases;
+            int next=(language+1)%3;LaunchProfile changed=p.withLanguage(next);check(changed.flags==flags && changed.subtitle.equals(uri));paired(changed,next);++subtitles;++cases;
         }
         for(int flags=0;flags<8;++flags){byte[] old=legacy(1,flags,"","","");LaunchProfile p=LaunchProfile.decode(old);check(p.flags==(flags|8) && p.subtitle.isEmpty() && LaunchProfile.needsUpgrade(old));paired(p,0);++v1;++cases;}
         String[][] pairs={{"",""},{"script.pak","fon.pak"},{"CK-GAL.PAK","fnt.pak"},{"","IC/FNT.PAK"},{"custom-script.pak","font-en.pak"},{"IC/SCRIPT.PAK","IC/FON.PAK"}};
         for(int flags=0;flags<16;++flags)for(String[] pair:pairs)for(int version:new int[]{2,3})for(String uri:version==2?new String[]{""}:uris){
             byte[] old=legacy(version,flags,pair[0],pair[1],uri);LaunchProfile p=LaunchProfile.decode(old);paired(p,0);check(p.flags==flags && p.subtitle.equals(uri) && LaunchProfile.needsUpgrade(old));
-            Storage files=new Storage();files.bytes=old;LaunchProfileStore migrated=new LaunchProfileStore(files,LaunchProfile.defaults());check(migrated.dirty() && migrated.current().equals(p));migrated.flush();check(files.writes==1 && !migrated.dirty() && files.bytes[4]==6 && LaunchProfile.decode(files.bytes).equals(p));
+            Storage files=new Storage();files.bytes=old;LaunchProfileStore migrated=new LaunchProfileStore(files,LaunchProfile.defaults());check(migrated.dirty() && migrated.current().equals(p));migrated.flush();check(files.writes==1 && !migrated.dirty() && files.bytes[4]==7 && LaunchProfile.decode(files.bytes).equals(p));
             if(version==2)++v2;else ++v3;++cases;
         }
         for(int flags=0;flags<16;++flags)for(int language=0;language<2;++language)for(String uri:uris){
             byte[] old=new LaunchProfile(flags,language,uri).encode();old[4]=4;seal(old);
             Storage files=new Storage();files.bytes=old;LaunchProfileStore migrated=new LaunchProfileStore(files,LaunchProfile.defaults());
             paired(migrated.current(),0);check(migrated.dirty() && migrated.current().flags==flags && migrated.current().subtitle.equals(uri));
-            migrated.flush();check(files.bytes[4]==6 && !migrated.dirty());
+            migrated.flush();check(files.bytes[4]==7 && !migrated.dirty());
             migrated.setLanguage(1);migrated.flush();migrated.reload();paired(migrated.current(),1);check(!migrated.dirty() && migrated.current().flags==flags && migrated.current().subtitle.equals(uri));++v4;++cases;
         }
         for(int flags=0;flags<16;++flags)for(int language=0;language<2;++language)for(String uri:uris){
             byte[] old=new LaunchProfile(flags,language,uri).encode();old[4]=5;seal(old);
             Storage files=new Storage();files.bytes=old;LaunchProfileStore migrated=new LaunchProfileStore(files,LaunchProfile.defaults());
             paired(migrated.current(),language);check(migrated.dirty() && migrated.current().flags==flags && !migrated.current().enabled(LaunchProfile.HIDE_MENU) && migrated.current().subtitle.equals(uri));
-            migrated.flush();check(files.bytes[4]==6 && !migrated.dirty());migrated.reload();paired(migrated.current(),language);++v5;++cases;
+            migrated.flush();check(files.bytes[4]==7 && !migrated.dirty());migrated.reload();paired(migrated.current(),language);++v5;++cases;
         }
         {byte[] old=new LaunchProfile(16).encode();old[4]=5;seal(old);rejects(()->LaunchProfile.decode(old));}
+        for(int flags=0;flags<32;++flags)for(int language=0;language<2;++language)for(String uri:uris){
+            byte[] old=new LaunchProfile(flags,language,uri).encode();old[4]=6;seal(old);
+            Storage files=new Storage();files.bytes=old;LaunchProfileStore migrated=new LaunchProfileStore(files,LaunchProfile.defaults());
+            paired(migrated.current(),language);check(migrated.dirty() && migrated.current().flags==flags && migrated.current().subtitle.equals(uri));
+            migrated.flush();check(files.bytes[4]==7 && !migrated.dirty());migrated.reload();paired(migrated.current(),language);++v6;++cases;
+        }
+        {byte[] old=new LaunchProfile(15,2,"").encode();old[4]=6;seal(old);rejects(()->LaunchProfile.decode(old));}
         {byte[] old=new LaunchProfile(15,1,uris[1]).encode();old[4]=4;old[6]=2;seal(old);rejects(()->LaunchProfile.decode(old));}
         char[] tail=new char[4086];Arrays.fill(tail,'a');String maxUri="content://"+new String(tail);
         LaunchProfile max=new LaunchProfile(15,1,maxUri);check(max.encode().length==4112 && LaunchProfile.decode(max.encode()).equals(max));++cases;
@@ -77,7 +84,7 @@ public final class LaunchProfileTest {
         rejects(()->LaunchProfile.decode(null));
         for(int at=0;at<16;++at){byte[] bad=LaunchProfile.defaults().encode();bad[at]^=(byte)128;rejects(()->LaunchProfile.decode(bad));}
         for(int at:new int[]{0,1,2,3,4,5,6,7,8,9,10,11}){byte[] bad=LaunchProfile.defaults().encode();bad[at]=(byte)255;seal(bad);rejects(()->LaunchProfile.decode(bad));}
-        for(int invalid:new int[]{-1,2,255})rejects(()->LaunchProfile.defaults().withLanguage(invalid));
+        for(int invalid:new int[]{-1,3,255})rejects(()->LaunchProfile.defaults().withLanguage(invalid));
         rejects(()->new LaunchProfile(32));rejects(()->LaunchProfile.defaults().with(32,true));
         for(String bad:new String[]{"file:///sub.yaml","https://example.invalid/sub.yaml","relative/sub.yaml","content://","content://provider/a\n.yaml","content://provider/a\0.yaml","content://provider/\ud800",maxUri+"a"})rejects(()->LaunchProfile.defaults().withSubtitle(bad));
         for(String bad:new String[]{"../bad.pak","other/a.pak","IC/../bad.pak","IC\\font.pak",".hidden.pak","font.ttf","字体.pak","a"+maxPak})rejects(()->LaunchProfile.decode(legacy(3,15,bad,"", "")));
@@ -91,7 +98,7 @@ public final class LaunchProfileTest {
         byte[] before=first.bytes.clone();first.bytes[15]^=1;rejects(store::reload);check(store.current().equals(saved) && !store.dirty());first.bytes=before;++cases;
         Storage second=new Storage();second.bytes=new LaunchProfile(4,1,"").encode();LaunchProfileStore independent=new LaunchProfileStore(second,LaunchProfile.defaults());check(independent.current().flags==4);paired(independent.current(),1);independent.set(1,true);independent.flush();check(LaunchProfile.decode(first.bytes).equals(saved) && LaunchProfile.decode(second.bytes).flags==5);++cases;
         first.bytes=null;store.reload();check(store.current().equals(LaunchProfile.defaults()) && store.dirty());store.flush();++cases;
-        first.bytes=legacy(3,10,"script.pak","fon.pak",uris[2]);store.reload();check(store.dirty());paired(store.current(),0);first.failWrite=true;rejects(store::flush);check(store.dirty() && first.bytes[4]==3);first.failWrite=false;store.flush();check(first.bytes[4]==6 && LaunchProfile.decode(first.bytes).subtitle.equals(uris[2]) && store.current().flags==10);++cases;
+        first.bytes=legacy(3,10,"script.pak","fon.pak",uris[2]);store.reload();check(store.dirty());paired(store.current(),0);first.failWrite=true;rejects(store::flush);check(store.dirty() && first.bytes[4]==3);first.failWrite=false;store.flush();check(first.bytes[4]==7 && LaunchProfile.decode(first.bytes).subtitle.equals(uris[2]) && store.current().flags==10);++cases;
         first.failWrite=true;store.setSubtitle(uris[1]);rejects(store::flush);check(store.dirty() && LaunchProfile.decode(first.bytes).subtitle.equals(uris[2]));first.failWrite=false;store.flush();store.reload();check(store.current().subtitle.equals(uris[1]));++cases;
         first.duringWrite=()->{store.setSubtitle("");store.setLanguage(0);};store.setSubtitle(uris[2]);store.flush();check(store.dirty() && LaunchProfile.decode(first.bytes).subtitle.equals(uris[2]));store.flush();check(!store.dirty() && LaunchProfile.decode(first.bytes).subtitle.isEmpty());paired(store.current(),0);check(independent.current().subtitle.isEmpty());++cases;
         LaunchProfile beforeMenu=store.current();first.failWrite=true;store.set(LaunchProfile.HIDE_MENU,true);rejects(store::flush);
@@ -102,6 +109,7 @@ public final class LaunchProfileTest {
         check(store.dirty() && !store.current().enabled(LaunchProfile.HIDE_MENU) && LaunchProfile.decode(first.bytes).enabled(LaunchProfile.HIDE_MENU));
         store.flush();store.reload();check(!store.dirty() && !store.current().enabled(LaunchProfile.HIDE_MENU) && store.current().subtitle.equals(uris[1]));++cases;
         String report="{\"schema\":\"wa2.android-launch-profile.v6\",\"cases\":"+cases+",\"guards\":"+guards+",\"language_roundtrips\":"+languages+",\"legacy_migrations\":"+v1+",\"v2_migrations\":"+v2+",\"v3_migrations\":"+v3+",\"v4_migrations\":"+v4+",\"v5_migrations\":"+v5+",\"external_subtitle_roundtrips\":"+subtitles+",\"menu_visibility_persisted\":true,\"menu_preference_write_retry\":true,\"menu_edits_preserve_game_args\":true,\"v5_language_preserved\":true,\"automatic_matched_pairs\":true,\"legacy_mixed_pair_corrected\":true,\"older_profiles_default_chinese\":true,\"explicit_language_retained_after_upgrade\":true,\"upgrade_write_retry\":true,\"external_subtitle_write_retry\":true,\"language_arguments_exact\":true,\"language_edits_preserve_flags\":true,\"directory_isolation\":true,\"unchanged_writes_suppressed\":true,\"failed_write_retry\":true,\"inflight_edit_not_lost\":true,\"source_files_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
+        report=report.replace("wa2.android-launch-profile.v6","wa2.android-launch-profile.v7").replace("\"external_subtitle_roundtrips\"","\"v6_migrations\":"+v6+",\"english_game_profile\":true,\"external_subtitle_roundtrips\"");
         Files.write(Paths.get(args[0]),report.getBytes(StandardCharsets.UTF_8));
     }
 }

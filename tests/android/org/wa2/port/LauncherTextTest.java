@@ -14,7 +14,7 @@ public final class LauncherTextTest {
         Locale processLocale=Locale.getDefault();int messages=0,formats=0,rtl=0,resolutions=0;
         check(LauncherText.count()==28 && LauncherText.Key.values().length==44);
         Set<String> names=new HashSet<>(),tags=new HashSet<>(),catalogues=new HashSet<>();
-        byte[][] profiles={new LaunchProfile(15,0,"content://provider/sub.yaml").encode(),new LaunchProfile(15,1,"").encode()};
+        byte[][] profiles={new LaunchProfile(15,0,"content://provider/sub.yaml").encode(),new LaunchProfile(15,1,"").encode(),new LaunchProfile(15,2,"").encode()};
         for(int n=0;n<LauncherText.count();++n){
             LauncherText ui=LauncherText.at(n);check(names.add(ui.name()) && tags.add(ui.tag()) && LauncherText.forTag(ui.tag()).index()==n);
             if(ui.rtl())++rtl;StringBuilder catalogue=new StringBuilder();
@@ -28,7 +28,7 @@ public final class LauncherTextTest {
                 catalogue.append(template).append('\n');++messages;
             }
             check(catalogues.add(catalogue.toString()));
-            for(byte[] data:profiles){LaunchProfile profile=LaunchProfile.decode(data);check(Arrays.equals(profile.encode(),data));check(Arrays.asList(profile.gameArguments()).contains(profile.language==0?"zh-CN":"ja-JP"));}
+            for(byte[] data:profiles){LaunchProfile profile=LaunchProfile.decode(data);check(Arrays.equals(profile.encode(),data));check(Arrays.asList(profile.gameArguments()).contains(profile.languageTag()));}
             check(Locale.getDefault().equals(processLocale));
         }
         String[][] aliases={{null,"zh-CN"},{"","zh-CN"},{"unknown","zh-CN"},{"zh-Hant-HK","zh-TW"},{"zh-HK","zh-TW"},{"zh-TW","zh-TW"},{"zh-SG","zh-CN"},{"zh-Hans-CN","zh-CN"},{"en-US","en"},{"pt-PT","pt-BR"},{"iw-IL","he"},{"tl-PH","fil"},{"ja-JP","ja"},{"ar-EG","ar"},{"fr-CA","fr"}};

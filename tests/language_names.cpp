@@ -36,6 +36,10 @@ int main(int argc,char** argv){try{
     CHECK(jp.memory.load(0x4be348+22*4,32)==jp.memory.load(0x4be348+23*4,32));
     CHECK(bytes(jp,0x401000,code.size())==code && bytes(jp,0x4a1420,tables.size())==tables && jp.memory.code_epoch()==code_epoch);
     CHECK(jp.cpu.r==registers.r && jp.cpu.eip==registers.eip && jp.native_function_entries==0 && jp.executed_instructions==0);
+    {a::Runtime english;english.load(image);auto& en=english.process();a::configure_language_names(en,r::GameLanguage::english);
+        for(unsigned slot=0;slot<32;++slot){const auto one=en.memory.load(0x4be348+slot*4,32),two=jp.memory.load(0x4be348+slot*4,32);CHECK((one?en.read_string(one,64):std::string{})==(two?jp.read_string(two,64):std::string{}));}
+        CHECK(bytes(en,0x401000,code.size())==code && bytes(en,0x4a1420,tables.size())==tables && !en.native_function_entries && !en.executed_instructions);
+        CHECK(en.state().reports.at("language_names")().find("en-US")!=std::string::npos);}
     rejects([&]{a::configure_language_names(jp,r::GameLanguage::japanese);});
     {a::Runtime empty;rejects([&]{a::configure_language_names(empty.process(),r::GameLanguage::japanese);});}
     for(unsigned fault=0;fault<6;++fault){

@@ -2,6 +2,8 @@
 #include "../platform/compat/language_resources.hpp"
 #include "../platform/compat/resource_mount.hpp"
 #include "../platform/compat/system.hpp"
+#include "../recompiled/process.hpp"
+#include "../port/native_resources.hpp"
 #include <winrecomp/process.hpp>
 #include <winrecomp/win32_state.hpp>
 #include <algorithm>
@@ -9,11 +11,12 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <tuple>
 
 #define CHECK(x) do{++checks;if(!(x))throw std::runtime_error(std::string("check failed: ")+#x);}while(false)
 namespace r=wa2::resource;
 namespace pc=wa2::platform::compat;
-unsigned checks{},guards{},aliases{},argument_cases{};
+unsigned checks{},guards{},aliases{},argument_cases{},english_native_cases{};
 template<class F>void rejects(F f,std::string_view name={}){
     bool failed=false;try{f();}catch(const std::exception& error){failed=name.empty() || std::string_view(error.what()).find(name)!=std::string_view::npos;}CHECK(failed);++guards;
 }
@@ -35,6 +38,18 @@ int main(int argc,char** argv){try{
         {"fon.pak",pak(font_names,0x21)},{"fnt.pak",pak(font_names,0x22)},
         {"ic/ck-gal.pak",pak(script_names,0x13)},{"ic/fon.pak",pak(font_names,0x23)},
         {"patch.pak",pak(script_names,0x51)},{"bad.pak",{1,2,3,4,5,6,7,8}}};
+    packs["en.pak"]=pak({"bak","same.tga","fnt","same.tga","grp","same.tga","script","1001.bnr","1001.txt"},0x31);
+    for(unsigned n:{0u,2u,4u,6u}){
+        const auto at=16+n*44;std::fill_n(packs["en.pak"].begin()+at,4,0xcc);std::fill_n(packs["en.pak"].begin()+at+40,4,0);
+    }
+    const auto en_payload=16+9*44;
+    packs["en.pak"][en_payload+1]=0x61;packs["en.pak"][en_payload+3]=0x62;packs["en.pak"][en_payload+5]=0x63;
+    {auto& packed=packs["en.pak"];const auto offset=packed.size();const auto at=16+8*44;
+        packed.insert(packed.end(),{10,0,0,0,1,0,0,0,1,0x31});
+        const auto word=[&](std::size_t where,std::uint32_t value){for(unsigned n=0;n<4;++n)packed[where+n]=std::uint8_t(value>>(n*8));};
+        word(at,1);word(at+36,std::uint32_t(offset));word(at+40,10);}
+    packs["fon_en.pak"]=pak(font_names,0x32);
+    packs["bak.pak"]=pak({"same.tga","base-only.tga"},0x41);packs["grp.pak"]=pak({"same.tga","base-only.tga"},0x42);
     std::vector<wr::ReadOnlyFileInfo> entries;unsigned opens{};
     for(const auto& [name,bytes]:packs){
         const auto path=root/std::filesystem::path(name);if(path.has_parent_path())std::filesystem::create_directories(path.parent_path());
@@ -65,7 +80,41 @@ int main(int argc,char** argv){try{
     CHECK(call("ReadFile",{a,work,4,work+8,0}) && p.memory.load(work,32)==0);CHECK(call("ReadFile",{b,work,4,work+8,0}) && p.memory.load(work,32)==0x5041434b);
     CHECK(call("CreateFileA",{logical,0x40000000,1,0,2,0x80,0})==0xffffffff && p.last_error==5);
     CHECK(call("CloseHandle",{a}) && call("CloseHandle",{b}));rejects([&]{pc::select_language_resources(p,choice);});
-    for(const auto language:{r::GameLanguage::chinese,r::GameLanguage::japanese}){
+    auto english=process();pc::install_resource_mount(*english,mount);pc::select_language_resources(*english,{r::GameLanguage::english,true});
+    for(const auto* name:{"ck-gal.pak","script.pak","IC/ck-gal.pak"}){CHECK(read(*english,name,"1001.txt")==std::vector<std::uint8_t>{0x31});++aliases;}
+    for(const auto* name:{"fon.pak","fnt.pak","IC/fon.pak"}){CHECK(read(*english,name,font_names[0])==std::vector<std::uint8_t>{0x32});++aliases;}
+    const auto overlay=[&](std::string_view path,std::string_view name){return pc::language_resource_member(*english,root/std::filesystem::path(path),name);};
+    CHECK(overlay("ck-gal.pak","1001.txt")->archive->load(overlay("ck-gal.pak","1001.txt")->member)==std::vector<std::uint8_t>{0x31});
+    for(const auto* name:{"ck-gal.pak","script.pak","en.pak"}){
+        const auto fallback=overlay(name,"Global.vrb");CHECK(fallback && fallback->archive && fallback->archive->load(fallback->member)==std::vector<std::uint8_t>{0x12});
+    }
+    CHECK(overlay("bak.pak","same.tga")->archive->load(overlay("bak.pak","same.tga")->member)==std::vector<std::uint8_t>{0x61});
+    CHECK(overlay("grp.pak","same.tga")->archive->load(overlay("grp.pak","same.tga")->member)==std::vector<std::uint8_t>{0x63});
+    CHECK(!overlay("bak.pak","base-only.tga") && !overlay("fon.pak",font_names[0]) && !overlay("patch.pak","1001.txt"));
+    CHECK(overlay("ck-gal.pak","unknown")->member==r::Archive::missing);
+    CHECK(!pc::language_resource_member(*selected,root/"script.pak","1001.txt"));
+    CHECK(!pc::language_resource_member(*english,root.parent_path()/"elsewhere/script.pak","1001.txt"));
+    // Exercise the actual shared resource callbacks in owned memory, with an
+    // executor that rejects every attempted static game instruction.
+    for(bool linear:{false,true}){
+        wr::ProcessOptions options;options.data_root=root;options.prefer_linear_memory=linear;
+        wr::Process q(wr::FunctionExecutor{[](wr::Cpu&,wr::Memory&){throw std::runtime_error("English resource checks must not execute game instructions");return false;}},options);
+        wr::install_wa2_native_resources(q);pc::install_resource_mount(q,mount);pc::select_language_resources(q,{r::GameLanguage::english,false});
+        wr::U32 target{};q.replace_api("kernel32.dll","HeapAlloc",3,[&](auto&){return target;});q.load(wa2::aot::initial_image());
+        const auto output=q.allocate_bytes(4096);target=q.allocate_bytes(4096);
+        const std::array<std::tuple<std::string,std::string,unsigned>,7> cases{{
+            {"ck-gal.pak","1001.txt",0x31},{"script.pak","Global.vrb",0x12},{"fon.pak",font_names[0],0x32},
+            {"bak.pak","same.tga",0x61},{"grp.pak","same.tga",0x63},{"bak.pak","base-only.tga",0x41},{"patch.pak","1001.txt",0x51}}};
+        for(const auto& [file,name,expected]:cases){
+            const auto path=q.put_string(file),member=q.put_string(name);
+            CHECK(q.callback(0x437220,std::array<wr::U32,2>{path,member},false)!=0);++english_native_cases;
+            CHECK(q.callback(0x437310,std::array<wr::U32,3>{path,member,output},false)==1);
+            CHECK(q.memory.load(output,32)==target && q.memory.load(target,8)==expected);++english_native_cases;
+        }
+        CHECK(!q.executed_instructions);
+    }
+    {auto files=entries;std::erase_if(files,[](const auto& file){return file.name=="script.pak";});auto q=process();auto invalid=std::make_shared<pc::ResourceMount>(files,[&](std::string_view name){return std::fopen((root/std::filesystem::path(name)).string().c_str(),"rb");});pc::install_resource_mount(*q,invalid);rejects([&]{pc::select_language_resources(*q,{r::GameLanguage::english,true});},"script.pak");CHECK(q->state().read_only_files==invalid);}
+    for(const auto language:{r::GameLanguage::chinese,r::GameLanguage::japanese,r::GameLanguage::english}){
         const auto profile=r::language_profile(language);
         for(const auto target:{profile.script,profile.font})for(int failure=0;failure<3;++failure){
             auto files=entries;if(!failure)std::erase_if(files,[&](const auto& entry){return entry.name==target;});
@@ -76,11 +125,13 @@ int main(int argc,char** argv){try{
         }
     }
     {auto q=process();rejects([&]{pc::select_language_resources(*q,{});},"mounted");}
-    for(const auto* bad:{"","en-US","JA","ja","zh","script.pak","../ja-JP"})rejects([&]{r::parse_language(bad);});
+    for(const auto* bad:{"","en-GB","JA","ja","zh","script.pak","../ja-JP"})rejects([&]{r::parse_language(bad);});
     rejects([&]{r::validate_language_resources({static_cast<r::GameLanguage>(99),true});});
     CHECK(r::language_profile(r::GameLanguage::chinese).script=="ck-gal.pak" && r::language_profile(r::GameLanguage::chinese).font=="fon.pak");
     CHECK(r::language_profile(r::GameLanguage::japanese).script=="script.pak" && r::language_profile(r::GameLanguage::japanese).font=="fnt.pak");
-    for(bool caption:{false,true})for(const auto language:{r::GameLanguage::chinese,r::GameLanguage::japanese}){
+    CHECK(r::language_profile(r::GameLanguage::english).script=="en.pak" && r::language_profile(r::GameLanguage::english).font=="fon_en.pak");
+    CHECK(r::parse_language("en-US")==r::GameLanguage::english);
+    for(bool caption:{false,true})for(const auto language:{r::GameLanguage::chinese,r::GameLanguage::japanese,r::GameLanguage::english}){
         r::LanguageResources options;std::vector<std::string_view> args{caption?"--chinese-subtitles":"--no-chinese-subtitles","--language",r::language_profile(language).tag};
         for(std::size_t n=0;n<args.size();++n)CHECK(r::language_launch_option(args,n,options));CHECK(options.chinese_subtitles==caption && options.language==language);++argument_cases;
     }
@@ -89,6 +140,6 @@ int main(int argc,char** argv){try{
     {std::array<std::string_view,0> args{};std::size_t n=0;r::LanguageResources value;CHECK(!r::language_launch_option(args,n,value) && n==0);}
     {std::array<std::string_view,2> args{"--language","unknown"};std::size_t n=0;r::LanguageResources value;rejects([&]{r::language_launch_option(args,n,value);});CHECK(value.language==r::GameLanguage::chinese);}
     CHECK(selected->state().reports.at("language_resources")().find("\"chinese_subtitles\":false")!=std::string::npos);
-    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.language-resources.v2\",\"checks\":"<<checks<<",\"guards\":"<<guards<<",\"archive_aliases\":"<<aliases<<",\"shared_argument_combinations\":"<<argument_cases<<",\"default_chinese_pair\":true,\"automatic_matched_pairs\":true,\"root_ic_and_file_apis_checked\":true,\"patch_priority_preserved\":true,\"invalid_selection_not_published\":true,\"source_executable_opened\":false,\"original_resource_files_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);
+    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.language-resources.v3\",\"checks\":"<<checks<<",\"guards\":"<<guards<<",\"archive_aliases\":"<<aliases<<",\"shared_argument_combinations\":"<<argument_cases<<",\"english_native_resource_cases\":"<<english_native_cases<<",\"english_grouped_override_and_base_script_fallback\":true,\"default_chinese_pair\":true,\"automatic_matched_pairs\":true,\"root_ic_and_file_apis_checked\":true,\"patch_priority_preserved\":true,\"invalid_selection_not_published\":true,\"source_executable_opened\":false,\"original_resource_files_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);
     std::cout<<"PASS language profiles: matching script/font pairs, aliases, separate file streams and validation.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

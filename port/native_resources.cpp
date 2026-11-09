@@ -8,6 +8,7 @@
 #include "native_backend.hpp"
 #include "clock.hpp"
 #include "../platform/compat/resource_mount.hpp"
+#include "../platform/compat/language_resources.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <deque>
@@ -175,8 +176,11 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         try {
             const auto path=guest_file_path(q,q.read_string(q.argument(0),32768));
             for(const auto& [id,file]:q.state().files)if(file.path==path && (file.write || !(file.share&1))){++state->declined;return std::nullopt;}
-            const auto& archive=state->get(q,path).archive;if(!archive.is_kcap()){++state->declined;return std::nullopt;}
-            const auto member=archive.find_first(q.read_string(q.argument(1),1024));++state->image_checks;
+            const auto name=q.read_string(q.argument(1),1024);
+            const auto selected=wa2::platform::compat::language_resource_member(q,path,name);
+            if(selected && (!selected->archive || selected->member==wa2::resource::Archive::missing)){++state->image_checks;return 0;}
+            const auto& archive=selected?*selected->archive:state->get(q,path).archive;if(!archive.is_kcap()){++state->declined;return std::nullopt;}
+            const auto member=selected?selected->member:archive.find_first(name);++state->image_checks;
             return member==wa2::resource::Archive::missing ? 0 : archive.members()[member].source_index+1;
         }catch(const std::filesystem::filesystem_error& error){
             if(error.code()==std::errc::no_such_file_or_directory){++state->missing_archives;q.set_error(2);return 0;}
@@ -193,14 +197,19 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         wa2::resource::StoredResource stored;
         wa2::resource::DecodedKey cache_key{};std::array<std::uint8_t,18> input_tail{};
         std::shared_ptr<const wa2::resource::DecodedMember> cached;
-        std::filesystem::path image_path;std::size_t image_member{};
+        std::filesystem::path image_path;std::size_t image_member{};const wa2::resource::Archive* language_archive{};
         try {
             const auto path=guest_file_path(q,q.read_string(q.argument(0),32768));image_path=path;
             for(const auto& [id,file]:q.state().files)if(file.path==path && (file.write || !(file.share&1))){++state->declined;return std::nullopt;}
-            const auto& indexed=state->get(q,path);const auto& archive=indexed.archive;if(!archive.is_kcap()){++state->declined;return std::nullopt;}
-            const auto member=archive.find_first(q.read_string(q.argument(1),1024));
+            const auto name=q.read_string(q.argument(1),1024);
+            const auto selected=wa2::platform::compat::language_resource_member(q,path,name);
+            if(selected && (!selected->archive || selected->member==wa2::resource::Archive::missing))return 0;
+            const auto* indexed=selected?nullptr:&state->get(q,path);
+            const auto& archive=selected?*selected->archive:indexed->archive;if(!archive.is_kcap()){++state->declined;return std::nullopt;}
+            if(selected)language_archive=&archive;
+            const auto member=selected?selected->member:archive.find_first(name);
             if(member==wa2::resource::Archive::missing)return 0;
-            cache_key={indexed.identity,member};image_member=member;
+            cache_key={selected?selected->identity:indexed->identity,member};image_member=member;
             if(archive.members()[member].compressed)q.memory.copy_out(dictionary+0xfee,input_tail);
             {ResourceState::Timer time(state->timing["image_cache_lookup"]);cached=state->decoded_images.find(cache_key,input_tail);}
             if(cached){stored.expanded_size=U32(cached->bytes.size());stored.compressed=cached->compressed;stored.dictionary_fill=archive.members()[member].dictionary_fill;}
@@ -247,7 +256,7 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
                     // A native heap hook may change the caller-owned tail.
                     // Re-read/decode for that input, retaining this allocation.
                     const auto expected=stored.expanded_size;
-                    ResourceState::Timer time(state->timing["image_read"]);stored=state->get(q,image_path).archive.read(image_member);cached.reset();
+                    ResourceState::Timer time(state->timing["image_read"]);stored=(language_archive?*language_archive:state->get(q,image_path).archive).read(image_member);cached.reset();
                     ++state->image_payload_reads;state->image_payload_bytes+=stored.bytes.size()+8;
                     if(stored.expanded_size!=expected)throw wa2::resource::Error("image archive changed during allocation");
                 }

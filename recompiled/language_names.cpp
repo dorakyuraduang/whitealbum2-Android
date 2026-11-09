@@ -39,7 +39,9 @@ void configure_language_names(wr::Process& process,resource::GameLanguage langua
     if(!process.entry || process.native_function_entries || process.executed_instructions || process.state().reports.contains("language_names"))throw std::logic_error("Default-name language must be configured once before game execution");
     if(process.input_sha256!="246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327")throw std::runtime_error("Unknown source default-name layout");
     constexpr std::uint32_t table=0x4be348;
-    if(language==resource::GameLanguage::japanese){
+    // The authorized English EXE retains the same 32 Japanese default slots.
+    // Translated scripts may replace these names later through normal commands.
+    if(language!=resource::GameLanguage::chinese){
         process.memory.check(table,128,wr::Memory::Read|wr::Memory::Write);
         for(const auto& name:names)if(process.memory.load(table+name.slot*4,32)!=name.address || process.read_string(name.address,64)!=name.chinese)throw std::runtime_error("Source default-name contract changed at slot "+std::to_string(name.slot));
         std::map<std::string_view,std::uint32_t> allocated;std::array<std::uint32_t,std::size(names)> pointers{};
@@ -49,6 +51,6 @@ void configure_language_names(wr::Process& process,resource::GameLanguage langua
         // runs here. Original strings and instruction pages stay immutable.
         for(std::size_t n=0;n<std::size(names);++n)process.memory.store(table+names[n].slot*4,pointers[n],32);
     }
-    process.state().reports["language_names"]=[language,profile]{return "{\"language\":"+wr::quote(std::string(profile.tag))+",\"changed_default_slots\":"+std::to_string(language==resource::GameLanguage::japanese?std::size(names):0)+",\"glyph_tables_changed\":false,\"save_files_rewritten\":false}";};
+    process.state().reports["language_names"]=[language,profile]{return "{\"language\":"+wr::quote(std::string(profile.tag))+",\"changed_default_slots\":"+std::to_string(language!=resource::GameLanguage::chinese?std::size(names):0)+",\"glyph_tables_changed\":false,\"save_files_rewritten\":false}";};
 }
 }
