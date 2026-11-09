@@ -107,6 +107,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     std::array<int,6> subtitle_bounds{};
     std::vector<DecodedVertex> subtitle_vertices;
     std::uint64_t subtitle_draws{},subtitle_layouts{},subtitle_font_uploads{};
+    std::uint64_t subtitle_font_revision{};
     void draw_subtitles(int width,int height,const std::array<int,4>& destination);
     GLuint vertex_buffer{},index_buffer{};
     MOJOSHADER_glShader* default_vertex{};
@@ -974,9 +975,12 @@ void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
     if(!cue){subtitle_cue=nullptr;return;}
     const auto projection=wa2::graphics::subtitle_projection(w,h,destination);
     if(!projection)return;
-    const auto font=wa2::subtitles::font_spec();
+    const auto font=subtitles->font();
+    if(subtitle_font_revision!=subtitles->font_revision()){
+        if(subtitle_texture)gl.DeleteTextures(1,&subtitle_texture);subtitle_texture=0;subtitle_cue=nullptr;subtitle_font_revision=subtitles->font_revision();
+    }
     if(!subtitle_texture){
-        auto pixels=wa2::subtitles::decode_font(wa2::subtitles::font_coverage(),font,wa2::subtitles::characters().size());
+        auto pixels=subtitles->font_image();
         if(pixels.width>U32(max_texture) || pixels.height>U32(max_texture))stop("subtitle atlas exceeds texture dimensions");
         gl.GenTextures(1,&subtitle_texture);gl.ActiveTexture(GL_TEXTURE0);gl.BindTexture(GL_TEXTURE_2D,subtitle_texture);
         gl.PixelStorei(GL_UNPACK_ALIGNMENT,1);gl.PixelStorei(GL_UNPACK_ROW_LENGTH,0);
@@ -992,7 +996,7 @@ void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
     }
     const std::array<int,6> bounds{w,h,destination[0],destination[1],destination[2],destination[3]};
     if(cue!=subtitle_cue || bounds!=subtitle_bounds){
-        const auto quads=wa2::subtitles::layout(*cue,font,wa2::subtitles::characters().size());
+        const auto quads=wa2::subtitles::layout(*cue,font,subtitles->glyph_count());
         subtitle_vertices.clear();subtitle_vertices.reserve(quads.size()*6);
         const auto vertex=[&](float x,float y,float u,float v){
             DecodedVertex out;out.pos=projection->position(x,y);out.uv[0]={u,v,0,1};return out;
@@ -1050,7 +1054,7 @@ U32 Graphics::present(Args a,bool force){
     if(p.state().stop_after_presents && presents>=p.state().stop_after_presents){p.state().diagnostic_stop=true;p.exit(0);}return 0;
 }
 void Graphics::install(){
-    p.state().reports["main_story_subtitles"]=[this]{return std::string("{\"enabled\":")+(subtitles && subtitles->enabled()?"true":"false")+",\"tracks\":46,\"cues\":315,\"special_contents_included\":false,\"draws\":"+
+    p.state().reports["main_story_subtitles"]=[this]{std::size_t cues{};if(subtitles)for(const auto& track:subtitles->tracks())cues+=track.cues.size();return std::string("{\"enabled\":")+(subtitles && subtitles->enabled()?"true":"false")+",\"external\":"+(subtitles && subtitles->font_revision()?"true":"false")+",\"tracks\":"+std::to_string(subtitles?subtitles->tracks().size():0)+",\"cues\":"+std::to_string(cues)+",\"special_contents_included\":false,\"draws\":"+
         std::to_string(subtitle_draws)+",\"layouts\":"+std::to_string(subtitle_layouts)+",\"font_uploads\":"+std::to_string(subtitle_font_uploads)+"}";};
     sprite_service.emplace(p.memory,[](const wa2::aot::SpriteCommand& command,void* owner){return static_cast<Graphics*>(owner)->sprite_command(command);},this);
     // Bind implementations before load so their leaf contracts belong to

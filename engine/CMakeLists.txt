@@ -6,6 +6,7 @@ add_library(wa2_engine STATIC pcm_audio.cpp pcm_stream.cpp resource_archive.cpp 
 target_sources(wa2_engine PRIVATE audio_resources.cpp)
 target_sources(wa2_engine PRIVATE image_chroma.cpp)
 target_sources(wa2_engine PRIVATE language_resources.cpp)
+target_sources(wa2_engine PRIVATE external_subtitles.cpp)
 target_compile_features(wa2_engine PUBLIC cxx_std_20)
 target_include_directories(wa2_engine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 add_library(wa2_pixel_transfer STATIC pixel_transfer.cpp)

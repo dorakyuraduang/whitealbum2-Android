@@ -13,6 +13,11 @@ Windows 使用同一实现，参数为 `--no-chinese-subtitles`。
 选项保存在安卓所选游戏目录，下次启动生效；关闭后不做字幕参数读取、
 字幕选择或字图上传。语言资源切换见 [LANGUAGE_RESOURCES.md](LANGUAGE_RESOURCES.md)。
 
+`0.2.59` 起还可选择玩家自己的 `sub.yaml`；默认仍用这里描述的内置数据。
+同一个字幕开关控制所选来源。外置格式严格校验，外置整份替换内置轨道，
+新字符通过离屏字体适配器生成字图后使用同一绘制路径。
+参见 [EXTERNAL_SUBTITLES.md](EXTERNAL_SUBTITLES.md)。
+
 整个 `SpecialContents` 字幕集都没有导入、编译或打包。根目录正篇字幕中的
 `scene=9500` 是原游戏人物采访的编号，仍按该文件的内容保留；不会加入
 Special Contents 的广播剧、附加歌曲等数据。

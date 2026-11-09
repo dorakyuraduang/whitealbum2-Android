@@ -34,7 +34,7 @@ std::uint32_t run(Startup startup){
     wr::ProcessBackends backends;
     backends.gui=[host=startup.window](wr::Process& p){return window::install(p,host);};
     backends.directdraw=[host=startup.window](wr::Process& p){return platform::compat::install_legacy_display(p,host);};
-    aot::Runtime runtime(std::move(startup.options),std::move(backends),startup.window,startup.language.chinese_subtitles);
+    aot::Runtime runtime(std::move(startup.options),std::move(backends),startup.window,startup.language.chinese_subtitles,std::move(startup.captions));
     auto& process=runtime.process();
     process.state().reports["host_event_pump"]=[host=startup.window]{return host->event_pump_report();};
     const auto report=[&](std::string_view error){

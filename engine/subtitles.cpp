@@ -1,4 +1,5 @@
 #include "subtitles.hpp"
+#include "external_subtitles.hpp"
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -67,7 +68,7 @@ std::vector<GlyphQuad> layout(const Cue& cue,FontSpec spec,std::size_t glyphs){
 bool Playback::play(std::uint32_t key,Kind kind,std::uint32_t slot,std::uint64_t now,bool replace){
     if(!enabled_)return false;
     (void)current(now);
-    const auto* next=find_track(key);
+    const auto* next=catalogue_?catalogue_->find(key):find_track(key);
     if(!next || (track_ && !replace))return false;
     if((key<65536)!=(kind==Kind::effect))return false;
     track_=next;kind_=kind;slot_=slot;started_=now;++generation_;return true;
@@ -75,6 +76,11 @@ bool Playback::play(std::uint32_t key,Kind kind,std::uint32_t slot,std::uint64_t
 void Playback::stop(Kind kind,std::uint32_t slot) noexcept {
     if(track_ && kind_==kind && slot_==slot)reset();
 }
+void Playback::catalogue(std::shared_ptr<const Catalogue> value){if(value==catalogue_)return;reset();catalogue_=std::move(value);++font_revision_;}
+FontSpec Playback::font()const noexcept{return catalogue_?catalogue_->font():font_spec();}
+std::size_t Playback::glyph_count()const noexcept{return catalogue_?catalogue_->glyph_count():characters().size();}
+FontImage Playback::font_image()const{if(catalogue_)if(const auto* image=catalogue_->atlas())return *image;return decode_font(font_coverage(),font_spec(),characters().size());}
+std::span<const Track> Playback::tracks()const noexcept{return catalogue_?catalogue_->tracks():main_story_tracks();}
 const Cue* Playback::current(std::uint64_t now) noexcept {
     if(!enabled_ || !track_)return nullptr;
     const auto elapsed=now>=started_?now-started_:0;

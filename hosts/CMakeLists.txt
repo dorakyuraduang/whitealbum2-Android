@@ -24,12 +24,13 @@ if(ANDROID)
         "${WA2_ROOT}/android/native/compiled_save_files.cpp"
         "${WA2_ROOT}/android/native/frame_metrics.cpp"
         "${WA2_ROOT}/android/native/frame_hud_jni.cpp"
+        "${WA2_ROOT}/android/native/subtitles_android.cpp"
         "${WA2_ROOT}/android/native/frame_metrics_jni.cpp")
     target_include_directories(wa2_android PRIVATE "${WA2_ROOT}/android/native" "${WA2_ROOT}/engine" "${WA2_ROOT}/platform")
     target_link_libraries(wa2_android PRIVATE wa2_shared_startup log android)
     target_link_options(wa2_android PRIVATE "-Wl,--no-undefined" "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
 else()
-    add_executable(wa2_native WIN32 windows_main.cpp)
+    add_executable(wa2_native WIN32 windows_main.cpp "${WA2_ROOT}/platform/subtitle_font_windows.cpp")
     if(WIN32)
         configure_file(app.rc.in "${CMAKE_CURRENT_BINARY_DIR}/app.rc" @ONLY)
         set(WA2_ICON_RESOURCE "${CMAKE_CURRENT_BINARY_DIR}/app.res")
@@ -40,6 +41,6 @@ else()
         set_source_files_properties("${WA2_ICON_RESOURCE}" PROPERTIES GENERATED TRUE EXTERNAL_OBJECT TRUE)
         target_sources(wa2_native PRIVATE "${WA2_ICON_RESOURCE}")
     endif()
-    target_link_libraries(wa2_native PRIVATE wa2_shared_startup)
+    target_link_libraries(wa2_native PRIVATE wa2_shared_startup gdi32)
     set_target_properties(wa2_native PROPERTIES OUTPUT_NAME WA2_SDL2_x64)
 endif()

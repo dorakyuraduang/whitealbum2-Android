@@ -4,9 +4,9 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.58-shared-aot**. Use the
+is **0.2.59-shared-aot**. Use the
 standard `out/android/WA2-arm64-dev.apk` for the retained AOT application, or
-`out/android/WA2-0.2.58-shared-aot-replace-native.apk` to update the experimental
+`out/android/WA2-0.2.59-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
@@ -114,6 +114,14 @@ bound; all old toggle values survive the version-1 record migration. This does
 not implement arbitrary Unicode scripts or TTF/OTF rendering. See
 [language resource settings](LANGUAGE_RESOURCES.md) for supported formats,
 patch precedence and Windows options.
+
+0.2.59 adds a document picker for an external UTF-8 `sub.yaml`, with embedded
+captions still the default. Selection and startup use the same strict C++ parser
+to check fields, IDs, interval ordering, text and file bounds. Invalid selections
+retain the previous choice. New characters use off-screen system font masks and
+the common native atlas/layout; no screen read or per-frame Java overlay is
+involved. v1/v2 launcher records retain their values with the embedded source.
+See [external subtitles](EXTERNAL_SUBTITLES.md) for the format and font limits.
 
 The separate native migration development package now saves game data in the
 currently selected game folder: root `Sys.sav`, `native-settings.wa2cfg` and

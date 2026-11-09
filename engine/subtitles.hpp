@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <span>
 #include <vector>
+#include <memory>
 
 namespace wa2::subtitles {
 struct Cue {
@@ -25,13 +26,22 @@ struct GlyphQuad {float left{},top{},right{},bottom{},u0{},v0{},u1{},v1{};};
 // canvas to the visible game viewport, independently of backbuffer allocation.
 std::vector<GlyphQuad> layout(const Cue&,FontSpec,std::size_t glyphs);
 enum class Kind {effect,voice};
+class Catalogue;
 class Playback {
     bool enabled_{true};
     const Track* track_{};
     Kind kind_{};
     std::uint32_t slot_{};
     std::uint64_t started_{},generation_{};
+    std::shared_ptr<const Catalogue> catalogue_;
+    std::uint64_t font_revision_{};
 public:
+    void catalogue(std::shared_ptr<const Catalogue>);
+    std::uint64_t font_revision()const noexcept{return font_revision_;}
+    FontSpec font()const noexcept;
+    std::size_t glyph_count()const noexcept;
+    FontImage font_image()const;
+    std::span<const Track> tracks()const noexcept;
     bool enabled()const noexcept{return enabled_;}
     void enabled(bool value)noexcept{if(enabled_==value)return;enabled_=value;reset();}
     bool play(std::uint32_t key,Kind,std::uint32_t slot,std::uint64_t now,bool replace=false);

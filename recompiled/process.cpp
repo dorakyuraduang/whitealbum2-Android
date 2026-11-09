@@ -26,7 +26,7 @@
 #include <sstream>
 namespace wr {void install_wa2_exceptions(Process&);}
 namespace wa2::aot {
-Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> graphics,bool chinese_subtitles):
+Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> graphics,bool chinese_subtitles,std::shared_ptr<const subtitles::Catalogue> captions):
     process_(wr::FunctionExecutor{[this,samples=std::make_shared<FunctionWorkSamples>(functions()),subtitle_player=std::shared_ptr<subtitles::Playback>{}](Context& context,wr::Memory& memory) mutable {
         if(!program_){program_=std::make_unique<Program>(memory);process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};}
         // Resolve once, then use the captured owner directly at all subsequent
@@ -44,6 +44,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     }},std::move(options),std::move(backends)){
     auto subtitle_player=bind_source_subtitles(process_.memory);
     subtitle_player->enabled(chinese_subtitles);
+    subtitle_player->catalogue(std::move(captions));
     process_.state().shutdown.push_back([subtitle_player,memory=&process_.memory]{unbind_source_subtitles(*memory,subtitle_player.get());subtitle_player->reset();});
     wr::install_wa2_native_resources(process_,true);
     // Cached image copies can run chroma work without a new archive access.

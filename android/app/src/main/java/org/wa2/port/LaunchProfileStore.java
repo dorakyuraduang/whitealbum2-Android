@@ -19,6 +19,7 @@ final class LaunchProfileStore {
         return update(current.with(flag,value));
     }
     synchronized boolean setArchive(boolean font,String name) { return update(current.withArchive(font,name)); }
+    synchronized boolean setSubtitle(String uri) {return update(current.withSubtitle(uri));}
     private boolean update(LaunchProfile next) {if(next.equals(current))return false;current=next;dirty=true;++revision;return true;}
     void flush() throws IOException {
         final LaunchProfile profile;final long version;

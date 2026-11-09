@@ -2,6 +2,7 @@
 #include "functions.hpp"
 #include <winrecomp/process.hpp>
 namespace wa2::graphics {class SurfaceHost;}
+namespace wa2::subtitles {class Catalogue;}
 namespace wa2::aot {
 wr::Image initial_image();
 // The entry used by ALL native hosts. Platform shells supply device/window
@@ -11,7 +12,8 @@ class Runtime {
     wr::Process process_;
 public:
     explicit Runtime(wr::ProcessOptions options={},wr::ProcessBackends backends={},
-                     std::shared_ptr<graphics::SurfaceHost> graphics={},bool chinese_subtitles=true);
+                     std::shared_ptr<graphics::SurfaceHost> graphics={},bool chinese_subtitles=true,
+                     std::shared_ptr<const subtitles::Catalogue> captions={});
     wr::Process& process() noexcept{return process_;}
     void load(){process_.load(initial_image());}
     void load(const wr::Image& image){process_.load(image);}

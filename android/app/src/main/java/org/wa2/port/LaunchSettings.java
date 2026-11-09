@@ -47,6 +47,7 @@ final class LaunchSettings {
     static boolean chineseSubtitles(Context context) { return profile(context).enabled(LaunchProfile.CHINESE_SUBTITLES); }
     static String script(Context context) { return profile(context).script; }
     static String font(Context context) { return profile(context).font; }
+    static String subtitle(Context context) {return profile(context).subtitle;}
     static String[] gameArguments(Context context) { return profile(context).gameArguments(); }
     static boolean saving(Context context) {LaunchProfileStore current=store(context);return current!=null && current.dirty();}
     // Called after read/write authorization on a launcher worker. Queueing on
@@ -87,5 +88,10 @@ final class LaunchSettings {
         final LaunchProfileStore store=store(context);if(store==null){completed.accept("请先选择并检查游戏文件夹。");return;}
         if(!store.setArchive(font,name)){completed.accept(null);return;}
         IO.execute(() -> {String problem=null;try{store.flush();}catch(IOException | RuntimeException error){problem=error.getMessage();if(problem==null)problem="无法保存语言资源选择";}completed.accept(problem);});
+    }
+    static void setSubtitle(Context context,String uri,Consumer<String> completed) {
+        final LaunchProfileStore store=store(context);if(store==null){completed.accept("请先选择并检查游戏文件夹。");return;}
+        if(!store.setSubtitle(uri)){completed.accept(null);return;}
+        IO.execute(() -> {String problem=null;try{store.flush();}catch(IOException | RuntimeException error){problem=error.getMessage();if(problem==null)problem="无法保存字幕文件选择";}completed.accept(problem);});
     }
 }

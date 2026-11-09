@@ -4,6 +4,7 @@
 #include <winrecomp/readonly_files.hpp>
 #include "../../platform/compat/io_diagnostics.hpp"
 #include "../../engine/language_resources.hpp"
+#include "../../engine/external_subtitles.hpp"
 namespace wa2::host {
 struct Startup {
     wr::ProcessOptions options;
@@ -14,6 +15,7 @@ struct Startup {
     platform::compat::IoDiagnosticSink io_diagnostic_sink;
     bool test_mode{};
     resource::LanguageResources language;
+    std::shared_ptr<const subtitles::Catalogue> captions;
 };
 // This is the only game startup/run path. Platform entry files select device
 // adapters and resource access, then enter the same preserved source program.
