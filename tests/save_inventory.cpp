@@ -13,11 +13,12 @@ using wr::U32;namespace c=wa2::platform::compat;
 class Counted final:public wr::MutableFiles {
     std::shared_ptr<wr::MutableFiles> files_;
 public:
-    unsigned queries{},lists{},opens{};bool fail_listing{};
-    explicit Counted(std::shared_ptr<wr::MutableFiles> files):files_(std::move(files)){}
-    std::optional<wr::ReadOnlyFileInfo> info(std::string_view name)override{++queries;return files_->info(name);}
+    unsigned queries{},lists{},opens{},prepared_reads{};bool fail_listing{},references{};
+    explicit Counted(std::shared_ptr<wr::MutableFiles> files,bool refs):files_(std::move(files)),references(refs){}
+    void resolved(wr::ReadOnlyFileInfo& info,std::string name){if(references && !(info.attributes&16))info.open_read=[this,name=std::move(name)](U32& error){++prepared_reads;return open(name,true,false,3,error);};}
+    std::optional<wr::ReadOnlyFileInfo> info(std::string_view name)override{++queries;auto item=files_->info(name);if(item)resolved(*item,std::string(name));return item;}
     std::string identity(std::string_view name)override{return files_->identity(name);}
-    std::vector<wr::ReadOnlyFileInfo> list(std::string_view name)override{++lists;if(fail_listing)throw std::runtime_error("Synthetic provider cannot list siblings");return files_->list(name);}
+    std::vector<wr::ReadOnlyFileInfo> list(std::string_view name)override{++lists;if(fail_listing)throw std::runtime_error("Synthetic provider cannot list siblings");auto items=files_->list(name);for(auto& item:items)resolved(item,name.empty()?item.name:std::string(name)+"/"+item.name);return items;}
     std::FILE* open(std::string_view name,bool read,bool write,U32 mode,U32& error)override{++opens;return files_->open(name,read,write,mode,error);}
     U32 directory(std::string_view name)override{return files_->directory(name);}
     U32 remove(std::string_view name,bool directory)override{return files_->remove(name,directory);}
@@ -29,12 +30,12 @@ void write(const std::filesystem::path& path,unsigned byte){
     std::vector<std::uint8_t> data(0x10058,std::uint8_t(byte));std::ofstream file(path,std::ios::binary|std::ios::trunc);file.write(reinterpret_cast<const char*>(data.data()),data.size());CHECK(file.good());
 }
 struct Result {unsigned queries{},lists{},opens{},readers{},guards{};};
-Result exercise(const std::filesystem::path& root,bool linear,bool scoped){
-    const auto selected=root/(std::string(linear?"linear-":"paged-")+(scoped?"scoped":"baseline"));CHECK(std::filesystem::create_directory(selected));
+Result exercise(const std::filesystem::path& root,bool linear,bool scoped,bool references){
+    const auto selected=root/(std::string(linear?"linear-":"paged-")+(scoped?"scoped":"baseline")+(references?"-references":"-paths"));CHECK(std::filesystem::create_directory(selected));
     write(selected/"save_00.sav",1);write(selected/"save_09.sav",9);
     wr::ProcessOptions options;options.prefer_linear_memory=linear;options.allow_file_write=true;options.data_root=selected/"private";CHECK(std::filesystem::create_directory(options.data_root));
     wa2::aot::Runtime runtime(options);auto& p=runtime.process();auto& m=p.memory;
-    auto backend=std::make_shared<Counted>(c::local_files(selected));
+    auto backend=std::make_shared<Counted>(c::local_files(selected),references);
     p.state().mutable_files=c::save_files(backend,false,scoped?wa2::aot::traced_save_read_scope(p):c::SaveReadScope{});
     runtime.load();CHECK(!p.gui() && !p.directdraw());
     const std::string prefix="C:\\WinRecomp";m.copy_in(0xa39d28,{reinterpret_cast<const std::uint8_t*>(prefix.c_str()),prefix.size()+1});
@@ -49,6 +50,7 @@ Result exercise(const std::filesystem::path& root,bool linear,bool scoped){
     result.queries=backend->queries;result.lists=backend->lists;result.opens=backend->opens;
     const auto io=p.state().reports.at("file_io")();CHECK(io.find("\"read_calls\":2,")!=std::string::npos && io.find("\"read_bytes\":131248,")!=std::string::npos);
     CHECK(result.opens==2);
+    CHECK(backend->prepared_reads==(references?2u:0u));
     if(!scoped){CHECK(result.queries==198 && result.lists==0);return result;}
     CHECK(result.queries==0 && result.lists==1);
     // Payloads are never cached, even during the same inventory update.
@@ -71,7 +73,7 @@ Result exercise(const std::filesystem::path& root,bool linear,bool scoped){
     CHECK(p.callback(p.resolve("kernel32.dll","CloseHandle"),std::array<U32,1>{fresh})==1);++result.guards;
     m.store(0xa39208,7,32);p.state().current_thread_id=2;const auto worker_queries=backend->queries;reader(3,true,33);CHECK(backend->queries>worker_queries);p.state().current_thread_id=1;++result.guards;
     // An open writer disables the shared inventory until its handle closes.
-    const auto name=p.put_string("save_09.sav");const auto handle=p.callback(p.resolve("kernel32.dll","CreateFileA"),std::array<U32,7>{name,0xc0000000,7,0,3,128,0});CHECK(handle!=0xffffffff);
+    const auto name=p.put_string("save_09.sav"),before_writer=backend->prepared_reads;const auto handle=p.callback(p.resolve("kernel32.dll","CreateFileA"),std::array<U32,7>{name,0xc0000000,7,0,3,128,0});CHECK(handle!=0xffffffff && backend->prepared_reads==before_writer);
     const auto writer_queries=backend->queries;reader(3,true,33);CHECK(backend->queries>writer_queries);
     CHECK(p.callback(p.resolve("kernel32.dll","CloseHandle"),std::array<U32,1>{handle})==1);++result.guards;
     // A stalled or reused source counter cannot keep an inventory forever.
@@ -84,9 +86,9 @@ Result exercise(const std::filesystem::path& root,bool linear,bool scoped){
 }
 int main(int argc,char** argv){try{
     CHECK(argc==2);const auto root=std::filesystem::path(argv[1]).parent_path()/("save-inventory-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(std::filesystem::create_directory(root));
-    unsigned readers{},guards{};for(bool linear:{false,true}){const auto baseline=exercise(root,linear,false),scoped=exercise(root,linear,true);readers+=baseline.readers+scoped.readers;guards+=scoped.guards;}
+    unsigned readers{},guards{};for(bool linear:{false,true})for(bool references:{false,true}){const auto baseline=exercise(root,linear,false,references),scoped=exercise(root,linear,true,references);readers+=baseline.readers+scoped.readers;guards+=scoped.guards;}
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.save-inventory.v1\",\"actual_static_reader_calls\":"<<readers<<",\"guard_cases\":"<<guards
         <<",\"slots_per_fixture\":100,\"present_slots\":2,\"baseline_metadata_queries_per_fixture\":198,\"scoped_metadata_queries_per_fixture\":0,\"scoped_directory_lists_per_fixture\":1,\"descriptor_opens_per_fixture\":2"
-          ",\"same_static_save_reader\":true,\"title_reader_batch\":true,\"scope_audit_checked\":true,\"payload_reads_fresh\":true,\"write_invalidation\":true,\"source_frame_invalidation\":true,\"ordinary_and_worker_reads_fresh\":true,\"inventory_lifetime_bounded\":true,\"original_saves_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
+          ",\"same_static_save_reader\":true,\"prepared_reads_checked\":true,\"writers_bypass_read_reference\":true,\"title_reader_batch\":true,\"scope_audit_checked\":true,\"payload_reads_fresh\":true,\"write_invalidation\":true,\"source_frame_invalidation\":true,\"ordinary_and_worker_reads_fresh\":true,\"inventory_lifetime_bounded\":true,\"original_saves_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS unchanged static save reader: per-slot metadata lookup replaced by one inventory for 100 own-fixture slots; guards and fresh payload reads.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

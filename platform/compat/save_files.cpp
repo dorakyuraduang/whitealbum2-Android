@@ -37,7 +37,7 @@ class Saves final:public wr::MutableFiles {
         std::optional<std::uint64_t> key;std::chrono::steady_clock::time_point expires;
         std::optional<std::uint64_t> declined_key;std::chrono::steady_clock::time_point declined_until;
         std::map<std::string,Info> root,legacy;bool legacy_loaded{},have_documents{};
-        std::uint64_t revision{},builds{},hits{},declines{},info_calls{},list_calls{},open_calls{},info_ns{},list_ns{},open_ns{};
+        std::uint64_t revision{},builds{},hits{},declines{},info_calls{},list_calls{},open_calls{},prepared_reads{},info_ns{},list_ns{},open_ns{};
         void invalidate(){key.reset();declined_key.reset();}
         struct Mutation {
             Inventory& value;
@@ -114,16 +114,21 @@ public:
     }
     std::FILE* open(std::string_view value,bool read,bool write,U32 creation,U32& error)override{
         std::optional<Inventory::Mutation> mutation;if(write || creation!=3)mutation.emplace(*inventory_);
-        const auto path=mapped(value);if(!path){error=5;return nullptr;}const auto resolved=(creation==3 || creation==4 || creation==5)?existing(*path):physical(*path);
-        Inventory::Timer timer(inventory_->open_calls,inventory_->open_ns);return files_->open(resolved,read,write,creation,error);
+        const auto path=mapped(value);if(!path){error=5;return nullptr;}
+        auto [resolved,info]=(creation==3 || creation==4 || creation==5)?locate(*path):std::pair<std::string,std::optional<Info>>{physical(*path),{}};
+        Inventory::Timer timer(inventory_->open_calls,inventory_->open_ns);
+        if(read && !write && creation==3 && info && info->open_read){++inventory_->prepared_reads;return info->open_read(error);}
+        return files_->open(resolved,read,write,creation,error);
     }
     OpenPlan prepare_open(std::string_view value)override{
         const auto name=mapped(value);
         if(!name)return {{},physical(fold(value)),[](bool,bool,U32,U32& error)->std::FILE*{error=5;return nullptr;}};
         auto [found,info]=locate(*name);
-        return {std::move(info),found,[files=files_,cache=inventory_,existing=found,primary=physical(*name)](bool read,bool write,U32 creation,U32& error){
+        auto resolved_read=info?info->open_read:decltype(Info::open_read){};
+        return {std::move(info),found,[files=files_,cache=inventory_,existing=found,primary=physical(*name),resolved_read=std::move(resolved_read)](bool read,bool write,U32 creation,U32& error){
             std::optional<Inventory::Mutation> mutation;if(write || creation!=3)mutation.emplace(*cache);
             Inventory::Timer timer(cache->open_calls,cache->open_ns);
+            if(read && !write && creation==3 && resolved_read){++cache->prepared_reads;return resolved_read(error);}
             return files->open((creation==3 || creation==4 || creation==5)?existing:primary,read,write,creation,error);
         }};
     }
@@ -134,7 +139,7 @@ public:
     void replace(std::string_view value,std::span<const std::uint8_t> bytes)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);if(!path || bytes.size()>64u*1024*1024)throw std::runtime_error("Unsupported selected-directory save/configuration path: "+std::string(value));files_->replace(physical(*path),bytes);}
     std::uint64_t revision()const{return inventory_->revision;}
     std::string report()const{const auto& c=*inventory_;std::ostringstream out;
-        out<<"{\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
+        out<<"{\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
 };
 class Local final:public wr::MutableFiles {
     std::filesystem::path root_;

@@ -13,9 +13,9 @@ using wr::U32;namespace c=wa2::platform::compat;
 class Counted final:public wr::MutableFiles {
     std::shared_ptr<wr::MutableFiles> files_;
 public:
-    unsigned queries{},opens{};bool fail_open{};
+    unsigned queries{},opens{},prepared_reads{};bool fail_open{};
     explicit Counted(std::shared_ptr<wr::MutableFiles> files):files_(std::move(files)){}
-    std::optional<wr::ReadOnlyFileInfo> info(std::string_view name)override{++queries;return files_->info(name);}
+    std::optional<wr::ReadOnlyFileInfo> info(std::string_view name)override{++queries;auto item=files_->info(name);if(item && !(item->attributes&16))item->open_read=[this,path=std::string(name)](U32& error){++prepared_reads;return open(path,true,false,3,error);};return item;}
     std::vector<wr::ReadOnlyFileInfo> list(std::string_view name)override{return files_->list(name);}
     std::FILE* open(std::string_view name,bool r,bool w,U32 mode,U32& error)override{++opens;if(fail_open){error=5;return nullptr;}return files_->open(name,r,w,mode,error);}
     U32 directory(std::string_view name)override{return files_->directory(name);}
@@ -37,6 +37,7 @@ unsigned exercise(const std::filesystem::path& parent,bool linear,bool cached,un
     const auto getter=[&](U32 key,U32 fallback,U32 name){++calls;return p.callback(0x44d4e0,std::array<U32,4>{key,fallback,section,name},false);};
     for(unsigned n=0;n<100;++n)CHECK(getter(p.put_string("k"+std::to_string(n)),999,file)==n*3);
     CHECK(backend->opens==(cached?1u:100u) && backend->queries==(cached?1u:100u));
+    CHECK(backend->prepared_reads==backend->opens);
     if(!cached)return 0;
     unsigned guards{};
     const auto missing=p.put_string("default.ini");backend->opens=0;

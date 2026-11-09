@@ -102,7 +102,7 @@ def main():
         inventory=reports['save_inventory']
         profiles=reports['profile_batch']
         if profiles['static_profile_getter_calls']<400 or profiles['batched_descriptor_opens']!=1 or not all(profiles[key] for key in ('same_static_getter','writes_immediate','flush_and_revision_invalidation','frame_and_age_bounded','ordinary_and_worker_reads_fresh','namespace_isolation','failed_read_retry')):raise ValueError('Incomplete external profile read batch checks')
-        if inventory['actual_static_reader_calls']<400 or inventory['scoped_directory_lists_per_fixture']!=1 or not all(inventory[key] for key in ('same_static_save_reader','title_reader_batch','scope_audit_checked','payload_reads_fresh','write_invalidation','source_frame_invalidation','ordinary_and_worker_reads_fresh','inventory_lifetime_bounded')):raise ValueError('Incomplete source save inventory checks')
+        if inventory['actual_static_reader_calls']<800 or inventory['scoped_directory_lists_per_fixture']!=1 or not all(inventory[key] for key in ('same_static_save_reader','prepared_reads_checked','writers_bypass_read_reference','title_reader_batch','scope_audit_checked','payload_reads_fresh','write_invalidation','source_frame_invalidation','ordinary_and_worker_reads_fresh','inventory_lifetime_bounded')):raise ValueError('Incomplete source save inventory checks')
         if not all(saves[key] for key in ('single_lookup_open_plan','next_operation_sees_external_edits','sharing_checked_before_truncation')) or saves['fixture_root_opens']!=saves['fixture_root_metadata_queries']:raise ValueError('Repeated or stale save-open metadata queries')
         skip=reports['fast_forward']
         if skip['static_predicate_comparisons']<7000 or not all(skip[key] for key in ('unchanged_static_predicate','unread_policy_preserved','worker_and_object_waits_preserved','game_clock_unscaled','source_sync_restored','presentation_only_coalescing')):raise ValueError('Incomplete fast-forward scheduling checks')
@@ -121,7 +121,7 @@ def main():
         symbols=output([llvm/'llvm-nm.exe','--defined-only','--demangle',actual])
         if re.search(r'Zydis|shared_aot_oracle|wr_x87_|wr_sse_|wa2::game::|wa2::script::|wa2::aot::f_[0-9a-f]+<true>',symbols):raise ValueError('Decoder, diagnostic or separate native game leaked into the AOT application')
         data=actual.read_bytes()
-        expected={'compatibleOpen':'(Ljava/lang/String;III)I','compatibleMetadata':'(Ljava/lang/String;IZ)[Ljava/lang/String;','compatibleOperation':'(Ljava/lang/String;Ljava/lang/String;III)I','compatibleReplace':'(Ljava/lang/String;ILjava/nio/ByteBuffer;)V'}
+        expected={'compatibleOpen':'(Ljava/lang/String;III)I','compatibleReadMetadata':'(Ljava/lang/String;IZ)[Ljava/lang/String;','compatibleReadOpen':'(Ljava/lang/String;Ljava/lang/String;I)I','compatibleOperation':'(Ljava/lang/String;Ljava/lang/String;III)I','compatibleReplace':'(Ljava/lang/String;ILjava/nio/ByteBuffer;)V'}
         declarations=output([ROOT/'tools/source-analysis/jdk-21.0.12.1+1/bin/javap.exe','-p','-s',Path(ui['source_sets']['shared-aot']['classes_directory'])/'org/wa2/port/ResourceDirectory.class'])
         for name,signature in expected.items():
             if not re.search(r'\b'+name+r'\([^;]*;\s*descriptor:\s*'+re.escape(signature),declarations) or name.encode()+b'\0' not in data or signature.encode()+b'\0' not in data:raise ValueError('Actual selected-directory Java/JNI signature mismatch: '+name)

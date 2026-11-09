@@ -46,6 +46,13 @@ recovers interrupted publication on reads; the probe first rejects pending
 publication sidecars in the root and legacy main-save path so it does not need
 to recover them. There must be no concurrent game or external file writer.
 
+From 0.2.53, `measure` also opens the same settled file address repeatedly through
+the read-only prepared path, after one metadata request. Every iteration owns
+a new descriptor and compares its bytes with the ordinary read. Invalid scheme
+and tree references must fail before file access. This isolates redundant
+directory resolution; it is not a whole-load speed comparison or a replacement
+for the common core's frame/age/mutation snapshot guards.
+
 `native` uses its own newly built common core, not the installed core. It calls
 the unchanged static INI wrapper and the unchanged save-header reader, with
 and without the batch policies. `count` defaults to 10 and is bounded to 100;

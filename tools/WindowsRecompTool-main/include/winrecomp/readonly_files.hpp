@@ -11,6 +11,11 @@
 namespace wr {
 struct ReadOnlyFileInfo {
     std::string name;std::uint64_t size{},modified_100ns{};std::uint32_t attributes{0x21};
+    // Optional already-resolved address. Each invocation opens a NEW read-only
+    // stream; it never retains file contents or a descriptor. Mutable mounts
+    // may attach this to operation/update-scoped metadata to avoid resolving
+    // the same document path twice. Writers must use the normal open path.
+    std::function<std::FILE*(std::uint32_t& error)> open_read;
 };
 // Logical resource filenames are independent of the host's filesystem path.
 // open() transfers one ordinary seekable FILE ownership to its caller. The

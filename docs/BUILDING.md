@@ -26,6 +26,10 @@ ordinary/worker reads, writer exclusion and providers that cannot list siblings.
 The profile-batch check calls the unchanged static INI wrapper 624 times across
 both memory modes: 100 keys use one file open, with immediate writes and
 frame/age, flush, namespace, thread and failed-read guards.
+The save-inventory check now runs 868 static reads with ordinary and prepared
+read openers in both memory modes. It verifies fresh payloads, writer bypass
+and metadata invalidation. The Android bridge audits the new five-field read
+metadata and resolved-read JNI methods alongside ordinary mutable operations.
 It explicitly does not claim the deleted historical oracle/performance suite
 ran. Modified static bodies or math sources require their independent checks.
 
@@ -45,8 +49,8 @@ results as freshly executed checks. Matching cached math source provenance is
 recorded separately from the newly executed file and host tests.
 
 The packager publishes the ordinary AOT application and an identical-code
-`WA2-0.2.52-shared-aot-replace-native.apk` with the experimental native app's
-installation ID. Version code 54 and the retained development key allow an
+`WA2-0.2.53-shared-aot-replace-native.apk` with the experimental native app's
+installation ID. Version code 55 and the retained development key allow an
 in-place update from native version code 4. The audit compares DEX/native bytes,
 checks both installation identities, versions, signatures and resource-table
 alignment. LGPL relink materials apply to both since their native libraries

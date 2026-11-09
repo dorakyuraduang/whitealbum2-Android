@@ -334,6 +334,12 @@ final class ResourceDirectory {
     public static String[] compatibleMetadata(String name,int token,boolean list) throws IOException {
         GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleMetadata(name,list);}
     }
+    public static String[] compatibleReadMetadata(String name,int token,boolean list) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleReadMetadata(name,list);}
+    }
+    public static int compatibleReadOpen(String name,String reference,int token) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleReadOpen(name,reference);}
+    }
     public static int compatibleOperation(String name,String target,int token,int operation,int flags) throws IOException {
         GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleOperation(name,target,operation,flags);}
     }

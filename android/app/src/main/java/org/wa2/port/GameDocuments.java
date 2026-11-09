@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import java.io.IOException;
+import java.io.FileNotFoundException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
@@ -126,6 +127,31 @@ final class GameDocuments {
         try(ParcelFileDescriptor fd=resolver.openFileDescriptor(file.uri,mode)){if(fd==null)throw new IOException("Cannot open selected game file");return fd.detachFd();}
     }
     synchronized String[] compatibleMetadata(String path,boolean list) throws IOException {
+        return metadataRecords(path,list,false);
+    }
+    synchronized String[] compatibleReadMetadata(String path,boolean list) throws IOException {
+        return metadataRecords(path,list,true);
+    }
+    // The reference came from this selected tree's settled publication. Only
+    // a fresh read-only descriptor is opened; writes and creates never use it.
+    synchronized int compatibleReadOpen(String path,String reference) throws IOException {
+        directories.clear();CompatibleStoragePath.parts(path,false);
+        if(reference==null || reference.length()>4096)throw new IOException("Invalid game-file read reference");
+        Uri uri=Uri.parse(reference);
+        try{
+            if(!"content".equals(uri.getScheme()) || !tree.getAuthority().equals(uri.getAuthority()) ||
+                !DocumentsContract.isTreeUri(uri) || !DocumentsContract.getTreeDocumentId(tree).equals(DocumentsContract.getTreeDocumentId(uri)))
+                throw new IOException("Game-file read reference belongs to a different directory");
+        }catch(IllegalArgumentException error){throw new IOException("Invalid game-file read reference",error);}
+        try(ParcelFileDescriptor fd=resolver.openFileDescriptor(uri,"r")){
+            if(fd==null)throw new IOException("Cannot open resolved game file");return fd.detachFd();
+        }catch(FileNotFoundException changed){
+            // An external atomic replacement can retire an opaque document ID.
+            // Resolve the current name rather than reusing a stale object.
+            return compatibleOpen(path,1,3);
+        }
+    }
+    private String[] metadataRecords(String path,boolean list,boolean reference) throws IOException {
         directories.clear();
         CompatibleStoragePath.parts(path,list || CompatibleStoragePath.valid(path,true));
         Uri root=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
@@ -136,6 +162,7 @@ final class GameDocuments {
             if(list && !CompatibleStoragePath.valid(child,item.directory))continue;
             if(!item.directory && (item.name.endsWith(GameFilePublication.STAGE) || item.name.endsWith(GameFilePublication.BACKUP)))continue;
             result.add(item.name);result.add(Long.toString(Math.max(0,item.size)));result.add(Long.toString(item.modified));result.add(item.directory?"16":"128");
+            if(reference){String address=item.directory?"":item.uri.toString();result.add(address.length()<=1024?address:"");}
         }
         return result.toArray(new String[0]);
     }

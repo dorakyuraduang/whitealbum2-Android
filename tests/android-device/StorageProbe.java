@@ -16,6 +16,7 @@ import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import org.json.JSONObject;
 
 /** Read-only provider timing in the target UID. No Activity, game or screen. */
@@ -82,6 +83,30 @@ public final class StorageProbe extends Instrumentation {
         }
         return new JSONObject().put("iterations",count).put("metadata_ns",metadataNs).put("open_ns",openNs).put("read_ns",readNs).put("close_ns",closeNs).put("elapsed_ns",System.nanoTime()-begin).put("maximum_iteration_ns",maximum).put("bytes",totalBytes).put("present",present);
     }
+    private JSONObject preparedReads(String path,byte[] expected,int count)throws Exception{
+        Method inspect,read;
+        try{inspect=documents.getClass().getDeclaredMethod("compatibleReadMetadata",String.class,boolean.class);read=documents.getClass().getDeclaredMethod("compatibleReadOpen",String.class,String.class);}
+        catch(NoSuchMethodException absent){return new JSONObject().put("available",false);}
+        inspect.setAccessible(true);read.setAccessible(true);long start=System.nanoTime();String[] info=(String[])call(inspect,path,false);long metadataNs=System.nanoTime()-start;
+        if(info.length!=5 || !"128".equals(info[3]))throw new IllegalStateException("Invalid resolved file metadata");
+        if(info[4].isEmpty())return new JSONObject().put("available",true).put("reference_declined",true);
+        long legacyBegin=System.nanoTime();
+        for(int n=0;n<count;++n)if(!Arrays.equals(this.read(path),expected))throw new IllegalStateException("Ordinary open content differs");
+        long legacyNs=System.nanoTime()-legacyBegin;
+        long openNs=0,readNs=0,closeNs=0,total=0,begin=System.nanoTime();
+        for(int n=0;n<count;++n){long at=System.nanoTime();int fd=(Integer)call(read,path,info[4]);openNs+=System.nanoTime()-at;if(fd<0)throw new IllegalStateException("Resolved open failed: "+fd);
+            InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.adoptFd(fd));
+            try{at=System.nanoTime();byte[] data=bytes(input,1024*1024);readNs+=System.nanoTime()-at;total+=data.length;if(!Arrays.equals(data,expected))throw new IllegalStateException("Resolved read content differs");}
+            finally{at=System.nanoTime();input.close();closeNs+=System.nanoTime()-at;}
+        }
+        long elapsed=System.nanoTime()-begin;int guards=0;Uri source=Uri.parse(info[4]);
+        String wrongTree=DocumentsContract.buildDocumentUriUsingTree(DocumentsContract.buildTreeDocumentUri(source.getAuthority(),"__wa2_other_tree__"),"file").toString();
+        for(String invalid:new String[]{"","https://example.invalid/wa2","content://invalid.wa2/tree/other/document/file",wrongTree}){
+            boolean rejected=false;try{int fd=(Integer)call(read,path,invalid);if(fd>=0)ParcelFileDescriptor.adoptFd(fd).close();}
+            catch(java.io.IOException error){rejected=true;}if(!rejected)throw new IllegalStateException("Invalid read reference was accepted");++guards;
+        }
+        return new JSONObject().put("available",true).put("iterations",count).put("metadata_ns",metadataNs).put("legacy_open_only_ns",legacyNs).put("open_ns",openNs).put("read_ns",readNs).put("close_ns",closeNs).put("elapsed_ns",elapsed).put("bytes",total).put("same_contents",true).put("invalid_reference_guards",guards).put("new_descriptor_each_time",true);
+    }
     private static JSONObject privateReads(Context context,byte[] data,int count)throws Exception{
         File fixture=File.createTempFile("wa2-storage-probe-",".ini",context.getCacheDir());
         try{try(FileOutputStream out=new FileOutputStream(fixture)){out.write(data);}
@@ -115,7 +140,7 @@ public final class StorageProbe extends Instrumentation {
                 }
                 int count=Math.max(1,Math.min(100,Integer.parseInt(arguments.getString("count","20"))));String selected=findProfile();
                 result.put("profile_found",selected!=null);
-                if(selected!=null){byte[] data=read(selected);result.put("profile_bytes",data.length);result.put("private_reads",privateReads(context,data,count));result.put("provider_reads",measure(selected,true,count));long begin=System.nanoTime();info(selected);byte[] once=read(selected);result.put("single_provider_read_ns",System.nanoTime()-begin);if(once.length!=data.length)throw new IllegalStateException("Profile changed during probe");}
+                if(selected!=null){byte[] data=read(selected);result.put("profile_bytes",data.length);result.put("private_reads",privateReads(context,data,count));result.put("provider_reads",measure(selected,true,count));result.put("prepared_reads",preparedReads(selected,data,count));long begin=System.nanoTime();info(selected);byte[] once=read(selected);result.put("single_provider_read_ns",System.nanoTime()-begin);if(once.length!=data.length)throw new IllegalStateException("Profile changed during probe");}
                 for(String missing:new String[]{"default.ini","d3d.ini","save_99.sav"})if(info(missing).length==0){result.put("missing_file_checks",measure(missing,false,count));break;}
             }
             result.put("passed",true);output.putString("stream",result.toString());
