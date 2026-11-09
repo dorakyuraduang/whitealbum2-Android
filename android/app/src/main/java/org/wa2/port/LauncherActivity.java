@@ -180,7 +180,7 @@ public final class LauncherActivity extends Activity {
     private void chooseLanguage() {
         if(busy || !profileReady)return;
         showDialog(new AlertDialog.Builder(this).setTitle(t(PICK_GAME))
-            .setSingleChoiceItems(new String[]{"简体中文","日本語","English"},LaunchSettings.language(this),(dialog,which) -> {
+            .setSingleChoiceItems(new String[]{"简体中文","日本語","English","Українська"},LaunchSettings.language(this),(dialog,which) -> {
                 dialog.dismiss();status.setText(t(SAVING));
                 LaunchSettings.setLanguage(this,which,this::saved);refresh();
                 if(LaunchSettings.saving(this))status.setText(t(SAVING));

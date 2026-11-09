@@ -32,6 +32,6 @@ std::vector<subtitles::GlyphMask> subtitle_glyphs(std::span<const char32_t> char
 }
 std::shared_ptr<const subtitles::Catalogue> subtitle_file(const std::filesystem::path& path){
     auto source=open_resource_file(path);if(!source->size() || source->size()>subtitles::maximum_yaml_bytes)throw std::runtime_error("External sub.yaml must be nonempty and no larger than 1 MiB");
-    std::vector<std::uint8_t> bytes(std::size_t(source->size()));source->read_at(0,bytes);return subtitles::compile_external(subtitles::parse_yaml(bytes),subtitle_glyphs);
+    std::vector<std::uint8_t> bytes(std::size_t(source->size()));source->read_at(0,bytes);return subtitles::compile_external(subtitles::parse_external(bytes),subtitle_glyphs);
 }
 }

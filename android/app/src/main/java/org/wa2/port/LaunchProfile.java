@@ -10,8 +10,8 @@ import java.util.zip.CRC32;
 /** One language choice; resource pairs are selected by the common game host. */
 final class LaunchProfile {
     static final int FPS=1, LONG_PRESS=2, TEST_MODE=4, CHINESE_SUBTITLES=8, HIDE_MENU=16;
-    static final int CHINESE=0, JAPANESE=1, ENGLISH=2;
-    private static final int VERSION=7;
+    static final int CHINESE=0, JAPANESE=1, ENGLISH=2, UKRAINIAN=3;
+    private static final int VERSION=8;
     // Retain the larger legacy v3 read bound for migration.
     static final int MAX_BYTES=20+128*2+4096;
     final int flags, language;
@@ -19,19 +19,19 @@ final class LaunchProfile {
     LaunchProfile(int flags) {this(flags,CHINESE,"");}
     LaunchProfile(int flags,int language,String subtitle) {
         if(flags<0 || flags>31)throw new IllegalArgumentException("Unknown launcher setting");
-        if(language!=CHINESE && language!=JAPANESE && language!=ENGLISH)throw new IllegalArgumentException("Unsupported game language");
+        if(language!=CHINESE && language!=JAPANESE && language!=ENGLISH && language!=UKRAINIAN)throw new IllegalArgumentException("Unsupported game language");
         this.flags=flags;this.language=language;this.subtitle=subtitleUri(subtitle);
     }
     static String subtitleUri(String value) {
         if(value==null || (!value.isEmpty() && (!value.startsWith("content://") || value.length()<=10)) || value.getBytes(StandardCharsets.UTF_8).length>4096 || !new String(value.getBytes(StandardCharsets.UTF_8),StandardCharsets.UTF_8).equals(value))throw new IllegalArgumentException("Invalid external subtitle document URI");
         for(int at=0;at<value.length();++at)if(value.charAt(at)<32 || value.charAt(at)==127)throw new IllegalArgumentException("Control character in subtitle document URI");return value;
     }
-    String languageTag(){return language==ENGLISH?"en-US":language==JAPANESE?"ja-JP":"zh-CN";}
-    String languageLabel(){return language==ENGLISH?"English":language==JAPANESE?"日本語":"简体中文";}
+    String languageTag(){return language==UKRAINIAN?"uk-UA":language==ENGLISH?"en-US":language==JAPANESE?"ja-JP":"zh-CN";}
+    String languageLabel(){return language==UKRAINIAN?"Українська":language==ENGLISH?"English":language==JAPANESE?"日本語":"简体中文";}
     // These names are launcher metadata checks. The common C++ profile owns
     // actual archive routing and language-specific default-name data.
-    String scriptArchive(){return language==ENGLISH?"en.pak":language==JAPANESE?"script.pak":"ck-gal.pak";}
-    String fontArchive(){return language==ENGLISH?"fon_en.pak":language==JAPANESE?"fnt.pak":"fon.pak";}
+    String scriptArchive(){return language==UKRAINIAN?"ua.pak":language==ENGLISH?"en.pak":language==JAPANESE?"script.pak":"ck-gal.pak";}
+    String fontArchive(){return language==UKRAINIAN?"font_ua.pak":language==ENGLISH?"fon_en.pak":language==JAPANESE?"fnt.pak":"fon.pak";}
     static LaunchProfile defaults(){return new LaunchProfile(FPS|LONG_PRESS|CHINESE_SUBTITLES);}
     boolean enabled(int flag){return (flags&flag)!=0;}
     LaunchProfile with(int flag,boolean value){
@@ -75,9 +75,9 @@ final class LaunchProfile {
         try{
             if(version==1){if(data.length!=16 || flags>7)throw new IOException("Unsupported legacy launcher configuration");for(int n=6;n<12;++n)if(data[n]!=0)throw new IOException("Unknown legacy launcher fields");return new LaunchProfile(flags|CHINESE_SUBTITLES);}
             if(flags>(version>=6 && version<=VERSION?31:15) || data[7]!=0)throw new IOException("Unknown launcher fields");
-            if(version==4 || version==5 || version==6 || version==VERSION){
+            if(version==4 || version==5 || version==6 || version==7 || version==VERSION){
                 int size=(data[8]&255)|((data[9]&255)<<8),language=data[6]&255;
-                if(size>4096 || data.length!=16+size || data[10]!=0 || data[11]!=0 || (language!=CHINESE && language!=JAPANESE && !(version==VERSION && language==ENGLISH)))throw new IOException("Invalid language configuration fields");
+                if(size>4096 || data.length!=16+size || data[10]!=0 || data[11]!=0 || (language!=CHINESE && language!=JAPANESE && !(version>=7 && language==ENGLISH) && !(version==VERSION && language==UKRAINIAN)))throw new IOException("Invalid language configuration fields");
                 // v4 could infer Japanese from old filenames. Start older
                 // profiles in Chinese once; v5+ retain the player's choice.
                 // Older records have no hide-menu bit, so the menu stays shown.

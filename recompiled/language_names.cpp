@@ -32,6 +32,13 @@ constexpr DefaultName names[]{
 {30u,0x4a1bbcu,"\xa5\xdf\xa5\xeb\xa5\xc7\xa5\xa3\xa5\xf3","\x83\x7e\x83\x8b\x83\x66\x83\x42\x83\x93"},
 {31u,0x4a1bb4u,"\xa5\xd7\xa5\xa3\xa5\xeb","\x83\x76\x83\x42\x83\x8b"},
 };
+std::string_view selected_name(const DefaultName& name,resource::GameLanguage language){
+    if(language==resource::GameLanguage::ukrainian)switch(name.slot){
+    case 0:return "Uaqtk'";case 1:return "Kaehtra";case 2:return "Rf+tna";
+    case 10:return "Sakfz";case 11:return "V'ka}'";case 12:return ";o";case 16:return "Joko";
+    }
+    return name.japanese;
+}
 }
 std::span<const DefaultName> language_default_names()noexcept{return names;}
 void configure_language_names(wr::Process& process,resource::GameLanguage language){
@@ -45,12 +52,13 @@ void configure_language_names(wr::Process& process,resource::GameLanguage langua
         process.memory.check(table,128,wr::Memory::Read|wr::Memory::Write);
         for(const auto& name:names)if(process.memory.load(table+name.slot*4,32)!=name.address || process.read_string(name.address,64)!=name.chinese)throw std::runtime_error("Source default-name contract changed at slot "+std::to_string(name.slot));
         std::map<std::string_view,std::uint32_t> allocated;std::array<std::uint32_t,std::size(names)> pointers{};
-        try{for(std::size_t n=0;n<std::size(names);++n){const auto found=allocated.find(names[n].japanese);if(found!=allocated.end())pointers[n]=found->second;else{const auto address=process.put_string(std::string(names[n].japanese));try{allocated.emplace(names[n].japanese,address);}catch(...){process.memory.release(address);throw;}pointers[n]=address;}}}
+        try{for(std::size_t n=0;n<std::size(names);++n){const auto text=selected_name(names[n],language);const auto found=allocated.find(text);if(found!=allocated.end())pointers[n]=found->second;else{const auto address=process.put_string(std::string(text));try{allocated.emplace(text,address);}catch(...){process.memory.release(address);throw;}pointers[n]=address;}}}
         catch(...){for(const auto& [text,address]:allocated)process.memory.release(address);throw;}
         // All destinations were checked before allocation; no guest callback
         // runs here. Original strings and instruction pages stay immutable.
         for(std::size_t n=0;n<std::size(names);++n)process.memory.store(table+names[n].slot*4,pointers[n],32);
     }
     process.state().reports["language_names"]=[language,profile]{return "{\"language\":"+wr::quote(std::string(profile.tag))+",\"changed_default_slots\":"+std::to_string(language!=resource::GameLanguage::chinese?std::size(names):0)+",\"glyph_tables_changed\":false,\"save_files_rewritten\":false}";};
+    if(language==resource::GameLanguage::ukrainian)process.state().reports["ukrainian_text"]=[]{return "{\"source_semantic_sites\":3,\"runtime_code_patches\":false}";};
 }
 }

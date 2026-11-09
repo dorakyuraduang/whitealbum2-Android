@@ -31,7 +31,7 @@ final class ExternalSubtitles {
     }
     static byte[] read(Context context,String location) throws IOException {
         if(Looper.myLooper()==Looper.getMainLooper())throw new IOException("字幕文件必须在后台读取");
-        final Uri uri=Uri.parse(LaunchProfile.subtitleUri(location));if(!"content".equals(uri.getScheme()))throw new IOException("请选择系统文件选择器提供的 sub.yaml 文件");
+        final Uri uri=Uri.parse(LaunchProfile.subtitleUri(location));if(!"content".equals(uri.getScheme()))throw new IOException("请选择系统文件选择器提供的字幕文件（sub.yaml 或 Todokanai 格式）");
         ByteArrayOutputStream result=new ByteArrayOutputStream();byte[] buffer=new byte[8192];
         try(InputStream input=context.getContentResolver().openInputStream(uri)){
             if(input==null)throw new IOException("无法打开外置字幕文件，请重新选择并授权");

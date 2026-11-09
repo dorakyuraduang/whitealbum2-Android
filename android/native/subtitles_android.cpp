@@ -30,7 +30,7 @@ std::vector<subtitles::GlyphMask> rasterize(JNIEnv* env,std::span<const char32_t
         subtitles::GlyphMask glyph{left,top,unsigned(width),unsigned(height),{}};glyph.coverage.reserve(std::size_t(width*height));for(int p=0;p<width*height;++p){const auto a=raw[at++];if(a<0 || a>255)throw std::runtime_error("Invalid subtitle font coverage");glyph.coverage.push_back(std::uint8_t(a));}result.push_back(std::move(glyph));}
     if(at!=raw.size())throw std::runtime_error("Trailing subtitle font data");return result;
 }
-std::shared_ptr<const subtitles::Catalogue> compile(JNIEnv* env,jbyteArray array){return subtitles::compile_external(subtitles::parse_yaml(bytes(env,array)),[env](auto characters){return rasterize(env,characters);});}
+std::shared_ptr<const subtitles::Catalogue> compile(JNIEnv* env,jbyteArray array){return subtitles::compile_external(subtitles::parse_external(bytes(env,array)),[env](auto characters){return rasterize(env,characters);});}
 }
 bool initialize_subtitles_jni(JNIEnv* env)noexcept{
     const auto local=env->FindClass("org/wa2/port/ExternalSubtitles");if(!local)return false;subtitles_class=static_cast<jclass>(env->NewGlobalRef(local));env->DeleteLocalRef(local);if(!subtitles_class)return false;

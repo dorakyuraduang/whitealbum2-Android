@@ -5,7 +5,7 @@
 #include <string_view>
 
 namespace wa2::resource {
-enum class GameLanguage {chinese,japanese,english};
+enum class GameLanguage {chinese,japanese,english,ukrainian};
 struct LanguageProfile {std::string_view tag,script,font;};
 const LanguageProfile& language_profile(GameLanguage);
 GameLanguage parse_language(std::string_view);

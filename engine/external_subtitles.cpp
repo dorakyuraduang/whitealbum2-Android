@@ -8,7 +8,7 @@
 
 namespace wa2::subtitles {
 namespace {
-[[noreturn]]void fail(std::size_t line,std::string_view message){throw std::runtime_error("sub.yaml line "+std::to_string(line)+": "+std::string(message));}
+[[noreturn]]void fail(std::size_t line,std::string_view message){throw std::runtime_error("Subtitle line "+std::to_string(line)+": "+std::string(message));}
 std::u32string utf8(std::string_view text,std::size_t line){
     std::u32string out;
     for(std::size_t n=0;n<text.size();){
@@ -91,6 +91,46 @@ Document parse_yaml(std::span<const std::uint8_t> bytes){
     finish_track();if(groups!=3 || out.tracks.empty())fail(line,"both soundEffect and voice groups and at least one track are required");
     std::sort(out.tracks.begin(),out.tracks.end(),[](const auto& a,const auto& b){return a.key<b.key;});out.characters.assign(charset.begin(),charset.end());return out;
 }
+Document parse_todokanai(std::span<const std::uint8_t> bytes){
+    if(bytes.empty() || bytes.size()>maximum_yaml_bytes)throw std::runtime_error("Subtitle file must be nonempty and no larger than 1 MiB");
+    std::string_view source(reinterpret_cast<const char*>(bytes.data()),bytes.size());if(source.starts_with("\xef\xbb\xbf"))source.remove_prefix(3);
+    Document out;out.legacy_audio_scene_matching=true;std::set<char32_t> charset;std::set<std::uint32_t> keys;
+    TextTrack track;unsigned phase{};std::size_t line{};
+    const auto token=[&](std::string_view& row){row=trim(row);const auto at=row.find_first_of(" \t");const auto word=row.substr(0,at);row=at==row.npos?std::string_view{}:trim(row.substr(at));return number(word,line);};
+    for(std::size_t at=0;at<source.size();){
+        auto end=source.find('\n',at);if(end==source.npos)end=source.size();auto row=source.substr(at,end-at);at=end==source.size()?end:end+1;++line;if(row.ends_with('\r'))row.remove_suffix(1);
+        const auto decoded=utf8(row,line);for(auto cp:decoded)if(cp==0 || (cp<32 && cp!='\t') || (cp>=127 && cp<160))fail(line,"control character");
+        row=trim(row);if(row.empty())continue;
+        if(!phase){if(row!="{")fail(line,"expected a Todokanai opening brace");phase=1;continue;}
+        if(phase==1){
+            const auto scene=token(row),id=token(row),script_scene=token(row);(void)token(row);
+            if(!row.empty() || scene>65535 || id>65535 || script_scene>65535)fail(line,"invalid four-integer Todokanai header");
+            track={};track.key=(scene<<16)|id;if(!keys.insert(track.key).second)fail(line,"duplicate scene/audio identity");phase=2;continue;
+        }
+        if(row=="}"){
+            if(track.cues.empty() || out.tracks.size()>=1024)fail(line,"empty track or track limit exceeded");
+            out.tracks.push_back(std::move(track));phase=0;continue;
+        }
+        const auto begin=token(row),duration=token(row);
+        if(!duration || duration>0xffffffffu-begin || row.empty())fail(line,"invalid start/duration or empty text");
+        auto text=utf8(row,line);if(text.size()>512)fail(line,"text exceeds 512 characters");
+        for(auto& cp:text){if(cp=='^')cp='\n';else if(cp<32 || (cp>=127 && cp<160) || cp==0xfeff)fail(line,"control character in subtitle text");if(cp!='\n')charset.insert(cp);}
+        if(charset.size()>1536 || ++out.cue_count>8192 || text.size()>131072-out.text_count)fail(line,"subtitle limits exceeded");
+        if(!track.cues.empty()){
+            auto& previous=track.cues.back();if(begin<=previous.begin)fail(line,"cue starts must increase");
+            // The PC file contains four intentional overlaps: a later cue
+            // takes over the display at its start, rather than being rejected.
+            previous.end=std::min(previous.end,begin);
+        }
+        out.text_count+=text.size();track.cues.push_back({begin,begin+duration,std::move(text)});
+    }
+    if(phase || out.tracks.empty() || charset.empty())fail(line,"unterminated or empty Todokanai document");
+    std::sort(out.tracks.begin(),out.tracks.end(),[](const auto& a,const auto& b){return a.key<b.key;});out.characters.assign(charset.begin(),charset.end());return out;
+}
+Document parse_external(std::span<const std::uint8_t> bytes){
+    std::string_view source(reinterpret_cast<const char*>(bytes.data()),bytes.size());if(source.starts_with("\xef\xbb\xbf"))source.remove_prefix(3);
+    const auto at=source.find_first_not_of(" \t\r\n");return at!=source.npos && source[at]=='{'?parse_todokanai(bytes):parse_yaml(bytes);
+}
 Atlas compose_atlas(std::span<const GlyphMask> glyphs){
     if(glyphs.empty() || glyphs.size()>1536)throw std::runtime_error("Invalid external subtitle glyph count");
     int left{},top{},right{},bottom{};
@@ -110,10 +150,14 @@ Atlas compose_atlas(std::span<const GlyphMask> glyphs){
     return out;
 }
 const Track* Catalogue::find(std::uint32_t key)const noexcept{const auto it=std::lower_bound(tracks_.begin(),tracks_.end(),key,[](const auto& t,auto k){return t.key<k;});return it!=tracks_.end() && it->key==key?&*it:nullptr;}
+const Track* Catalogue::find_audio(std::uint32_t key,std::uint32_t scene)const noexcept{
+    if(legacy_audio_scene_matching_ && key<65536 && scene && scene<=65535)if(const auto* track=find(scene<<16|key))return track;
+    return find(key);
+}
 FontSpec Catalogue::font()const noexcept{return atlas_?atlas_->spec:font_spec();}
 std::shared_ptr<const Catalogue> compile_external(const Document& document,const GlyphRasterizer& rasterizer){
     if(document.tracks.empty() || document.tracks.size()>1024 || document.characters.empty() || document.characters.size()>1536 || !document.cue_count || document.cue_count>8192 || document.text_count>131072)throw std::runtime_error("Invalid external subtitle document bounds");
-    auto out=std::shared_ptr<Catalogue>(new Catalogue);std::map<char32_t,std::uint16_t> lookup;const auto embedded=characters();bool covered=true;
+    auto out=std::shared_ptr<Catalogue>(new Catalogue);out->legacy_audio_scene_matching_=document.legacy_audio_scene_matching;std::map<char32_t,std::uint16_t> lookup;const auto embedded=characters();bool covered=true;
     for(auto cp:document.characters){const auto it=std::lower_bound(embedded.begin(),embedded.end(),cp);if(it==embedded.end() || *it!=cp){covered=false;break;}}
     if(covered){for(std::size_t n=0;n<embedded.size();++n)lookup.emplace(embedded[n],std::uint16_t(n));out->glyph_count_=embedded.size();}
     else{if(!rasterizer)throw std::runtime_error("External subtitle characters require an available subtitle font adapter");const auto masks=rasterizer(document.characters);if(masks.size()!=document.characters.size())throw std::runtime_error("External subtitle font returned an incorrect glyph count");out->atlas_=std::make_unique<Atlas>(compose_atlas(masks));for(std::size_t n=0;n<document.characters.size();++n)lookup.emplace(document.characters[n],std::uint16_t(n));out->glyph_count_=document.characters.size();}
@@ -121,7 +165,7 @@ std::shared_ptr<const Catalogue> compile_external(const Document& document,const
     std::size_t total{};std::uint32_t last_key{};bool first=true;
     for(const auto& track:document.tracks){
         if(track.cues.empty() || (!first && track.key<=last_key))throw std::runtime_error("Invalid external subtitle track order");last_key=track.key;first=false;const auto start=out->cues_.size();std::uint32_t previous{};
-        for(const auto& cue:track.cues){if(cue.text.empty() || cue.text.size()>512 || cue.begin<previous || cue.begin>=cue.end || cue.text.size()>document.text_count-total || out->cues_.size()>=document.cue_count)throw std::runtime_error("Invalid external subtitle cue bounds");previous=cue.end;const auto offset=out->glyphs_.size();for(auto cp:cue.text){const auto it=lookup.find(cp);if(it==lookup.end())throw std::runtime_error("Subtitle character missing from validated font");out->glyphs_.push_back(it->second);}total+=cue.text.size();out->cues_.push_back({cue.begin,cue.end,{out->glyphs_.data()+offset,cue.text.size()}});}
+        for(const auto& cue:track.cues){if(cue.text.empty() || cue.text.size()>512 || cue.begin<previous || cue.begin>=cue.end || cue.text.size()>document.text_count-total || out->cues_.size()>=document.cue_count)throw std::runtime_error("Invalid external subtitle cue bounds");previous=cue.end;const auto offset=out->glyphs_.size();for(auto cp:cue.text){if(cp=='\n' && document.legacy_audio_scene_matching){out->glyphs_.push_back(line_break);continue;}const auto it=lookup.find(cp);if(it==lookup.end())throw std::runtime_error("Subtitle character missing from validated font");out->glyphs_.push_back(it->second);}total+=cue.text.size();out->cues_.push_back({cue.begin,cue.end,{out->glyphs_.data()+offset,cue.text.size()}});}
         out->tracks_.push_back({track.key,{out->cues_.data()+start,track.cues.size()}});
     }
     if(total!=document.text_count || out->cues_.size()!=document.cue_count)throw std::runtime_error("External subtitle counts changed after validation");return out;

@@ -7,7 +7,7 @@ namespace wr {class Process;}
 namespace wa2::aot {
 struct MenuPrompt {
     std::uint32_t address;
-    std::string_view chinese,japanese,english;
+    std::string_view chinese,japanese,english,ukrainian;
 };
 std::span<const MenuPrompt> language_menu_prompts()noexcept;
 // Initialize bounded read-only text data once, before any game execution.

@@ -3,6 +3,7 @@
 #include "fast_forward.hpp"
 #include "movie_settings.hpp"
 #include "subtitles.hpp"
+#include "language_text.hpp"
 #include "../platform/clock.hpp"
 #include "work_samples.hpp"
 #include "geometry_cache.hpp"
@@ -27,11 +28,12 @@
 namespace wr {void install_wa2_exceptions(Process&);}
 namespace wa2::aot {
 Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> graphics,bool chinese_subtitles,std::shared_ptr<const subtitles::Catalogue> captions):
-    process_(wr::FunctionExecutor{[this,samples=std::make_shared<FunctionWorkSamples>(functions()),subtitle_player=std::shared_ptr<subtitles::Playback>{}](Context& context,wr::Memory& memory) mutable {
+    process_(wr::FunctionExecutor{[this,samples=std::make_shared<FunctionWorkSamples>(functions()),subtitle_player=std::shared_ptr<subtitles::Playback>{},ukrainian=false](Context& context,wr::Memory& memory) mutable {
         if(!program_){program_=std::make_unique<Program>(memory);process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};}
         // Resolve once, then use the captured owner directly at all subsequent
         // host boundaries. No registry lookup or mutex runs per audio event.
-        if(!subtitle_player){subtitle_player=find_source_subtitles(memory);if(!subtitle_player)throw std::logic_error("missing native subtitle binding");}
+        if(!subtitle_player){subtitle_player=find_source_subtitles(memory);if(!subtitle_player)throw std::logic_error("missing native subtitle binding");ukrainian=process_.state().reports.contains("ukrainian_text");}
+        SourceTextScope text_language{memory,ukrainian};
         FunctionWorkScope sampled_work{samples.get()};
         SubtitleEventScope subtitle_events{memory,[](std::uint32_t entry,const wr::Cpu& cpu,wr::Memory& ram,std::uint32_t arguments,void* owner){
             source_subtitle_return(*static_cast<subtitles::Playback*>(owner),entry,cpu,ram,arguments,platform::Clock::counter()/1000000);

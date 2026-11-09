@@ -39,7 +39,11 @@ void source_subtitle_return(subtitles::Playback& playback,std::uint32_t entry,
         if(scene<=65535 && id<=65535)playback.play(scene<<16|id,scene?Kind::voice:Kind::effect,slot,now,replace);
     };
     switch(entry){
-    case 0x40f400:play(0,argument(1),argument(0));break;
+    case 0x40f400:{
+        if(!playback.needs_audio_scene()){play(0,argument(1),argument(0));break;}
+        auto scene=memory.load(0x4be4cc,32);if(scene==0xffffffff)scene=memory.load(0xa391e0,32);
+        const auto id=argument(1);if(id<=65535)playback.play(id,Kind::effect,argument(0),now,false,scene);break;
+    }
     case 0x40eda0:{
         auto scene=argument(2);
         if(scene==0xffffffff){scene=memory.load(0x4be4cc,32);if(scene==0xffffffff)scene=memory.load(0xa391e0,32);}

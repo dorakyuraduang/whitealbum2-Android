@@ -4,12 +4,20 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.69-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.69-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.69-shared-aot-replace-native.apk` to update the experimental
+is **0.2.70-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.70-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.70-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.70 adds **Game language → Українська**, selecting external `ua.pak` and
+`font_ua.pak`. Main and IC scripts stay in distinct groups inside `ua.pak`.
+The v8 launcher record retains v7's language, switches and selected subtitle
+URI. Caption selection now accepts the original Todokanai block format as well
+as `sub.yaml`, with explicit line breaks, duration timing and validated overlap
+handling. Users select their caption file; no patch caption URI is assigned
+automatically. See [Ukrainian setup](UKRAINIAN_SUPPORT.md).
 
 Standard APKs are named `WA2-arm64-<release name>.apk`, using the version from
 `config/release.json`. `WA2-arm64-dev.apk` remains an identical latest-file alias

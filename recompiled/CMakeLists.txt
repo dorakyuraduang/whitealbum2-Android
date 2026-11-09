@@ -10,6 +10,7 @@ if(NOT WA2_SHARED_CODE_REQUIRED)
 endif()
 include("${WA2_SHARED_ROOT}/generated/shared-aot/sources.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/chroma_sources.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/language_sources.cmake")
 add_library(wa2_initial_data STATIC "${WA2_SHARED_ROOT}/generated/static-data/image.cpp")
 target_include_directories(wa2_initial_data PUBLIC "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
 target_compile_features(wa2_initial_data PUBLIC cxx_std_20)
@@ -98,6 +99,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Measured CPU hotspots keep the same checked source bodies on both hosts.
     # Isolating them avoids expanding the whole static program for inlining.
     set_source_files_properties("${WA2_SHARED_ROOT}/generated/shared-aot/functions_hot.cpp"
+        "${WA2_SHARED_ROOT}/generated/shared-aot/native-language/functions_hot.cpp"
         "${CMAKE_CURRENT_LIST_DIR}/extended80.cpp" "${CMAKE_CURRENT_LIST_DIR}/native_string.cpp" "${CMAKE_CURRENT_LIST_DIR}/uv_clip.cpp" "${CMAKE_CURRENT_LIST_DIR}/vertex_grid.cpp" "${CMAKE_CURRENT_LIST_DIR}/native_weather.cpp" PROPERTIES COMPILE_OPTIONS "-O2")
     set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/functions.cpp"
         "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/src/runtime/process.cpp"

@@ -17,6 +17,7 @@ import sys
 from verify_shared_package import common_sources
 from verify_subtitles import verify as verify_subtitles
 from prepare_shared_chroma import prepare as prepare_chroma
+from prepare_shared_language import prepare as prepare_language
 
 ROOT=Path(__file__).resolve().parents[1]
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -52,6 +53,7 @@ def main():
             generated[name]=value
     if len(generated)<20:raise ValueError('Incomplete cached static source set')
     chroma=prepare_chroma()
+    language_sources=prepare_language()
     archive=args.windows_sdl.resolve();sdl_hash=digest(archive)
     if sdl_hash not in {value for name,value in reference['source_sha256'].items() if name.endswith('/libSDL2.a')}:raise ValueError('Windows SDL archive differs from the verified reference')
     unchanged_math={name:value for name,value in reference['source_sha256'].items() if name.startswith('recompiled/') and Path(name).name in ('native_math.cpp','native_math.hpp','native_gateways.cpp','extended80.cpp','extended80.hpp','transcend.cpp')}
@@ -83,8 +85,9 @@ def main():
         except (OSError,ValueError):
             run([sys.executable,ROOT/'scripts/verify_portable_shaders.py']);shaders=fresh(ROOT/'logs/portable-shader-verification.json')
         tracked=[Path(__file__),ROOT/'tests/shared-host-refresh/CMakeLists.txt',reference_path,archive,ROOT/'config/porting_contract.json',ROOT/'config/release.json']
-        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','language_prompts','external_subtitles')]
+        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles')]
         tracked += [ROOT/'scripts/prepare_shared_chroma.py',ROOT/chroma['reference_file']]
+        tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/verify_subtitles.py',ROOT/'scripts/verify_shared_package.py',ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/shared-aot-android/CMakeLists.txt',ROOT/'tests/shared-aot-android/entry.cpp']
         for folder in ('recompiled','engine','platform','hosts','android/native','generated/shared-aot','generated/static-data','generated/codepages','generated/graphics-abi','third_party/wa2_subtitles','tools/WindowsRecompTool-main/include/winrecomp'):
@@ -95,7 +98,7 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','language_prompts','external_subtitles')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -114,6 +117,8 @@ def main():
         prompts=reports['language_prompts']
         if prompts['prompts_per_language']!=7 or prompts['language_memory_cases']!=6 or prompts['localized_prompt_cases']!=28 or prompts['glyph_table_cases']<600 or prompts['guards']<34 or prompts['static_function_entries'] or prompts['instruction_step_calls'] or not all(prompts[key] for key in ('default_chinese_unchanged','japanese_source_text','english_ascii_prompts','adjacent_data_and_code_unchanged','read_only_permissions_preserved','all_contracts_checked_before_replacement')):raise ValueError('Incomplete language-specific save/load menu prompt checks')
         host=reports['host_progress']
+        ukrainian=reports['ukrainian']
+        if ukrainian['resource_callback_cases']!=18 or ukrainian['text_policy_cases']!=1344 or ukrainian['guards']<13 or not all(ukrainian[k] for k in ('main_ic_separate','matched_font_and_names','localized_prompts','source_code_immutable','legacy_subtitle_audio_binding','legacy_newlines_and_overlaps')):raise ValueError('Incomplete shared Ukrainian/Todokanai checks')
         if host['burst_queries']!=3072 or host['device_pumps']!=12 or host['transport_roundtrips']<4 or not host['blocking_waits_bypass'] or not host['frame_summary_exact']:raise ValueError('Incomplete event cadence/progress checks')
         image_chroma=reports['image_chroma']
         if image_chroma['exact_cpu_flags_stack_and_pixel_cases']!=756 or image_chroma['admitted_cases']!=360 or image_chroma['loop_exit_state_cases']!=36 or image_chroma['precise_fault_cases']<40 or image_chroma['partial_region_tail_cases']!=6 or not image_chroma['cached_reference_bodies_unchanged'] or not image_chroma['direct_linear_path_exercised']:raise ValueError('Incomplete cached-source chroma comparisons')
@@ -162,7 +167,7 @@ def main():
         bindings[sdl.relative_to(ROOT).as_posix()]=digest(sdl)
         proof=dict(schema='wa2.shared-aot-refresh.v1',source_sha256=bindings,reference_receipt=str(reference_path),reference_receipt_sha256=digest(reference_path),cached_generated_sha256=generated,
             verification_scope='unchanged verified AOT sources, fresh unmetered shared-host builds, selected memory/file and fast-forward scheduling tests, Java/JNI audit',historical_oracle_and_performance_suite_rerun=False,
-            current_tests=reports,derived_chroma_sources=chroma,selected_directory_files=saves,save_inventory=inventory,profile_batches=profiles,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
+            current_tests=reports,derived_chroma_sources=chroma,derived_language_sources=language_sources,selected_directory_files=saves,save_inventory=inventory,profile_batches=profiles,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
             crt_math_paths=dict(passed=True,source_unchanged=True,reference_receipt_sha256=digest(reference_path),independent_math_test_rerun=False,source_sha256=unchanged_math),
             manifest_sha256=digest(ROOT/'generated/shared-aot/manifest.json'),admitted_functions=manifest['admitted_functions'],instruction_locations=manifest['unique_instruction_locations'],
             partially_admitted_entries=manifest['partially_admitted_entries'],unsupported_instruction_sites=manifest['unsupported_instruction_sites'],

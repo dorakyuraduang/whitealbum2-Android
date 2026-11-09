@@ -20,19 +20,22 @@ class SelectedResources final:public wr::ReadOnlyFiles {
     struct Alias {std::string physical;wr::ReadOnlyFileInfo info;};
     std::map<std::string,Alias,std::less<>> aliases_;
     std::optional<resource::Archive> english_,base_script_,ic_script_;
+    bool ukrainian_{};
     std::map<std::string,std::pair<std::uint32_t,std::uint32_t>,std::less<>> directories_;
 public:
     explicit SelectedResources(std::shared_ptr<wr::ReadOnlyFiles> original):original_(std::move(original)){}
-    void english(wr::Process& process){
-        english_=resource::Archive::open(open_process_resource(process,process.options.data_root/"en.pak"));
+    void english(wr::Process& process,bool ukrainian=false){
+        ukrainian_=ukrainian;
+        english_=resource::Archive::open(open_process_resource(process,process.options.data_root/(ukrainian?"ua.pak":"en.pak")));
         const auto members=english_->members();
         std::vector<std::pair<std::uint32_t,std::string>> markers;
-        for(const auto& member:members)if(!member.stored_size && (member.name=="bak" || member.name=="grp" || member.name=="fnt" || member.name=="script"))markers.emplace_back(member.source_index,member.name);
+        for(const auto& member:members)if(!member.stored_size && (member.name=="bak" || member.name=="grp" || member.name=="fnt" || member.name=="script" || (ukrainian && member.name=="ic/script")))markers.emplace_back(member.source_index,member.name);
         std::sort(markers.begin(),markers.end());
         for(std::size_t n=0;n<markers.size();++n){
             if(!directories_.emplace(markers[n].second,std::pair{markers[n].first+1,n+1<markers.size()?markers[n+1].first:std::uint32_t(members.size())}).second)throw resource::Error("Duplicate English PAK directory");
         }
-        if(const auto range=directories_.find("fnt");range!=directories_.end()){
+        if(ukrainian && (!directories_.contains("script") || !directories_.contains("ic/script")))throw resource::Error("ua.pak needs separate script and ic/script groups; use the Ukrainian preparation tool");
+        if(const auto range=directories_.find("fnt");!ukrainian && range!=directories_.end()){
             const auto font=resource::Archive::open(open_process_resource(process,process.options.data_root/"fon_en.pak"));
             if(!font.is_kcap())throw resource::Error("fon_en.pak must be the KCAP font pack prepared from this en.pak");
             for(const auto name:font_members){
@@ -57,8 +60,8 @@ public:
     std::optional<LanguageMember> member(std::string_view path,std::string_view name)const{
         if(!english_)return {};
         auto logical=fold(path);const bool ic=logical.starts_with("ic/");if(ic)logical.erase(0,3);
-        const bool script=logical=="ck-gal.pak" || logical=="script.pak" || logical=="en.pak";
-        const auto group=script?std::string_view("script"):logical=="bak.pak"?std::string_view("bak"):logical=="grp.pak"?std::string_view("grp"):std::string_view{};
+        const bool script=logical=="ck-gal.pak" || logical=="script.pak" || logical=="en.pak" || (ukrainian_ && logical=="ua.pak");
+        const auto group=script?std::string_view(ukrainian_ && ic?"ic/script":"script"):logical=="bak.pak"?std::string_view("bak"):logical=="grp.pak"?std::string_view("grp"):std::string_view{};
         if(group.empty())return {};
         auto found=english_->find_first(name);
         if(const auto range=directories_.find(group);range!=directories_.end()){
@@ -69,7 +72,7 @@ public:
             }
             if(found>=entries.size() || (found!=resource::Archive::missing && resource::compare_names(entries[found].name,name)))found=resource::Archive::missing;
         }else if(!directories_.empty() || !script)found=resource::Archive::missing;
-        if(found!=resource::Archive::missing)return LanguageMember{&*english_,found,0x8000000000000001ull};
+        if(found!=resource::Archive::missing)return LanguageMember{&*english_,found,ukrainian_ && ic && script?0x8000000000000004ull:0x8000000000000001ull};
         if(!script)return {};
         const auto* base=ic?(ic_script_?&*ic_script_:nullptr):base_script_?&*base_script_:nullptr;
         return LanguageMember{base,base?base->find_first(name):resource::Archive::missing,ic?0x8000000000000003ull:0x8000000000000002ull};
@@ -140,7 +143,7 @@ void select_language_resources(wr::Process& process,const resource::LanguageReso
         check_pack(process,std::string(profile.script),false);
         check_pack(process,std::string(profile.font),true);
         auto selected=std::make_shared<SelectedResources>(process.state().read_only_files);
-        if(selection.language==resource::GameLanguage::english)selected->english(process);
+        if(selection.language==resource::GameLanguage::english || selection.language==resource::GameLanguage::ukrainian)selected->english(process,selection.language==resource::GameLanguage::ukrainian);
         selected->select(profile.script,{"ck-gal.pak","script.pak"});
         selected->select(profile.font,{"fon.pak","fnt.pak"});
         install_resource_mount(process,std::move(selected));

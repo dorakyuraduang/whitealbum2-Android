@@ -53,26 +53,29 @@ std::vector<GlyphQuad> layout(const Cue& cue,FontSpec spec,std::size_t glyphs){
     const auto per_line=std::size_t((1280-64)/spec.advance);
     std::vector<GlyphQuad> out;out.reserve(cue.glyphs.size());
     const float width=float(spec.cell*spec.columns),height=float(spec.cell*spec.rows);
-    for(std::size_t first=0;first<cue.glyphs.size();first+=per_line){
-        const auto length=std::min(per_line,cue.glyphs.size()-first);
+    for(std::size_t first=0,row=0;first<cue.glyphs.size();++row){
+        auto length=std::min(per_line,cue.glyphs.size()-first);
+        for(std::size_t n=0;n<length;++n)if(cue.glyphs[first+n]==line_break){length=n;break;}
         const float x=(1280.f-float(length*spec.advance))/2-float(spec.origin_x);
-        const float y=40.f+float(spec.advance)-float(spec.baseline)+float(first/per_line*(spec.advance+8));
+        const float y=40.f+float(spec.advance)-float(spec.baseline)+float(row*(spec.advance+8));
         for(std::size_t n=0;n<length;++n){
             const auto id=cue.glyphs[first+n];if(id>=glyphs)throw std::runtime_error("unknown embedded subtitle character");
             const float left=x+float(n*spec.advance),u=float(id%spec.columns*spec.cell),v=float(id/spec.columns*spec.cell);
             out.push_back({left,y,left+spec.cell,y+spec.cell,u/width,v/height,(u+spec.cell)/width,(v+spec.cell)/height});
         }
+        first+=length;if(first<cue.glyphs.size() && cue.glyphs[first]==line_break)++first;
     }
     return out;
 }
-bool Playback::play(std::uint32_t key,Kind kind,std::uint32_t slot,std::uint64_t now,bool replace){
+bool Playback::play(std::uint32_t key,Kind kind,std::uint32_t slot,std::uint64_t now,bool replace,std::uint32_t scene){
     if(!enabled_)return false;
     (void)current(now);
-    const auto* next=catalogue_?catalogue_->find(key):find_track(key);
+    const auto* next=catalogue_?catalogue_->find_audio(key,scene):find_track(key);
     if(!next || (track_ && !replace))return false;
     if((key<65536)!=(kind==Kind::effect))return false;
     track_=next;kind_=kind;slot_=slot;started_=now;++generation_;return true;
 }
+bool Playback::needs_audio_scene()const noexcept{return catalogue_ && catalogue_->needs_audio_scene();}
 void Playback::stop(Kind kind,std::uint32_t slot) noexcept {
     if(track_ && kind_==kind && slot_==slot)reset();
 }

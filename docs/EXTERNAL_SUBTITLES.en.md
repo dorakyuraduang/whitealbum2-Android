@@ -1,6 +1,28 @@
-# External sub.yaml captions
+# External captions: sub.yaml and Todokanai
 
 [中文说明](EXTERNAL_SUBTITLES.md)
+
+From **0.2.70**, the same file picker also accepts original Todokanai `subtitles`
+files. Select the file yourself; its filename is unrestricted and the format is
+detected from its contents. Embedded captions remain the default. Both formats
+require UTF-8 and have a 1 MiB limit.
+
+```text
+{
+1002 9763 1002 114
+0 800 First line^Second line
+800 900 Next caption
+}
+```
+
+The header contains audio scene, audio ID, PC script scene and script line.
+The final pair is validated location metadata; playback follows actual audio
+events. Each cue is `start_ms duration_ms text`, rather than start/end times.
+`^` forces a line break. A later cue takes over an overlapping earlier cue.
+Scene zero can match global effects; other tracks use their audio scene.
+Duplicate audio identities, invalid encoding, timing and oversized documents
+are rejected. The caption file supplied with UA 0.1.5 currently contains English;
+you can translate its text before selecting it. The YAML rules below are unchanged.
 
 The port uses the same field names and nesting as the main-story
 `script/sub.yaml` from the previously integrated Chinese subtitle patch.

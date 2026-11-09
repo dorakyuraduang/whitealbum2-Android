@@ -3,7 +3,7 @@
 [简体中文](README.md) · **English**
 
 A shared static-recompilation project for **Android ARM64 / Windows x64**.
-Current development version: **0.2.69-shared-aot**. Both platforms compile the
+Current development version: **0.2.70-shared-aot**. Both platforms compile the
 same game logic. Supply your own original PAK resources; whole-archive extraction
 is not required.
 
@@ -31,6 +31,7 @@ the root of the game folder:
 | 简体中文 / Chinese (default) | `ck-gal.pak` | `fon.pak` |
 | 日本語 / Japanese | `script.pak` | `fnt.pak` |
 | English | `en.pak` | `fon_en.pak` |
+| Українська / Ukrainian | `ua.pak` | `font_ua.pak` |
 
 You also need the complete original graphics, audio, movie and other resources.
 **Interface language** changes the launcher; **Game language** selects game
@@ -44,6 +45,12 @@ This copies packed font members without decompressing them or changing `en.pak`.
 Back up an existing `fon_en.pak` before generation. Renaming the Chinese font
 pack does not produce the matching English fonts.
 See [resource and patch details](docs/LANGUAGE_RESOURCES.md).
+
+Ukrainian uses the two external packs prepared from the UA 0.1.5 patch; retain
+the original resources. Select **Українська** under **Game language**. Supplementary
+captions can be selected separately as `sub.yaml` or Todokanai block-format files;
+the patch's caption file is not selected automatically. See the
+[Ukrainian setup guide](docs/UKRAINIAN_SUPPORT.md).
 
 ### Windows
 

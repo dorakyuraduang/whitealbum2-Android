@@ -11,6 +11,7 @@ struct Cue {
     std::uint32_t begin_ms{},end_ms{};
     std::span<const std::uint16_t> glyphs;
 };
+inline constexpr std::uint16_t line_break=0xffff;
 struct Track {std::uint32_t key{};std::span<const Cue> cues;};
 struct FontSpec {std::uint32_t cell{},columns{},rows{},advance{},origin_x{},baseline{};};
 std::span<const Track> main_story_tracks() noexcept;
@@ -44,7 +45,8 @@ public:
     std::span<const Track> tracks()const noexcept;
     bool enabled()const noexcept{return enabled_;}
     void enabled(bool value)noexcept{if(enabled_==value)return;enabled_=value;reset();}
-    bool play(std::uint32_t key,Kind,std::uint32_t slot,std::uint64_t now,bool replace=false);
+    bool play(std::uint32_t key,Kind,std::uint32_t slot,std::uint64_t now,bool replace=false,std::uint32_t scene=0);
+    bool needs_audio_scene()const noexcept;
     void stop(Kind,std::uint32_t slot) noexcept;
     void reset() noexcept {if(track_){track_=nullptr;++generation_;}}
     const Cue* current(std::uint64_t now) noexcept;

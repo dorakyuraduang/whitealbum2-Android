@@ -45,6 +45,17 @@ reference functions extracted from those untouched cached units, including
 metered stops at all six loop exits and partial-fault paths. The reference
 library is test-only and is rejected if linked into the Android application.
 
+From 0.2.70, `scripts/prepare_shared_language.py` derives language-aware copies
+of `functions_4.cpp` and `functions_hot.cpp` from the immutable cache. It changes
+exactly two quote expressions and one text-advance expression, with default
+behavior preserved outside the Ukrainian source policy. CMake checks input,
+recipe and output hashes and selects identical derived units on both hosts.
+The refresh runs this preparation automatically; run it before a direct CMake
+configure. Source code pages are not modified at runtime. Memory tests cover
+the four affected character values, CPU flags, nested policy scopes and other
+languages. Resource conversion uses the separate offline `wa2_prepare_lzss`
+target, which is never linked into the game; see [Ukrainian setup](UKRAINIAN_SUPPORT.md).
+
 In a workspace with these private inputs, run serially:
 
 ```powershell

@@ -187,5 +187,9 @@ final class LauncherText {
     String tag(){return ENTRIES[index].tag;}
     String name(){return ENTRIES[index].name;}
     boolean rtl(){return ENTRIES[index].rtl;}
-    String text(Key key,Object... args){return String.format(Locale.forLanguageTag(tag()),ENTRIES[index].words[key.ordinal()],args);}
+    String text(Key key,Object... args){
+        String template=ENTRIES[index].words[key.ordinal()];
+        if(key==Key.CHOOSE_SUBTITLE || key==Key.REQUIRE_LOCAL_SUBTITLE)template=template.replace("sub.yaml","sub.yaml / Todokanai");
+        return String.format(Locale.forLanguageTag(tag()),template,args);
+    }
 }
