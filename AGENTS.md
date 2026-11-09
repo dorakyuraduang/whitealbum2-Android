@@ -17,6 +17,11 @@
 - Builds run below normal priority, hidden, with one job; no concurrent heavy
   builds or tests. Keep original PAK resources external, in the user-selected
   Android folder. Its name is unrestricted (updated 2026-11-08).
+- After each new APK build, install the verified package in place on the
+  authorized Android device through ADB and verify its installed version and
+  package hash. Preserve application data. If the device is unavailable, report
+  installation as pending. Do not launch the app, operate game UI or read the
+  screen as part of installation (updated 2026-11-09).
 - Follow config/porting_contract.json. Report unknown targets and unsupported
   behavior explicitly. Component tests do not prove whole-game compatibility.
 - After each completed change and its applicable validation, commit the intended
