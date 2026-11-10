@@ -4,12 +4,17 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.72-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.72-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.72-shared-aot-replace-native.apk` to update the experimental
+is **0.2.73-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.73-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.73-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.73 defaults the launcher interface to the phone's primary system language,
+using English if no supported translation matches. Existing manual choices take
+priority; automatic choices are not stored, so they follow later system-language
+changes. Game language, resources and saves remain independent.
 
 0.2.72 fixes excessive spacing in external English captions. Font adapters
 retain each glyph's advance, including the width of a blank space; the shared
@@ -280,7 +285,8 @@ or screen inspected during this change.
 
 0.2.63 aligns the launcher to the top with 4 dp top padding. The 🌐 button
 selects 28 launcher interface languages, immediately applied and remembered
-without requiring a game-folder grant. Chinese remains the default. Labels,
+without requiring a game-folder grant. Its original Chinese default is replaced
+by system-language selection from 0.2.73. Labels,
 launcher dialogs and common status messages are translated; technical error
 details can retain their original language. Four RTL languages mirror launcher
 layout, while the game activity retains its original coordinate direction.

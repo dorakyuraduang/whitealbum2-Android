@@ -77,7 +77,7 @@ def main():
         if profile['v6_migrations']!=192:raise ValueError('Incomplete v6 migration to English-capable launcher settings')
         if profile['v7_migrations']!=288:raise ValueError('Incomplete v7 migration retaining Chinese/Japanese/English settings')
         text=reports['LauncherTextTest']
-        if text['languages']!=28 or text['translated_messages']!=1232 or text['formatted_message_cases']!=308 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=15 or not all(text[key] for key in ('default_chinese','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue checks')
+        if text['languages']!=28 or text['translated_messages']!=1232 or text['formatted_message_cases']!=308 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=25 or text['automatic_language_cases']!=56 or text['manual_language_cases']!=31 or not all(text[key] for key in ('system_language_default','english_fallback','manual_language_override_preserved','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue and automatic locale checks')
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Android UI input changed during verification: '+name)
     report=dict(schema='wa2.native-android-ui.v1',source_sha256=inputs,source_sets=records,api_jar_sha256=digest(api),javac_sha256=digest(jdk/'bin/javac.exe'),d8_sha256=digest(bt/'lib/d8.jar'),

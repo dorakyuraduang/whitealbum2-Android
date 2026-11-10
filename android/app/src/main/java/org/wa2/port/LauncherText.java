@@ -174,12 +174,14 @@ final class LauncherText {
         }return out.toString();
     }
     static LauncherText forTag(String tag){
-        if(tag==null)return new LauncherText(0);Locale locale=Locale.forLanguageTag(tag);String language=locale.getLanguage();
-        if(language.equals("zh"))return new LauncherText(locale.getScript().equals("Hant") || locale.getCountry().equals("TW") || locale.getCountry().equals("HK") || locale.getCountry().equals("MO")?1:0);
+        if(tag==null)return new LauncherText(2);Locale locale=Locale.forLanguageTag(tag);String language=locale.getLanguage();
+        if(language.equals("zh"))return new LauncherText(locale.getScript().equals("Hant") || (locale.getScript().isEmpty() && (locale.getCountry().equals("TW") || locale.getCountry().equals("HK") || locale.getCountry().equals("MO")))?1:0);
         if(language.equals("tl"))language="fil";
         for(int n=0;n<ENTRIES.length;++n)if(Locale.forLanguageTag(ENTRIES[n].tag).getLanguage().equals(language))return new LauncherText(n);
-        return new LauncherText(0);
+        return new LauncherText(2);
     }
+    // Only an explicit user choice overrides the current system language.
+    static LauncherText resolve(String savedTag,String systemTag){return forTag(savedTag==null || savedTag.isEmpty()?systemTag:savedTag);}
     static LauncherText at(int index){if(index<0 || index>=ENTRIES.length)throw new IllegalArgumentException("Unknown interface language");return new LauncherText(index);}
     static String[] names(){String[] result=new String[ENTRIES.length];for(int n=0;n<result.length;++n)result[n]=ENTRIES[n].name;return result;}
     static int count(){return ENTRIES.length;}

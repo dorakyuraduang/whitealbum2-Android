@@ -3,7 +3,7 @@
 [简体中文](README.md) · **English**
 
 A static-recompilation port for **Android ARM64**, using shared game logic
-across platforms. Current development version: **0.2.72-shared-aot**.
+across platforms. Current development version: **0.2.73-shared-aot**.
 Supply your own original PAK resources; whole-archive extraction is not required.
 
 **[Downloads and releases](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
@@ -30,8 +30,9 @@ the root of the game folder:
 | Українська / Ukrainian | `ua.pak` | `font_ua.pak` |
 
 You also need the complete original graphics, audio, movie and other resources.
-**Interface language** changes the launcher; **Game language** selects game
-resources.
+The launcher follows the phone's primary system language, falling back to English
+when unsupported. A manual **Interface language** choice is remembered and takes
+priority. **Game language** independently selects game resources.
 
 For English, retain the original `script.pak` for base script data and select
 **English** in the launcher. `fon_en.pak` must contain the matching game font
