@@ -2,17 +2,15 @@
 
 **简体中文** · [English](README.en.md)
 
-面向 **Android ARM64 / Windows x64** 的同源静态重编译项目，两平台共用游戏逻辑。当前开发版本：**0.2.71-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
+面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.71-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
 
 **[下载与发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
 
 ## 快速启动
 
-### Android
-
 要求：**Android 8.0 及以上、ARM64、OpenGL ES 3.0**。
 
-1. 安装 `WA2-arm64-<版本名>.apk`。英文资源支持从 **0.2.67** 起，乌克兰语与 Todokanai 外置字幕支持从 **0.2.70** 起。
+1. 安装 `WA2-arm64-<版本名>.apk`。
 2. 将完整游戏资源复制到手机的任意文件夹，保留原有 `IC` 子目录。**文件夹名称不限，PAK 不用解压。**
 3. 打开应用，选择这个游戏文件夹，并授予读写权限。
 4. 选择游戏语言，按需设置 FPS、长按快进和补充字幕，点击 **“开始游戏”**。
@@ -39,41 +37,39 @@
 
 脚本保留原编码和 `.txt`/`.bnr` 配对。可用[资源准备工具](scripts/prepare_ukrainian_resources.py)从原始 0.1.5 ZIP 生成两个包，放到所选游戏目录根目录，并保留原版 `script.pak`、`IC` 子目录等完整资源；具体步骤见[乌克兰语说明](docs/UKRAINIAN_SUPPORT.md)。
 
-### Windows
-
-将编译包中的 `WA2_SDL2_x64.exe` 放在原版 PAK 所在目录，双击启动；也可指定资源目录：
-
-```powershell
-.\WA2_SDL2_x64.exe --root "D:\Games\WHITE ALBUM2"
-```
-
-默认中文；日语加 `--language ja-JP`，英语加 `--language en-US`，乌克兰语加 `--language uk-UA`。本地工作区也可在准备好 `res/` 资源后使用 `run.cmd`。
-
 ## 存档、配置与字幕
 
-### 外置存档与配置
+### 普通存档
 
-**当前版本的游戏存档全部外置，读写在玩家选择的游戏目录中。普通模式和测试模式都使用外置存档，仅存放的子目录不同。** 下表中的 `<游戏目录>` 就是启动页选定的文件夹，名称不限。
+**游戏存档全部外置。** `<游戏目录>` 指启动页选择的游戏文件夹。普通存档按 PC 目录布局放置：
 
-| 用途 | 普通模式下的外置位置 |
-| --- | --- |
-| 全局进度、已读及内容解锁状态 | `<游戏目录>/Sys.sav` |
-| 手动存档（100 个位置） | `<游戏目录>/save_00.sav` ～ `<游戏目录>/save_99.sav` |
-| 快速存档 | `<游戏目录>/save_Q.sav` |
-| 游戏及显示设置 | `<游戏目录>/SYSTEM.ini`、`<游戏目录>/D3D.ini`；已有的 `default.ini` 也从这里读取 |
-| 安卓启动器选项（游戏语言、FPS、字幕来源等） | `<游戏目录>/native-launcher.wa2cfg` |
+```text
+<游戏目录>/Documents/Leaf/WHITE ALBUM2/
+```
 
-例如，安卓选择“内部存储/Games/WA2”，第一个手动存档的完整路径就是 **`/storage/emulated/0/Games/WA2/save_00.sav`**。Windows 使用同一布局：若以 `--root "D:\Games\WHITE ALBUM2"` 启动，则对应 **`D:\Games\WHITE ALBUM2\save_00.sav`**。首次保存前，部分文件可能尚未生成；文件名的大小写可能不同。
+其中 `Sys.sav` 保存全局进度和解锁状态，`save_00.sav` ～ `save_99.sav` 为手动存档，`save_Q.sav` 为快速存档。导入 PC 存档时，退出游戏后将文件复制到上述目录，并关闭测试模式后读档。
 
-开启“测试模式（全部解锁）”后，游戏存档和 INI 配置保存在同一外置游戏目录的 **`test-mode/`** 子目录，例如 `<游戏目录>/test-mode/Sys.sav`、`<游戏目录>/test-mode/save_00.sav`；安卓启动器的 `native-launcher.wa2cfg` 仍在外置游戏目录根目录。
+已有根目录同名存档也兼容读取；两处同时存在同名文件时，根目录文件优先。
 
-导入普通 PC 存档时，退出游戏后把 `Sys.sav`、`save_00.sav` 等编号存档、`save_Q.sav` 复制到游戏目录根目录，需要同步设置时再复制 INI，并关闭测试模式后读档。也兼容外置游戏目录内的旧 PC 布局：根目录找不到同名文件时会查找 `<游戏目录>/Documents/Leaf/WHITE ALBUM2/`；独立章节的 `WHITE ALBUM2 -introductory chapter-` 和 `WHITE ALBUM2 -closing chapter-` 目录保留在同级 `Documents/Leaf/` 下。
+### 测试模式存档
+
+开启“测试模式（全部解锁）”后，独立使用同一外置游戏目录中的：
+
+```text
+<游戏目录>/test-mode/
+```
+
+例如 `test-mode/Sys.sav`、`test-mode/save_00.sav`。关闭测试模式即可恢复使用普通存档。
+
+### 配置
+
+安卓启动器选项保存在 `<游戏目录>/native-launcher.wa2cfg`。游戏配置沿用 `SYSTEM.ini`、`D3D.ini`，保留已有文件所在目录。
 
 ### 补充字幕
 
-默认内置正篇中文字幕，可通过“补充字幕”开关控制显示。外置字幕支持 **UTF-8 的 `sub.yaml` 和原 Todokanai 格式**：在启动页的 **“字幕来源”** 中手动选择文件，例如补丁的 `todokanai/subtitles`，并开启补充字幕。原 Todokanai 文件可直接使用，无需转换为 YAML。
+默认内置正篇中文字幕，可通过“补充字幕”开关控制。使用外置字幕时，在 **“字幕来源”** 中手动选择 UTF-8 的 `sub.yaml` 或原 Todokanai `subtitles` 文件，并开启补充字幕。外置文件替换整份内置补充字幕，Todokanai 文件无需转换为 YAML。
 
-字幕文件独立于脚本包，字幕语言由文件内容决定；UA 0.1.5 附带的字幕为英文，可自行翻译后选择。外置字幕替换整份内置补充字幕，不会自动选用补丁文件；普通剧情对白仍由所选脚本和字库提供。
+剧情对白由所选脚本和字库提供，补充字幕语言由字幕文件内容决定。UA 0.1.5 附带的字幕为英文，可自行翻译后选择。
 
 ## 文档与开发
 

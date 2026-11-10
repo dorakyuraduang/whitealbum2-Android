@@ -2,21 +2,17 @@
 
 [简体中文](README.md) · **English**
 
-A shared static-recompilation project for **Android ARM64 / Windows x64**.
-Current development version: **0.2.71-shared-aot**. Both platforms compile the
-same game logic. Supply your own original PAK resources; whole-archive extraction
-is not required.
+A static-recompilation port for **Android ARM64**, using shared game logic
+across platforms. Current development version: **0.2.71-shared-aot**.
+Supply your own original PAK resources; whole-archive extraction is not required.
 
 **[Downloads and releases](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
 
 ## Quick start
 
-### Android
-
 Requirements: **Android 8.0+, ARM64 and OpenGL ES 3.0**.
 
-1. Install `WA2-arm64-<release-name>.apk`. English resources require **0.2.67+**;
-   Ukrainian resources and external Todokanai captions require **0.2.70+**.
+1. Install `WA2-arm64-<release-name>.apk`.
 2. Copy your complete game resources to any folder on your phone. Keep the `IC`
    subfolder. **Any folder name is accepted; leave the PAK files packed.**
 3. Open the app, select that folder and grant read/write access.
@@ -63,69 +59,53 @@ both packs from the original 0.1.5 ZIP. Put them in the selected game folder's
 root and retain the original `script.pak`, `IC` subfolder and other game resources. See the
 [preparation guide](docs/UKRAINIAN_SUPPORT.md) for the procedure.
 
-### Windows
-
-Place the compiled `WA2_SDL2_x64.exe` beside the original PAK files and launch it,
-or specify the game folder:
-
-```powershell
-.\WA2_SDL2_x64.exe --root "D:\Games\WHITE ALBUM2" --language en-US
-```
-
-Omit `--language` for Chinese; use `--language ja-JP` for Japanese or
-`--language uk-UA` for Ukrainian. In a prepared local workspace, `run.cmd`
-uses the `res/` folder.
-
 ## Saves, settings and captions
 
-### External saves and settings
+### Normal saves
 
-**All game saves are external files in the selected game-resource folder.
-Normal mode and test mode both use external saves; only their subdirectory differs.**
-`<game folder>` below means the folder selected in the launcher; its name is unrestricted.
+**All game saves are external files.** `<game folder>` means the folder selected
+in the launcher. Use the PC directory layout for normal saves:
 
-| Purpose | External location in normal mode |
-| --- | --- |
-| Global progress, read history and content unlocks | `<game folder>/Sys.sav` |
-| Manual saves (100 slots) | `<game folder>/save_00.sav` through `<game folder>/save_99.sav` |
-| Quick save | `<game folder>/save_Q.sav` |
-| Game and display settings | `<game folder>/SYSTEM.ini`, `<game folder>/D3D.ini`; an existing `default.ini` is also read here |
-| Android launcher options (game language, FPS, caption source, etc.) | `<game folder>/native-launcher.wa2cfg` |
+```text
+<game folder>/Documents/Leaf/WHITE ALBUM2/
+```
 
-For example, selecting **Internal storage/Games/WA2** on Android puts the first
-manual save at **`/storage/emulated/0/Games/WA2/save_00.sav`**. Windows uses the same
-layout: starting with `--root "D:\Games\WHITE ALBUM2"` puts it at
-**`D:\Games\WHITE ALBUM2\save_00.sav`**. Some files only appear after saving;
-filename capitalization may differ.
+`Sys.sav` stores global progress and unlocks, `save_00.sav` through `save_99.sav`
+are manual saves, and `save_Q.sav` is the quick save. To import PC saves, exit the
+game, copy the files into this directory and disable test mode before loading.
 
-With **Test mode (unlock all)** enabled, game saves and INI settings use the
-**`test-mode/`** subfolder of that same external game folder, such as
-`<game folder>/test-mode/Sys.sav` and `<game folder>/test-mode/save_00.sav`.
-The Android launcher's `native-launcher.wa2cfg` remains in the external game
-folder's root.
+Existing root-level saves are also supported; a root-level file takes priority
+when the same filename exists in both locations.
 
-To import normal PC saves, exit the game and copy `Sys.sav`, numbered saves such
-as `save_00.sav`, and `save_Q.sav` directly into the game folder's root. Copy the
-INI files too if you want the corresponding settings, and disable test mode
-before loading. The legacy PC layout inside the same external game folder is
-also supported: when a root file is absent, the adapter checks
-`<game folder>/Documents/Leaf/WHITE ALBUM2/`. Separate chapter
-directories, `WHITE ALBUM2 -introductory chapter-` and
-`WHITE ALBUM2 -closing chapter-`, remain alongside it under `Documents/Leaf/`.
+### Test-mode saves
+
+With **Test mode (unlock all)** enabled, saves use this separate directory
+inside the same external game folder:
+
+```text
+<game folder>/test-mode/
+```
+
+For example, `test-mode/Sys.sav` and `test-mode/save_00.sav`. Disable test mode
+to return to normal saves.
+
+### Settings
+
+Android launcher options are stored in `<game folder>/native-launcher.wa2cfg`.
+Game settings use `SYSTEM.ini` and `D3D.ini`; keep existing files in their current
+directories.
 
 ### Supplementary captions
 
-Embedded main-story supplementary captions are Chinese by default. The
-**Extra captions** switch controls their display. External captions support
-**UTF-8 `sub.yaml` and the original Todokanai format**: select a file under
-**Caption source**, such as the patch's `todokanai/subtitles`, and enable
-**Extra captions**. Todokanai files work directly without YAML conversion.
+Embedded main-story supplementary captions are Chinese by default, controlled
+by **Extra captions**. To use an external file, select a UTF-8 `sub.yaml` or
+original Todokanai `subtitles` file under **Caption source** and enable
+**Extra captions**. The external file replaces the complete embedded set;
+Todokanai files need no YAML conversion.
 
-Caption files are separate from the script packs; their text determines their
-language. The UA 0.1.5 caption file contains English text and can be translated
-before selection. External captions replace the complete embedded set and are
-never selected automatically. Ordinary story dialogue comes from the selected
-scripts and fonts.
+Story dialogue comes from the selected scripts and fonts; supplementary caption
+language comes from the caption file. The UA 0.1.5 captions contain English text
+and can be translated before selection.
 
 ## Documentation and development
 
