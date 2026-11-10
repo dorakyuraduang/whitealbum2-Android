@@ -83,6 +83,15 @@ def main():
         for source_set in ui['source_sets'].values():
             for name,value in source_set['classes_sha256'].items():
                 if digest(Path(source_set['classes_directory'])/name)!=value:raise ValueError('Compiled Android presentation class changed: '+name)
+        movies=fresh(ROOT/'logs/movie-codec-verification.json')
+        if movies['patch_movies']!=16 or movies['baseline_movies']!=2 or movies['full_audio_files']!=18 or movies['full_video_files']!=4 or not all(movies[key] for key in ('same_shared_reader','original_resources_external','unknown_codecs_rejected')):raise ValueError('Incomplete original/Final Full Patch movie checks')
+        media_builds={}
+        for host in ('windows','arm64'):
+            media=json.loads((ROOT/('logs/media-codec-'+host+'-build.json')).read_text())
+            if media['movie_decoders']!=['wmv2','wmv3','wmav2','wmapro'] or not media['thread_safe_initialization'] or media['decoder_thread_count_policy']!=1:raise ValueError('Incomplete movie decoder build: '+host)
+            for name,value in media['libraries'].items():
+                if digest(ROOT/'tools/media-codec'/host/name)!=value['sha256']:raise ValueError('Changed movie decoder library: '+host+'/'+name)
+            media_builds[host]=media
         try:shaders=fresh(ROOT/'logs/portable-shader-verification.json')
         except (OSError,ValueError):
             run([sys.executable,ROOT/'scripts/verify_portable_shaders.py']);shaders=fresh(ROOT/'logs/portable-shader-verification.json')
@@ -92,6 +101,8 @@ def main():
         tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
         tracked += [ROOT/'scripts/prepare_shared_progress.py']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
+        tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
+        tracked += [ROOT/('logs/media-codec-'+host+'-build.json') for host in ('windows','arm64')]
         tracked += [ROOT/'scripts/verify_subtitles.py',ROOT/'scripts/verify_shared_package.py',ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/shared-aot-android/CMakeLists.txt',ROOT/'tests/shared-aot-android/entry.cpp']
         for folder in ('recompiled','engine','platform','hosts','android/native','generated/shared-aot','generated/static-data','generated/codepages','generated/graphics-abi','third_party/wa2_subtitles','tools/WindowsRecompTool-main/include/winrecomp'):
             tracked += [path for path in (ROOT/folder).rglob('*') if path.is_file() and path.suffix in ('.cpp','.hpp','.h','.inc','.cmake','.txt','.json')]
@@ -174,7 +185,7 @@ def main():
         bindings[sdl.relative_to(ROOT).as_posix()]=digest(sdl)
         proof=dict(schema='wa2.shared-aot-refresh.v1',source_sha256=bindings,reference_receipt=str(reference_path),reference_receipt_sha256=digest(reference_path),cached_generated_sha256=generated,
             verification_scope='unchanged verified AOT sources, fresh unmetered shared-host builds, selected memory/file and fast-forward scheduling tests, Java/JNI audit',historical_oracle_and_performance_suite_rerun=False,
-            current_tests=reports,derived_chroma_sources=chroma,derived_language_sources=language_sources,derived_progress_sources=progress_sources,selected_directory_files=saves,save_inventory=inventory,profile_batches=profiles,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
+            current_tests=reports,movie_codec_verification=movies,media_codec_builds=media_builds,derived_chroma_sources=chroma,derived_language_sources=language_sources,derived_progress_sources=progress_sources,selected_directory_files=saves,save_inventory=inventory,profile_batches=profiles,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
             crt_math_paths=dict(passed=True,source_unchanged=True,reference_receipt_sha256=digest(reference_path),independent_math_test_rerun=False,source_sha256=unchanged_math),
             manifest_sha256=digest(ROOT/'generated/shared-aot/manifest.json'),admitted_functions=manifest['admitted_functions'],instruction_locations=manifest['unique_instruction_locations'],
             partially_admitted_entries=manifest['partially_admitted_entries'],unsupported_instruction_sites=manifest['unsupported_instruction_sites'],

@@ -12,6 +12,8 @@ foreach(name selected_save_files portable_system resource_mount test_profile por
     add_executable(wa2_refresh_${name} "${WA2_ROOT}/tests/${name}.cpp")
     target_link_libraries(wa2_refresh_${name} PRIVATE wa2_function_process)
 endforeach()
+add_executable(wa2_refresh_movie_codecs "${WA2_ROOT}/tests/movie_codecs.cpp")
+target_link_libraries(wa2_refresh_movie_codecs PRIVATE wa2_function_process wa2_movie)
 target_link_libraries(wa2_refresh_image_chroma PRIVATE wa2_chroma_reference)
 if(WIN32)
     target_sources(wa2_refresh_subtitle_spacing PRIVATE "${WA2_ROOT}/platform/subtitle_font_windows.cpp")

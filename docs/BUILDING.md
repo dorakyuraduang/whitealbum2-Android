@@ -285,6 +285,29 @@ python scripts/build_media_codec.py --target windows
 python scripts/build_media_codec.py --target arm64
 ```
 
+The movie subset includes ASF with WMV3/WMA2 and Final Full Patch 1.0.3.0's
+WMV2/WMA Pro. Both architectures build the same decoder set. To refresh the
+memory-only compatibility receipt, extract only the patch's 16 video PAKs
+(preserving `IC`) into a private directory and provide original WMV3/WMA2
+`mv000.pak` and `mv100.pak` separately:
+
+```powershell
+python scripts/verify_movie_codecs.py --patch-dir path/to/patch-videos --original-dir path/to/original-res --zig-cache build/zig-cache --windows-sdl path/to/libSDL2.a
+```
+
+The check decodes every audio stream to EOF, compares PCM/YUV prefixes between
+interleaved and independent track readers, fully decodes the two `mv000` and
+two `mv100` videos, and checks bounded reads, cancellation and unsupported codec
+errors. It creates no window, device or app. The shared refresh requires this
+receipt and matching codec-library build receipts. Resources are never copied
+into public source or APKs.
+
+`tests/movie-codec-android` builds the same decoder fixture as a standalone
+ARM64 CLI with the NDK. It links no game entry, AOT functions, guest CPU/memory,
+renderer or device backend; representative files can be checked in memory on
+an authorized phone without starting the app. This is a component check and
+does not establish whole-game compatibility.
+
 Run builds sequentially. Build helpers set below-normal process priority,
 hide child windows and use one job. The current shared workflow is:
 

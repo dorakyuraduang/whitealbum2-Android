@@ -31,17 +31,22 @@ def wrapper(path,command):
 
 def main():
     arguments=argparse.ArgumentParser();arguments.add_argument('--target',choices=['windows','arm64'],required=True)
+    arguments.add_argument('--zig-cache',type=Path,default=ROOT/'build/zig-cache')
     args=arguments.parse_args()
     if os.name=='nt':
         kernel=ctypes.WinDLL('kernel32');kernel.GetCurrentProcess.restype=ctypes.c_void_p
+        kernel.GetCurrentProcess.restype=ctypes.c_void_p
         kernel.SetPriorityClass.argtypes=[ctypes.c_void_p,ctypes.c_uint]
-        if not kernel.SetPriorityClass(kernel.GetCurrentProcess(),0x4000):raise ctypes.WinError(ctypes.get_last_error())
+        kernel.GetProcessAffinityMask.argtypes=[ctypes.c_void_p,ctypes.POINTER(ctypes.c_size_t),ctypes.POINTER(ctypes.c_size_t)]
+        kernel.SetProcessAffinityMask.argtypes=[ctypes.c_void_p,ctypes.c_size_t]
+        process=kernel.GetCurrentProcess();current=ctypes.c_size_t();system=ctypes.c_size_t()
+        if not kernel.SetPriorityClass(process,0x4000) or not kernel.GetProcessAffinityMask(process,ctypes.byref(current),ctypes.byref(system)) or not kernel.SetProcessAffinityMask(process,current.value&-current.value):raise ctypes.WinError(ctypes.get_last_error())
     source=ROOT/'tools/ffmpeg-9.0.2';source_proof=json.loads((ROOT/'logs/media-sources.json').read_text())
     if source_proof.get('detached_signature_verified') is not True:raise ValueError('Unverified codec source')
     work=ROOT/'build/media-codec'/args.target;work.mkdir(parents=True,exist_ok=True)
     prefix=ROOT/'tools/media-codec'/args.target;prefix.mkdir(parents=True,exist_ok=True)
     environment=os.environ.copy();environment.update(TEMP=str(ROOT/'build/temp'),TMP=str(ROOT/'build/temp'),
-        ZIG_GLOBAL_CACHE_DIR=str(ROOT/'build/zig-cache'),ZIG_LOCAL_CACHE_DIR=str(ROOT/'build/zig-local'),
+        ZIG_GLOBAL_CACHE_DIR=str(args.zig_cache.resolve()),ZIG_LOCAL_CACHE_DIR=str(ROOT/'build/zig-local'),
         MSYS2_PATH_TYPE='inherit',LC_ALL='C',MAKEFLAGS='-j1')
     environment['PATH']=str(ROOT/'tools/media-build/bin')+os.pathsep+str(GIT/'usr/bin')+os.pathsep+environment.get('PATH','')
     flags=subprocess.BELOW_NORMAL_PRIORITY_CLASS|subprocess.CREATE_NO_WINDOW
@@ -67,7 +72,7 @@ def main():
         '--disable-avdevice','--disable-avfilter','--disable-swscale','--disable-swresample',
         '--disable-os2threads',
         '--enable-avformat','--enable-avcodec','--enable-avutil',
-        '--enable-demuxer=asf','--enable-decoder=wmv3,wmav2,adpcm_ms,adpcm_ima_wav,pcm_alaw,pcm_mulaw',
+        '--enable-demuxer=asf','--enable-decoder=wmv2,wmv3,wmav2,wmapro,adpcm_ms,adpcm_ima_wav,pcm_alaw,pcm_mulaw',
         '--extra-cflags=-ffunction-sections -fdata-sections']
     log=ROOT/('logs/media-codec-'+args.target+'-build.log')
     config_key=hashlib.sha256(json.dumps(configuration).encode()).hexdigest()
@@ -88,8 +93,11 @@ def main():
     if set(Path(p).name for p in libraries)!={'libavformat.a','libavcodec.a','libavutil.a'}:raise ValueError('Unexpected codec libraries')
     config_text=(work/'config.h').read_text()
     if '#define HAVE_THREADS 1' not in config_text:raise ValueError('Codec initialization must be thread-safe')
+    components=(work/'config_components.h').read_text()
+    movie_decoders=['wmv2','wmv3','wmav2','wmapro']
+    if any('#define CONFIG_'+codec.upper()+'_DECODER 1' not in components for codec in movie_decoders):raise ValueError('Missing required original/patch movie decoder')
     proof=dict(schema='wa2.media-codec-build.v1',target=args.target,source=source_proof,configuration=configuration,
-        config_sha256=digest(work/'config.h'),libraries=libraries,license='LGPL-2.1-or-later',
+        config_sha256=digest(work/'config.h'),components_sha256=digest(work/'config_components.h'),movie_decoders=movie_decoders,libraries=libraries,license='LGPL-2.1-or-later',
         thread_safe_initialization=True,decoder_thread_count_policy=1,
         gpl_enabled=False,nonfree_enabled=False,external_game_project_used=False,game_launched=False,screen_access=False)
     (ROOT/('logs/media-codec-'+args.target+'-build.json')).write_text(json.dumps(proof,indent=2)+'\n')

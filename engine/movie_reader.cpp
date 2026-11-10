@@ -84,14 +84,17 @@ struct Reader::Impl{
         if(io_failure)std::rethrow_exception(io_failure);
         if(result<0)fail(operation,result);
     }
-    void open_codec(Codec& output,AVStream* stream,AVCodecID expected){
-        if(stream->codecpar->codec_id!=expected)throw Error("unsupported original movie codec");
+    void open_codec(Codec& output,AVStream* stream,AVMediaType type){
+        const auto codec=stream->codecpar->codec_id;
+        const bool supported=type==AVMEDIA_TYPE_VIDEO?(codec==AV_CODEC_ID_WMV2 || codec==AV_CODEC_ID_WMV3):
+            (codec==AV_CODEC_ID_WMAV2 || codec==AV_CODEC_ID_WMAPRO);
+        if(!supported)throw Error(std::string("unsupported movie ")+(type==AVMEDIA_TYPE_VIDEO?"video":"audio")+" codec: "+avcodec_get_name(codec));
         output.stream=stream;
-        if((fixed_track==Track::audio && expected==AV_CODEC_ID_WMV3) ||
-           (fixed_track==Track::video && expected==AV_CODEC_ID_WMAV2)){
+        if((fixed_track==Track::audio && type==AVMEDIA_TYPE_VIDEO) ||
+           (fixed_track==Track::video && type==AVMEDIA_TYPE_AUDIO)){
             stream->discard=AVDISCARD_ALL;return;
         }
-        const auto* decoder=avcodec_find_decoder(expected);
+        const auto* decoder=avcodec_find_decoder(codec);
         if(!decoder)throw Error("required native movie decoder was not built");
         output.context=avcodec_alloc_context3(decoder);
         if(!output.context)throw std::bad_alloc();
@@ -116,10 +119,10 @@ struct Reader::Impl{
         // ASF declares stream parameters in its header; avoid scanning seconds
         // of the file with avformat_find_stream_info before the first frame.
         for(unsigned i=0;i<format->nb_streams;++i){auto* stream=format->streams[i];
-            if(stream->codecpar->codec_type==AVMEDIA_TYPE_VIDEO && !video.stream)open_codec(video,stream,AV_CODEC_ID_WMV3);
-            else if(stream->codecpar->codec_type==AVMEDIA_TYPE_AUDIO && !audio.stream)open_codec(audio,stream,AV_CODEC_ID_WMAV2);
+            if(stream->codecpar->codec_type==AVMEDIA_TYPE_VIDEO && !video.stream)open_codec(video,stream,AVMEDIA_TYPE_VIDEO);
+            else if(stream->codecpar->codec_type==AVMEDIA_TYPE_AUDIO && !audio.stream)open_codec(audio,stream,AVMEDIA_TYPE_AUDIO);
         }
-        if(!video.stream)throw Error("original movie has no WMV3 video stream");
+        if(!video.stream)throw Error("movie has no supported video stream");
         const auto width=video.context?video.context->width:video.stream->codecpar->width;
         const auto height=video.context?video.context->height:video.stream->codecpar->height;
         if(width<1 || height<1 || width>8192 || height>8192)throw Error("invalid movie dimensions");
