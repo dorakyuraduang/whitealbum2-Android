@@ -51,21 +51,25 @@
 
 ## 存档、配置与字幕
 
-**普通存档默认直接保存在所选游戏资源目录的根目录。** 下表中的 `<游戏目录>` 就是启动页选定的文件夹，名称不限。
+### 外置存档与配置
 
-| 用途 | 普通模式下的默认位置 |
+**当前版本的游戏存档全部外置，读写在玩家选择的游戏目录中。普通模式和测试模式都使用外置存档，仅存放的子目录不同。** 下表中的 `<游戏目录>` 就是启动页选定的文件夹，名称不限。
+
+| 用途 | 普通模式下的外置位置 |
 | --- | --- |
 | 全局进度、已读及内容解锁状态 | `<游戏目录>/Sys.sav` |
 | 手动存档（100 个位置） | `<游戏目录>/save_00.sav` ～ `<游戏目录>/save_99.sav` |
 | 快速存档 | `<游戏目录>/save_Q.sav` |
 | 游戏及显示设置 | `<游戏目录>/SYSTEM.ini`、`<游戏目录>/D3D.ini`；已有的 `default.ini` 也从这里读取 |
-| 安卓启动器选项（语言、FPS、字幕来源等） | `<游戏目录>/native-launcher.wa2cfg` |
+| 安卓启动器选项（游戏语言、FPS、字幕来源等） | `<游戏目录>/native-launcher.wa2cfg` |
 
 例如，安卓选择“内部存储/Games/WA2”，第一个手动存档的完整路径就是 **`/storage/emulated/0/Games/WA2/save_00.sav`**。Windows 使用同一布局：若以 `--root "D:\Games\WHITE ALBUM2"` 启动，则对应 **`D:\Games\WHITE ALBUM2\save_00.sav`**。首次保存前，部分文件可能尚未生成；文件名的大小写可能不同。
 
-开启“测试模式（全部解锁）”后，游戏存档和 INI 配置改用 **`<游戏目录>/test-mode/`**，例如 `test-mode/Sys.sav`、`test-mode/save_00.sav`；安卓启动器的 `native-launcher.wa2cfg` 仍在游戏目录根目录。
+开启“测试模式（全部解锁）”后，游戏存档和 INI 配置保存在同一外置游戏目录的 **`test-mode/`** 子目录，例如 `<游戏目录>/test-mode/Sys.sav`、`<游戏目录>/test-mode/save_00.sav`；安卓启动器的 `native-launcher.wa2cfg` 仍在外置游戏目录根目录。
 
-导入普通 PC 存档时，退出游戏后把 `Sys.sav`、`save_00.sav` 等编号存档、`save_Q.sav` 复制到游戏目录根目录，需要同步设置时再复制 INI，并关闭测试模式后读档。也兼容旧布局：根目录找不到同名文件时会查找 `<游戏目录>/Documents/Leaf/WHITE ALBUM2/`；独立章节的 `WHITE ALBUM2 -introductory chapter-` 和 `WHITE ALBUM2 -closing chapter-` 目录保留在同级 `Documents/Leaf/` 下。
+导入普通 PC 存档时，退出游戏后把 `Sys.sav`、`save_00.sav` 等编号存档、`save_Q.sav` 复制到游戏目录根目录，需要同步设置时再复制 INI，并关闭测试模式后读档。也兼容外置游戏目录内的旧 PC 布局：根目录找不到同名文件时会查找 `<游戏目录>/Documents/Leaf/WHITE ALBUM2/`；独立章节的 `WHITE ALBUM2 -introductory chapter-` 和 `WHITE ALBUM2 -closing chapter-` 目录保留在同级 `Documents/Leaf/` 下。
+
+### 补充字幕
 
 默认内置正篇中文字幕，可通过“补充字幕”开关控制显示。外置字幕支持 **UTF-8 的 `sub.yaml` 和原 Todokanai 格式**：在启动页的 **“字幕来源”** 中手动选择文件，例如补丁的 `todokanai/subtitles`，并开启补充字幕。原 Todokanai 文件可直接使用，无需转换为 YAML。
 

@@ -78,16 +78,19 @@ uses the `res/` folder.
 
 ## Saves, settings and captions
 
-**Normal saves default to the root of the selected game-resource folder.**
+### External saves and settings
+
+**All game saves are external files in the selected game-resource folder.
+Normal mode and test mode both use external saves; only their subdirectory differs.**
 `<game folder>` below means the folder selected in the launcher; its name is unrestricted.
 
-| Purpose | Default location in normal mode |
+| Purpose | External location in normal mode |
 | --- | --- |
 | Global progress, read history and content unlocks | `<game folder>/Sys.sav` |
 | Manual saves (100 slots) | `<game folder>/save_00.sav` through `<game folder>/save_99.sav` |
 | Quick save | `<game folder>/save_Q.sav` |
 | Game and display settings | `<game folder>/SYSTEM.ini`, `<game folder>/D3D.ini`; an existing `default.ini` is also read here |
-| Android launcher options (language, FPS, caption source, etc.) | `<game folder>/native-launcher.wa2cfg` |
+| Android launcher options (game language, FPS, caption source, etc.) | `<game folder>/native-launcher.wa2cfg` |
 
 For example, selecting **Internal storage/Games/WA2** on Android puts the first
 manual save at **`/storage/emulated/0/Games/WA2/save_00.sav`**. Windows uses the same
@@ -95,18 +98,22 @@ layout: starting with `--root "D:\Games\WHITE ALBUM2"` puts it at
 **`D:\Games\WHITE ALBUM2\save_00.sav`**. Some files only appear after saving;
 filename capitalization may differ.
 
-With **Test mode (unlock all)** enabled, game saves and INI settings use
-**`<game folder>/test-mode/`**, such as `test-mode/Sys.sav` and
-`test-mode/save_00.sav`. The Android launcher's `native-launcher.wa2cfg` remains
-in the game folder's root.
+With **Test mode (unlock all)** enabled, game saves and INI settings use the
+**`test-mode/`** subfolder of that same external game folder, such as
+`<game folder>/test-mode/Sys.sav` and `<game folder>/test-mode/save_00.sav`.
+The Android launcher's `native-launcher.wa2cfg` remains in the external game
+folder's root.
 
 To import normal PC saves, exit the game and copy `Sys.sav`, numbered saves such
 as `save_00.sav`, and `save_Q.sav` directly into the game folder's root. Copy the
 INI files too if you want the corresponding settings, and disable test mode
-before loading. The legacy layout is also supported: when a root file is absent,
-the adapter checks `<game folder>/Documents/Leaf/WHITE ALBUM2/`. Separate chapter
+before loading. The legacy PC layout inside the same external game folder is
+also supported: when a root file is absent, the adapter checks
+`<game folder>/Documents/Leaf/WHITE ALBUM2/`. Separate chapter
 directories, `WHITE ALBUM2 -introductory chapter-` and
 `WHITE ALBUM2 -closing chapter-`, remain alongside it under `Documents/Leaf/`.
+
+### Supplementary captions
 
 Embedded main-story supplementary captions are Chinese by default. The
 **Extra captions** switch controls their display. External captions support
