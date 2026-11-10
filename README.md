@@ -2,7 +2,7 @@
 
 **简体中文** · [English](README.en.md)
 
-面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.74-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
+面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.75-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
 
 **[下载与发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
 
@@ -15,7 +15,7 @@
 3. 打开应用，选择这个游戏文件夹，并授予读写权限。
 4. 选择游戏语言，按需设置 FPS、长按快进和补充字幕，点击 **“开始游戏”**。
 
-影片支持原版 **WMV3/WMA2**，以及 **Final Full Patch 1.0.3.0** 的 **WMV2/WMA Pro** 视频 PAK。保留原文件名和 `IC` 路径，直接替换对应资源，无需转码。
+影片支持 MP4/MOV、MKV/WebM、AVI、WMV/ASF、MPEG/TS、FLV 等常用格式，以及原版和 **Final Full Patch 1.0.3.0** 的视频 PAK。保留游戏原文件名和 `IC` 路径；无法读取、解析或解码的影片会自动跳过并继续剧情，原因记录在运行诊断中。详见[影片格式与容错](docs/MOVIE_FORMATS.md)。
 
 游戏语言默认中文，所选文件夹根目录需有对应的脚本包和字库包：
 

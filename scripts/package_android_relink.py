@@ -18,7 +18,7 @@ def package_relink(apk,console,environment,flags):
     materials={}
     for path in build.rglob('libwa2_*.a'):materials['application/libs/'+path.name]=path
     for path in (build/'CMakeFiles/wa2_android.dir/native').glob('*.o'):materials['application/entry/'+path.name]=path
-    for name in ('libavformat.a','libavcodec.a','libavutil.a'):materials['ffmpeg/lib/'+name]=ROOT/'tools/media-codec/arm64/lib'/name
+    for name in ('libavformat.a','libavcodec.a','libswscale.a','libswresample.a','libavutil.a'):materials['ffmpeg/lib/'+name]=ROOT/'tools/media-codec/arm64/lib'/name
     for name in ('config.h','config_components.h','config.asm'): 
         path=ROOT/'build/media-codec/arm64'/name
         if path.is_file():materials['ffmpeg/config/'+name]=path
@@ -26,6 +26,7 @@ def package_relink(apk,console,environment,flags):
     for name in ('COPYING.LGPLv2.1','NOTICE.txt'):materials['ffmpeg/'+name]=ROOT/'third_party/ffmpeg'/name
     materials['ffmpeg/ffmpeg-9.0.2.tar.xz']=ROOT/'tools/downloads/ffmpeg-9.0.2.tar.xz'
     materials['ffmpeg/build-configuration.json']=ROOT/'logs/media-codec-arm64-build.json'
+    materials['config/media_codecs.json']=ROOT/'config/media_codecs.json'
     materials['native/libSDL2.so']=build/'size-check/libSDL2.so'
     materials['native/SDL2-LICENSE.txt']=ROOT/'tools/SDL-release-2.32.10/LICENSE.txt'
     materials['android_relink.py']=ROOT/'scripts/android_relink.py'

@@ -42,6 +42,8 @@ def main():
         process=kernel.GetCurrentProcess();current=ctypes.c_size_t();system=ctypes.c_size_t()
         if not kernel.SetPriorityClass(process,0x4000) or not kernel.GetProcessAffinityMask(process,ctypes.byref(current),ctypes.byref(system)) or not kernel.SetProcessAffinityMask(process,current.value&-current.value):raise ctypes.WinError(ctypes.get_last_error())
     source=ROOT/'tools/ffmpeg-9.0.2';source_proof=json.loads((ROOT/'logs/media-sources.json').read_text())
+    policy=json.loads((ROOT/'config/media_codecs.json').read_text())
+    movie_decoders=policy['video_decoders']+policy['audio_decoders']
     if source_proof.get('detached_signature_verified') is not True:raise ValueError('Unverified codec source')
     work=ROOT/'build/media-codec'/args.target;work.mkdir(parents=True,exist_ok=True)
     prefix=ROOT/'tools/media-codec'/args.target;prefix.mkdir(parents=True,exist_ok=True)
@@ -69,10 +71,12 @@ def main():
         '--nm='+posix(NDK/'bin/llvm-nm.exe'),'--strip='+posix(NDK/'bin/llvm-strip.exe'),
         '--disable-everything','--disable-autodetect','--disable-network','--disable-programs','--disable-doc',
         '--disable-shared','--enable-static','--enable-pic','--enable-small',
-        '--disable-avdevice','--disable-avfilter','--disable-swscale','--disable-swresample',
+        '--disable-avdevice','--disable-avfilter','--enable-swscale','--enable-swresample',
         '--disable-os2threads',
         '--enable-avformat','--enable-avcodec','--enable-avutil',
-        '--enable-demuxer=asf','--enable-decoder=wmv2,wmv3,wmav2,wmapro,adpcm_ms,adpcm_ima_wav,pcm_alaw,pcm_mulaw',
+        '--enable-demuxer='+','.join(policy['demuxers']),
+        '--enable-decoder='+','.join(movie_decoders+policy['legacy_wave_decoders']),
+        '--enable-parser='+','.join(policy['parsers']),
         '--extra-cflags=-ffunction-sections -fdata-sections']
     log=ROOT/('logs/media-codec-'+args.target+'-build.log')
     config_key=hashlib.sha256(json.dumps(configuration).encode()).hexdigest()
@@ -90,14 +94,14 @@ def main():
             subprocess.run([str(shell),'-c',command],cwd=ROOT,env=environment,creationflags=flags,
                 stdout=console,stderr=subprocess.STDOUT,check=True,timeout=1800)
     libraries={str(p.relative_to(prefix)):dict(bytes=p.stat().st_size,sha256=digest(p)) for p in sorted((prefix/'lib').glob('*.a'))}
-    if set(Path(p).name for p in libraries)!={'libavformat.a','libavcodec.a','libavutil.a'}:raise ValueError('Unexpected codec libraries')
+    if set(Path(p).name for p in libraries)!={'lib'+name+'.a' for name in policy['libraries']}:raise ValueError('Unexpected codec libraries')
     config_text=(work/'config.h').read_text()
     if '#define HAVE_THREADS 1' not in config_text:raise ValueError('Codec initialization must be thread-safe')
     components=(work/'config_components.h').read_text()
-    movie_decoders=['wmv2','wmv3','wmav2','wmapro']
     if any('#define CONFIG_'+codec.upper()+'_DECODER 1' not in components for codec in movie_decoders):raise ValueError('Missing required original/patch movie decoder')
+    if any('#define CONFIG_'+name.upper()+'_DEMUXER 1' not in components for name in policy['demuxers']):raise ValueError('Missing required movie demuxer')
     proof=dict(schema='wa2.media-codec-build.v1',target=args.target,source=source_proof,configuration=configuration,
-        config_sha256=digest(work/'config.h'),components_sha256=digest(work/'config_components.h'),movie_decoders=movie_decoders,libraries=libraries,license='LGPL-2.1-or-later',
+        config_sha256=digest(work/'config.h'),components_sha256=digest(work/'config_components.h'),movie_decoders=movie_decoders,movie_demuxers=policy['demuxers'],media_policy_sha256=digest(ROOT/'config/media_codecs.json'),libraries=libraries,license='LGPL-2.1-or-later',
         thread_safe_initialization=True,decoder_thread_count_policy=1,
         gpl_enabled=False,nonfree_enabled=False,external_game_project_used=False,game_launched=False,screen_access=False)
     (ROOT/('logs/media-codec-'+args.target+'-build.json')).write_text(json.dumps(proof,indent=2)+'\n')

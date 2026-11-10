@@ -78,8 +78,8 @@ def main():
     for kind,path,metadata in fixtures:
         expected=('WMV2',0x162) if kind=='patch' else ('WMV3',0x161)
         if (metadata['video_fourcc'],metadata['audio_tag'])!=expected:raise ValueError('Unexpected movie codec pair: '+str(path))
-    sources=[Path(__file__),ROOT/'scripts/build_media_codec.py',ROOT/'tests/movie_codecs.cpp',ROOT/'engine/movie_reader.cpp',ROOT/'engine/movie_reader.hpp',ROOT/'engine/movie.cmake',ROOT/'platform/file_io.cpp',ROOT/'platform/file_io.hpp',ROOT/'scripts/zig-toolchain.cmake']
-    sources += [ROOT/'tools/media-codec/windows/lib'/('lib'+name+'.a') for name in ('avformat','avcodec','avutil')]
+    sources=[Path(__file__),ROOT/'config/media_codecs.json',ROOT/'scripts/build_media_codec.py',ROOT/'tests/movie_codecs.cpp',ROOT/'engine/movie_reader.cpp',ROOT/'engine/movie_reader.hpp',ROOT/'engine/movie.cmake',ROOT/'platform/file_io.cpp',ROOT/'platform/file_io.hpp',ROOT/'scripts/zig-toolchain.cmake']
+    sources += [ROOT/'tools/media-codec/windows/lib'/('lib'+name+'.a') for name in ('avformat','avcodec','swscale','swresample','avutil')]
     sources += [path for path in (ROOT/'tools/media-codec/windows/include').rglob('*.h')]
     bindings={path.relative_to(ROOT).as_posix():digest(path) for path in sources}
     directory=ROOT/'build/shared-aot-refresh-x64';results=ROOT/'build/movie-codec-checks';results.mkdir(parents=True,exist_ok=True)

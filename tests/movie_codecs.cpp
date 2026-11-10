@@ -48,10 +48,10 @@ void unsupported(std::shared_ptr<r::Source> source,bool video){
         CHECK(at+24<=bytes.size());const auto size=u64(bytes,at+16);CHECK(size>=24 && size<=bytes.size()-at);
         if(std::equal(stream_guid.begin(),stream_guid.end(),bytes.begin()+at)){
             CHECK(size>=80);const bool match=video?u32(bytes,at+24)==0xbc19efc0:u32(bytes,at+24)==0xf8699e40;
-            if(match){if(video){CHECK(size>=109);std::memcpy(bytes.data()+at+105,"H264",4);}else{bytes[at+78]=0x63;bytes[at+79]=0x01;}changed=true;break;}
+            if(match){if(video){CHECK(size>=109);std::memcpy(bytes.data()+at+105,"AV01",4);}else{bytes[at+78]=0x0a;bytes[at+79]=0x00;}changed=true;break;}
         }at+=size;
     }
-    CHECK(changed);rejects([&]{m::Reader reader(altered);},video?"unsupported movie video codec: h264":"unsupported movie audio codec: wmalossless");
+    CHECK(changed);rejects([&]{m::Reader reader(altered);},video?"unsupported movie video codec: av1":"unsupported movie audio codec: wmavoice");
 }
 int main(int argc,char** argv){try{
     CHECK(argc==4);const bool full=std::string_view(argv[3])=="full";CHECK(full || std::string_view(argv[3])=="prefix");

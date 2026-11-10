@@ -85,10 +85,13 @@ def main():
                 if digest(Path(source_set['classes_directory'])/name)!=value:raise ValueError('Compiled Android presentation class changed: '+name)
         movies=fresh(ROOT/'logs/movie-codec-verification.json')
         if movies['patch_movies']!=16 or movies['baseline_movies']!=2 or movies['full_audio_files']!=18 or movies['full_video_files']!=4 or not all(movies[key] for key in ('same_shared_reader','original_resources_external','unknown_codecs_rejected')):raise ValueError('Incomplete original/Final Full Patch movie checks')
+        movie_formats=fresh(ROOT/'logs/movie-format-verification.json')
+        if not all(movie_formats[key] for key in ('bad_movie_completes_source_wait','unknown_guest_faults_preserved','same_shared_reader')) or movie_formats['formats']['recoveries']!=2 or movie_formats['source_completion']['parse_decode_failure_cases']!=16:raise ValueError('Incomplete common-format and movie-skip checks')
         media_builds={}
+        media_policy=json.loads((ROOT/'config/media_codecs.json').read_text())
         for host in ('windows','arm64'):
             media=json.loads((ROOT/('logs/media-codec-'+host+'-build.json')).read_text())
-            if media['movie_decoders']!=['wmv2','wmv3','wmav2','wmapro'] or not media['thread_safe_initialization'] or media['decoder_thread_count_policy']!=1:raise ValueError('Incomplete movie decoder build: '+host)
+            if media['movie_decoders']!=media_policy['video_decoders']+media_policy['audio_decoders'] or media['movie_demuxers']!=media_policy['demuxers'] or media['media_policy_sha256']!=digest(ROOT/'config/media_codecs.json') or not media['thread_safe_initialization'] or media['decoder_thread_count_policy']!=1:raise ValueError('Incomplete movie decoder build: '+host)
             for name,value in media['libraries'].items():
                 if digest(ROOT/'tools/media-codec'/host/name)!=value['sha256']:raise ValueError('Changed movie decoder library: '+host+'/'+name)
             media_builds[host]=media
@@ -102,13 +105,15 @@ def main():
         tracked += [ROOT/'scripts/prepare_shared_progress.py']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
+        tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
         tracked += [ROOT/('logs/media-codec-'+host+'-build.json') for host in ('windows','arm64')]
         tracked += [ROOT/'scripts/verify_subtitles.py',ROOT/'scripts/verify_shared_package.py',ROOT/'scripts/zig-toolchain.cmake',ROOT/'tests/shared-aot-android/CMakeLists.txt',ROOT/'tests/shared-aot-android/entry.cpp']
         for folder in ('recompiled','engine','platform','hosts','android/native','generated/shared-aot','generated/static-data','generated/codepages','generated/graphics-abi','third_party/wa2_subtitles','tools/WindowsRecompTool-main/include/winrecomp'):
             tracked += [path for path in (ROOT/folder).rglob('*') if path.is_file() and path.suffix in ('.cpp','.hpp','.h','.inc','.cmake','.txt','.json')]
         tracked += [ROOT/('tools/WindowsRecompTool-main/src/'+name) for name in ('runtime/native_memory.cpp','runtime/process.cpp','runtime/win32.cpp','pe.cpp','resources.cpp')]
         tracked += [ROOT/('port/'+name) for name in ('audio.cpp','audio.hpp','audio_abi.hpp','audio_tables.inc','native_resources.cpp','native_resources.hpp','native_vorbis.cpp','native_vorbis.hpp','registry.cpp','wa2_win32.hpp','exceptions.cpp','exception_abi.hpp','sprite_sort.cpp','sprite_sort.hpp','sort_signature.inc','vertex_batch.cpp','vertex_batch.hpp','vertex_signature.inc','d3d9_tables.inc')]
-        tracked += [ROOT/('tools/media-codec/'+host+'/lib/'+name) for host in ('windows','arm64') for name in ('libavformat.a','libavcodec.a','libavutil.a')]
+        tracked += [ROOT/'config/media_codecs.json']
+        tracked += [ROOT/('tools/media-codec/'+host+'/lib/'+name) for host in ('windows','arm64') for name in ('libavformat.a','libavcodec.a','libswscale.a','libswresample.a','libavutil.a')]
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
@@ -185,7 +190,7 @@ def main():
         bindings[sdl.relative_to(ROOT).as_posix()]=digest(sdl)
         proof=dict(schema='wa2.shared-aot-refresh.v1',source_sha256=bindings,reference_receipt=str(reference_path),reference_receipt_sha256=digest(reference_path),cached_generated_sha256=generated,
             verification_scope='unchanged verified AOT sources, fresh unmetered shared-host builds, selected memory/file and fast-forward scheduling tests, Java/JNI audit',historical_oracle_and_performance_suite_rerun=False,
-            current_tests=reports,movie_codec_verification=movies,media_codec_builds=media_builds,derived_chroma_sources=chroma,derived_language_sources=language_sources,derived_progress_sources=progress_sources,selected_directory_files=saves,save_inventory=inventory,profile_batches=profiles,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
+            current_tests=reports,movie_codec_verification=movies,movie_format_verification=movie_formats,media_codec_builds=media_builds,derived_chroma_sources=chroma,derived_language_sources=language_sources,derived_progress_sources=progress_sources,selected_directory_files=saves,save_inventory=inventory,profile_batches=profiles,fast_forward_scheduling=skip,shared_main_story_subtitles=subtitle,chapter_test_profile=reports['test_profile'],shaders=shaders['checks'],
             crt_math_paths=dict(passed=True,source_unchanged=True,reference_receipt_sha256=digest(reference_path),independent_math_test_rerun=False,source_sha256=unchanged_math),
             manifest_sha256=digest(ROOT/'generated/shared-aot/manifest.json'),admitted_functions=manifest['admitted_functions'],instruction_locations=manifest['unique_instruction_locations'],
             partially_admitted_entries=manifest['partially_admitted_entries'],unsupported_instruction_sites=manifest['unsupported_instruction_sites'],

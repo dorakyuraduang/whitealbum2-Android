@@ -55,6 +55,7 @@ def package(artifacts,console,environment,flags):
     for name in ('COPYING.LGPLv2.1','NOTICE.txt'):materials['ffmpeg/'+name]=ROOT/'third_party/ffmpeg'/name
     materials['ffmpeg/ffmpeg-9.0.2.tar.xz']=ROOT/'tools/downloads/ffmpeg-9.0.2.tar.xz'
     materials['build_media_codec.py']=ROOT/'scripts/build_media_codec.py'
+    materials['config/media_codecs.json']=ROOT/'config/media_codecs.json'
     materials['shared_relink.py']=ROOT/'scripts/shared_relink.py'
     materials['SDL2-LICENSE.txt']=ROOT/'tools/SDL-release-2.32.10/LICENSE.txt'
     for name in ('LICENSE','FONT-NOTICE.txt','README.md','source.json'):
@@ -77,7 +78,7 @@ def package(artifacts,console,environment,flags):
         relinked_artifacts=relinks,game_resources_included=False,ndk='27.0.12077973',maximum_build_jobs=1)
     readme=('These materials match the APK and Windows executable identified in manifest.json.\n'
         'FFmpeg remains replaceable: rebuild compatible libraries with the supplied source and exact configurations, '
-        'then replace the corresponding libav*.a files under android/archives or windows/archives.\n'
+        'then replace the corresponding libav*.a and libsw*.a files under android/archives or windows/archives.\n'
         'Android: python shared_relink.py --target android --ndk /path/to/ndk-r27 --output libwa2_android.so\n'
         'Windows: python shared_relink.py --target windows --zig /path/to/zig.exe --output WA2_SDL2_x64.exe\n'
         'For Android, replace lib/arm64-v8a/libwa2_android.so in an unsigned APK and align/sign it with your own SDK tools.\n'

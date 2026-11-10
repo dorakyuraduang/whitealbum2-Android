@@ -142,7 +142,7 @@ def main():
     tracked += [p for p in (ROOT/'android/app/src/main/java').rglob('*.java')]
     tracked += [p for p in (ROOT/'android/native').glob('*') if p.suffix in ('.cpp','.hpp')]
     tracked += [ROOT/('tools/media-codec/'+host+'/lib/'+name) for host in ('windows','arm64')
-                for name in ('libavformat.a','libavcodec.a','libavutil.a')]
+                for name in ('libavformat.a','libavcodec.a','libswscale.a','libswresample.a','libavutil.a')]
     tracked += [ROOT/'build/android-native-game/sdl2/libSDL2.so',ROOT/'build/wa2-win64/wa2_port/sdl2/libSDL2.a']
     tracked += [ROOT/'scripts/capture_nls_snapshot.py',ROOT/'port/audio.cpp',ROOT/'port/audio_abi.hpp',ROOT/'port/audio_tables.inc']
     tracked += [ROOT/('android/native/'+name) for name in ('android_resources.cpp','android_resources.hpp','compiled_resources.cpp','compiled_resources.hpp','resource_jni.hpp')]

@@ -11,6 +11,7 @@
     "jit_forbidden": true,
     "unknown_game_commands_must_fail": true,
     "unknown_indirect_targets_must_fail": true,
+    "movie_failures_skip_with_diagnostics": true,
     "keep_original_pak_files_external": true,
     "android_resource_directory": "user-selected",
     "android_resource_directory_name_required": false,

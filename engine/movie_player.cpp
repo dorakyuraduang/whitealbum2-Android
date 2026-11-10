@@ -19,6 +19,7 @@ struct Player::Impl{
     std::deque<VideoFrame> frames;
     std::optional<VideoFrame> current;
     std::exception_ptr failure;
+    std::string media_failure;
     ReaderStatistics reader_stats;
     std::size_t peak_frames{};
     std::uint64_t skipped{};
@@ -32,7 +33,11 @@ struct Player::Impl{
         if(worker.joinable())worker.join();
         std::lock_guard lock(mutex);if(audio)audio->stop();frames.clear();current.reset();ended=true;
     }
-    void rethrow()const{if(failure)std::rethrow_exception(failure);}
+    void rethrow()const{if(failure && media_failure.empty())std::rethrow_exception(failure);}
+    void failed(const char* reason){
+        std::lock_guard lock(mutex);failure=std::current_exception();media_failure=reason && *reason?reason:"movie decoding failed";
+        eof=ended=true;if(audio)audio->stop();frames.clear();current.reset();changed.notify_all();
+    }
     static ReaderStatistics combined(const Reader& video,const std::unique_ptr<Reader>& audio){
         auto out=video.statistics();if(!audio)return out;const auto other=audio->statistics();
         out.bytes_read+=other.bytes_read;out.read_calls+=other.read_calls;out.seek_calls+=other.seek_calls;
@@ -80,7 +85,7 @@ struct Player::Impl{
                 if(!decoded){
                     std::lock_guard lock(mutex);
                     if(preference==Track::audio){audio_eof=true;if(audio)audio->finish_input();}else video_eof=true;
-                    if(audio_eof && video_eof){eof=true;changed.notify_all();return;}
+                    if(audio_eof && video_eof){if(!reader_stats.video_frames)throw Error("movie contains no decodable video frames");eof=true;changed.notify_all();return;}
                     continue;
                 }
                 if(auto* video=std::get_if<VideoFrame>(&*decoded)){
@@ -93,6 +98,10 @@ struct Player::Impl{
                     if(!audio)throw Error("movie decoder produced undeclared audio");pending_audio=std::move(samples);audio_cursor=0;
                 }
             }
+        }catch(const Error& error){
+            if(!stopping.load(std::memory_order_acquire))failed(error.what());
+        }catch(const resource::Error& error){
+            if(!stopping.load(std::memory_order_acquire))failed(error.what());
         }catch(...){
             if(stopping.load(std::memory_order_acquire))return;
             std::lock_guard lock(mutex);failure=std::current_exception();eof=true;if(audio)audio->stop();changed.notify_all();
@@ -152,6 +161,7 @@ void Player::gain(float value){
 }
 std::optional<VideoFrame> Player::frame()const{std::lock_guard lock(impl_->mutex);impl_->rethrow();return impl_->current;}
 bool Player::finished()const{std::lock_guard lock(impl_->mutex);impl_->rethrow();return impl_->ended;}
+std::string Player::failure()const{std::lock_guard lock(impl_->mutex);impl_->rethrow();return impl_->media_failure;}
 void Player::stop(){impl_->stop();}
 PlayerStatistics Player::statistics()const{
     std::lock_guard lock(impl_->mutex);impl_->rethrow();const auto audio=impl_->audio?impl_->audio->status():audio::StreamStatus{};

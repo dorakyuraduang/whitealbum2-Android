@@ -4,12 +4,20 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.74-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.74-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.74-shared-aot-replace-native.apk` to update the experimental
+is **0.2.75-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.75-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.75-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.75 adds content-based MP4/MOV, MKV/WebM, AVI, MPEG/TS and FLV detection, with
+common H.264/H.265, VP8/VP9, MPEG and audio decoders. The same reader converts
+video planes to 8-bit YUV420P when needed and audio to mono/stereo PCM. Media
+open, parse or decode failures stop the movie's audio, clear its picture and
+complete the source wait so the story continues. Diagnostics retain the skipped
+filename and reason. Unknown guest instructions and unrelated host faults remain
+errors. See [movie formats and recovery](MOVIE_FORMATS.md).
 
 0.2.74 adds WMV2 video and WMA Pro audio alongside original WMV3/WMA2. This covers
 all 16 video PAKs in Final Full Patch 1.0.3.0, using the same ASF reader and bounded

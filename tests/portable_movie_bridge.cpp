@@ -110,13 +110,14 @@ class MemorySource final:public wa2::resource::Source {
 public:std::uint64_t size()const override{return 16;}void read_at(std::uint64_t,std::span<std::uint8_t>)override{throw std::runtime_error("movie bridge fixture must not invoke a real decoder");}
 };
 class Playback final:public movie::Playback {
-    std::shared_ptr<Counters> counts;unsigned updates{};bool ended{},paused{};std::optional<movie::VideoFrame> current;
-public:explicit Playback(std::shared_ptr<Counters> value):counts(std::move(value)){++counts->created;}
+    std::shared_ptr<Counters> counts;unsigned updates{};int mode{};bool ended{},paused{};std::optional<movie::VideoFrame> current;
+public:explicit Playback(std::shared_ptr<Counters> value,int failure_mode=0):counts(std::move(value)),mode(failure_mode){++counts->created;}
     ~Playback()override{stop();}bool finished()const override{return ended;}
     void stop()override{if(!ended){++counts->stopped;ended=true;}current.reset();}
-    void update(std::int64_t)override{if(ended || paused)return;movie::VideoFrame frame;frame.owner=std::make_shared<unsigned>(++updates);frame.width=640;frame.height=480;frame.time_us=updates*3000;frame.duration_us=3000;current=std::move(frame);if(updates==4)ended=true;}
+    void update(std::int64_t)override{if(ended || paused)return;if(mode==3 && updates==1)throw movie::Error("fixture mid-play decode failure");movie::VideoFrame frame;frame.owner=std::make_shared<unsigned>(++updates);frame.width=640;frame.height=480;frame.time_us=updates*3000;frame.duration_us=3000;current=std::move(frame);if(updates==4)ended=true;}
     void pause(bool value,std::int64_t)override{paused=value;}void gain(float value)override{counts->gain=value;}
     std::optional<movie::VideoFrame> frame()const override{return current;}
+    std::string failure()const override{return mode==4 && updates>=2?"fixture stored decode failure":"";}
 };
 class Presenter final:public wa2::graphics::MoviePresenter {
     std::shared_ptr<Counters> counts;
@@ -130,7 +131,7 @@ public:explicit Presenter(std::shared_ptr<Counters> value):counts(std::move(valu
 };
 Image fixture(){Image image;image.base=0x400000;image.size=65536;image.headers_size=4096;image.entry=0x401000;image.bytes.resize(8192);image.sections={{".text",4096,4096,4096,4096,0x60000020}};return image;}
 int main(int argc,char** argv){try{
-    CHECK(argc==2);unsigned checked{},mounted_paths{},missing_cases{},open_error_cases{};const auto layouts=layout_checks(),frame_layouts=frame_layout_checks();
+    CHECK(argc==2);unsigned checked{},mounted_paths{},missing_cases{},open_error_cases{},media_failure_cases{};const auto layouts=layout_checks(),frame_layouts=frame_layout_checks();
     const auto source_file=std::filesystem::path(argv[1]).parent_path()/("movie-source-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".bin");
     {std::ofstream file(source_file,std::ios::binary);file.write("MOV0abcdefghijkl",16);CHECK(file.good());}
     for(bool linear:{false,true})for(bool mounted:{false,true}){auto counts=std::make_shared<Counters>();{
@@ -139,12 +140,12 @@ int main(int argc,char** argv){try{
             std::vector<ReadOnlyFileInfo>{{"MV000.PAK",16,0},{"IC/MV010.PAK",16,0}},
             [source_file,counts](std::string_view){++counts->source_opens;return std::fopen(source_file.string().c_str(),"rb");}));
         auto audio=install_wa2_audio_service(p,[counts](wa2::audio::Mixer&){return std::make_unique<MemoryOutput>(counts);});
-        auto presenter=std::make_shared<Presenter>(counts);std::int64_t clock{};c::MovieServices services;
+        auto presenter=std::make_shared<Presenter>(counts);std::int64_t clock{};int failure_mode{};c::MovieServices services;
         services.monotonic_us=[&]{return clock;};if(!mounted)services.open=[](Process& p,std::u16string_view name){
             if(name==u"open-denied.pak")throw wa2::resource::Error("fixture provider permission denied");
             if(name==u"unsupported.pak")throw GuestFault(FaultKind::unsupported,p.cpu.eip,"fixture unsupported movie service");
             CHECK(name==u"movie0.pak");return std::make_shared<MemorySource>();};
-        services.inspect=[mounted](const auto& source){if(mounted){std::array<std::uint8_t,4> header{};source->read_at(0,header);CHECK((header==std::array<std::uint8_t,4>{'M','O','V','0'}));}return movie::Information{640,480,48000,2,12000};};services.player=[counts](auto,auto){return std::make_unique<Playback>(counts);};
+        services.inspect=[mounted,&failure_mode](const auto& source){if(failure_mode==1)throw movie::Error("fixture invalid movie header");if(mounted){std::array<std::uint8_t,4> header{};source->read_at(0,header);CHECK((header==std::array<std::uint8_t,4>{'M','O','V','0'}));}return movie::Information{640,480,48000,2,12000};};services.player=[counts,&failure_mode](auto,auto){if(failure_mode==2)throw movie::Error("fixture movie factory failure");return std::make_unique<Playback>(counts,failure_mode);};
         c::install_media(p,std::move(audio),presenter,std::move(services));p.load(fixture());auto& m=p.memory;const auto work=p.allocate_bytes(4096);
         wr::port::write(p,work,c::media_abi::filter_class);wr::port::write(p,work+32,c::media_abi::graph);
         CHECK(p.callback(p.resolve("ole32.dll","CoCreateInstance"),std::array<U32,5>{work,0,1,work+32,work+64})==0);const auto graph=m.load(work+64,32);CHECK(graph);
@@ -159,21 +160,21 @@ int main(int argc,char** argv){try{
             const auto set_directory=p.resolve("kernel32.dll","SetCurrentDirectoryA");CHECK(set_directory);
             CHECK(p.callback(set_directory,std::array<U32,1>{p.put_string("IC")})==1);
             CHECK(method(graph,13,{p.put_wstring(u"mv010.pak"),0})==0);++mounted_paths;
-            CHECK(method(graph,13,{p.put_wstring(u"missing.pak"),0})==0x80040216u);
+            CHECK(method(graph,13,{p.put_wstring(u"missing.pak"),0})==0);
             const auto text=movie_report();CHECK(text.find("IC/missing.pak")!=text.npos && text.find("MV000.PAK")!=text.npos);
-            CHECK(method(control,7,{})==0x80040227u && counts->created==0 && counts->opened==0);++mounted_paths;++missing_cases;
+            CHECK(method(control,7,{})==0 && counts->created==0 && counts->opened==0);++mounted_paths;++missing_cases;
             CHECK(p.callback(set_directory,std::array<U32,1>{p.put_string("C:\\WinRecomp")})==1);
             for(bool automation:{false,true}){
                 CHECK(method(graph,13,{p.put_wstring(u"mv000.pak"),0})==0);const auto before=counts->source_opens;
                 const auto missing=p.put_wstring(u"mv001.pak");
-                CHECK((automation?method(control,11,{missing}):method(graph,13,{missing,0}))==0x80040216u);
+                CHECK((automation?method(control,11,{missing}):method(graph,13,{missing,0}))==0);
                 CHECK(counts->source_opens==before && counts->created==0 && counts->opened==0);
-                CHECK(method(video,34,{work+128,work+132})==0 && m.load(work+128,32)==0 && m.load(work+132,32)==0);
-                CHECK(method(control,7,{})==0x80040227u);CHECK(movie_report().find("mv001.pak")!=std::string::npos);++missing_cases;
+                CHECK(method(video,34,{work+128,work+132})==0 && m.load(work+128,32)==1280 && m.load(work+132,32)==720);
+                CHECK(method(control,7,{})==0);CHECK(movie_report().find("mv001.pak")!=std::string::npos);++missing_cases;
             }
         }else{
-            CHECK(method(graph,13,{p.put_wstring(u"open-denied.pak"),0})==0x80004005u);
-            CHECK(movie_report().find("permission denied")!=std::string::npos);CHECK(method(control,7,{})==0x80040227u);++open_error_cases;
+            CHECK(method(graph,13,{p.put_wstring(u"open-denied.pak"),0})==0);
+            CHECK(movie_report().find("permission denied")!=std::string::npos);CHECK(method(control,7,{})==0);++open_error_cases;
             bool unsupported=false;try{method(control,11,{p.put_wstring(u"unsupported.pak")});}catch(const GuestFault& error){unsupported=error.kind==FaultKind::unsupported;}
             CHECK(unsupported && counts->created==0 && counts->opened==0);
         }
@@ -198,14 +199,24 @@ int main(int argc,char** argv){try{
         CHECK(method(control,9,{})==0 && counts->restored==1);
         if(mounted){
             // Clear a completed source and event on failure, then recover.
-            CHECK(method(graph,13,{p.put_wstring(u"mv001.pak"),0})==0x80040216u);
-            CHECK(method(control,7,{})==0x80040227u && counts->created==1);
-            CHECK(p.callback(p.resolve("kernel32.dll","WaitForSingleObject"),std::array<U32,2>{event,0})==258u);
+            CHECK(method(graph,13,{p.put_wstring(u"mv001.pak"),0})==0);
+            CHECK(method(control,7,{})==0 && counts->created==1);
+            CHECK(p.callback(p.resolve("kernel32.dll","WaitForSingleObject"),std::array<U32,2>{event,0})==0);
             CHECK(method(control,11,{filename})==0);CHECK(movie_report().find("mv001.pak")!=std::string::npos);++missing_cases;
         }
+        for(int mode:{1,2,3,4}){
+            failure_mode=mode;const auto before_frames=counts->frames,before_restored=counts->restored;
+            CHECK(method(graph,13,{filename,0})==0);CHECK(method(control,7,{})==0);
+            if(mode>=3){poll();CHECK(counts->frames==before_frames+1);poll();CHECK(counts->restored==before_restored+1);}
+            else CHECK(counts->frames==before_frames);
+            CHECK(method(events,8,{work+128,work+132,work+136,0})==0 && m.load(work+128,32)==1);CHECK(method(events,12,{1,0,0})==0);
+            CHECK(method(control,7,{})==0);CHECK(method(events,8,{work+128,work+132,work+136,0})==0x80004004u);
+            CHECK(movie_report().find("fixture ")!=std::string::npos && movie_report().find("last_skip_reason")!=std::string::npos);++media_failure_cases;
+        }
+        failure_mode=0;const auto before_recovery=counts->frames;CHECK(method(graph,13,{filename,0})==0 && method(control,7,{})==0);poll();CHECK(counts->frames==before_recovery+1);CHECK(method(control,9,{})==0);
         for(auto object:{window,video,volume,events,control,graph})CHECK(method(object,2,{})==0);
         CHECK(!p.state().events.contains(event) && p.executed_instructions==0);++checked;
     }CHECK(counts->closed==1);}
-    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.shared-movie-bridge.v2\",\"memory_backend_source_combinations\":"<<checked<<",\"memory_backends\":2,\"default_mounted_movie_path_cases\":"<<mounted_paths<<",\"missing_movie_hresult_cases\":"<<missing_cases<<",\"provider_io_hresult_cases\":"<<open_error_cases<<",\"failed_render_does_not_replay_stale_source\":true,\"unsupported_service_still_rejected\":true,\"recovery_after_missing_mv001\":true,\"frame_layout_cases\":"<<frame_layouts<<",\"present_destination_uses_client\":true,\"movie_layout_cases\":"<<layouts<<",\"client_backbuffer_resolution_mismatch\":true,\"dpi_aspect_crop_and_sample_aspect_ratio\":true,\"source_com_layout_and_identity\":true,\"pause_resume_and_volume\":true,\"completion_event_and_empty_queue\":true,\"decoder_factory_released\":true,\"audio_hardware_opened\":false,\"graphics_device_created\":false,\"real_codec_playback_checked\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.shared-movie-bridge.v3\",\"memory_backend_source_combinations\":"<<checked<<",\"memory_backends\":2,\"default_mounted_movie_path_cases\":"<<mounted_paths<<",\"missing_movie_skip_cases\":"<<missing_cases<<",\"provider_io_skip_cases\":"<<open_error_cases<<",\"parse_decode_failure_cases\":"<<media_failure_cases<<",\"failure_completion_exactly_once\":true,\"restart_after_media_failure\":true,\"failed_render_does_not_replay_stale_source\":true,\"unsupported_service_still_rejected\":true,\"recovery_after_missing_mv001\":true,\"frame_layout_cases\":"<<frame_layouts<<",\"present_destination_uses_client\":true,\"movie_layout_cases\":"<<layouts<<",\"client_backbuffer_resolution_mismatch\":true,\"dpi_aspect_crop_and_sample_aspect_ratio\":true,\"source_com_layout_and_identity\":true,\"pause_resume_and_volume\":true,\"completion_event_and_empty_queue\":true,\"decoder_factory_released\":true,\"audio_hardware_opened\":false,\"graphics_device_created\":false,\"real_codec_playback_checked\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";
     std::cout<<"PASS shared movie transport and "<<layouts<<" production layout cases: client resolution, DPI, aspect, crop and COM playback in synthetic memory.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

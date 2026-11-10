@@ -6,7 +6,12 @@ endif()
 get_filename_component(WA2_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 # Reader only needs Source's interface. No game, AOT functions, guest state,
 # application entry point, renderer or device backend is linked into this CLI.
-add_library(wa2_engine INTERFACE)
+add_library(wa2_engine STATIC "${WA2_ROOT}/engine/pcm_audio.cpp" "${WA2_ROOT}/engine/pcm_stream.cpp")
+target_compile_features(wa2_engine PUBLIC cxx_std_20)
+target_include_directories(wa2_engine PUBLIC "${WA2_ROOT}/engine")
+set_target_properties(wa2_engine PROPERTIES POSITION_INDEPENDENT_CODE ON)
 include("${WA2_ROOT}/engine/movie.cmake")
 add_executable(wa2_movie_codec_probe "${WA2_ROOT}/tests/movie_codecs.cpp" "${WA2_ROOT}/platform/file_io.cpp")
 target_link_libraries(wa2_movie_codec_probe PRIVATE wa2_movie)
+add_executable(wa2_movie_format_probe "${WA2_ROOT}/tests/movie_formats.cpp" "${WA2_ROOT}/platform/file_io.cpp")
+target_link_libraries(wa2_movie_format_probe PRIVATE wa2_movie)

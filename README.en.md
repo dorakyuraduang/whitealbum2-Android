@@ -3,7 +3,7 @@
 [简体中文](README.md) · **English**
 
 A static-recompilation port for **Android ARM64**, using shared game logic
-across platforms. Current development version: **0.2.74-shared-aot**.
+across platforms. Current development version: **0.2.75-shared-aot**.
 Supply your own original PAK resources; whole-archive extraction is not required.
 
 **[Downloads and releases](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
@@ -19,9 +19,11 @@ Requirements: **Android 8.0+, ARM64 and OpenGL ES 3.0**.
 4. Select **Game language**, adjust FPS, hold-to-skip and extra-caption options
    as needed, then tap **Start game**.
 
-Movies support original **WMV3/WMA2** and **Final Full Patch 1.0.3.0 WMV2/WMA Pro**
-video PAKs. Keep the original filenames and `IC` paths; replace the matching
-resources directly without transcoding.
+Movies support MP4/MOV, MKV/WebM, AVI, WMV/ASF, MPEG/TS and FLV, alongside the
+original and **Final Full Patch 1.0.3.0** video PAKs. Keep the game's filenames
+and `IC` paths. Unreadable or undecodable movies are skipped so the story can
+continue; the reason is retained in runtime diagnostics. See [movie formats and
+failure handling](docs/MOVIE_FORMATS.md).
 
 Chinese is the default. Put the selected language's script and font packs in
 the root of the game folder:

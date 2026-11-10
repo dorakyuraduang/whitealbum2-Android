@@ -285,8 +285,9 @@ python scripts/build_media_codec.py --target windows
 python scripts/build_media_codec.py --target arm64
 ```
 
-The movie subset includes ASF with WMV3/WMA2 and Final Full Patch 1.0.3.0's
-WMV2/WMA Pro. Both architectures build the same decoder set. To refresh the
+The movie subset is declared in `config/media_codecs.json`, including common
+containers/codecs, ASF with WMV3/WMA2 and Final Full Patch 1.0.3.0's WMV2/WMA Pro.
+Both architectures build the same decoder set and pixel/audio converters. To refresh the
 memory-only compatibility receipt, extract only the patch's 16 video PAKs
 (preserving `IC`) into a private directory and provide original WMV3/WMA2
 `mv000.pak` and `mv100.pak` separately:
@@ -301,6 +302,20 @@ two `mv100` videos, and checks bounded reads, cancellation and unsupported codec
 errors. It creates no window, device or app. The shared refresh requires this
 receipt and matching codec-library build receipts. Resources are never copied
 into public source or APKs.
+
+Common-format checks use own 16x16 H.264/AAC and MJPEG/PCM clips (the fixture
+generator uses Pillow), including stereo and six-channel PCM, a renamed PAK and
+optional external codec samples. The recovery check injects header and mid-read
+errors, verifies exactly-once source completion and later playback, and keeps
+non-media failures fatal:
+
+```powershell
+python scripts/verify_movie_formats.py --original-movie path/to/original-res/mv100.pak --zig-cache build/zig-cache --windows-sdl path/to/libSDL2.a
+```
+
+Supply extra private test clips with repeated `--sample path/to/clip` options.
+No fixture or game resource is embedded in an APK. Both movie receipts are
+required by the shared refresh.
 
 `tests/movie-codec-android` builds the same decoder fixture as a standalone
 ARM64 CLI with the NDK. It links no game entry, AOT functions, guest CPU/memory,

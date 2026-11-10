@@ -27,7 +27,8 @@ struct Graph {
     std::array<U32,46> properties{};graphics::MovieView view;
     std::u16string caption;std::shared_ptr<const void> last_frame;
     U32 event_handle{},references{},state{},notify_window{},notify_message{},notify_parameter{},notify_flags{};
-    int volume{},balance{};bool completion{},shown{};std::int64_t start{},elapsed{},last_pump{},last_frame_time{-1};
+    std::string filename;
+    int volume{},balance{};bool completion{},shown{},skipped{};std::int64_t start{},elapsed{},last_pump{},last_frame_time{-1};
 };
 struct Object {Kind kind;U32 references{1};std::shared_ptr<Graph> graph;};
 class Media {
@@ -36,6 +37,7 @@ class Media {
     std::vector<std::weak_ptr<Graph>> graphs;bool stopped{},pumping{};std::uint64_t created{},rendered{},runs{},completed{};
     std::uint64_t render_failures{};U32 last_render{},last_failure{};
     std::string last_file,last_error,last_failure_file,last_failure_error;
+    std::uint64_t skipped_movies{};std::string last_skip_file,last_skip_reason;
     std::int64_t clock()const{return services.monotonic_us();}
     [[noreturn]]void unsupported(const std::string& what){throw GuestFault(FaultKind::unsupported,p.cpu.eip,"shared movie: "+what);}
     template<class T>U32 output(U32 at,const T& value){write(p,at,value);return ok;}
@@ -59,26 +61,41 @@ class Media {
     void stop(Graph& graph,bool release=false){if(graph.player)graph.player->stop();graph.player.reset();graph.state=0;graph.last_frame.reset();graph.last_frame_time=-1;
         if(graph.shown){presenter->restore_game();graph.shown=false;}if(release && graph.event_handle){kernel("CloseHandle",{graph.event_handle});graph.event_handle=0;}}
     U32 render_error(U32 hr,std::string error){++render_failures;last_render=last_failure=hr;last_error=std::move(error);last_failure_file=last_file;last_failure_error=last_error;return hr;}
+    void complete(Graph& graph){if(graph.completion)return;graph.completion=true;graph.state=0;notify(graph,1);++completed;}
+    U32 skip(Graph& graph,U32 hr,std::string reason,bool finish_now){
+        last_file=graph.filename;render_error(hr,std::move(reason));++skipped_movies;last_skip_file=graph.filename;last_skip_reason=last_error;
+        stop(graph);graph.source.reset();graph.skipped=true;
+        // The source configures its movie rectangle before Run, even when a
+        // damaged movie will complete immediately. Keep those dimensions valid.
+        if(!graph.info.width || !graph.info.height)graph.info={1280,720,0,0,0};
+        graph.view.source={0,0,int(graph.info.width),int(graph.info.height)};
+        if(graph.view.destination[2]<=0 || graph.view.destination[3]<=0)graph.view.destination=graph.view.source;
+        if(finish_now)complete(graph);return last_render=ok;
+    }
     U32 render(Graph& graph,U32 filename){stop(graph);graph.source.reset();graph.info={};
-        graph.completion=false;graph.elapsed=0;graph.events.clear();graph.delivered.clear();if(graph.event_handle)kernel("ResetEvent",{graph.event_handle});
+        graph.completion=graph.skipped=false;graph.filename.clear();graph.elapsed=0;graph.events.clear();graph.delivered.clear();if(graph.event_handle)kernel("ResetEvent",{graph.event_handle});
         last_file.clear();last_error.clear();if(!filename)return render_error(pointer_error,"null movie filename");
         const auto name=p.read_wstring(filename);const auto encoded=encode_text(65001,name);last_file.assign(encoded.bytes.begin(),encoded.bytes.end());
+        graph.filename=last_file;
         if(name.empty())return render_error(invalid,"empty movie filename");
         std::shared_ptr<resource::Source> source;
-        try{source=services.open(p,name);}
-        catch(const resource::NotFound& error){return render_error(not_found,error.what());}
-        catch(const resource::Error& error){return render_error(failure,error.what());}
-        // Unknown codecs, guest faults and unsupported operations still fail
-        // explicitly; only ordinary source-open errors become HRESULTs.
-        if(!source)unsupported("movie source opener returned no source");const auto info=services.inspect(source);if(!info.width || !info.height)unsupported("movie has no supported video track");
-        graph.source=std::move(source);graph.info=info;
+        try{source=services.open(p,name);
+            if(!source)unsupported("movie source opener returned no source");const auto info=services.inspect(source);
+            if(!info.width || !info.height)throw movie::Error("movie has no supported video track");
+            graph.source=std::move(source);graph.info=info;
+        }catch(const resource::NotFound& error){return skip(graph,not_found,error.what(),false);}
+        catch(const resource::Error& error){return skip(graph,failure,error.what(),false);}
+        catch(const movie::Error& error){return skip(graph,failure,error.what(),false);}
         graph.view.source={0,0,int(graph.info.width),int(graph.info.height)};if(graph.view.destination[2]<=0 || graph.view.destination[3]<=0)graph.view.destination=graph.view.source;
         ++rendered;return last_render=ok;
     }
-    U32 run(Graph& graph){if(!graph.source)return 0x80040227u;if(graph.info.audio_rate && !sound.open_output())return 0x80040256u;
-        const auto now=clock();if(graph.completion && graph.player)stop(graph);if(!graph.player){graph.player=services.player(graph.source,sound.mixer);if(!graph.player)unsupported("movie factory returned no playback");graph.player->gain(std::pow(10.f,float(graph.volume)/2000));if(graph.balance)unsupported("movie balance requires the PCM pan contract");graph.start=now;graph.elapsed=0;graph.completion=false;}
-        else if(graph.state==1){graph.player->pause(false,now);graph.start=now-graph.elapsed;}
-        graph.state=2;++runs;return ok;
+    U32 run(Graph& graph){if(graph.skipped){++runs;complete(graph);return ok;}if(!graph.source)return 0x80040227u;if(graph.info.audio_rate && !sound.open_output())return 0x80040256u;
+        ++runs;const auto now=clock();
+        try{if(graph.completion && graph.player)stop(graph);if(!graph.player){graph.player=services.player(graph.source,sound.mixer);if(!graph.player)unsupported("movie factory returned no playback");graph.player->gain(std::pow(10.f,float(graph.volume)/2000));if(graph.balance)unsupported("movie balance requires the PCM pan contract");graph.start=now;graph.elapsed=0;graph.completion=false;}
+            else if(graph.state==1){graph.player->pause(false,now);graph.start=now-graph.elapsed;}
+        }catch(const movie::Error& error){return skip(graph,failure,error.what(),true);}
+        catch(const resource::Error& error){return skip(graph,failure,error.what(),true);}
+        graph.state=2;return ok;
     }
     void notify(Graph& graph,U32 code){if(graph.disabled_events.contains(code))return;if(graph.events.size()>=128)unsupported("movie event queue limit");graph.events.push_back({code});if(graph.event_handle)kernel("SetEvent",{graph.event_handle});
         if(graph.notify_window && !(graph.notify_flags&1)){const auto target=p.resolve("user32.dll","PostMessageA");if(!target)unsupported("movie notification has no window service");p.callback(target,std::array<U32,4>{graph.notify_window,graph.notify_message,0,graph.notify_parameter});}}
@@ -91,7 +108,7 @@ class Media {
         if(slot==2){const auto refs=--o.references;--g.references;if(!refs){p.memory.release(a[0]);objects.erase(a[0]);}if(!g.references)stop(g,true);return refs;}
         if(slot==3 && o.kind!=Kind::graph && o.kind!=Kind::filter_graph && o.kind!=Kind::seeking && o.kind!=Kind::unknown)return output(a[1],U32(0));
         if(o.kind==Kind::graph || o.kind==Kind::filter_graph){if(slot==10)return ok;if(slot==13 && o.kind==Kind::graph){if(a[2])return invalid;return render(g,a[1]);}if(slot==16){stop(g);return ok;}if(slot==17)return g.state?ok:U32(1);}
-        if(o.kind==Kind::control)switch(slot){case 7:return run(g);case 8:if(g.player){g.player->pause(true,clock());g.elapsed=std::max<std::int64_t>(0,clock()-g.start);}g.state=1;return ok;case 9:case 15:stop(g);return ok;case 10:return output(a[2],g.state);case 11:return render(g,a[1]);}
+        if(o.kind==Kind::control)switch(slot){case 7:return run(g);case 8:if(g.skipped)return ok;if(g.player){g.player->pause(true,clock());g.elapsed=std::max<std::int64_t>(0,clock()-g.start);}g.state=1;return ok;case 9:case 15:stop(g);return ok;case 10:return output(a[2],g.state);case 11:return render(g,a[1]);}
         if(o.kind==Kind::event || o.kind==Kind::event_ex)switch(slot){
             case 7:if(!g.event_handle)g.event_handle=kernel("CreateEventA",{0,1,!g.events.empty(),0});return output(a[1],g.event_handle);
             case 8:{for(unsigned n=1;n<4;++n)p.memory.check(a[n],4,Memory::Write);if(g.events.empty() && a[4]){const auto until=std::chrono::steady_clock::now()+std::chrono::milliseconds(integer(a[4]));if(integer(a[4])<0)unsupported("infinite movie GetEvent wait");while(g.events.empty() && std::chrono::steady_clock::now()<until){kernel("Sleep",{1});pump();}}
@@ -146,16 +163,25 @@ public:
     ~Media(){shutdown();}
     void pump(){if(stopped || pumping || graphs.empty())return;pumping=true;
         try{const auto now=clock();for(auto it=graphs.begin();it!=graphs.end();){const auto graph=it->lock();if(!graph){it=graphs.erase(it);continue;}++it;auto& g=*graph;
-                if(!g.player || g.state!=2 || now-g.last_pump<2000)continue;g.last_pump=now;g.player->update(now);g.elapsed=std::min(std::max<std::int64_t>(0,now-g.start),g.info.duration_us>0?g.info.duration_us:std::numeric_limits<std::int64_t>::max());
-                if(g.view.visible)if(const auto frame=g.player->frame();frame && (frame->owner!=g.last_frame || frame->time_us!=g.last_frame_time)){presenter->movie_frame(*frame,g.view);g.last_frame=frame->owner;g.last_frame_time=frame->time_us;g.shown=true;}
-                if(g.player->finished() && !g.completion){g.completion=true;g.state=0;notify(g,1);++completed;}}
+                if(!g.player || g.state!=2 || now-g.last_pump<2000)continue;g.last_pump=now;
+                try{g.player->update(now);if(const auto reason=g.player->failure();!reason.empty()){skip(g,failure,reason,true);continue;}
+                    g.elapsed=std::min(std::max<std::int64_t>(0,now-g.start),g.info.duration_us>0?g.info.duration_us:std::numeric_limits<std::int64_t>::max());
+                    if(g.view.visible)if(const auto frame=g.player->frame();frame && (frame->owner!=g.last_frame || frame->time_us!=g.last_frame_time)){presenter->movie_frame(*frame,g.view);g.last_frame=frame->owner;g.last_frame_time=frame->time_us;g.shown=true;}
+                    if(g.player->finished()){
+                        // The worker may fail between the first status check
+                        // and finished(). Retain that reason before releasing it.
+                        const auto reason=g.player->failure();if(!reason.empty())skip(g,failure,reason,true);else complete(g);
+                    }
+                }catch(const movie::Error& error){skip(g,failure,error.what(),true);}
+                catch(const resource::Error& error){skip(g,failure,error.what(),true);}}
             pumping=false;
         }catch(...){pumping=false;throw;}
     }
     void shutdown()noexcept{if(stopped)return;stopped=true;for(auto& weak:graphs)if(auto graph=weak.lock())try{stop(*graph,true);}catch(...){}objects.clear();for(auto [at,base]:bstrs)try{p.memory.release(base);}catch(...){}bstrs.clear();}
     std::string report()const{return "{\"backend\":\"shared-native-movie\",\"graphs\":"+std::to_string(created)+",\"renders\":"+std::to_string(rendered)+",\"runs\":"+std::to_string(runs)+",\"completions\":"+std::to_string(completed)+",\"live_interfaces\":"+std::to_string(objects.size())+
         ",\"render_failures\":"+std::to_string(render_failures)+",\"last_render_hresult\":"+std::to_string(last_render)+",\"last_file\":"+wr::quote(last_file)+",\"last_error\":"+wr::quote(last_error)+
-        ",\"last_failure_hresult\":"+std::to_string(last_failure)+",\"last_failure_file\":"+wr::quote(last_failure_file)+",\"last_failure_error\":"+wr::quote(last_failure_error)+"}";}
+        ",\"last_failure_hresult\":"+std::to_string(last_failure)+",\"last_failure_file\":"+wr::quote(last_failure_file)+",\"last_failure_error\":"+wr::quote(last_failure_error)+
+        ",\"skipped_movies\":"+std::to_string(skipped_movies)+",\"last_skip_file\":"+wr::quote(last_skip_file)+",\"last_skip_reason\":"+wr::quote(last_skip_reason)+"}";}
     void install(){
         api(p,"ole32.dll","CoCreateInstance",5,[this](Process&,Args a){if(!a[4])return pointer_error;p.memory.check(a[4],4,Memory::Write);p.memory.store(a[4],0,32);if(a[1])return U32(0x80040110);const auto clsid=read<GUID>(p,a[0]);if(clsid!=media_abi::filter_class && clsid!=media_abi::filter_no_thread)unsupported("COM class outside movie graph");const auto k=kind(read<GUID>(p,a[3]));if(!k)return no_interface;
             auto graph=std::make_shared<Graph>();graph->properties[13]=graph->properties[19]=0xffffffffu;graphs.push_back(graph);p.memory.store(a[4],wrap(graph,*k),32);++created;return ok;});

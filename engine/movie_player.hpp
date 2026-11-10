@@ -12,6 +12,8 @@ public:
     virtual void pause(bool value,std::int64_t monotonic_us)=0;
     virtual void gain(float amplitude)=0;
     virtual std::optional<VideoFrame> frame()const=0;
+    // Recoverable media failures finish playback and retain their diagnostic.
+    virtual std::string failure()const{return {};}
 };
 struct PlayerStatistics{
     ReaderStatistics reader;
@@ -34,6 +36,7 @@ public:
     void gain(float amplitude)override;
     std::optional<VideoFrame> frame()const override;
     bool finished()const override;
+    std::string failure()const override;
     void stop()override;
     PlayerStatistics statistics()const;
 };

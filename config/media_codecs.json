@@ -1,0 +1,9 @@
+{
+  "schema": "wa2.media-codecs.v1",
+  "demuxers": ["asf", "mov", "matroska", "avi", "mpegts", "mpegps", "flv", "h264", "hevc", "ogg"],
+  "video_decoders": ["wmv1", "wmv2", "wmv3", "vc1", "h264", "hevc", "mpeg4", "mpeg1video", "mpeg2video", "vp8", "vp9", "mjpeg", "flv"],
+  "audio_decoders": ["wmav1", "wmav2", "wmapro", "wmalossless", "aac", "aac_latm", "mp3", "vorbis", "opus", "flac", "ac3", "eac3", "pcm_u8", "pcm_s16le", "pcm_s16be", "pcm_s24le", "pcm_s24be", "pcm_s32le", "pcm_s32be", "pcm_f32le", "pcm_f32be"],
+  "legacy_wave_decoders": ["adpcm_ms", "adpcm_ima_wav", "pcm_alaw", "pcm_mulaw"],
+  "parsers": ["h264", "hevc", "mpeg4video", "mpegvideo", "aac", "aac_latm", "mpegaudio", "vorbis", "vp8", "vp9", "opus", "ac3", "flac", "vc1"],
+  "libraries": ["avformat", "avcodec", "swscale", "swresample", "avutil"]
+}
