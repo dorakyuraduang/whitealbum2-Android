@@ -1,6 +1,7 @@
 #include "subtitles.hpp"
 #include "external_subtitles.hpp"
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 
@@ -67,6 +68,45 @@ std::vector<GlyphQuad> layout(const Cue& cue,FontSpec spec,std::size_t glyphs){
     }
     return out;
 }
+std::vector<GlyphQuad> layout(const Cue& cue,FontSpec spec,std::size_t glyphs,std::span<const GlyphMetric> metrics){
+    if(metrics.empty())return layout(cue,spec,glyphs);
+    if(cue.glyphs.size()>512 || metrics.size()!=glyphs || !glyphs || glyphs>1536 ||
+       !spec.advance || spec.advance>40 || !spec.cell || spec.cell>40 || !spec.columns || spec.columns>32 ||
+       !spec.rows || spec.rows>64 || glyphs>std::size_t(spec.columns)*spec.rows ||
+       spec.origin_x>spec.cell || spec.baseline>spec.cell)throw std::runtime_error("invalid measured subtitle layout");
+    for(const auto& metric:metrics)if(!std::isfinite(metric.advance) || metric.advance<0 || metric.advance>40)
+        throw std::runtime_error("invalid subtitle glyph advance");
+    for(const auto id:cue.glyphs)if(id!=line_break && id>=glyphs)throw std::runtime_error("unknown measured subtitle character");
+    std::vector<GlyphQuad> out;out.reserve(cue.glyphs.size());
+    const float width=float(spec.cell*spec.columns),height=float(spec.cell*spec.rows);
+    for(std::size_t first=0,row=0;first<cue.glyphs.size();++row){
+        if(cue.glyphs[first]==line_break){++first;continue;}
+        std::size_t end=first,last_break=first;float measured{};bool content{};
+        while(end<cue.glyphs.size() && cue.glyphs[end]!=line_break){
+            const auto& metric=metrics[cue.glyphs[end]];
+            if(end>first && measured+metric.advance>1216.f)break;
+            measured+=metric.advance;content|=!metric.space;++end;
+            if(content && metric.break_after)last_break=end;
+        }
+        const bool wrapped=end<cue.glyphs.size() && cue.glyphs[end]!=line_break;
+        if(wrapped && !metrics[cue.glyphs[end]].space && last_break>first)end=last_break;
+        auto drawn=end;
+        if(wrapped)while(drawn>first && metrics[cue.glyphs[drawn-1]].space)--drawn;
+        measured=0;for(auto n=first;n<drawn;++n)measured+=metrics[cue.glyphs[n]].advance;
+        const float x=(1280.f-measured)/2-float(spec.origin_x);
+        const float y=40.f+float(spec.advance)-float(spec.baseline)+float(row*(spec.advance+8));
+        float pen{};
+        for(auto n=first;n<drawn;++n){const auto id=cue.glyphs[n];
+            const float left=x+pen,u=float(id%spec.columns*spec.cell),v=float(id/spec.columns*spec.cell);
+            out.push_back({left,y,left+spec.cell,y+spec.cell,u/width,v/height,(u+spec.cell)/width,(v+spec.cell)/height});
+            pen+=metrics[id].advance;
+        }
+        first=end;
+        if(wrapped)while(first<cue.glyphs.size() && cue.glyphs[first]!=line_break && metrics[cue.glyphs[first]].space)++first;
+        if(first<cue.glyphs.size() && cue.glyphs[first]==line_break)++first;
+    }
+    return out;
+}
 bool Playback::play(std::uint32_t key,Kind kind,std::uint32_t slot,std::uint64_t now,bool replace,std::uint32_t scene){
     if(!enabled_)return false;
     (void)current(now);
@@ -83,6 +123,7 @@ void Playback::catalogue(std::shared_ptr<const Catalogue> value){if(value==catal
 FontSpec Playback::font()const noexcept{return catalogue_?catalogue_->font():font_spec();}
 std::size_t Playback::glyph_count()const noexcept{return catalogue_?catalogue_->glyph_count():characters().size();}
 FontImage Playback::font_image()const{if(catalogue_)if(const auto* image=catalogue_->atlas())return *image;return decode_font(font_coverage(),font_spec(),characters().size());}
+std::vector<GlyphQuad> Playback::layout(const Cue& cue)const{return subtitles::layout(cue,font(),glyph_count(),catalogue_?catalogue_->metrics():std::span<const GlyphMetric>{});}
 std::span<const Track> Playback::tracks()const noexcept{return catalogue_?catalogue_->tracks():main_story_tracks();}
 const Cue* Playback::current(std::uint64_t now) noexcept {
     if(!enabled_ || !track_)return nullptr;

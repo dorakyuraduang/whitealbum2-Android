@@ -15,7 +15,7 @@ Document parse_yaml(std::span<const std::uint8_t>);
 Document parse_todokanai(std::span<const std::uint8_t>);
 // Detect the bounded UTF-8 YAML or Todokanai block format by content.
 Document parse_external(std::span<const std::uint8_t>);
-struct GlyphMask {int left{},top{};unsigned width{},height{};std::vector<std::uint8_t> coverage;};
+struct GlyphMask {int left{},top{};unsigned width{},height{};std::vector<std::uint8_t> coverage;float advance{28.f};};
 using GlyphRasterizer=std::function<std::vector<GlyphMask>(std::span<const char32_t>)>;
 struct Atlas {FontSpec spec;FontImage image;};
 Atlas compose_atlas(std::span<const GlyphMask>);
@@ -25,6 +25,7 @@ class Catalogue {
     std::vector<Cue> cues_;
     std::vector<Track> tracks_;
     std::unique_ptr<Atlas> atlas_;
+    std::vector<GlyphMetric> metrics_;
     std::size_t glyph_count_{};
     bool legacy_audio_scene_matching_{};
     Catalogue()=default;
@@ -38,8 +39,9 @@ public:
     FontSpec font()const noexcept;
     std::size_t glyph_count()const noexcept{return glyph_count_;}
     const FontImage* atlas()const noexcept{return atlas_?&atlas_->image:nullptr;}
+    std::span<const GlyphMetric> metrics()const noexcept{return metrics_;}
 };
-// The compiled embedded glyphs are reused whenever they cover this text. Only
-// additional characters require the host's off-screen font rasterizer.
+// Covered Chinese text reuses the embedded bitmap. Alphabetic-only external
+// text and Todokanai captions prefer the off-screen font adapter's advances.
 std::shared_ptr<const Catalogue> compile_external(const Document&,const GlyphRasterizer& = {});
 }

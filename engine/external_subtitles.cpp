@@ -1,4 +1,5 @@
 #include "external_subtitles.hpp"
+#include <cmath>
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -135,7 +136,7 @@ Atlas compose_atlas(std::span<const GlyphMask> glyphs){
     if(glyphs.empty() || glyphs.size()>1536)throw std::runtime_error("Invalid external subtitle glyph count");
     int left{},top{},right{},bottom{};
     for(const auto& glyph:glyphs){
-        if(glyph.left < -40 || glyph.left>40 || glyph.top < -40 || glyph.top>40 || glyph.width>36 || glyph.height>36 || glyph.coverage.size()!=std::size_t(glyph.width)*glyph.height)throw std::runtime_error("External subtitle glyph exceeds atlas bounds");
+        if(glyph.left < -40 || glyph.left>40 || glyph.top < -40 || glyph.top>40 || glyph.width>36 || glyph.height>36 || glyph.coverage.size()!=std::size_t(glyph.width)*glyph.height || !std::isfinite(glyph.advance) || glyph.advance<0 || glyph.advance>40)throw std::runtime_error("External subtitle glyph exceeds atlas bounds");
         if(glyph.width && glyph.height){left=std::min(left,glyph.left-2);top=std::min(top,glyph.top-2);right=std::max(right,glyph.left+int(glyph.width)+2);bottom=std::max(bottom,glyph.top+int(glyph.height)+2);}
     }
     const auto cell=std::max(right-left,bottom-top)+2;if(cell<=2 || cell>40)throw std::runtime_error("External subtitle font metrics exceed the 40-pixel cell");
@@ -159,8 +160,15 @@ std::shared_ptr<const Catalogue> compile_external(const Document& document,const
     if(document.tracks.empty() || document.tracks.size()>1024 || document.characters.empty() || document.characters.size()>1536 || !document.cue_count || document.cue_count>8192 || document.text_count>131072)throw std::runtime_error("Invalid external subtitle document bounds");
     auto out=std::shared_ptr<Catalogue>(new Catalogue);out->legacy_audio_scene_matching_=document.legacy_audio_scene_matching;std::map<char32_t,std::uint16_t> lookup;const auto embedded=characters();bool covered=true;
     for(auto cp:document.characters){const auto it=std::lower_bound(embedded.begin(),embedded.end(),cp);if(it==embedded.end() || *it!=cp){covered=false;break;}}
-    if(covered){for(std::size_t n=0;n<embedded.size();++n)lookup.emplace(embedded[n],std::uint16_t(n));out->glyph_count_=embedded.size();}
-    else{if(!rasterizer)throw std::runtime_error("External subtitle characters require an available subtitle font adapter");const auto masks=rasterizer(document.characters);if(masks.size()!=document.characters.size())throw std::runtime_error("External subtitle font returned an incorrect glyph count");out->atlas_=std::make_unique<Atlas>(compose_atlas(masks));for(std::size_t n=0;n<document.characters.size();++n)lookup.emplace(document.characters[n],std::uint16_t(n));out->glyph_count_=document.characters.size();}
+    const bool full_width=std::any_of(document.characters.begin(),document.characters.end(),[](char32_t cp){return (cp>=0x2e80 && cp<=0x9fff) || (cp>=0xac00 && cp<=0xd7af) || (cp>=0xf900 && cp<=0xfaff) || (cp>=0xff01 && cp<=0xffee) || cp>=0x20000;});
+    const bool measured=rasterizer && (document.legacy_audio_scene_matching || !full_width);
+    if(covered && !measured){for(std::size_t n=0;n<embedded.size();++n)lookup.emplace(embedded[n],std::uint16_t(n));out->glyph_count_=embedded.size();}
+    else{if(!rasterizer)throw std::runtime_error("External subtitle characters require an available subtitle font adapter");const auto masks=rasterizer(document.characters);if(masks.size()!=document.characters.size())throw std::runtime_error("External subtitle font returned an incorrect glyph count");out->atlas_=std::make_unique<Atlas>(compose_atlas(masks));
+        for(std::size_t n=0;n<document.characters.size();++n){const auto cp=document.characters[n];lookup.emplace(cp,std::uint16_t(n));
+            const bool space=cp==U' ' || cp==0x3000 || (cp>=0x2000 && cp<=0x200a && cp!=0x2007);
+            const bool break_after=space || cp==U'-' || cp==0x2010 || (cp>=0x2e80 && cp<=0x9fff);
+            out->metrics_.push_back({masks[n].advance,break_after,space});
+        }out->glyph_count_=document.characters.size();}
     out->glyphs_.reserve(document.text_count);out->cues_.reserve(document.cue_count);out->tracks_.reserve(document.tracks.size());
     std::size_t total{};std::uint32_t last_key{};bool first=true;
     for(const auto& track:document.tracks){

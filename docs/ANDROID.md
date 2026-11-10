@@ -4,12 +4,17 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.71-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.71-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.71-shared-aot-replace-native.apk` to update the experimental
+is **0.2.72-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.72-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.72-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.72 fixes excessive spacing in external English captions. Font adapters
+retain each glyph's advance, including the width of a blank space; the shared
+layout uses those advances for centring and word wrapping at the same font size.
+The embedded Chinese caption layout is preserved.
 
 0.2.71 removes repeated system-save writes from the title extras menu's music
 registration. Changed flags still save immediately; unchanged music requests

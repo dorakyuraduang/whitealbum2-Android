@@ -3,7 +3,7 @@
 [简体中文](README.md) · **English**
 
 A static-recompilation port for **Android ARM64**, using shared game logic
-across platforms. Current development version: **0.2.71-shared-aot**.
+across platforms. Current development version: **0.2.72-shared-aot**.
 Supply your own original PAK resources; whole-archive extraction is not required.
 
 **[Downloads and releases](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
@@ -101,7 +101,8 @@ Embedded main-story supplementary captions are Chinese by default, controlled
 by **Extra captions**. To use an external file, select a UTF-8 `sub.yaml` or
 original Todokanai `subtitles` file under **Caption source** and enable
 **Extra captions**. The external file replaces the complete embedded set;
-Todokanai files need no YAML conversion.
+Todokanai files need no YAML conversion. English letters and spaces use measured
+advances for centring and wrapping.
 
 Story dialogue comes from the selected scripts and fonts; supplementary caption
 language comes from the caption file. The UA 0.1.5 captions contain English text

@@ -22,10 +22,14 @@ std::span<const std::uint8_t> font_coverage() noexcept;
 struct FontImage {std::uint32_t width{},height{};std::vector<std::uint8_t> rgba;};
 FontImage decode_font(std::span<const std::uint8_t>,FontSpec,std::size_t glyphs);
 struct GlyphQuad {float left{},top{},right{},bottom{},u0{},v0{},u1{},v1{};};
+struct GlyphMetric {float advance{};bool break_after{},space{};};
 // Positions use the original subtitle patch's 1280x720 canvas, at y=40.
 // Wrap only captions wider than the canvas; presentation fits this complete
 // canvas to the visible game viewport, independently of backbuffer allocation.
 std::vector<GlyphQuad> layout(const Cue&,FontSpec,std::size_t glyphs);
+// Measured advances are separate from bitmap cell dimensions. Empty metrics
+// retain the embedded Chinese layout exactly.
+std::vector<GlyphQuad> layout(const Cue&,FontSpec,std::size_t glyphs,std::span<const GlyphMetric>);
 enum class Kind {effect,voice};
 class Catalogue;
 class Playback {
@@ -42,6 +46,7 @@ public:
     FontSpec font()const noexcept;
     std::size_t glyph_count()const noexcept;
     FontImage font_image()const;
+    std::vector<GlyphQuad> layout(const Cue&)const;
     std::span<const Track> tracks()const noexcept;
     bool enabled()const noexcept{return enabled_;}
     void enabled(bool value)noexcept{if(enabled_==value)return;enabled_=value;reset();}

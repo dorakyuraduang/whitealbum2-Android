@@ -49,22 +49,25 @@ final class ExternalSubtitles {
         String name=Uri.parse(location).getLastPathSegment();if(name==null || name.isEmpty())return "外置 sub.yaml";
         int slash=name.lastIndexOf('/');return "外置："+name.substring(slash+1);
     }
-    // Returns count, then left/top/width/height/coverage for each character.
+    // Returns count, then left/top/width/height/advance64/coverage per character.
     // These pixels belong solely to new memory bitmaps; no screen is accessed.
     public static int[] rasterize(int[] characters) throws IOException {
         if(characters==null || characters.length==0 || characters.length>1536)throw new IOException("字幕字符数量超出范围");
         Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);paint.setColor(Color.WHITE);paint.setTypeface(Typeface.SANS_SERIF);paint.setTextSize(28);paint.setHinting(Paint.HINTING_ON);
-        Rect[] bounds=new Rect[characters.length];String[] text=new String[characters.length];int total=1;
+        Rect[] bounds=new Rect[characters.length];String[] text=new String[characters.length];int[] advances=new int[characters.length];int total=1;
         for(int n=0;n<characters.length;++n){
             int cp=characters[n];if(!Character.isValidCodePoint(cp) || cp<32 || (cp>=0xd800 && cp<=0xdfff))throw new IOException("无效的字幕 Unicode 字符");
             text[n]=new String(Character.toChars(cp));if(!Character.isSpaceChar(cp) && !paint.hasGlyph(text[n]))throw new IOException(String.format(java.util.Locale.ROOT,"系统字幕字体缺少字符 U+%04X",cp));
+            float advance=paint.measureText(text[n]);
+            if(Float.isNaN(advance) || Float.isInfinite(advance) || advance<0 || advance>40)throw new IOException("字幕字宽超出支持范围");
+            advances[n]=Math.round(advance*64);
             Rect box=new Rect();paint.getTextBounds(text[n],0,text[n].length(),box);
             if(box.width()>36 || box.height()>36 || box.left < -40 || box.top < -40 || box.right>40 || box.bottom>40)throw new IOException("字幕字形超出支持的字体尺寸");
             if(!Character.isSpaceChar(cp) && box.isEmpty())throw new IOException("字幕含不能显示的字符");
-            bounds[n]=box;total+=4+box.width()*box.height();
+            bounds[n]=box;total+=5+box.width()*box.height();
         }
         int[] result=new int[total];result[0]=characters.length;int at=1;Bitmap bitmap=Bitmap.createBitmap(40,40,Bitmap.Config.ARGB_8888);Canvas canvas=new Canvas(bitmap);int[] pixels=new int[1600];
-        try{for(int n=0;n<characters.length;++n){Rect box=bounds[n];int width=box.width(),height=box.height();result[at++]=box.left;result[at++]=box.top;result[at++]=width;result[at++]=height;
+        try{for(int n=0;n<characters.length;++n){Rect box=bounds[n];int width=box.width(),height=box.height();result[at++]=box.left;result[at++]=box.top;result[at++]=width;result[at++]=height;result[at++]=advances[n];
             if(width==0 || height==0)continue;
             bitmap.eraseColor(Color.TRANSPARENT);canvas.drawText(text[n],-box.left,-box.top,paint);bitmap.getPixels(pixels,0,width,0,0,width,height);
             for(int p=0;p<width*height;++p)result[at++]=pixels[p]>>>24;

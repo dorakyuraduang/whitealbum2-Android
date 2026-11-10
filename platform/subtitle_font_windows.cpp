@@ -22,8 +22,11 @@ std::vector<subtitles::GlyphMask> subtitle_glyphs(std::span<const char32_t> char
         if(cp>0xffff || cp<32 || (cp>=0xd800 && cp<=0xdfff))missing();const wchar_t value=wchar_t(cp);WORD index{};
         if(GetGlyphIndicesW(context.dc,&value,1,&index,GGI_MARK_NONEXISTING_GLYPHS)==GDI_ERROR || index==0xffff)missing();
         GLYPHMETRICS metrics{};const auto bytes=GetGlyphOutlineW(context.dc,index,GGO_GRAY8_BITMAP|GGO_GLYPH_INDEX,&metrics,0,nullptr,&transform);
-        if(bytes==GDI_ERROR || metrics.gmBlackBoxX>36 || metrics.gmBlackBoxY>36 || bytes>4096)missing();
-        subtitles::GlyphMask glyph{int(metrics.gmptGlyphOrigin.x),-int(metrics.gmptGlyphOrigin.y),unsigned(metrics.gmBlackBoxX),unsigned(metrics.gmBlackBoxY),{}};
+        if(bytes==GDI_ERROR || metrics.gmBlackBoxX>36 || metrics.gmBlackBoxY>36 || bytes>4096 || metrics.gmCellIncX<0 || metrics.gmCellIncX>40 || metrics.gmCellIncY)missing();
+        subtitles::GlyphMask glyph{int(metrics.gmptGlyphOrigin.x),-int(metrics.gmptGlyphOrigin.y),unsigned(metrics.gmBlackBoxX),unsigned(metrics.gmBlackBoxY),{},float(metrics.gmCellIncX)};
+        // Empty outlines (notably spaces) can report a nominal black box with
+        // no bitmap bytes. Keep their measured advance without inventing ink.
+        if(!bytes){glyph.left=glyph.top=0;glyph.width=glyph.height=0;out.push_back(std::move(glyph));continue;}
         const auto stride=(glyph.width+3u)&~3u;const auto expected=std::size_t(stride)*glyph.height;if(bytes<expected)missing();
         std::vector<std::uint8_t> source(bytes);if(bytes && GetGlyphOutlineW(context.dc,index,GGO_GRAY8_BITMAP|GGO_GLYPH_INDEX,&metrics,bytes,source.data(),&transform)!=bytes)missing();
         glyph.coverage.resize(std::size_t(glyph.width)*glyph.height);for(unsigned y=0;y<glyph.height;++y)for(unsigned x=0;x<glyph.width;++x){const auto alpha=source[y*stride+x];if(alpha>64)missing();glyph.coverage[y*glyph.width+x]=std::uint8_t((unsigned(alpha)*255+32)/64);}out.push_back(std::move(glyph));

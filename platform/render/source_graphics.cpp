@@ -975,7 +975,6 @@ void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
     if(!cue){subtitle_cue=nullptr;return;}
     const auto projection=wa2::graphics::subtitle_projection(w,h,destination);
     if(!projection)return;
-    const auto font=subtitles->font();
     if(subtitle_font_revision!=subtitles->font_revision()){
         if(subtitle_texture)gl.DeleteTextures(1,&subtitle_texture);subtitle_texture=0;subtitle_cue=nullptr;subtitle_font_revision=subtitles->font_revision();
     }
@@ -996,7 +995,7 @@ void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
     }
     const std::array<int,6> bounds{w,h,destination[0],destination[1],destination[2],destination[3]};
     if(cue!=subtitle_cue || bounds!=subtitle_bounds){
-        const auto quads=wa2::subtitles::layout(*cue,font,subtitles->glyph_count());
+        const auto quads=subtitles->layout(*cue);
         subtitle_vertices.clear();subtitle_vertices.reserve(quads.size()*6);
         const auto vertex=[&](float x,float y,float u,float v){
             DecodedVertex out;out.pos=projection->position(x,y);out.uv[0]={u,v,0,1};return out;

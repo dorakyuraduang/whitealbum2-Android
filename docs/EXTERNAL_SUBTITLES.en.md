@@ -209,8 +209,13 @@ used with Ukrainian supplementary captions. This does not replace the story
 script/font packs or audio. Do not add `language`, `font`, `size` or `position`
 fields; the current parser does not support them.
 
-New caption characters are rasterized once using the platform font adapter,
-then use the shared C++ layout and renderer. Android uses system fonts;
+Embedded Chinese captions and covered Chinese YAML text reuse the original atlas.
+From 0.2.72, external English and Todokanai captions retain measured per-glyph
+advances instead of assigning every letter, punctuation mark and space 28 pixels.
+The shared layout centres by measured width, prefers word boundaries when wrapping,
+and preserves explicit `^` line breaks at the same font size and line spacing.
+Platform glyphs are rasterized once, then use the shared C++ layout and renderer.
+Android uses system fonts;
 Windows uses Microsoft YaHei and currently supports BMP characters for new
 glyphs. Missing glyphs or unsupported glyph dimensions fail validation.
 Complex-script shaping and complete Unicode coverage across devices are not

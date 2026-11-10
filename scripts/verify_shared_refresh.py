@@ -87,7 +87,7 @@ def main():
         except (OSError,ValueError):
             run([sys.executable,ROOT/'scripts/verify_portable_shaders.py']);shaders=fresh(ROOT/'logs/portable-shader-verification.json')
         tracked=[Path(__file__),ROOT/'tests/shared-host-refresh/CMakeLists.txt',reference_path,archive,ROOT/'config/porting_contract.json',ROOT/'config/release.json']
-        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves')]
+        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')]
         tracked += [ROOT/'scripts/prepare_shared_chroma.py',ROOT/chroma['reference_file']]
         tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
         tracked += [ROOT/'scripts/prepare_shared_progress.py']
@@ -101,7 +101,7 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -114,6 +114,8 @@ def main():
         music=reports['music_flag_saves']
         if music['baseline_repeated_opens']!=480 or music['optimized_repeated_opens']!=4 or music['guards']<48 or music['plugin_notifications']!=music['actual_static_setter_calls'] or not all(music[k] for k in ('same_final_flags_and_nonflag_save_bytes','failed_open_short_write_and_close_retry','other_callers_workers_and_namespaces_preserved')):raise ValueError('Incomplete idempotent title music unlock checks')
         external=reports['external_subtitles']
+        spacing=reports['subtitle_spacing']
+        if spacing['unchanged_chinese_cues']!=315 or spacing['layout_cases']<13 or spacing['guards']<11 or spacing['native_font_metric_cases']!=3 or not all(spacing[k] for k in ('font_size_unchanged','word_wrap_and_explicit_newlines','zero_advance_marks_checked','yaml_and_todokanai_checked','playback_layout_used')):raise ValueError('Incomplete proportional external subtitle layout checks')
         if external['exact_embedded_cues']!=315 or external['exact_embedded_glyphs']!=6462 or external['rejections']<45 or not all(external[key] for key in ('bom_crlf_checked','shared_audio_binding_checked','external_replaces_embedded_tracks','new_character_atlas_checked','legacy_bitmap_reused','bounded_yaml_only')):raise ValueError('Incomplete external sub.yaml parser/playback checks')
         if language['archive_aliases']!=12 or language['shared_argument_combinations']!=6 or language['guards']<31 or not all(language[key] for key in ('default_chinese_pair','automatic_matched_pairs','root_ic_and_file_apis_checked','patch_priority_preserved','invalid_selection_not_published','english_grouped_override_and_base_script_fallback','english_font_metadata_guard')):raise ValueError('Incomplete selected language resource checks')
         if language['english_native_resource_cases']!=28:raise ValueError('Incomplete English lookup/decode callback checks in both memory modes')
