@@ -46,8 +46,9 @@ void fixture(const std::filesystem::path& root,bool linear,bool unlocked,bool op
     p.replace_api("kernel32.dll","WriteFile",5,[&](wr::Process& q){auto& file=q.state().files.at(q.argument(0));CHECK(file.owned && file.write && q.argument(2)==4096);std::array<std::uint8_t,4096> bytes;m.copy_out(q.argument(1),bytes);
         const auto count=std::fwrite(bytes.data(),1,short_write?2048:4096,file.stream);m.store(q.argument(3),U32(count),32);return count==4096?1u:0u;});
     runtime.load();CHECK(!p.gui() && !p.directdraw());
+    const auto save_root=root/"Documents/Leaf/WHITE ALBUM2";CHECK(std::filesystem::create_directories(save_root));
     std::vector<std::uint8_t> save(wa2::testing::system_save_bytes);if(unlocked)wa2::testing::unlock_all_content(save);
-    {std::ofstream output(root/"Sys.sav",std::ios::binary);output.write(reinterpret_cast<const char*>(save.data()),save.size());CHECK(output);}
+    {std::ofstream output(save_root/"Sys.sav",std::ios::binary);output.write(reinterpret_cast<const char*>(save.data()),save.size());CHECK(output);}
     m.copy_in(0x521930,std::span(save).subspan(wa2::testing::system_flags_offset,4096));
     const auto path=std::string("C:\\WinRecomp\\Sys.sav");m.copy_in(0x4bf530,{reinterpret_cast<const std::uint8_t*>(path.c_str()),path.size()+1});
     m.store(0xb92638,0xe0000050,32);
@@ -69,7 +70,7 @@ void fixture(const std::filesystem::path& root,bool linear,bool unlocked,bool op
     for(unsigned n=0;n<120;++n)CHECK(call()==4096);
     CHECK(notifications==120 && backend->opens==(optimized?1u:120u));
     if(optimized)totals.optimized_opens+=backend->opens;else totals.baseline_opens+=backend->opens;
-    auto disk=read(root/"Sys.sav");CHECK(disk.size()==save.size());
+    auto disk=read(save_root/"Sys.sav");CHECK(disk.size()==save.size());
     std::array<std::uint8_t,4096> flags;m.copy_out(0x521930,flags);
     CHECK(std::equal(disk.begin(),disk.begin()+wa2::testing::system_flags_offset,save.begin()));
     CHECK(std::equal(flags.begin(),flags.end(),disk.begin()+wa2::testing::system_flags_offset));
@@ -93,11 +94,11 @@ void fixture(const std::filesystem::path& root,bool linear,bool unlocked,bool op
         p.state().mutable_files=c::save_files(backend,false);CHECK(call()==4096 && backend->opens==++opens);++totals.guards;
         CHECK(call()==4096 && backend->opens==opens);++totals.guards;
         // A second file namespace writes once, preserving the first Sys.sav.
-        const auto before=read(root/"Sys.sav");CHECK(std::filesystem::create_directory(root/"Documents"));CHECK(std::filesystem::create_directory(root/"Documents/Leaf"));CHECK(std::filesystem::create_directory(root/"Documents/Leaf/WHITE ALBUM2 -introductory chapter-"));
+        const auto before=read(save_root/"Sys.sav");CHECK(std::filesystem::create_directory(root/"Documents/Leaf/WHITE ALBUM2 -introductory chapter-"));
         const auto other=std::string("C:\\WinRecomp\\Documents\\Leaf\\WHITE ALBUM2 -introductory chapter-\\Sys.sav");
         m.copy_in(0x4bf530,{reinterpret_cast<const std::uint8_t*>(other.c_str()),other.size()+1});
         CHECK(call()==4096 && backend->opens==++opens);CHECK(call()==4096 && backend->opens==opens);
-        CHECK(read(root/"Sys.sav")==before && read(root/"Documents/Leaf/WHITE ALBUM2 -introductory chapter-/Sys.sav").size()==wa2::testing::system_save_bytes);++totals.guards;
+        CHECK(read(save_root/"Sys.sav")==before && read(root/"Documents/Leaf/WHITE ALBUM2 -introductory chapter-/Sys.sav").size()==wa2::testing::system_save_bytes);++totals.guards;
     }
     totals.notifications+=notifications;++totals.fixtures;
 }

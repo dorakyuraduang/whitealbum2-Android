@@ -148,6 +148,7 @@ def main():
         saves=reports['selected_save_files']
         inventory=reports['save_inventory']
         if inventory['actual_static_index_calls']<1600 or not all(inventory[key] for key in ('chapter_index_batch','chapter_namespace_separate','missing_chapter_queries_batched')):raise ValueError('Incomplete initial chapter-index checks')
+        if inventory.get('full_bank_slots')!=100 or not inventory.get('full_bank_single_inventory') or not inventory.get('root_previews_ignored'):raise ValueError('Missing full 100-slot canonical save-bank check')
         progress=reports['io_diagnostics']
         if progress['selected_directory_written'] or not all(progress[key] for key in ('atomic_replacement','unchanged_io_not_rewritten','resource_activity_sampled','rate_and_count_bounded','failed_write_retry','optional_sink_failure_isolated','guest_errors_preserved')):raise ValueError('Incomplete bounded I/O diagnostic checks')
         reuse=reports['resource_reuse']
@@ -157,10 +158,11 @@ def main():
         profiles=reports['profile_batch']
         if profiles['static_profile_getter_calls']<400 or profiles['batched_descriptor_opens']!=1 or not all(profiles[key] for key in ('same_static_getter','writes_immediate','flush_and_revision_invalidation','frame_and_age_bounded','ordinary_and_worker_reads_fresh','namespace_isolation','failed_read_retry')):raise ValueError('Incomplete external profile read batch checks')
         if inventory['actual_static_reader_calls']<800 or inventory['scoped_directory_lists_per_fixture']!=1 or not all(inventory[key] for key in ('same_static_save_reader','prepared_reads_checked','writers_bypass_read_reference','title_reader_batch','scope_audit_checked','payload_reads_fresh','write_invalidation','source_frame_invalidation','ordinary_and_worker_reads_fresh','inventory_lifetime_bounded')):raise ValueError('Incomplete source save inventory checks')
-        if not all(saves[key] for key in ('single_lookup_open_plan','next_operation_sees_external_edits','sharing_checked_before_truncation')) or saves['fixture_root_opens']!=saves['fixture_root_metadata_queries']:raise ValueError('Repeated or stale save-open metadata queries')
+        if not all(saves[key] for key in ('single_lookup_open_plan','next_operation_sees_external_edits','sharing_checked_before_truncation')) or saves['fixture_main_opens']!=saves['fixture_main_metadata_queries']:raise ValueError('Repeated or stale save-open metadata queries')
         skip=reports['fast_forward']
         if skip['static_predicate_comparisons']<7000 or not all(skip[key] for key in ('unchanged_static_predicate','unread_policy_preserved','worker_and_object_waits_preserved','game_clock_unscaled','source_sync_restored','presentation_only_coalescing')):raise ValueError('Incomplete fast-forward scheduling checks')
-        if saves['cases']<40 or not all(saves[key] for key in ('root_pc_files_read','source_path_aliases','alias_sharing_preserved','random_access_writes','profile_roundtrip','nested_pc_fallback','test_profile_isolated','private_fallback_forbidden')):raise ValueError('Incomplete selected-directory file checks')
+        if saves['cases']<40 or not all(saves[key] for key in ('canonical_pc_files_read','source_path_aliases','alias_sharing_preserved','random_access_writes','profile_roundtrip','canonical_pc_only','test_profile_isolated','private_fallback_forbidden')):raise ValueError('Incomplete selected-directory file checks')
+        if not all(saves.get(key) for key in ('root_save_fallback_forbidden','all_save_operations_canonical','missing_parent_created','selected_roots_isolated')):raise ValueError('Missing canonical-only save-bank checks')
         subtitle=verify_subtitles(build/'subtitles.json',ROOT/'generated/shared-aot/manifest.json')
         print('Building the same AOT sources and actual Android entry on ARM64; no application starts.',flush=True)
         android_args=['-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ndk/'build/cmake/android.toolchain.cmake'),'-DANDROID_ABI=arm64-v8a','-DANDROID_PLATFORM=android-26','-DANDROID_STL=c++_shared','-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON','-DCMAKE_BUILD_TYPE=MinSizeRel','-DWA2_AOT_DIAGNOSTICS=OFF','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON']

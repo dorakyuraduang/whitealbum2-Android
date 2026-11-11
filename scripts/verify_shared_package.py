@@ -52,6 +52,7 @@ def verify(status,publish=False):
     if status.get('selected_directory_saves_and_configuration'):
         files=proof.get('selected_directory_files',{})
         if not files.get('passed') or files.get('cases',0)<40 or not files.get('private_fallback_forbidden'):raise ValueError('Missing selected-directory save/configuration checks')
+        if not all(files.get(key) for key in ('root_save_fallback_forbidden','all_save_operations_canonical','missing_parent_created','selected_roots_isolated')):raise ValueError('Missing canonical-only save-bank checks')
     subtitles=proof['shared_main_story_subtitles']
     if not subtitles['passed'] or subtitles['assets']['special_contents_included'] or subtitles['assets']['cues']!=315:
         raise ValueError('Missing main-only subtitle proof')

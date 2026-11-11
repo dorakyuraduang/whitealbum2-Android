@@ -8,9 +8,11 @@ game sources. Neither implementation is declared a fully verified game port.
 The AOT process now mounts a separate writable selected-directory namespace,
 beside its read-only PAK mount. Shared `platform/compat/save_files.*` owns path
 aliases and test-profile selection; local C++ and Android provider adapters own
-OS operations. Source save bytes are passed through unchanged. Main Documents
-paths map to root saves/INI, nested main files are read fallback, and separate
-chapter directories retain their identities. Normal and test-mode mounts never
+OS operations. Source save bytes are passed through unchanged. Normal saves
+resolve only to `Documents/Leaf/WHITE ALBUM2/` under the selected folder;
+root-level saves are ignored, with no compatibility fallback or migration.
+INI placement is unchanged, and explicit chapter directories retain their
+identities. Normal and test-mode mounts never
 fall through to private app files. Source file handles retain independent seek,
 read/write/truncate/flush and access-sharing semantics, including main-path
 aliases. Picker-authorized paths outside this namespace retain their existing

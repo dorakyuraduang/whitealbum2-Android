@@ -4,12 +4,20 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.75-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.75-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.75-shared-aot-replace-native.apk` to update the experimental
+is **0.2.76-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.76-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.76-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.76 makes normal-save storage canonical: only the selected game folder's
+`Documents/Leaf/WHITE ALBUM2/` stores `Sys.sav`, `save_00.sav` through
+`save_99.sav`, and `save_Q.sav`. The directory is created on first write.
+Old root-level saves are ignored; there is no import, merge, automatic move,
+or private-app-data fallback. Move saves into that directory yourself if needed.
+Test-mode saves stay separate under `test-mode/`. Existing INI placement is
+unchanged. One directory inventory still serves each 100-slot read scope.
 
 0.2.75 adds content-based MP4/MOV, MKV/WebM, AVI, MPEG/TS and FLV detection, with
 common H.264/H.265, VP8/VP9, MPEG and audio decoders. The same reader converts
@@ -79,13 +87,12 @@ Only bounded initial text data changes; instructions, glyph tables and save
 files are preserved. Memory checks cover all three languages in both memory
 backends; actual menu appearance still requires device gameplay testing.
 
-The AOT host now reads and writes original-format saves and INI files directly
-in the selected game folder through seekable provider descriptors. Root `Sys.sav`,
-`save_00.sav`..`save_99.sav`, `save_Q.sav`, `SYSTEM.ini`, `D3D.ini` and optional
-`default.ini` are accepted. The original main Documents/Leaf/WHITE ALBUM2 path
-aliases this root. Existing files in that full nested PC directory are a
-read fallback when the root file is absent; chapter-specific Documents folders
-remain distinct. There is no private save mirror or fallback to unrelated app
+The AOT host reads and writes original-format files through seekable provider
+descriptors in the selected game folder. From 0.2.76, normal saves use only
+`Documents/Leaf/WHITE ALBUM2/`; logical root save names map to this directory,
+and physical root saves are not read. `SYSTEM.ini`, `D3D.ini` and optional
+`default.ini` retain their existing placement policy. Explicit chapter-import
+folders remain distinct. There is no private save mirror or fallback to unrelated app
 data. Original PAKs remain read-only. Test mode uses the selected root's
 `test-mode/` and leaves normal files untouched. Disable test mode to use normal
 PC saves. Launcher switches keep using the same directory-bound configuration.

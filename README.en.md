@@ -3,7 +3,7 @@
 [简体中文](README.md) · **English**
 
 A static-recompilation port for **Android ARM64**, using shared game logic
-across platforms. Current development version: **0.2.75-shared-aot**.
+across platforms. Current development version: **0.2.76-shared-aot**.
 Supply your own original PAK resources; whole-archive extraction is not required.
 
 **[Downloads and releases](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
@@ -81,8 +81,9 @@ in the launcher. Use the PC directory layout for normal saves:
 are manual saves, and `save_Q.sav` is the quick save. To import PC saves, exit the
 game, copy the files into this directory and disable test mode before loading.
 
-Existing root-level saves are also supported; a root-level file takes priority
-when the same filename exists in both locations.
+From 0.2.76, normal saves are read and written only in this directory; it is
+created on the first save. Root-level `.sav` files are ignored and are not
+merged or moved automatically. Copy any saves you want to retain into this directory.
 
 ### Test-mode saves
 
