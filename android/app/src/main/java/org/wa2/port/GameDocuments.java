@@ -136,6 +136,15 @@ final class GameDocuments {
     // a fresh read-only descriptor is opened; writes and creates never use it.
     synchronized int compatibleReadOpen(String path,String reference) throws IOException {
         directories.clear();CompatibleStoragePath.parts(path,false);
+        Uri uri=readReference(reference);
+        try(ParcelFileDescriptor fd=resolver.openFileDescriptor(uri,"r")){
+            if(fd==null)throw new IOException("Cannot open resolved game file");return fd.detachFd();
+        }catch(FileNotFoundException changed){
+            // An external atomic replacement can retire an opaque document ID.
+            return compatibleOpen(path,1,3);
+        }
+    }
+    private Uri readReference(String reference) throws IOException {
         if(reference==null || reference.length()>4096)throw new IOException("Invalid game-file read reference");
         Uri uri=Uri.parse(reference);
         try{
@@ -143,13 +152,21 @@ final class GameDocuments {
                 !DocumentsContract.isTreeUri(uri) || !DocumentsContract.getTreeDocumentId(tree).equals(DocumentsContract.getTreeDocumentId(uri)))
                 throw new IOException("Game-file read reference belongs to a different directory");
         }catch(IllegalArgumentException error){throw new IOException("Invalid game-file read reference",error);}
-        try(ParcelFileDescriptor fd=resolver.openFileDescriptor(uri,"r")){
-            if(fd==null)throw new IOException("Cannot open resolved game file");return fd.detachFd();
-        }catch(FileNotFoundException changed){
-            // An external atomic replacement can retire an opaque document ID.
-            // Resolve the current name rather than reusing a stale object.
-            return compatibleOpen(path,1,3);
-        }
+        return uri;
+    }
+    synchronized int[] compatibleReadBatch(String[] paths,String[] references) throws IOException {
+        if(paths==null || references==null || paths.length!=references.length || paths.length<1 || paths.length>DocumentReadBatch.LIMIT)
+            throw new IOException("Invalid resolved document read batch");
+        final Uri[] uris=new Uri[paths.length];
+        for(int n=0;n<paths.length;++n){CompatibleStoragePath.parts(paths[n],false);uris[n]=readReference(references[n]);}
+        return DocumentReadBatch.open(paths.length,new DocumentReadBatch.Opener(){
+            public int open(int index) throws IOException {
+                try(ParcelFileDescriptor fd=resolver.openFileDescriptor(uris[index],"r")){
+                    if(fd==null)throw new IOException("Cannot open batched game file");return fd.detachFd();
+                }
+            }
+            public void close(int descriptor){try{ParcelFileDescriptor.adoptFd(descriptor).close();}catch(IOException ignored){}}
+        });
     }
     private String[] metadataRecords(String path,boolean list,boolean reference) throws IOException {
         directories.clear();

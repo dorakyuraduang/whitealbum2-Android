@@ -56,4 +56,16 @@ inline std::function<std::optional<std::uint64_t>()> traced_save_read_scope(wr::
     const auto audit=std::make_shared<SaveReadAudit>();p.state().reports["save_read_scope"]=[audit]{return audit->report();};
     return [&p,audit]{return save_read_scope(p,audit.get());};
 }
+// Only the 24-byte index helper scans the whole bank. Preview/full-load calls
+// must not open neighbouring slots or consume previously prepared streams.
+inline std::function<bool()> save_index_read_ahead(wr::Process& p){
+    return [&p]() noexcept {
+        try{
+            auto m=p.memory.execution_scope();const auto sp=p.cpu.r[wr::ESP];
+            if(std::uint64_t(sp)+56>0x100000000ull)return false;
+            return m.load<32>(sp)==0x44c4df && m.load<32>(sp+40)==0x423465 &&
+                m.load<32>(sp+48)==0xa4e5c0 && m.load<32>(sp+52)==24;
+        }catch(const wr::GuestFault&){return false;}
+    };
+}
 }

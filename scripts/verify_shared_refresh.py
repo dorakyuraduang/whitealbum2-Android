@@ -149,6 +149,7 @@ def main():
         inventory=reports['save_inventory']
         if inventory['actual_static_index_calls']<1600 or not all(inventory[key] for key in ('chapter_index_batch','chapter_namespace_separate','missing_chapter_queries_batched')):raise ValueError('Incomplete initial chapter-index checks')
         if inventory.get('full_bank_slots')!=100 or not inventory.get('full_bank_single_inventory') or not inventory.get('root_previews_ignored'):raise ValueError('Missing full 100-slot canonical save-bank check')
+        if inventory.get('read_ahead_index_calls',0)<100 or inventory.get('full_bank_read_ahead_batches')!=7 or inventory.get('maximum_read_ahead_files')!=16 or not all(inventory.get(k) for k in ('read_ahead_handles_released','read_ahead_failure_retries','read_ahead_writers_and_workers_bypass')):raise ValueError('Missing bounded save read-ahead ownership/guard checks')
         progress=reports['io_diagnostics']
         if progress['selected_directory_written'] or not all(progress[key] for key in ('atomic_replacement','unchanged_io_not_rewritten','resource_activity_sampled','rate_and_count_bounded','failed_write_retry','optional_sink_failure_isolated','guest_errors_preserved')):raise ValueError('Incomplete bounded I/O diagnostic checks')
         reuse=reports['resource_reuse']
@@ -177,7 +178,7 @@ def main():
         symbols=output([llvm/'llvm-nm.exe','--defined-only','--demangle',actual])
         if re.search(r'Zydis|shared_aot_oracle|wr_x87_|wr_sse_|wa2::game::|wa2::script::|wa2::aot::chroma_reference::|wa2::aot::f_[0-9a-f]+<true>',symbols):raise ValueError('Decoder, diagnostic or separate native game leaked into the AOT application')
         data=actual.read_bytes()
-        expected={'compatibleOpen':'(Ljava/lang/String;III)I','compatibleReadMetadata':'(Ljava/lang/String;IZ)[Ljava/lang/String;','compatibleReadOpen':'(Ljava/lang/String;Ljava/lang/String;I)I','compatibleOperation':'(Ljava/lang/String;Ljava/lang/String;III)I','compatibleReplace':'(Ljava/lang/String;ILjava/nio/ByteBuffer;)V'}
+        expected={'compatibleOpen':'(Ljava/lang/String;III)I','compatibleReadMetadata':'(Ljava/lang/String;IZ)[Ljava/lang/String;','compatibleReadOpen':'(Ljava/lang/String;Ljava/lang/String;I)I','compatibleReadBatch':'([Ljava/lang/String;[Ljava/lang/String;I)[I','compatibleOperation':'(Ljava/lang/String;Ljava/lang/String;III)I','compatibleReplace':'(Ljava/lang/String;ILjava/nio/ByteBuffer;)V'}
         declarations=output([ROOT/'tools/source-analysis/jdk-21.0.12.1+1/bin/javap.exe','-p','-s',Path(ui['source_sets']['shared-aot']['classes_directory'])/'org/wa2/port/ResourceDirectory.class'])
         for name,signature in expected.items():
             if not re.search(r'\b'+name+r'\([^;]*;\s*descriptor:\s*'+re.escape(signature),declarations) or name.encode()+b'\0' not in data or signature.encode()+b'\0' not in data:raise ValueError('Actual selected-directory Java/JNI signature mismatch: '+name)

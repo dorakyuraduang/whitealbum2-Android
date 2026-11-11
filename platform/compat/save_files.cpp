@@ -1,4 +1,5 @@
 #include "save_files.hpp"
+#include "read_ahead_files.hpp"
 #include "../../engine/test_progress.hpp"
 #include <algorithm>
 #include <atomic>
@@ -6,6 +7,7 @@
 #include <chrono>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <fcntl.h>
@@ -35,13 +37,17 @@ std::optional<std::string> mapped(std::string_view value,bool folder=false){
 class Saves final:public wr::MutableFiles {
     std::shared_ptr<wr::MutableFiles> files_;std::string prefix_;
     SaveReadScope scope_;
+    SaveReadAhead read_ahead_scope_;
     struct Inventory {
         std::optional<std::uint64_t> key;std::chrono::steady_clock::time_point expires;
         std::optional<std::uint64_t> declined_key;std::chrono::steady_clock::time_point declined_until;
         std::map<std::string,std::map<std::string,Info>> directories;
+        std::set<std::string> read_ahead;
+        std::vector<std::pair<Info*,decltype(Info::open_read)>> original_openers;
         bool main_prepared{};
-        std::uint64_t revision{},builds{},hits{},chapter_builds{},chapter_hits{},declines{},info_calls{},list_calls{},open_calls{},prepared_reads{},info_ns{},list_ns{},open_ns{};
-        void invalidate(){key.reset();declined_key.reset();}
+        std::uint64_t revision{},builds{},hits{},chapter_builds{},chapter_hits{},declines{},info_calls{},list_calls{},open_calls{},prepared_reads{},info_ns{},list_ns{},open_ns{},read_batches{},read_ahead_files{},read_ahead_ns{};
+        void release_reads(){for(auto& [info,opener]:original_openers)info->open_read=std::move(opener);original_openers.clear();}
+        void invalidate(){key.reset();declined_key.reset();release_reads();directories.clear();read_ahead.clear();}
         struct Mutation {
             Inventory& value;
             explicit Mutation(Inventory& v):value(v){value.invalidate();++value.revision;}
@@ -83,6 +89,8 @@ class Saves final:public wr::MutableFiles {
         const auto leaf=fold(slash==path.npos?path:path.substr(slash+1));
         if(file_name(leaf) && snapshot()){
             auto& cache=*inventory_;const auto key=fold(directory);
+            const bool prepare=read_ahead_scope_ && read_ahead_scope_();
+            if(!prepare)cache.release_reads();
             auto found=cache.directories.find(key);
             if(found==cache.directories.end()){
                 std::map<std::string,Info> index;
@@ -100,7 +108,27 @@ class Saves final:public wr::MutableFiles {
                 // Start the bounded lifetime after provider I/O, not before it.
                 cache.expires=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);
             }else ++cache.chapter_hits;
-            if(auto item=found->second.find(leaf);item!=found->second.end())return {std::move(path),item->second};
+            if(auto item=found->second.find(leaf);item!=found->second.end()){
+                if(prepare && save_name(leaf) && !cache.read_ahead.contains(fold(path)))if(auto* ahead=dynamic_cast<ReadAheadFiles*>(files_.get())){
+                    // Keep only one bounded descriptor batch alive, even if
+                    // the user jumps between distant pages/slot numbers.
+                    cache.release_reads();
+                    std::vector<ReadAheadFile> batch;
+                    for(auto next=item;next!=found->second.end() && batch.size()<ReadAheadFiles::limit;++next){
+                        auto& info=next->second;const auto name=directory.empty()?info.name:directory+"/"+info.name;
+                        if(save_name(next->first) && !(info.attributes&16) && info.open_read && !cache.read_ahead.contains(fold(name)))batch.push_back({name,&info});
+                    }
+                    if(!batch.empty()){
+                        for(const auto& request:batch)cache.original_openers.emplace_back(request.info,request.info->open_read);
+                        Inventory::Timer timer(cache.read_batches,cache.read_ahead_ns);cache.read_ahead_files+=ahead->prepare_reads(batch);
+                        for(const auto& request:batch)cache.read_ahead.insert(fold(request.path));
+                        // Provider work may outlast a metadata query. The
+                        // batch still expires on source scope changes/writes.
+                        cache.expires=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);
+                    }
+                }
+                return {std::move(path),item->second};
+            }
             return {std::move(path),{}};
         }
         auto info=inspect(path);return {std::move(path),std::move(info)};
@@ -118,7 +146,7 @@ class Saves final:public wr::MutableFiles {
     std::string existing(const std::string& name){return locate(name).first;}
 public:
     std::string identity(std::string_view value)override{const auto name=mapped(value);return name?existing(*name):physical(fold(value));}
-    Saves(std::shared_ptr<wr::MutableFiles> files,bool test,SaveReadScope scope):files_(std::move(files)),prefix_(test?"test-mode/":""),scope_(std::move(scope)){
+    Saves(std::shared_ptr<wr::MutableFiles> files,bool test,SaveReadScope scope,SaveReadAhead ahead):files_(std::move(files)),prefix_(test?"test-mode/":""),scope_(std::move(scope)),read_ahead_scope_(std::move(ahead)){
         if(!files_)throw std::invalid_argument("Missing selected game directory");
         if(test){const auto error=files_->directory("test-mode");if(error && error!=183)throw std::runtime_error("Cannot create selected-directory test profile");}
     }
@@ -170,7 +198,7 @@ public:
     std::uint64_t revision()const{return inventory_->revision;}
     std::uint64_t activity()const{const auto& c=*inventory_;return c.revision+c.info_calls+c.list_calls+c.open_calls+c.hits+c.chapter_hits;}
     std::string report()const{const auto& c=*inventory_;std::ostringstream out;
-        out<<"{\"save_policy\":\"canonical-only\",\"root_save_fallback\":false,\"normal_save_directory\":\"Documents/Leaf/WHITE ALBUM2\",\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"chapter_inventory_builds\":"<<c.chapter_builds<<",\"chapter_inventory_hits\":"<<c.chapter_hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
+        out<<"{\"save_policy\":\"canonical-only\",\"root_save_fallback\":false,\"normal_save_directory\":\"Documents/Leaf/WHITE ALBUM2\",\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"chapter_inventory_builds\":"<<c.chapter_builds<<",\"chapter_inventory_hits\":"<<c.chapter_hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"read_ahead_batches\":"<<c.read_batches<<",\"read_ahead_files\":"<<c.read_ahead_files<<",\"read_ahead_ns\":"<<c.read_ahead_ns<<",\"maximum_read_ahead_files\":16,\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
 };
 class Local final:public wr::MutableFiles {
     std::filesystem::path root_;
@@ -201,8 +229,8 @@ std::shared_ptr<wr::MutableFiles> local_files(const std::filesystem::path& root)
 std::string save_files_report(const std::shared_ptr<wr::MutableFiles>& files){if(auto* saves=dynamic_cast<const Saves*>(files.get()))return saves->report();return "{}";}
 std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->revision();return {};}
 std::optional<std::uint64_t> save_files_activity(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->activity();return {};}
-std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope){
-    auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope));
+std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope,SaveReadAhead ahead){
+    auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope),std::move(ahead));
     if(test){for(const auto* folder:{"Documents","Documents/Leaf","Documents/Leaf/WHITE ALBUM2 -closing chapter-","Documents/Leaf/WHITE ALBUM2 -introductory chapter-"}){const auto error=result->directory(folder);if(error && error!=183)throw std::runtime_error("Cannot prepare selected-directory test saves");}
         for(const auto* file:{"Sys.sav","Documents/Leaf/WHITE ALBUM2 -closing chapter-/Sys.sav","Documents/Leaf/WHITE ALBUM2 -introductory chapter-/Sys.sav"}){
             std::vector<std::uint8_t> bytes(testing::system_save_bytes);U32 error{};auto* opened=result->open(file,true,false,3,error);

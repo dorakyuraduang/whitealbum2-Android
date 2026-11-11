@@ -4,12 +4,21 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.76-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.76-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.76-shared-aot-replace-native.apk` to update the experimental
+is **0.2.77-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.77-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.77-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.77 batches only the original 24-byte save-list index scan. The common C++
+policy admits one group of at most 16 read-only streams; the Android OS adapter
+opens them with at most four provider requests in flight, through one JNI
+batch. The 100-file component fixture uses seven batches within one admitted
+source scope, while still opening and reading all 100 original headers. Unused streams close on invalidation or before the next
+batch; ordinary reads, previews, actual loads, workers and writers bypass it.
+No save payload is cached or mirrored. These are component checks, not measured
+phone load-time gains.
 
 0.2.76 makes normal-save storage canonical: only the selected game folder's
 `Documents/Leaf/WHITE ALBUM2/` stores `Sys.sav`, `save_00.sav` through

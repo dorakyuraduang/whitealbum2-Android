@@ -348,6 +348,9 @@ final class ResourceDirectory {
     public static int compatibleReadOpen(String name,String reference,int token) throws IOException {
         GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleReadOpen(name,reference);}
     }
+    public static int[] compatibleReadBatch(String[] names,String[] references,int token) throws IOException {
+        GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleReadBatch(names,references);}
+    }
     public static int compatibleOperation(String name,String target,int token,int operation,int flags) throws IOException {
         GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleOperation(name,target,operation,flags);}
     }

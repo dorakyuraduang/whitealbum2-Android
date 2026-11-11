@@ -8,7 +8,8 @@ namespace wa2::platform::compat {
 // Normal .sav files always use Documents/Leaf/WHITE ALBUM2; root saves are
 // ignored. Test-mode files remain isolated below test-mode/.
 using SaveReadScope=std::function<std::optional<std::uint64_t>()>;
-std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles>,bool test_mode,SaveReadScope={});
+using SaveReadAhead=std::function<bool()>;
+std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles>,bool test_mode,SaveReadScope={},SaveReadAhead={});
 std::string save_files_report(const std::shared_ptr<wr::MutableFiles>&);
 std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles*);
 std::optional<std::uint64_t> save_files_activity(const wr::MutableFiles*);
