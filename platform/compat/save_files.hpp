@@ -9,7 +9,10 @@ namespace wa2::platform::compat {
 // ignored. Test-mode files remain isolated below test-mode/.
 using SaveReadScope=std::function<std::optional<std::uint64_t>()>;
 using SaveReadAhead=std::function<bool()>;
-std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles>,bool test_mode,SaveReadScope={},SaveReadAhead={});
+// Optional metadata reuse for known list readers only. File contents are not
+// cached; ordinary opens and actual save restoration retain fresh metadata.
+using SaveListRead=std::function<bool()>;
+std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles>,bool test_mode,SaveReadScope={},SaveReadAhead={},SaveListRead={});
 std::string save_files_report(const std::shared_ptr<wr::MutableFiles>&);
 std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles*);
 std::optional<std::uint64_t> save_files_activity(const wr::MutableFiles*);

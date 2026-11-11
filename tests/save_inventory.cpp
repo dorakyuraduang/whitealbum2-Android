@@ -206,16 +206,53 @@ unsigned read_ahead_bank(const std::filesystem::path& root){
     p.state().mutable_files.reset();CHECK(backend->released());CHECK(!p.gui() && !p.directdraw());
     return calls;
 }
+unsigned repeated_list(const std::filesystem::path& root){
+    const auto selected=root/"repeat-list",bank=selected/"Documents/Leaf/WHITE ALBUM2";CHECK(std::filesystem::create_directories(bank));
+    write(bank/"save_00.sav",1);write(bank/"save_09.sav",9);
+    wr::ProcessOptions options;options.data_root=selected/"private";options.allow_file_write=true;options.prefer_linear_memory=true;CHECK(std::filesystem::create_directory(options.data_root));
+    wa2::aot::Runtime runtime(options);auto& p=runtime.process();auto& m=p.memory;
+    auto backend=std::make_shared<AheadCounted>(c::local_files(selected));
+    p.state().mutable_files=c::save_files(backend,false,wa2::aot::traced_save_read_scope(p),wa2::aot::save_index_read_ahead(p),wa2::aot::save_list_metadata_read(p));runtime.load();
+    const std::string path="C:\\WinRecomp";m.copy_in(0xa39d28,{reinterpret_cast<const std::uint8_t*>(path.c_str()),path.size()+1});m.store(0xa39208,0,32);
+    const auto output=p.allocate_bytes(32);unsigned calls{},frame=1000;
+    const auto index=[&](unsigned slot,unsigned byte){CHECK(p.callback(0x4233c0,std::array<U32,3>{slot,output,0},false)==1);CHECK(m.load(output,8)==byte);++calls;};
+    const auto preview=[&](unsigned slot,unsigned byte){CHECK(p.callback(0x4234c0,std::array<U32,6>{slot,0,0,0,0,0},false)==1);CHECK(m.load(0xa4e5c0+0x10057,8)==byte);++calls;};
+    for(unsigned repeat=0;repeat<20;++repeat){
+        m.store(0xa3a130,++frame,32);if(repeat==1)write(bank/"save_00.sav",49);
+        index(0,repeat?49:1);index(9,9);
+        // A preview in a different source update still uses original bytes,
+        // while the provider directory inventory can be reused briefly.
+        m.store(0xa3a130,++frame,32);preview(0,repeat?49:1);preview(9,9);CHECK(backend->released());
+    }
+    CHECK(backend->lists==1 && backend->opens==80 && backend->batches==20);
+    // Full file reads are not a list reader: new external files must be
+    // readable immediately, without waiting for the list metadata lifetime.
+    write(bank/"save_05.sav",55);const auto name=p.put_string("save_05.sav");
+    CHECK(p.callback(0x44c4c0,std::array<U32,3>{name,output,4},false)==4 && m.load(output,8)==55);++calls;
+    CHECK(backend->lists==2);m.store(0xa3a130,++frame,32);index(5,55);CHECK(backend->lists==2);
+    // Writes, an explicit directory refresh and worker reads invalidate the
+    // listing immediately. Only original metadata/openers are retained.
+    p.state().mutable_files->replace("save_00.sav",std::vector<std::uint8_t>(0x10058,66));CHECK(backend->released());
+    m.store(0xa3a130,++frame,32);index(0,66);CHECK(backend->lists==3);
+    write(bank/"save_06.sav",67);p.state().mutable_files->list("");m.store(0xa3a130,++frame,32);index(6,67);
+    const auto worker_before=backend->queries;p.state().current_thread_id=2;index(0,66);CHECK(backend->queries>worker_before && backend->released());p.state().current_thread_id=1;
+    m.store(0xa3a130,++frame,32);index(0,66);const auto before_expiry=backend->lists;write(bank/"save_07.sav",77);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2010));m.store(0xa3a130,++frame,32);index(7,77);CHECK(backend->lists>before_expiry);
+    const auto report=c::save_files_report(p.state().mutable_files);CHECK(report.find("\"list_metadata_hits\":0,")==std::string::npos);
+    p.state().mutable_files.reset();CHECK(backend->released());CHECK(!p.gui() && !p.directdraw());return calls;
+}
 int main(int argc,char** argv){try{
     CHECK(argc==2);const auto root=std::filesystem::path(argv[1]).parent_path()/("save-inventory-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(std::filesystem::create_directory(root));
     unsigned readers{},guards{};for(bool linear:{false,true})for(bool references:{false,true}){const auto baseline=exercise(root,linear,false,references),scoped=exercise(root,linear,true,references);readers+=baseline.readers+scoped.readers;guards+=scoped.guards;}
     unsigned index_calls{};for(bool linear:{false,true})for(bool scoped:{false,true})for(bool missing:{false,true})index_calls+=chapter_index(root,linear,scoped,missing);
     readers+=full_bank(root);
     const auto ahead_calls=read_ahead_bank(root);index_calls+=ahead_calls;
+    const auto repeat_calls=repeated_list(root);index_calls+=repeat_calls;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.save-inventory.v1\",\"actual_static_reader_calls\":"<<readers<<",\"guard_cases\":"<<guards
         <<",\"actual_static_index_calls\":"<<index_calls<<",\"chapter_index_batch\":true,\"chapter_namespace_separate\":true,\"missing_chapter_queries_batched\":true,\"baseline_two_namespace_metadata_queries\":200,\"batched_two_namespace_directory_queries\":2,\"batched_absent_chapter_directory_queries\":2,\"full_bank_slots\":100,\"full_bank_single_inventory\":true,\"root_previews_ignored\":true"
           ",\"slots_per_fixture\":100,\"present_slots\":2,\"baseline_metadata_queries_per_fixture\":100,\"scoped_metadata_queries_per_fixture\":0,\"scoped_directory_lists_per_fixture\":1,\"descriptor_opens_per_fixture\":2"
           ",\"read_ahead_index_calls\":"<<ahead_calls<<",\"full_bank_read_ahead_batches\":7,\"maximum_read_ahead_files\":16,\"read_ahead_only_manual_slots\":true,\"read_ahead_single_file_bypass\":true,\"read_ahead_handles_released\":true,\"read_ahead_failure_retries\":true,\"read_ahead_writers_and_workers_bypass\":true"
+          ",\"repeat_list_calls\":"<<repeat_calls<<",\"repeat_list_rounds\":20,\"repeat_list_directory_queries\":1,\"list_metadata_maximum_age_ms\":2000,\"list_payload_reads_fresh\":true,\"full_read_new_files_immediate\":true,\"list_expiry_and_mutation_checked\":true,\"list_cached_openers_hold_no_descriptors\":true"
           ",\"same_static_save_reader\":true,\"prepared_reads_checked\":true,\"writers_bypass_read_reference\":true,\"title_reader_batch\":true,\"scope_audit_checked\":true,\"payload_reads_fresh\":true,\"write_invalidation\":true,\"source_frame_invalidation\":true,\"ordinary_and_worker_reads_fresh\":true,\"inventory_lifetime_bounded\":true,\"original_saves_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS unchanged static save reader: per-slot metadata lookup replaced by one inventory for 100 own-fixture slots; guards and fresh payload reads.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

@@ -48,7 +48,7 @@ std::uint32_t run(Startup startup){
         if(!output)throw std::runtime_error("Cannot finish runtime report");
     };
     try{const auto image=aot::initial_image();require_imports(process,image);
-        if(startup.files){process.state().mutable_files=platform::compat::save_files(std::move(startup.files),startup.test_mode,aot::traced_save_read_scope(process),aot::save_index_read_ahead(process));
+        if(startup.files){process.state().mutable_files=platform::compat::save_files(std::move(startup.files),startup.test_mode,aot::traced_save_read_scope(process),aot::save_index_read_ahead(process),aot::save_list_metadata_read(process));
             process.state().reports["selected_directory_io"]=[&process]{return platform::compat::save_files_report(process.state().mutable_files);};}
         if(startup.mount_resources)startup.mount_resources(process);
         platform::compat::select_language_resources(process,startup.language);

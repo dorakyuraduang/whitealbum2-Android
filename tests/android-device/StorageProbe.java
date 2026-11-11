@@ -16,8 +16,11 @@ import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Arrays;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 /** Read-only provider timing in the target UID. No Activity, game or screen. */
 public final class StorageProbe extends Instrumentation {
@@ -115,6 +118,35 @@ public final class StorageProbe extends Instrumentation {
             return new JSONObject().put("iterations",count).put("elapsed_ns",System.nanoTime()-begin).put("bytes",total);
         }finally{fixture.delete();}
     }
+    private static int descriptors(){String[] entries=new File("/proc/self/fd").list();return entries==null?-1:entries.length;}
+    private JSONObject directoryReads(Uri tree,int count)throws Exception{
+        Method read=documents.getClass().getDeclaredMethod("compatibleReadMetadata",String.class,boolean.class);read.setAccessible(true);
+        Method light=documents.getClass().getDeclaredMethod("pathChildren",Uri.class),full=documents.getClass().getDeclaredMethod("children",Uri.class);light.setAccessible(true);full.setAccessible(true);
+        Uri bank=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
+        for(String expected:new String[]{"Documents","Leaf","WHITE ALBUM2"}){
+            Uri next=null;
+            for(Object entry:(List<?>)call(light,bank)){
+                Field name=entry.getClass().getDeclaredField("name"),directory=entry.getClass().getDeclaredField("directory"),uri=entry.getClass().getDeclaredField("uri");name.setAccessible(true);directory.setAccessible(true);uri.setAccessible(true);
+                if(expected.equalsIgnoreCase((String)name.get(entry)) && directory.getBoolean(entry)){if(next!=null)throw new IllegalStateException("Ambiguous probe directory");next=(Uri)uri.get(entry);}
+            }
+            if(next==null)throw new IllegalStateException("No canonical save bank to inspect");bank=next;
+        }
+        JSONArray timings=new JSONArray();int before=descriptors(),rows=-1;long heapBefore=Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory();
+        for(int n=0;n<count;++n){
+            long start=System.nanoTime();String[] entries=(String[])call(read,"Documents/Leaf/WHITE ALBUM2",true);long elapsed=System.nanoTime()-start;
+            if(entries.length%5!=0)throw new IllegalStateException("Malformed production directory inventory");
+            if(rows>=0 && rows!=entries.length/5)throw new IllegalStateException("Save directory changed during metadata probe");rows=entries.length/5;
+            long at=System.nanoTime();int lightRows=((List<?>)call(light,bank)).size();long lightNs=System.nanoTime()-at;
+            at=System.nanoTime();int fullRows=((List<?>)call(full,bank)).size();long fullNs=System.nanoTime()-at;
+            if(lightRows!=fullRows)throw new IllegalStateException("Directory changed between projections");
+            timings.put(new JSONObject().put("iteration",n).put("elapsed_ns",elapsed).put("rows",rows).put("descriptors",descriptors()).put("light_bank_ns",lightNs).put("full_bank_ns",fullNs));
+            // Separate immediate repeats from a cold metadata lookup after a
+            // pause; this is a finite file component check, not game pressure.
+            if(n==3 || n==7)Thread.sleep(1200);
+        }
+        return new JSONObject().put("iterations",count).put("timings",timings).put("descriptors_before",before).put("descriptors_after",descriptors())
+            .put("java_used_bytes_before",heapBefore).put("java_used_bytes_after",Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory()).put("payload_reads",0);
+    }
     @Override public void onStart(){Bundle output=new Bundle();int status=Activity.RESULT_OK;
         try{Context context=getTargetContext();JSONObject result=new JSONObject();result.put("schema","wa2.android-storage-probe.v1");result.put("game_launched",false);result.put("screen_access",false);result.put("selected_directory_written",false);
             File report=new File(context.getFilesDir(),"wa2-runtime.json"),progress=new File(context.getFilesDir(),"wa2-runtime-progress.json");
@@ -126,6 +158,10 @@ public final class StorageProbe extends Instrumentation {
                 requireCleanPublication(context,tree);
                 Class<?> type=context.getClassLoader().loadClass("org.wa2.port.GameDocuments");Constructor<?> ctor=type.getDeclaredConstructor(android.content.ContentResolver.class,Uri.class);ctor.setAccessible(true);documents=ctor.newInstance(context.getContentResolver(),tree);
                 metadata=type.getDeclaredMethod("compatibleMetadata",String.class,boolean.class);metadata.setAccessible(true);open=type.getDeclaredMethod("compatibleOpen",String.class,int.class,int.class);open.setAccessible(true);
+                if("directory".equals(arguments.getString("mode"))){
+                    int count=Math.max(1,Math.min(20,Integer.parseInt(arguments.getString("count","12"))));
+                    result.put("directory_reads",directoryReads(tree,count));result.put("passed",true);output.putString("stream",result.toString());finish(status,output);return;
+                }
                 if("native".equals(arguments.getString("mode"))){
                     System.loadLibrary("wa2_storage_probe");
                     File scratch=new File(context.getCacheDir(),"wa2-headless-probe");if(!scratch.isDirectory() && !scratch.mkdir())throw new IllegalStateException("Cannot create private probe scratch directory");

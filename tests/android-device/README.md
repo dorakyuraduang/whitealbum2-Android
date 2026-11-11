@@ -28,6 +28,7 @@ belong in the public repository.
 adb -s DEVICE install -r --no-streaming build/android-storage-probe/WA2-storage-probe.apk
 adb -s DEVICE shell am instrument -w -r -e mode report org.wa2.port.storageprobe/org.wa2.probe.StorageProbe
 adb -s DEVICE shell am instrument -w -r -e mode measure -e count 20 org.wa2.port.storageprobe/org.wa2.probe.StorageProbe
+adb -s DEVICE shell am instrument -w -r -e mode directory -e count 6 org.wa2.port.storageprobe/org.wa2.probe.StorageProbe
 adb -s DEVICE shell am instrument -w -r -e mode native -e count 10 org.wa2.port.storageprobe/org.wa2.probe.StorageProbe
 adb -s DEVICE uninstall org.wa2.port.storageprobe
 ```
@@ -67,3 +68,15 @@ times. Save payloads still open and read anew. No original EXE is opened or run.
 These results measure file components and a bounded source update only. They
 do not measure clicking a slot, restoring an entire scene, resource decoding,
 Android UI lifecycle, or whole-game compatibility.
+
+`directory` requires the 0.2.78 or newer directory adapter and an existing
+canonical `Documents/Leaf/WHITE ALBUM2/` save bank. It performs at most 20
+metadata-only iterations and reports full-path, direct names/types, and direct
+full-bank query times, row counts, the probe process's descriptor counts and
+Java heap usage. It pauses after iterations 4 and 8 to separate immediate
+repeats from later queries. It reads no save payloads and prints no document
+addresses. This deliberately bypasses the common C++ list cache to isolate
+provider latency; use `list_metadata_hits/refreshes` and the finite repeated
+source-reader checks for that cache. Stable client descriptor counts do not
+rule out unrelated game or provider resource problems. Keep the game closed
+throughout this component test.

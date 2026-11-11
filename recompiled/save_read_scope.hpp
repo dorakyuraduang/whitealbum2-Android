@@ -68,4 +68,14 @@ inline std::function<bool()> save_index_read_ahead(wr::Process& p){
         }catch(const wr::GuestFault&){return false;}
     };
 }
+inline std::function<bool()> save_list_metadata_read(wr::Process& p){
+    return [&p]() noexcept {
+        try{
+            auto m=p.memory.execution_scope();const auto sp=p.cpu.r[wr::ESP];
+            if(std::uint64_t(sp)+56>0x100000000ull || m.load<32>(sp)!=0x44c4df || m.load<32>(sp+48)!=0xa4e5c0)return false;
+            const auto caller=m.load<32>(sp+40),bytes=m.load<32>(sp+52);
+            return (caller==0x423465 && bytes==24) || (caller==0x42357e && bytes==0x10058);
+        }catch(const wr::GuestFault&){return false;}
+    };
+}
 }

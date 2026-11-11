@@ -39,16 +39,26 @@ class Saves final:public wr::MutableFiles {
     std::shared_ptr<wr::MutableFiles> files_;std::string prefix_;
     SaveReadScope scope_;
     SaveReadAhead read_ahead_scope_;
+    SaveListRead list_read_scope_;
     struct Inventory {
         std::optional<std::uint64_t> key;std::chrono::steady_clock::time_point expires;
         std::optional<std::uint64_t> declined_key;std::chrono::steady_clock::time_point declined_until;
         std::map<std::string,std::map<std::string,Info>> directories;
         std::set<std::string> read_ahead;
         std::vector<std::pair<Info*,decltype(Info::open_read)>> original_openers;
+        struct Listing {std::map<std::string,Info> entries;std::chrono::steady_clock::time_point expires;U32 screen;};
+        std::map<std::string,Listing> listings;
+        bool list_reader{};
+        std::uint64_t listing_hits{},listing_refreshes{},listing_invalidations{};
+        void expiry(std::chrono::steady_clock::time_point value){
+            expires=value;
+            if(list_reader)for(const auto& [name,items]:directories)if(auto saved=listings.find(name);saved!=listings.end())expires=std::min(expires,saved->second.expires);
+        }
         bool main_prepared{};
         std::uint64_t revision{},builds{},hits{},chapter_builds{},chapter_hits{},declines{},info_calls{},list_calls{},open_calls{},prepared_reads{},info_ns{},list_ns{},open_ns{},read_batches{},read_ahead_files{},read_ahead_ns{};
         void release_reads(){for(auto& [info,opener]:original_openers)info->open_read=std::move(opener);original_openers.clear();}
-        void invalidate(){key.reset();declined_key.reset();release_reads();directories.clear();read_ahead.clear();}
+        void reset_active(){key.reset();declined_key.reset();release_reads();directories.clear();read_ahead.clear();}
+        void invalidate(){reset_active();if(!listings.empty()){listings.clear();++listing_invalidations;}}
         struct Mutation {
             Inventory& value;
             explicit Mutation(Inventory& v):value(v){value.invalidate();++value.revision;}
@@ -75,30 +85,46 @@ class Saves final:public wr::MutableFiles {
     }
     std::optional<Info> inspect(std::string_view name){Inventory::Timer timer(inventory_->info_calls,inventory_->info_ns);return files_->info(name);}
     std::vector<Info> entries(std::string_view name){Inventory::Timer timer(inventory_->list_calls,inventory_->list_ns);return files_->list(name);}
-    bool snapshot(){
+    bool snapshot(bool list_reader){
         const auto key=scope_?scope_():std::nullopt;auto& cache=*inventory_;
         if(!key){cache.invalidate();return false;}
         const auto now=std::chrono::steady_clock::now();
         if(cache.declined_key==key && now<cache.declined_until)return false;
-        if(cache.key==key && now<cache.expires){++cache.hits;return true;}
-        cache.invalidate();cache.directories.clear();cache.key=key;
-        cache.expires=now+std::chrono::milliseconds(250);return true;
+        if(cache.key==key && cache.list_reader==list_reader && now<cache.expires){++cache.hits;return true;}
+        cache.reset_active();cache.key=key;cache.list_reader=list_reader;
+        cache.expiry(now+std::chrono::milliseconds(250));return true;
     }
     std::pair<std::string,std::optional<Info>> locate_exact(std::string path){
         const auto slash=path.find_last_of('/');
         const auto directory=slash==path.npos?std::string{}:path.substr(0,slash);
         const auto leaf=fold(slash==path.npos?path:path.substr(slash+1));
-        if(file_name(leaf) && snapshot()){
+        const bool list_reader=list_read_scope_ && list_read_scope_();
+        if(file_name(leaf) && snapshot(list_reader)){
             auto& cache=*inventory_;const auto key=fold(directory);
             const bool prepare=read_ahead_scope_ && read_ahead_scope_();
             if(!prepare)cache.release_reads();
             auto found=cache.directories.find(key);
             if(found==cache.directories.end()){
                 std::map<std::string,Info> index;
-                try{for(auto item:entries(directory)){
-                    const auto name=fold(item.name);
-                    if(file_name(name) && !index.emplace(name,std::move(item)).second)throw std::runtime_error("Ambiguous save inventory filename");
-                }}catch(const std::runtime_error&){
+                const auto screen=U32(*cache.key);auto saved=cache.listings.find(key);
+                const bool reuse=list_reader && saved!=cache.listings.end() && saved->second.screen==screen && std::chrono::steady_clock::now()<saved->second.expires;
+                try{
+                    if(reuse){index=saved->second.entries;++cache.listing_hits;}
+                    else{
+                        for(auto item:entries(directory)){
+                            const auto name=fold(item.name);
+                            if(file_name(name) && !index.emplace(name,std::move(item)).second)throw std::runtime_error("Ambiguous save inventory filename");
+                        }
+                        if(list_reader || saved!=cache.listings.end()){
+                            if(cache.listings.size()>=4 && !cache.listings.contains(key)){
+                                auto oldest=std::min_element(cache.listings.begin(),cache.listings.end(),[](const auto& a,const auto& b){return a.second.expires<b.second.expires;});cache.listings.erase(oldest);
+                            }
+                            // Store only original metadata/openers, before any
+                            // descriptor batch is bound to the active copy.
+                            cache.listings.insert_or_assign(key,Inventory::Listing{index,std::chrono::steady_clock::now()+std::chrono::seconds(2),screen});++cache.listing_refreshes;
+                        }
+                    }
+                }catch(const std::runtime_error&){
                     const auto scope=cache.key;cache.invalidate();cache.declined_key=scope;
                     cache.declined_until=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);++cache.declines;
                     return {path,inspect(path)};
@@ -107,7 +133,7 @@ class Saves final:public wr::MutableFiles {
                 const auto primary=prefix_.empty()?std::string(main_folder):fold(prefix_.substr(0,prefix_.size()-1));
                 if(key==primary)++cache.builds;else ++cache.chapter_builds;
                 // Start the bounded lifetime after provider I/O, not before it.
-                cache.expires=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);
+                cache.expiry(std::chrono::steady_clock::now()+std::chrono::milliseconds(250));
             }else ++cache.chapter_hits;
             if(auto item=found->second.find(leaf);item!=found->second.end()){
                 if(prepare && manual_save(leaf) && !cache.read_ahead.contains(fold(path)))if(auto* ahead=dynamic_cast<ReadAheadFiles*>(files_.get())){
@@ -125,7 +151,7 @@ class Saves final:public wr::MutableFiles {
                         for(const auto& request:batch)cache.read_ahead.insert(fold(request.path));
                         // Provider work may outlast a metadata query. The
                         // batch still expires on source scope changes/writes.
-                        cache.expires=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);
+                        cache.expiry(std::chrono::steady_clock::now()+std::chrono::milliseconds(250));
                     }
                 }
                 return {std::move(path),item->second};
@@ -147,7 +173,7 @@ class Saves final:public wr::MutableFiles {
     std::string existing(const std::string& name){return locate(name).first;}
 public:
     std::string identity(std::string_view value)override{const auto name=mapped(value);return name?existing(*name):physical(fold(value));}
-    Saves(std::shared_ptr<wr::MutableFiles> files,bool test,SaveReadScope scope,SaveReadAhead ahead):files_(std::move(files)),prefix_(test?"test-mode/":""),scope_(std::move(scope)),read_ahead_scope_(std::move(ahead)){
+    Saves(std::shared_ptr<wr::MutableFiles> files,bool test,SaveReadScope scope,SaveReadAhead ahead,SaveListRead list_read):files_(std::move(files)),prefix_(test?"test-mode/":""),scope_(std::move(scope)),read_ahead_scope_(std::move(ahead)),list_read_scope_(std::move(list_read)){
         if(!files_)throw std::invalid_argument("Missing selected game directory");
         if(test){const auto error=files_->directory("test-mode");if(error && error!=183)throw std::runtime_error("Cannot create selected-directory test profile");}
     }
@@ -156,6 +182,7 @@ public:
         const auto path=mapped(value);if(!path)return {};auto result=locate(*path).second;if(result)result->name=std::string(value);return result;
     }
     std::vector<Info> list(std::string_view value)override{
+        inventory_->invalidate();
         const auto path=mapped(value,true);if(!path)return {};std::map<std::string,Info> result;
         const auto add=[&](std::string_view directory,bool bank=false){for(auto item:entries(physical(directory))){
             const auto name=fold(item.name);const auto logical=path->empty()?item.name:*path+"/"+item.name;
@@ -197,9 +224,9 @@ public:
     U32 attributes(std::string_view value,U32 flags)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);return path?files_->attributes(existing(*path),flags):5;}
     void replace(std::string_view value,std::span<const std::uint8_t> bytes)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);if(!path || bytes.size()>64u*1024*1024)throw std::runtime_error("Unsupported selected-directory save/configuration path: "+std::string(value));const auto error=prepare_main(files_,*inventory_,main_save(*path));if(error)throw std::runtime_error("Cannot prepare selected-directory save folder (error "+std::to_string(error)+")");files_->replace(physical(*path),bytes);}
     std::uint64_t revision()const{return inventory_->revision;}
-    std::uint64_t activity()const{const auto& c=*inventory_;return c.revision+c.info_calls+c.list_calls+c.open_calls+c.hits+c.chapter_hits;}
+    std::uint64_t activity()const{const auto& c=*inventory_;return c.revision+c.info_calls+c.list_calls+c.open_calls+c.hits+c.chapter_hits+c.listing_hits;}
     std::string report()const{const auto& c=*inventory_;std::ostringstream out;
-        out<<"{\"save_policy\":\"canonical-only\",\"root_save_fallback\":false,\"normal_save_directory\":\"Documents/Leaf/WHITE ALBUM2\",\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"chapter_inventory_builds\":"<<c.chapter_builds<<",\"chapter_inventory_hits\":"<<c.chapter_hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"read_ahead_batches\":"<<c.read_batches<<",\"read_ahead_files\":"<<c.read_ahead_files<<",\"read_ahead_ns\":"<<c.read_ahead_ns<<",\"maximum_read_ahead_files\":16,\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
+        out<<"{\"save_policy\":\"canonical-only\",\"root_save_fallback\":false,\"normal_save_directory\":\"Documents/Leaf/WHITE ALBUM2\",\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"chapter_inventory_builds\":"<<c.chapter_builds<<",\"chapter_inventory_hits\":"<<c.chapter_hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"list_metadata_hits\":"<<c.listing_hits<<",\"list_metadata_refreshes\":"<<c.listing_refreshes<<",\"list_metadata_invalidations\":"<<c.listing_invalidations<<",\"list_metadata_maximum_age_ms\":2000,\"list_metadata_maximum_directories\":4,\"read_ahead_batches\":"<<c.read_batches<<",\"read_ahead_files\":"<<c.read_ahead_files<<",\"read_ahead_ns\":"<<c.read_ahead_ns<<",\"maximum_read_ahead_files\":16,\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
 };
 class Local final:public wr::MutableFiles {
     std::filesystem::path root_;
@@ -230,8 +257,8 @@ std::shared_ptr<wr::MutableFiles> local_files(const std::filesystem::path& root)
 std::string save_files_report(const std::shared_ptr<wr::MutableFiles>& files){if(auto* saves=dynamic_cast<const Saves*>(files.get()))return saves->report();return "{}";}
 std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->revision();return {};}
 std::optional<std::uint64_t> save_files_activity(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->activity();return {};}
-std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope,SaveReadAhead ahead){
-    auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope),std::move(ahead));
+std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope,SaveReadAhead ahead,SaveListRead list_read){
+    auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope),std::move(ahead),std::move(list_read));
     if(test){for(const auto* folder:{"Documents","Documents/Leaf","Documents/Leaf/WHITE ALBUM2 -closing chapter-","Documents/Leaf/WHITE ALBUM2 -introductory chapter-"}){const auto error=result->directory(folder);if(error && error!=183)throw std::runtime_error("Cannot prepare selected-directory test saves");}
         for(const auto* file:{"Sys.sav","Documents/Leaf/WHITE ALBUM2 -closing chapter-/Sys.sav","Documents/Leaf/WHITE ALBUM2 -introductory chapter-/Sys.sav"}){
             std::vector<std::uint8_t> bytes(testing::system_save_bytes);U32 error{};auto* opened=result->open(file,true,false,3,error);

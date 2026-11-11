@@ -4,12 +4,23 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.78-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.78-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.78-shared-aot-replace-native.apk` to update the experimental
+is **0.2.79-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.79-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.79-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.79 reuses immutable directory metadata for known save-list index and preview
+readers across source updates, for at most two seconds and four directories.
+Each payload still opens and reads the selected original file. Actual save
+restoration and ordinary APIs use fresh metadata; writes, deletion, renaming,
+explicit enumeration and excluded callers invalidate the list snapshot.
+External new filenames can take up to two seconds to appear in the list.
+No save contents or open descriptors are retained by this metadata cache.
+A finite repeated-reader fixture covers 20 simulated reentries with one
+provider listing, fresh payloads, full reads, expiry and invalidation. It does
+not establish whole-menu device latency.
 
 0.2.78 reduces directory traversal work: ancestor queries request only document
 IDs, names and types. Full size/time/write metadata is fetched for the requested
