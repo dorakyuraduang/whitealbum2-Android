@@ -1,5 +1,6 @@
 #include "pak.hpp"
 #include "i18n.hpp"
+#include "integrity.hpp"
 #include "engine/resource_archive.hpp"
 #include <algorithm>
 #include <array>
@@ -143,7 +144,7 @@ void roundtrips(const fs::path& root) {
     require(fs::is_regular_file(extracted/"empty.txt"), "empty file became folder");
     require(fs::is_directory(extracted/"empty-folder/nested"), "empty folder omitted");
     put(extracted/"script"/"scene.txt", "changed main scene"); put(extracted/"script"/"added.txt", "new file"); fs::remove(extracted/"random.bin");
-    Options uncompressed; uncompressed.compress = false;
+    Options uncompressed; uncompressed.compress = false; uncompressed.preserve_original = false;
     const auto repacked = root/"repacked.pak"; pack(extracted, repacked, uncompressed); unpack(repacked, root/"again");
     require(get(root/"again/script/scene.txt") == get(extracted/"script/scene.txt"), "modified file not packed");
     require(get(root/"again/script/added.txt") == get(extracted/"script/added.txt"), "new member not assigned to group");
@@ -178,7 +179,7 @@ void format_fixtures(const fs::path& root) {
     require(get(root/"groups/script/same.txt") == Bytes{'a'}, "first duplicate lost");
     require(get(root/"groups/script/SAME~4.TXT") == Bytes{'b'}, "case-folding collision lost");
     require(get(root/"groups/ic/script/same.txt") == Bytes{'c'}, "IC scope collision");
-    Options raw; raw.compress = false; pack(root/"groups", root/"groups-repacked.pak", raw);
+    Options raw; raw.compress = false; raw.preserve_original = false; pack(root/"groups", root/"groups-repacked.pak", raw);
     const auto rebuilt = get(root/"groups-repacked.pak");
     require(std::equal(bytes.begin()+4, bytes.begin()+12, rebuilt.begin()+4), "reserved KCAP header lost");
     require(word(bytes, 12) == word(rebuilt, 12), "directory entry count changed");
@@ -254,6 +255,120 @@ void malformed_tests(const fs::path& root) {
     std::error_code link_error; fs::create_directory_symlink(root/"groups", root/"linked", link_error);
     if(!link_error) rejects([&] { pack(root/"linked", root/"link.pak"); }, "root directory link followed");
 }
+Bytes literal_payload(const Bytes& original, bool kcap) {
+    // Deliberately inefficient but legal LZSS. Recompressing with our encoder
+    // cannot accidentally pass the byte-identity/reused-payload assertions.
+    Bytes result(kcap ? 8 : 4); word(result, kcap ? 4 : 0, std::uint32_t(original.size()));
+    for(std::size_t at = 0; at < original.size();) {
+        const auto count = std::min<std::size_t>(8, original.size()-at);
+        result.push_back(std::uint8_t((1u << count)-1));
+        result.insert(result.end(), original.begin()+std::ptrdiff_t(at), original.begin()+std::ptrdiff_t(at+count)); at += count;
+    }
+    if(kcap) word(result, 0, std::uint32_t(result.size()-8)); // Legacy size-prefix variant.
+    return result;
+}
+Bytes original_layout_fixture(bool kcap) {
+    std::vector<Fixture> entries{
+        {"unchanged.txt", literal_payload(Bytes(16000, 'Q'), kcap), 1},
+        {"changed.txt", stored(Bytes(63, 'R'), kcap), 1},
+        {"plain.bin", Bytes{1,2,3,4,5}},
+        {"nested/path.txt", Bytes{'n'}},
+        {"empty.dat", kcap ? stored({}, true) : Bytes{}, kcap ? 1u : 0u},
+        {".wa2pak-cache", Bytes{'c'}}, {".wa2pak-manifest", Bytes{'m'}},
+    };
+    if(kcap) entries.push_back({"script", {}, 0xccccccccu, true});
+    entries.push_back({"DUP.TXT", Bytes{'X'}}); entries.push_back({"dup.txt", Bytes{'Y'}});
+    const auto source = make_archive(kcap, entries);
+    const unsigned start = kcap ? 16 : 8, stride = kcap ? 44 : 40;
+    Bytes result(source.begin(), source.begin()+start+entries.size()*stride);
+    // Physical payload order differs from directory order. Nonzero gaps and a
+    // nonempty trailer exercise layout preservation as well as compression.
+    for(std::size_t next = entries.size(); next != 0; --next) {
+        const auto n = next-1; const auto row = unsigned(start+n*stride);
+        result.insert(result.end(), 7+n, std::uint8_t(0xa0+n));
+        word(result, row+(kcap ? 36 : 36), entries[n].directory ? 0 : std::uint32_t(result.size()));
+        result.insert(result.end(), entries[n].data.begin(), entries[n].data.end());
+    }
+    const std::string trailer = "original nonzero trailer"; result.insert(result.end(), trailer.begin(), trailer.end());
+    return result;
+}
+Bytes member_payload(const Bytes& bytes, bool kcap, unsigned index) {
+    const auto row = (kcap ? 16 : 8)+index*(kcap ? 44 : 40);
+    const auto offset = word(bytes, row+36), size = word(bytes, row+(kcap ? 40 : 32));
+    require(offset <= bytes.size() && size <= bytes.size()-offset, "test member range");
+    return Bytes(bytes.begin()+offset, bytes.begin()+offset+size);
+}
+void preservation_tests(const fs::path& parent) {
+    {
+        Sha256 empty;
+        require(empty.finish() == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "SHA-256 empty known vector");
+        Sha256 abc; const Bytes a{'a'}, bc{'b','c'}; abc.update(a); abc.update(bc);
+        require(abc.finish() == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", "SHA-256 streaming known vector");
+    }
+    for(bool kcap : {true, false}) {
+        const auto root = parent/(kcap ? "preserve-kcap" : "preserve-lac"); fs::create_directory(root);
+        const auto original = original_layout_fixture(kcap); const auto source = root/"original.pak";
+        put(source, original); unpack(source, root/"extracted");
+        require(get(root/"extracted"/cache_name/"original.pak") == original, "original snapshot not retained");
+        const auto manifest_bytes = get(root/"extracted"/manifest_name);
+        require(std::string(manifest_bytes.begin(), manifest_bytes.end()).starts_with("WA2PAK\t2\t"), "lossless manifest version missing");
+        fs::rename(root/"extracted", root/"moved"); fs::remove(source);
+        Options preserved; preserved.compress = false; // Original coding takes precedence for unchanged files.
+        const auto first = pack(root/"moved", root/"roundtrip.pak", preserved);
+        require(first.exact_original && get(first.output) == original, "unchanged archive was not byte-identical");
+        unpack(first.output, root/"second");
+        const auto second = pack(root/"second", root/"second.pak");
+        require(second.exact_original && get(second.output) == original, "repeated roundtrip changed size or bytes");
+        const auto modified = root/"moved/changed.txt"; const auto old_time = fs::last_write_time(modified);
+        put(modified, Bytes(63, 'Z')); fs::last_write_time(modified, old_time);
+        const auto changed = pack(root/"moved", root/"changed.pak", preserved);
+        require(!changed.exact_original && get(changed.output) != original, "same-size edit was ignored");
+        const auto rebuilt = get(changed.output);
+        require(member_payload(rebuilt, kcap, 0) == member_payload(original, kcap, 0), "unchanged compressed bytes were recompressed");
+        require(member_payload(rebuilt, kcap, 1) != member_payload(original, kcap, 1), "changed payload reused old data");
+        auto reader = wa2::resource::Archive::open(std::make_shared<Source>(rebuilt));
+        require(reader.load(reader.find("changed.txt")) == Bytes(63, 'Z'), "game reader did not see the edit");
+        require(reader.load(reader.find("unchanged.txt")) == Bytes(16000, 'Q'), "reused member content mismatch");
+        require(reader.find(cache_name) != wa2::resource::Archive::missing, "real resource matching metadata name was lost");
+        require(reader.members().size() == word(original, kcap ? 12 : 4), "snapshot or helper metadata was packed as a resource");
+        fs::remove(root/"moved/plain.bin"); put(root/"moved/new.txt", "added");
+        const auto added = pack(root/"moved", root/"added.pak");
+        reader = wa2::resource::Archive::open(std::make_shared<Source>(get(added.output)));
+        require(reader.find("plain.bin") == wa2::resource::Archive::missing && reader.load(reader.find("new.txt")) == Bytes({'a','d','d','e','d'}), "add/delete not reflected in preserved repack");
+        require(member_payload(get(added.output), kcap, 0) == member_payload(original, kcap, 0), "add/delete recompressed unchanged member");
+        const auto snapshot = root/"moved"/cache_name/"original.pak";
+        auto damaged = get(snapshot); damaged.back() ^= 1; put(snapshot, damaged);
+        rejects([&] { pack(root/"moved", root/"damaged.pak"); }, "corrupted original snapshot accepted");
+        require(!fs::exists(root/"damaged.pak"), "corrupt-cache output published");
+        put(snapshot, original);
+        auto manifest = get(root/"moved"/manifest_name); const auto newline = std::find(manifest.begin(), manifest.end(), '\n');
+        require(newline != manifest.end() && newline+1 != manifest.end(), "manifest fixture header");
+        auto row = newline+1; const auto tab = std::find(row, manifest.end(), '\t');
+        require(tab+1 != manifest.end(), "manifest fixture record"); *(tab+1) = *(tab+1) == '0' ? '1' : '0';
+        put(root/"moved"/manifest_name, manifest);
+        rejects([&] { pack(root/"moved", root/"bad-index.pak"); }, "manifest record not checked against original snapshot");
+        put(root/"moved"/manifest_name, manifest_bytes);
+        fs::remove(snapshot);
+        rejects([&] { pack(root/"moved", root/"missing-cache.pak"); }, "missing original snapshot silently recompressed");
+        Options fresh; fresh.preserve_original = false;
+        pack(root/"moved", root/"fresh.pak", fresh);
+        require(!get(root/"fresh.pak").empty(), "explicit fresh packing should not require a cache");
+        Options legacy; legacy.preserve_original = false;
+        put(source, original); unpack(source, root/"legacy", legacy);
+        require(!fs::exists(root/"legacy"/cache_name/"original.pak"), "disabled preservation still saved snapshot");
+        rejects([&] { pack(root/"legacy", root/"legacy-preserved.pak"); }, "legacy extraction claimed lossless preservation");
+        pack(root/"legacy", root/"legacy-fresh.pak", legacy);
+        std::atomic_bool cancel = false; Options cancelled; cancelled.cancel = &cancel;
+        cancelled.progress = [&](unsigned, ProgressStage stage, std::string_view) { if(stage == ProgressStage::copying_original) cancel = true; };
+        rejects([&] { unpack(source, root/"cancelled", cancelled); }, "snapshot-copy cancellation ignored");
+        require(!fs::exists(root/"cancelled"), "cancelled snapshot extraction published"); no_staging(root);
+        // Empty archives with trailers also have a layout worth preserving.
+        auto empty = make_archive(kcap, {}); empty.insert(empty.end(), {1,3,5,7,9});
+        put(root/"empty-archive.pak", empty); unpack(root/"empty-archive.pak", root/"empty-archive");
+        const auto restored = pack(root/"empty-archive", root/"empty-restored.pak");
+        require(restored.exact_original && get(restored.output) == empty, "empty archive trailer was lost");
+    }
+}
 void movie_tests(const fs::path& root) {
     const Bytes guid{0x30,0x26,0xb2,0x75,0x8e,0x66,0xcf,0x11,0xa6,0xd9,0,0xaa,0,0x62,0xce,0x6c};
     auto bytes = guid; bytes.resize(800001, 17); put(root/"mv100.pak", bytes);
@@ -275,13 +390,24 @@ void movie_tests(const fs::path& root) {
 }
 int main(int argc, char** argv) {
     try {
-        if(argc != 2) throw std::runtime_error("usage: wa2_pak_tests <existing-test-parent>");
-        const auto parent = fs::canonical(fs::u8path(argv[1]));
+        const bool existing = argc == 4 && std::string_view(argv[1]) == "--archive-roundtrip";
+        if(argc != 2 && !existing) throw std::runtime_error("usage: wa2_pak_tests <existing-test-parent> | --archive-roundtrip <pak> <existing-test-parent>");
+        const auto parent = fs::canonical(fs::u8path(argv[existing ? 3 : 1]));
         const auto root = parent/("pak-test-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         if(!fs::create_directory(root)) throw std::runtime_error("test directory already exists");
         // Keep fixtures on failure; only remove this verified, exclusively-owned
         // absolute directory after all assertions have passed.
-        language_tests(); codec_tests(); roundtrips(root); format_fixtures(root); malformed_tests(root); movie_tests(root); no_staging(root);
+        if(existing) {
+            const auto source = fs::canonical(fs::u8path(argv[2]));
+            require(path_key(source.extension()) == ".pak", "read-only archive check accepts PAK resources only");
+            require(fs::file_size(source) <= 128ull*1024*1024, "read-only archive check memory limit: 128 MiB");
+            const auto before = get(source); unpack(source, root/"extracted");
+            const auto result = pack(root/"extracted", root/"restored.pak");
+            require(result.exact_original && get(result.output) == before, "existing PAK was not restored byte for byte");
+            require(get(source) == before, "read-only input was modified"); no_staging(root);
+        } else {
+            language_tests(); codec_tests(); roundtrips(root); format_fixtures(root); malformed_tests(root); preservation_tests(root); movie_tests(root); no_staging(root);
+        }
         require(root.is_absolute() && root.parent_path() == parent && fs::canonical(root) == root && !is_link(root), "test cleanup containment");
         fs::remove_all(root);
         std::cout << "PAK component checks passed: " << assertions << " assertions; no game process or screen used\n";

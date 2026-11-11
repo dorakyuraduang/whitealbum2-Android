@@ -11,6 +11,7 @@
 namespace wa2::paktool {
 namespace fs = std::filesystem;
 inline constexpr const char* manifest_name = ".wa2pak-manifest";
+inline constexpr const char* cache_name = ".wa2pak-cache";
 enum class Format { kcap, lac, movie };
 enum class ErrorKind { general, read, write, format, unsafe_path, filename, size_limit,
                        target_exists, invalid_target, link, source_changed, cancelled };
@@ -21,11 +22,14 @@ struct Error : std::runtime_error {
 };
 struct Cancelled : Error { Cancelled() : Error(ErrorKind::cancelled, "Operation cancelled") {} };
 enum class ProgressStage { checking_index, scanning_folder, packing_file, unpacking_file,
-                           copying_movie, packed, unpacked };
+                           copying_movie, packed, unpacked, checking_original, copying_original };
 struct Options {
     // Zero preserves a manifest's encoding; new folders use Shift-JIS (932).
     unsigned codepage{};
     bool compress = true;
+    // Extraction saves an original snapshot. Repacking restores unchanged
+    // archives byte-for-byte and reuses unchanged members' original payloads.
+    bool preserve_original = true;
     // Extraction is streamed, but bound total expansion against damaged input.
     std::uint64_t maximum_expanded = 64ull * 1024 * 1024 * 1024;
     const std::atomic_bool* cancel{};
@@ -37,6 +41,7 @@ struct Result {
     fs::path output;
     Format format{};
     std::uint64_t files{}, bytes{};
+    bool exact_original{};
 };
 // Both destinations must be new. Neither operation replaces existing data.
 Result pack(const fs::path& folder, const fs::path& destination, const Options& = {});

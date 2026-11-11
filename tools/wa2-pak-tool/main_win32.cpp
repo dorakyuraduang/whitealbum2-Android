@@ -16,7 +16,7 @@ using ui::Text;
 constexpr int pack_id = 101, unpack_id = 102, cancel_id = 103, language_id = 104;
 constexpr UINT finished_message = WM_APP + 1;
 HWND window, heading, introduction, language_label, language_box, pack_button, unpack_button,
-     cancel_button, encoding_label, codepage_box, compression_box, help, status, bar;
+     cancel_button, encoding_label, codepage_box, compression_box, preservation_box, help, status, bar;
 HFONT font, title_font;
 Language language = ui::default_language;
 std::thread worker;
@@ -68,7 +68,7 @@ std::wstring render_update(const Update& value) {
     case State::failure: return ui::error_text(language, value.error, value.detail);
     case State::success: {
         wchar_t bytes[80]; swprintf(bytes, 80, L"%.2f MiB", double(value.result.bytes)/(1024*1024));
-        return std::wstring(tr(value.stage == ProgressStage::packed ? Text::packed : Text::unpacked)) + L" · " +
+        return std::wstring(tr(value.result.exact_original ? Text::restored : (value.stage == ProgressStage::packed ? Text::packed : Text::unpacked))) + L" · " +
                tr(Text::files) + L": " + std::to_wstring(value.result.files) + L"\r\n" + value.result.output.wstring() + L"\r\n" + bytes;
     }
     }
@@ -85,6 +85,7 @@ void apply_language() {
     SetWindowTextW(introduction, tr(Text::introduction)); SetWindowTextW(language_label, tr(Text::language_label));
     SetWindowTextW(pack_button, tr(Text::pack_button)); SetWindowTextW(unpack_button, tr(Text::unpack_button));
     SetWindowTextW(encoding_label, tr(Text::name_encoding)); SetWindowTextW(compression_box, tr(Text::compression));
+    SetWindowTextW(preservation_box, tr(Text::preserve_original));
     SetWindowTextW(help, tr(Text::help)); SetWindowTextW(cancel_button, tr(Text::cancel));
     auto selected = SendMessageW(codepage_box, CB_GETCURSEL, 0, 0); if(selected == CB_ERR) selected = 0;
     SendMessageW(codepage_box, CB_RESETCONTENT, 0, 0);
@@ -140,6 +141,7 @@ fs::path choose(bool folder, bool save, const fs::path& suggested = {}) {
 void controls(bool busy) {
     EnableWindow(pack_button, !busy); EnableWindow(unpack_button, !busy);
     EnableWindow(codepage_box, !busy); EnableWindow(compression_box, !busy); EnableWindow(cancel_button, busy);
+    EnableWindow(preservation_box, !busy);
     // The worker only publishes typed stages and data, so language switching is
     // safe even during a job and immediately re-renders progress/results.
 }
@@ -162,6 +164,7 @@ void start(bool packing) {
         const auto selected = SendMessageW(codepage_box, CB_GETCURSEL, 0, 0);
         options.codepage = selected == 1 ? 932 : selected == 2 ? 936 : selected == 3 ? 65001 : 0;
         options.compress = SendMessageW(compression_box, BM_GETCHECK, 0, 0) == BST_CHECKED;
+        options.preserve_original = SendMessageW(preservation_box, BM_GETCHECK, 0, 0) == BST_CHECKED;
         options.cancel = &cancelled;
         options.progress = [](unsigned percent, ProgressStage stage, std::string_view detail) {
             std::lock_guard lock(update_mutex);
@@ -215,13 +218,15 @@ LRESULT CALLBACK procedure(HWND handle, UINT message, WPARAM wparam, LPARAM lpar
         unpack_button = control(L"BUTTON", BS_PUSHBUTTON | BS_MULTILINE | WS_TABSTOP, 335, 169, 294, 56, unpack_id);
         encoding_label = control(L"STATIC", 0, 25, 245, 175, 42);
         codepage_box = control(WC_COMBOBOXW, CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, 210, 241, 419, 180);
-        compression_box = control(L"BUTTON", BS_AUTOCHECKBOX | BS_MULTILINE | WS_TABSTOP, 25, 297, 604, 44);
+        compression_box = control(L"BUTTON", BS_AUTOCHECKBOX | BS_MULTILINE | WS_TABSTOP, 25, 291, 604, 42);
         SendMessageW(compression_box, BM_SETCHECK, BST_CHECKED, 0);
-        help = control(L"STATIC", 0, 25, 354, 604, 72);
-        bar = control(PROGRESS_CLASSW, PBS_SMOOTH, 25, 441, 604, 20);
+        preservation_box = control(L"BUTTON", BS_AUTOCHECKBOX | BS_MULTILINE | WS_TABSTOP, 25, 335, 604, 42);
+        SendMessageW(preservation_box, BM_SETCHECK, BST_CHECKED, 0);
+        help = control(L"STATIC", 0, 25, 387, 604, 65);
+        bar = control(PROGRESS_CLASSW, PBS_SMOOTH, 25, 461, 604, 20);
         SendMessageW(bar, PBM_SETRANGE32, 0, 100);
-        status = control(L"STATIC", SS_LEFT, 25, 477, 604, 92);
-        cancel_button = control(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 499, 585, 130, 35, cancel_id);
+        status = control(L"STATIC", SS_LEFT, 25, 495, 604, 84);
+        cancel_button = control(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 499, 589, 130, 35, cancel_id);
         controls(false); apply_language(); return 0;
     }
     case WM_COMMAND:
@@ -267,7 +272,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     klass.hIcon = LoadIconW(nullptr, IDI_APPLICATION); klass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     RegisterClassW(&klass);
     const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-    RECT rectangle{0, 0, 654, 638}; AdjustWindowRectEx(&rectangle, style, FALSE, 0);
+    RECT rectangle{0, 0, 654, 642}; AdjustWindowRectEx(&rectangle, style, FALSE, 0);
     window = CreateWindowExW(0, klass.lpszClassName, tr(Text::window_title), style, CW_USEDEFAULT, CW_USEDEFAULT,
                            rectangle.right-rectangle.left, rectangle.bottom-rectangle.top, nullptr, nullptr, instance, nullptr);
     if(!window) { CoUninitialize(); return 1; }

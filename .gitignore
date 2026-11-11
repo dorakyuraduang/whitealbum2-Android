@@ -52,6 +52,9 @@
 **/build/
 **/.gradle/
 **/__pycache__/
+**/.wa2pak-cache/
+**/.wa2pak-manifest
+**/.wa2pak-work-*/
 **/.git/
 **/.env
 **/.env.*

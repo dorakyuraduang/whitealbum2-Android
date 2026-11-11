@@ -1,7 +1,9 @@
 #include "pak.hpp"
+#include "integrity.hpp"
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <charconv>
 #include <fstream>
 #include <limits>
 #include <map>
@@ -22,12 +24,19 @@ struct Entry {
     fs::path local;
     std::uint32_t flags{};
     std::uint64_t offset{}, stored{}, expanded{};
+    std::string content_hash;
+    std::optional<std::size_t> original_index;
+    bool reusable{};
+    std::uint64_t checked_size{};
+    fs::file_time_type checked_time{};
 };
 struct Index {
     Format format = Format::kcap;
     unsigned codepage = 932;
     Bytes header;
     std::vector<Entry> entries;
+    std::uint64_t original_size{};
+    std::string original_hash;
 };
 void check(const Options& options) { if(options.cancel && options.cancel->load()) throw Cancelled(); }
 void progress(const Options& options, unsigned percent, ProgressStage stage, std::string_view detail = {}) {
@@ -45,9 +54,10 @@ void read(std::istream& input, std::span<std::uint8_t> bytes) {
     if(!bytes.empty() && !input.read(reinterpret_cast<char*>(bytes.data()), std::streamsize(bytes.size())))
         throw Error(ErrorKind::read, "Incomplete file read; the source may be damaged or have changed");
 }
-void write(std::ostream& output, std::span<const std::uint8_t> bytes) {
+void write(std::ostream& output, std::span<const std::uint8_t> bytes, Sha256* digest = nullptr) {
     if(!bytes.empty()) output.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
     if(!output) throw Error(ErrorKind::write, "Cannot write output; check free space and folder permissions");
+    if(digest) digest->update(bytes);
 }
 void seek(std::istream& input, std::uint64_t offset) {
     input.clear(); input.seekg(std::streamoff(offset));
@@ -64,12 +74,12 @@ void finish(std::ofstream& output) {
     output.close();
     if(output.fail()) throw Error(ErrorKind::write, "Cannot close the output file");
 }
-void copy(std::istream& input, std::ostream& output, std::uint64_t size, const Options& options) {
+void copy(std::istream& input, std::ostream& output, std::uint64_t size, const Options& options, Sha256* digest = nullptr) {
     std::array<std::uint8_t, 256 * 1024> buffer;
     while(size) {
         check(options);
         const auto count = std::size_t(std::min<std::uint64_t>(buffer.size(), size));
-        read(input, std::span(buffer).first(count)); write(output, std::span(buffer).first(count)); size -= count;
+        read(input, std::span(buffer).first(count)); write(output, std::span(buffer).first(count), digest); size -= count;
     }
 }
 bool within(const fs::path& parent, const fs::path& child) {
@@ -78,6 +88,17 @@ bool within(const fs::path& parent, const fs::path& child) {
 }
 void no_links(const fs::path& path) {
     if(is_link(path)) throw Error(ErrorKind::link, "Symbolic links and directory junctions are not supported: " + utf8(path));
+}
+std::string hash_file(const fs::path& path, const Options& options) {
+    no_links(path); ReadLock lock(path);
+    auto input = open_input(path); auto remaining = fs::file_size(path);
+    Sha256 digest; std::array<std::uint8_t, 256*1024> buffer;
+    while(remaining) {
+        check(options);
+        const auto count = std::size_t(std::min<std::uint64_t>(remaining, buffer.size()));
+        read(input, std::span(buffer).first(count)); digest.update(std::span(buffer).first(count)); remaining -= count;
+    }
+    return digest.finish();
 }
 // An exclusively-created directory owns every temporary file. Cleanup is only
 // allowed after checking its absolute parent and excluding reparse points.
@@ -143,6 +164,11 @@ std::vector<std::string> split(const std::string& line) {
 void validate_codepage(unsigned cp) {
     if(cp != 932 && cp != 936 && cp != 65001) throw Error(ErrorKind::filename, "Supported filename encodings are Shift-JIS, GBK and UTF-8");
 }
+bool metadata_path(const fs::path& relative) {
+    if(relative.empty()) return false;
+    const auto first = path_key(*relative.begin());
+    return first == path_key(fs::path(manifest_name)) || first == path_key(fs::path(cache_name));
+}
 // Check traversal AFTER decoding: a Shift-JIS trail byte may be 0x5c.
 fs::path safe_relative(std::string text, bool repair = false) {
     if(text.empty() || text.find('\0') != std::string::npos) throw Error(ErrorKind::unsafe_path, "PAK contains an empty name or NUL character");
@@ -182,7 +208,7 @@ fs::path with_suffix(const fs::path& path, unsigned index) {
 }
 // Map collisions to distinct paths; the manifest retains the original names.
 class Names {
-    std::map<std::string, bool> paths_{{path_key(fs::u8path(manifest_name)), false}};
+    std::map<std::string, bool> paths_{{path_key(fs::path(manifest_name)), false}, {path_key(fs::path(cache_name)), false}};
 public:
     fs::path reserve(const fs::path& wanted, bool directory, unsigned index) {
         fs::path result;
@@ -269,7 +295,7 @@ Index read_index(std::ifstream& input, std::uint64_t size, unsigned codepage, co
 }
 // Bounded input/output buffers keep extraction independent of member size.
 void expand(std::istream& input, std::ostream& output, std::uint64_t stored, std::uint64_t expanded,
-            std::uint8_t fill, const Options& options) {
+            std::uint8_t fill, const Options& options, Sha256* digest = nullptr) {
     std::array<std::uint8_t, 4096> ring{}; std::fill_n(ring.begin(), 0xfee, fill);
     std::array<std::uint8_t, 65536> source{}, target{};
     std::size_t next = 0, available = 0, buffered = 0, cursor = 0xfee;
@@ -284,7 +310,7 @@ void expand(std::istream& input, std::ostream& output, std::uint64_t stored, std
     auto put = [&](std::uint8_t byte) {
         ring[cursor] = byte; cursor = (cursor+1) & 4095;
         target[buffered++] = byte;
-        if(buffered == target.size()) { check(options); write(output, target); buffered = 0; }
+        if(buffered == target.size()) { check(options); write(output, target, digest); buffered = 0; }
     };
     std::uint64_t written = 0;
     while(written < expanded) {
@@ -300,16 +326,22 @@ void expand(std::istream& input, std::ostream& output, std::uint64_t stored, std
             }
         }
     }
-    write(output, std::span(target).first(buffered));
+    write(output, std::span(target).first(buffered), digest);
 }
 const char* format_name(Format format) {
     return format == Format::kcap ? "KCAP" : format == Format::lac ? "LAC" : "MOVIE";
 }
 void write_manifest(const fs::path& root, const Index& index) {
     std::ofstream output(root / manifest_name, std::ios::binary);
-    output << "WA2PAK\t1\t" << format_name(index.format) << '\t' << index.codepage << '\t' << hex(index.header) << '\n';
-    for(const auto& entry : index.entries)
-        output << (entry.directory ? "D" : "F") << '\t' << hex(entry.record) << '\t' << hex(utf8(entry.local)) << '\n';
+    const bool original = !index.original_hash.empty();
+    output << "WA2PAK\t" << (original ? 2 : 1) << '\t' << format_name(index.format) << '\t' << index.codepage << '\t' << hex(index.header);
+    if(original) output << '\t' << index.original_size << '\t' << index.original_hash;
+    output << '\n';
+    for(const auto& entry : index.entries) {
+        output << (entry.directory ? "D" : "F") << '\t' << hex(entry.record) << '\t' << hex(utf8(entry.local));
+        if(original) output << '\t' << entry.content_hash;
+        output << '\n';
+    }
     finish(output);
 }
 Index read_manifest(const fs::path& root) {
@@ -319,12 +351,23 @@ Index read_manifest(const fs::path& root) {
     if(!std::getline(input, line)) throw Error(ErrorKind::format, "PAK manifest is empty");
     if(!line.empty() && line.back() == '\r') line.pop_back();
     const auto fields = split(line);
-    if(fields.size() != 5 || fields[0] != "WA2PAK" || fields[1] != "1") throw Error(ErrorKind::format, "Unsupported PAK manifest version");
+    if(fields.size() < 2 || fields[0] != "WA2PAK" || (fields[1] != "1" && fields[1] != "2"))
+        throw Error(ErrorKind::format, "Unsupported PAK manifest version");
+    const bool original = fields[1] == "2";
+    if(fields.size() != (original ? 7u : 5u)) throw Error(ErrorKind::format, "Invalid PAK manifest header");
     Index result;
     if(fields[2] == "KCAP") result.format = Format::kcap;
     else if(fields[2] == "LAC") result.format = Format::lac;
     else if(fields[2] == "MOVIE") result.format = Format::movie;
     else throw Error(ErrorKind::format, "Invalid archive type in the PAK manifest");
+    if(original) {
+        if(result.format == Format::movie) throw Error(ErrorKind::format, "Direct-video PAKs do not use archive snapshots");
+        const auto& value = fields[5];
+        const auto parsed = std::from_chars(value.data(), value.data()+value.size(), result.original_size);
+        if(parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size() || fields[6].size() != 64)
+            throw Error(ErrorKind::format, "Invalid original PAK size or SHA-256 digest");
+        unhex(fields[6]); result.original_hash = fields[6];
+    }
     if(fields[3] == "932") result.codepage = 932;
     else if(fields[3] == "936") result.codepage = 936;
     else if(fields[3] == "65001") result.codepage = 65001;
@@ -338,9 +381,9 @@ Index read_manifest(const fs::path& root) {
     while(std::getline(input, line)) {
         if(!line.empty() && line.back() == '\r') line.pop_back();
         const auto parts = split(line);
-        if(parts.size() != 3 || (parts[0] != "D" && parts[0] != "F")) throw Error(ErrorKind::format, "Invalid PAK manifest entry");
+        if(parts.size() != (original ? 4u : 3u) || (parts[0] != "D" && parts[0] != "F")) throw Error(ErrorKind::format, "Invalid PAK manifest entry");
         Entry entry; entry.directory = parts[0] == "D"; entry.local = safe_relative(unhex(parts[2]));
-        if(path_key(entry.local) == path_key(fs::u8path(manifest_name))) throw Error(ErrorKind::unsafe_path, "PAK manifest must not reference itself");
+        if(metadata_path(entry.local)) throw Error(ErrorKind::unsafe_path, "PAK manifest must not reference tool metadata or the original snapshot");
         const auto record = unhex(parts[1]); entry.record.assign(record.begin(), record.end());
         if(entry.record.size() != (result.format == Format::kcap ? 44u : result.format == Format::lac ? 40u : 0u) ||
            (entry.directory && result.format != Format::kcap)) throw Error(ErrorKind::format, "Invalid record length or type in the PAK manifest");
@@ -352,6 +395,12 @@ Index read_manifest(const fs::path& root) {
         if(result.format != Format::movie && entry.name.empty()) throw Error(ErrorKind::format, "PAK manifest record has no original filename");
         if(!entry.directory && !files.insert(path_key(entry.local)).second) throw Error(ErrorKind::format, "PAK manifest references the same file more than once");
         if(result.entries.size() == member_limit) throw Error(ErrorKind::size_limit, "PAK manifest exceeds the member-count limit");
+        entry.original_index = result.entries.size();
+        if(original) {
+            if((entry.directory && !parts[3].empty()) || (!entry.directory && parts[3].size() != 64))
+                throw Error(ErrorKind::format, "Invalid member SHA-256 digest in the PAK manifest");
+            unhex(parts[3]); entry.content_hash = parts[3];
+        }
         result.entries.push_back(std::move(entry));
     }
     if(!input.eof()) throw Error(ErrorKind::read, "Cannot read the PAK manifest");
@@ -361,17 +410,21 @@ Index read_manifest(const fs::path& root) {
 }
 std::vector<fs::path> inventory(const fs::path& root, const Options& options, std::vector<fs::path>& directories) {
     std::vector<fs::path> result; std::set<std::string> keys;
-    for(const auto& item : fs::recursive_directory_iterator(root)) {
+    for(auto iterator = fs::recursive_directory_iterator(root); iterator != fs::recursive_directory_iterator{}; ++iterator) {
+        const auto& item = *iterator;
         check(options); no_links(item.path());
+        const auto relative = item.path().lexically_relative(root);
+        if(metadata_path(relative)) {
+            if(item.is_directory()) iterator.disable_recursion_pending();
+            continue;
+        }
         if(item.is_directory()) {
-            const auto relative = item.path().lexically_relative(root); safe_relative(utf8(relative));
+            safe_relative(utf8(relative));
             directories.push_back(relative);
             if(directories.size() > member_limit) throw Error(ErrorKind::size_limit, "Source folder exceeds the directory-count limit");
             continue;
         }
         if(!item.is_regular_file()) throw Error(ErrorKind::format, "Source contains a non-regular file: " + utf8(item.path()));
-        const auto relative = item.path().lexically_relative(root);
-        if(path_key(relative) == path_key(fs::u8path(manifest_name))) continue;
         safe_relative(utf8(relative));
         if(!keys.insert(path_key(relative)).second) throw Error(ErrorKind::filename, "Source contains filenames that differ only by case");
         result.push_back(relative);
@@ -409,6 +462,10 @@ void prepare_entries(Index& index, const fs::path& root, const std::vector<fs::p
             no_links(path);
             if(!fs::is_regular_file(path)) throw Error(ErrorKind::source_changed, "A manifest file has been replaced by a directory");
             existing.insert(path_key(entry.local)); blocks[block].files.push_back(entry);
+            // Full relative names can encode folders without a separate KCAP
+            // directory row. Do not invent markers during an unchanged repack.
+            for(auto parent = entry.local.parent_path(); !parent.empty(); parent = parent.parent_path())
+                implied_parents.insert(path_key(parent));
         }
     }
     if(index.format == Format::kcap) for(const auto& local : folders) {
@@ -435,6 +492,41 @@ void prepare_entries(Index& index, const fs::path& root, const std::vector<fs::p
         for(auto& entry : item.files) index.entries.push_back(std::move(entry));
     }
     if(index.entries.size() > member_limit) throw Error(ErrorKind::size_limit, "PAK index exceeds the entry-count limit");
+}
+void same_index(const Index& manifest, const Index& original) {
+    if(manifest.format != original.format || manifest.header != original.header || manifest.entries.size() != original.entries.size())
+        throw Error(ErrorKind::format, "Original PAK snapshot does not match the manifest index");
+    for(std::size_t i = 0; i < manifest.entries.size(); ++i)
+        if(manifest.entries[i].record != original.entries[i].record || manifest.entries[i].directory != original.entries[i].directory)
+            throw Error(ErrorKind::format, "Original PAK snapshot member does not match the manifest index");
+}
+void compare_original_files(Index& index, const Index& original, const fs::path& root, const Options& options) {
+    same_index(index, original);
+    for(std::size_t n = 0; n < index.entries.size(); ++n) {
+        auto& entry = index.entries[n]; const auto& source = original.entries[n];
+        entry.flags = source.flags; entry.offset = source.offset; entry.stored = source.stored; entry.expanded = source.expanded;
+        if(entry.directory) continue;
+        progress(options, 0, ProgressStage::packing_file, utf8(entry.local));
+        const auto path = root/entry.local;
+        if(!fs::exists(path)) continue;
+        no_links(path);
+        if(!fs::is_regular_file(path)) throw Error(ErrorKind::source_changed, "A manifest file has been replaced by a directory");
+        entry.checked_size = fs::file_size(path); entry.checked_time = fs::last_write_time(path);
+        if(entry.checked_size == source.expanded) entry.reusable = hash_file(path, options) == entry.content_hash;
+        if(fs::file_size(path) != entry.checked_size || fs::last_write_time(path) != entry.checked_time)
+            throw Error(ErrorKind::source_changed, "Source file changed while checking: " + utf8(entry.local));
+    }
+}
+void check_reused_input(const fs::path& root, const Entry& entry) {
+    const auto path = root/entry.local; no_links(path);
+    if(!fs::is_regular_file(path) || fs::file_size(path) != entry.checked_size || fs::last_write_time(path) != entry.checked_time)
+        throw Error(ErrorKind::source_changed, "Source file changed after checking: " + utf8(entry.local));
+}
+void check_reused_inputs(const fs::path& root, const Index& index, const Options& options) {
+    for(const auto& entry : index.entries) {
+        check(options);
+        if(!entry.directory && entry.reusable) check_reused_input(root, entry);
+    }
 }
 }
 
@@ -476,6 +568,7 @@ std::vector<std::uint8_t> compress_lzss(const Bytes& input, const Options& optio
 Result unpack(const fs::path& archive, const fs::path& destination, const Options& options) {
     progress(options, 0, ProgressStage::checking_index);
     const auto target = destination_path(destination); no_links(archive);
+    ReadLock archive_lock(archive);
     auto input = open_input(archive); const auto size = fs::file_size(archive);
     const auto cp = options.codepage ? options.codepage : 932; validate_codepage(cp);
     auto index = read_index(input, size, cp, options); Names names; fs::path group;
@@ -495,21 +588,45 @@ Result unpack(const fs::path& archive, const fs::path& destination, const Option
         else { total += entry.expanded; ++count; }
     }
     Stage stage(target.parent_path()); const auto tree = stage.path() / "contents"; fs::create_directory(tree);
-    for(const auto& entry : index.entries) {
+    // These streams are destroyed before Stage, including on cancellation, so
+    // Windows never has a snapshot handle open while its staging tree is removed.
+    std::ifstream snapshot;
+    std::istream* payload = &input;
+    const bool preserve = options.preserve_original && index.format != Format::movie;
+    if(preserve) {
+        progress(options, 0, ProgressStage::copying_original);
+        const auto cache = tree/cache_name; fs::create_directory(cache);
+        const auto original = cache/"original.pak";
+        std::ofstream output(original, std::ios::binary); Sha256 digest;
+        seek(input, 0); copy(input, output, size, options, &digest); finish(output);
+        index.original_hash = digest.finish(); index.original_size = size;
+        snapshot = open_input(original);
+        const auto captured = read_index(snapshot, size, cp, options); same_index(index, captured);
+        // Expand the snapshot itself so file hashes and saved compressed bytes
+        // always refer to the same read-only input, even if the source is moved.
+        payload = &snapshot;
+    }
+    for(auto& entry : index.entries) {
         check(options);
         if(entry.directory) { fs::create_directories(tree / entry.local); continue; }
         progress(options, total ? unsigned(done * 99 / total) : 0, ProgressStage::unpacking_file, utf8(entry.local));
         const auto output_path = tree / entry.local; fs::create_directories(output_path.parent_path());
         std::ofstream output(output_path, std::ios::binary);
         if(!output) throw Error(ErrorKind::write, "Cannot create output file: " + utf8(entry.local));
-        seek(input, entry.offset);
+        std::unique_ptr<Sha256> digest;
+        if(preserve) digest = std::make_unique<Sha256>();
+        seek(*payload, entry.offset);
         if(entry.flags == 1 && index.format != Format::movie) {
-            const unsigned prefix = index.format == Format::kcap ? 8 : 4; seek(input, entry.offset+prefix);
-            expand(input, output, entry.stored-prefix, entry.expanded, index.format == Format::kcap ? 32 : 0, options);
-        } else copy(input, output, entry.stored, options);
+            const unsigned prefix = index.format == Format::kcap ? 8 : 4; seek(*payload, entry.offset+prefix);
+            expand(*payload, output, entry.stored-prefix, entry.expanded, index.format == Format::kcap ? 32 : 0, options, digest.get());
+        } else copy(*payload, output, entry.stored, options, digest.get());
         finish(output); done += entry.expanded;
+        if(digest) entry.content_hash = digest->finish();
     }
     write_manifest(tree, index); check(options);
+    // Close the snapshot before moving its containing directory on Windows.
+    if(snapshot.is_open()) snapshot.close();
+    input.close();
     if(fs::exists(target)) throw Error(ErrorKind::target_exists, "Another program created the destination folder; it was not overwritten");
     publish_no_replace(tree, target);
     // Completion must not turn an already-published result into cancellation.
@@ -537,7 +654,40 @@ Result pack(const fs::path& folder, const fs::path& destination, const Options& 
         if(options.progress) options.progress(100, ProgressStage::packed, {});
         return {target, Format::movie, 1, size};
     }
+    const auto original_count = index.entries.size();
+    std::unique_ptr<ReadLock> original_lock;
+    std::ifstream original;
+    if(options.preserve_original && fs::exists(root/manifest_name)) {
+        if(index.original_hash.empty())
+            throw Error(ErrorKind::format, "This extraction has no original snapshot. Re-extract the original PAK with this version, or disable Preserve original PAK data.");
+        const auto cache = root/cache_name, path = cache/"original.pak";
+        no_links(cache); no_links(path);
+        if(!fs::is_directory(cache) || !fs::is_regular_file(path))
+            throw Error(ErrorKind::read, "Original PAK snapshot is missing. Re-extract the original PAK, or disable Preserve original PAK data.");
+        progress(options, 0, ProgressStage::checking_original);
+        original_lock = std::make_unique<ReadLock>(path);
+        if(fs::file_size(path) != index.original_size || hash_file(path, options) != index.original_hash)
+            throw Error(ErrorKind::format, "Original PAK snapshot failed its size or SHA-256 check. Re-extract it before preserving original data.");
+        original = open_input(path);
+        const auto source = read_index(original, index.original_size, index.codepage, options);
+        compare_original_files(index, source, root, options);
+    }
     prepare_entries(index, root, files, folders, cp);
+    bool exact = original.is_open() && index.entries.size() == original_count;
+    for(std::size_t n = 0; n < index.entries.size(); ++n) {
+        const auto& entry = index.entries[n];
+        if(entry.original_index != n || (!entry.directory && !entry.reusable)) exact = false;
+    }
+    if(exact) {
+        progress(options, 0, ProgressStage::copying_original);
+        Stage stage(target.parent_path()); const auto temporary = stage.path()/"result.pak";
+        std::ofstream output(temporary, std::ios::binary); seek(original, 0);
+        copy(original, output, index.original_size, options); finish(output);
+        check_reused_inputs(root, index, options); check(options);
+        publish_no_replace(temporary, target);
+        if(options.progress) options.progress(100, ProgressStage::packed, {});
+        return {target, index.format, files.size(), index.original_size, true};
+    }
     const bool kcap = index.format == Format::kcap;
     const unsigned start = kcap ? 16 : 8, stride = kcap ? 44 : 40;
     if(index.header.empty()) {
@@ -550,18 +700,23 @@ Result pack(const fs::path& folder, const fs::path& destination, const Options& 
     std::uint64_t offset = start + table.size(), done = 0, total = 0, count = 0;
     for(const auto& entry : index.entries) if(!entry.directory) total += fs::file_size(root/entry.local);
     for(auto& entry : index.entries) {
-        check(options); entry.offset = offset; entry.stored = 0;
+        check(options); const auto old_offset = entry.offset, old_stored = entry.stored;
+        entry.offset = offset; entry.stored = 0;
         if(!entry.directory) {
             progress(options, total ? unsigned(done * 99 / total) : 0, ProgressStage::packing_file, utf8(entry.local));
             const auto path = root/entry.local; no_links(path);
             auto input = open_input(path); const auto size = fs::file_size(path);
             if(size > word_limit) throw Error(ErrorKind::size_limit, "Member file exceeds 4 GiB: " + utf8(entry.local));
-            entry.flags = 0;
             const unsigned prefix = kcap ? 8 : 4;
             // Empty KCAP files need a real compressed payload so they cannot be
             // mistaken for the format's zero-length directory markers.
             const bool empty_file = kcap && size == 0;
-            if((options.compress && size && size <= 256ull * 1024 * 1024) || empty_file) {
+            if(entry.reusable && original.is_open()) {
+                check_reused_input(root, entry);
+                if(offset+old_stored > word_limit) throw Error(ErrorKind::size_limit, "Total PAK size exceeds 4 GiB");
+                seek(original, old_offset); copy(original, output, old_stored, options); entry.stored = old_stored;
+            } else if((options.compress && size && size <= 256ull * 1024 * 1024) || empty_file) {
+                entry.flags = 0;
                 Bytes bytes{ }; bytes.resize(std::size_t(size)); read(input, bytes);
                 auto packed = compress_lzss(bytes, options);
                 if(packed.size()+prefix < size || empty_file) {
@@ -574,6 +729,7 @@ Result pack(const fs::path& folder, const fs::path& destination, const Options& 
                     write(output, bytes); entry.stored = size;
                 }
             } else {
+                entry.flags = 0;
                 if(offset+size > word_limit) throw Error(ErrorKind::size_limit, "Total PAK size exceeds 4 GiB");
                 copy(input, output, size, options); entry.stored = size;
             }
@@ -590,6 +746,7 @@ Result pack(const fs::path& folder, const fs::path& destination, const Options& 
     output.seekp(start);
     for(const auto& entry : index.entries) write(output, entry.record);
     finish(output); check(options);
+    check_reused_inputs(root, index, options);
     if(fs::exists(target)) throw Error(ErrorKind::target_exists, "Another program created the destination file; it was not overwritten");
     publish_no_replace(temporary, target);
     if(options.progress) options.progress(100, ProgressStage::packed, {});

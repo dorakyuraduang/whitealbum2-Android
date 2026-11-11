@@ -30,7 +30,7 @@ enum class Text {
     checking_index, scanning_folder, packing_file, unpacking_file, copying_movie,
     error_general, error_read, error_write, error_format, error_unsafe, error_filename,
     error_limit, error_exists, error_target, error_link, error_changed,
-    preference_not_saved, count
+    preference_not_saved, preserve_original, checking_original, copying_original, restored, count
 };
 Language parse_language(std::string_view code) noexcept;
 std::string_view language_code(Language) noexcept;
