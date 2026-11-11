@@ -78,4 +78,20 @@ inline std::function<bool()> save_list_metadata_read(wr::Process& p){
         }catch(const wr::GuestFault&){return false;}
     };
 }
+inline std::function<bool()> save_page_preview_read_ahead(wr::Process& p){
+    return [&p]() noexcept {
+        try{
+            auto m=p.memory.execution_scope();const auto sp=p.cpu.r[wr::ESP];
+            // Cached 0x4234c0: 0x10c locals, four saved registers, three
+            // arguments and return to 0x44c4c0, then its 40-byte API frame.
+            if(std::uint64_t(sp)+0x15c>0x100000000ull || m.load<32>(sp)!=0x44c4df ||
+               m.load<32>(sp+40)!=0x42357e || m.load<32>(sp+48)!=0xa4e5c0 ||
+               m.load<32>(sp+52)!=0x10058 || m.load<32>(sp+0x158)>=100)return false;
+            const auto caller=m.load<32>(sp+0x154);
+            // Only the two ten-slot page-fill loops. Confirmed loads, quick
+            // saves and all other callers must keep a single fresh open.
+            return caller==0x41abe9 || caller==0x41d9ba;
+        }catch(const wr::GuestFault&){return false;}
+    };
+}
 }

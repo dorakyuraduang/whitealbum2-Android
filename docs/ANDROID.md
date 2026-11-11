@@ -4,12 +4,24 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.79-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.79-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.79-shared-aot-replace-native.apk` to update the experimental
+is **0.2.80-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.80-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.80-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.80 also batches preview opens for the two cached ten-slot page-fill call
+sites. Slow page processing retains one prepared group within the same source
+update for at most one second, bounded by the original listing deadline; other
+callers keep the ordinary 250 ms scope. Only manual slots on the current page
+are eligible; confirmed loads,
+quick saves and other callers keep single-file opens. Index-to-preview mode
+changes release the previous batch and admit a new one. Each consumed stream
+is still read and closed normally, with at most ten preview streams prepared
+and at most four Android provider requests in flight. Component checks use
+the unchanged reader and synthetic caller frames, not actual game UI.
+`preview_read_ahead_*` counters are included in total `read_ahead_*` times.
 
 0.2.79 reuses immutable directory metadata for known save-list index and preview
 readers across source updates, for at most two seconds and four directories.

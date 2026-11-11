@@ -30,12 +30,14 @@ public:
 class AheadCounted final:public Counted,public c::ReadAheadFiles {
 public:
     unsigned batches{},requested{},maximum{};bool decline{},fail_one{};
+    std::vector<std::vector<std::string>> paths;
     std::vector<std::weak_ptr<c::ReadAheadStreams>> pools;
     explicit AheadCounted(std::shared_ptr<wr::MutableFiles> files):Counted(std::move(files),true){}
     std::size_t prepare_reads(std::span<c::ReadAheadFile> files)override{
         CHECK(!files.empty() && files.size()<=limit);
         for(const auto& pool:pools)CHECK(pool.expired()); // Never retain two batches.
         ++batches;requested+=files.size();maximum=std::max(maximum,unsigned(files.size()));
+        paths.emplace_back();for(const auto& file:files)paths.back().push_back(file.path);
         if(decline)return 0;
         auto pool=std::make_shared<c::ReadAheadStreams>(files.size());pools.push_back(pool);unsigned ready{};
         for(std::size_t n=0;n<files.size();++n){
@@ -241,6 +243,55 @@ unsigned repeated_list(const std::filesystem::path& root){
     const auto report=c::save_files_report(p.state().mutable_files);CHECK(report.find("\"list_metadata_hits\":0,")==std::string::npos);
     p.state().mutable_files.reset();CHECK(backend->released());CHECK(!p.gui() && !p.directdraw());return calls;
 }
+struct PreviewResult {unsigned reads{},indexes{},guards{},stack_checks{};};
+PreviewResult preview_pages(const std::filesystem::path& root){
+    const auto selected=root/"all-100-slots",bank=selected/"Documents/Leaf/WHITE ALBUM2";
+    wr::ProcessOptions options;options.data_root=selected/"preview-private";options.allow_file_write=true;options.prefer_linear_memory=true;CHECK(std::filesystem::create_directory(options.data_root));
+    wa2::aot::Runtime runtime(options);auto& p=runtime.process();auto& m=p.memory;runtime.load();PreviewResult result;
+    auto rule=wa2::aot::save_page_preview_read_ahead(p);const auto saved_cpu=p.cpu;const auto scratch=p.allocate_bytes(0x200);p.cpu.r[wr::ESP]=scratch;
+    for(const auto [offset,value]:std::array<std::pair<U32,U32>,6>{{{0,0x44c4df},{40,0x42357e},{48,0xa4e5c0},{52,0x10058},{0x154,0x41d9ba},{0x158,20}}})m.store(scratch+offset,value,32);
+    for(auto caller:{0x41abe9u,0x41d9bau}){m.store(scratch+0x154,caller,32);CHECK(rule());++result.guards;}
+    for(auto caller:{0x41c426u,0x4117cbu,0x40a295u,0x409ed3u,0x424556u,0x41e61eu,0u}){m.store(scratch+0x154,caller,32);CHECK(!rule());++result.guards;}
+    m.store(scratch+0x154,0x41d9ba,32);
+    for(auto offset:{0u,40u,48u,52u,0x154u,0x158u}){const auto old=m.load(scratch+offset,32);m.store(scratch+offset,0xffffffff,32);CHECK(!rule());m.store(scratch+offset,old,32);++result.guards;}
+    p.cpu.r[wr::ESP]=0xffffff00;CHECK(!rule());++result.guards;p.cpu=saved_cpu;m.release(scratch);
+    auto backend=std::make_shared<AheadCounted>(c::local_files(selected));U32 ui_caller=0x41d9ba,expected_slot{};
+    // Real unchanged helper, own files, own callback return frame. Substitute
+    // only its caller identity during admission, then restore it immediately;
+    // no UI handler, device, game startup or original EXE is ever executed.
+    const auto page_scope=[&]{
+        const auto sp=p.cpu.r[wr::ESP];CHECK(m.load(sp,32)==0x44c4df && m.load(sp+40,32)==0x42357e);
+        const auto original=m.load(sp+0x154,32);CHECK(original==0xffffffd0 && m.load(sp+0x158,32)==expected_slot);++result.stack_checks;
+        m.store(sp+0x154,ui_caller,32);const auto admitted=rule();m.store(sp+0x154,original,32);return admitted;
+    };
+    p.state().mutable_files=c::save_files(backend,false,wa2::aot::traced_save_read_scope(p),wa2::aot::save_index_read_ahead(p),wa2::aot::save_list_metadata_read(p),page_scope);
+    const std::string path="C:\\WinRecomp";m.copy_in(0xa39d28,{reinterpret_cast<const std::uint8_t*>(path.c_str()),path.size()+1});m.store(0xa39208,0,32);U32 frame=3000;m.store(0xa3a130,frame,32);
+    const auto out=p.allocate_bytes(16);for(unsigned slot=0;slot<100;++slot){CHECK(p.callback(0x4233c0,std::array<U32,3>{slot,out,0},false)==1);++result.indexes;}
+    const auto preview=[&](U32 slot,bool present,unsigned byte){expected_slot=slot;CHECK(p.callback(0x4234c0,std::array<U32,6>{slot,0,0,0,0,0},false)==U32(present));if(present)CHECK(m.load(0xa4e5c0+0x10057,8)==byte);++result.reads;};
+    const auto page=[&](unsigned first){const auto before=backend->batches,opens=backend->opens;for(unsigned n=first;n<first+10;++n)preview(n,true,n?n:71);CHECK(backend->batches==before+1 && backend->opens==opens+10 && backend->paths.back().size()==10);for(unsigned n=0;n<10;++n)CHECK(backend->paths.back()[n].ends_with("save_"+std::to_string((first+n)/10)+std::to_string((first+n)%10)+".sav"));};
+    // Transition from index read ahead in the same update must start a NEW
+    // page batch, rather than treat already-consumed header streams as ready.
+    page(0);++result.guards;m.store(0xa3a130,++frame,32);ui_caller=0x41abe9;page(20);++result.guards;
+    // Row processing can outlast the ordinary 250 ms metadata window on a
+    // slower device. The same source update must not reopen unused streams.
+    p.state().mutable_files->list("");m.store(0xa3a130,++frame,32);
+    const auto slow_batches=backend->batches,slow_opens=backend->opens;
+    for(unsigned n=10;n<20;++n){preview(n,true,n);std::this_thread::sleep_for(std::chrono::milliseconds(35));}
+    if(backend->batches!=slow_batches+1 || backend->opens!=slow_opens+10)std::cerr<<"Slow preview used "<<backend->batches-slow_batches<<" batches and "<<backend->opens-slow_opens<<" opens for 10 files\n";
+    CHECK(backend->batches==slow_batches+1 && backend->opens==slow_opens+10);++result.guards;
+    // Jumping pages disposes unused streams before admitting the next group.
+    m.store(0xa3a130,++frame,32);preview(30,true,30);preview(70,true,70);CHECK(backend->paths.back().size()==10 && backend->paths.back().front().ends_with("save_70.sav"));++result.guards;
+    for(auto caller:{0x41c426u,0x4117cbu,0x40a295u,0x409ed3u,0x424556u,0x41e61eu}){ui_caller=caller;const auto before=backend->batches,opens=backend->opens;preview(32,true,32);CHECK(backend->batches==before && backend->opens==opens+1 && backend->released());++result.guards;}
+    ui_caller=0x41d9ba;const auto quick_batches=backend->batches;preview(0xffffffff,true,0xfe);CHECK(backend->batches==quick_batches && backend->released());++result.guards;
+    p.state().mutable_files->remove("save_25.sav",false);m.store(0xa3a130,++frame,32);const auto sparse=backend->batches;
+    for(unsigned n=20;n<30;++n)preview(n,n!=25,n);CHECK(backend->batches==sparse+1 && backend->paths.back().size()==9);++result.guards;
+    m.store(0xa3a130,++frame,32);const auto single=backend->batches;preview(29,true,29);CHECK(backend->batches==single && backend->released());++result.guards;
+    backend->fail_one=true;m.store(0xa3a130,++frame,32);for(unsigned n=40;n<50;++n)preview(n,true,n);backend->fail_one=false;++result.guards;
+    p.state().current_thread_id=2;const auto worker=backend->batches;preview(30,true,30);CHECK(backend->batches==worker && backend->released());p.state().current_thread_id=1;++result.guards;
+    const auto name=p.put_string("save_20.sav");const auto handle=p.callback(p.resolve("kernel32.dll","CreateFileA"),std::array<U32,7>{name,0xc0000000,7,0,3,128,0});CHECK(handle!=0xffffffff);
+    const auto writer=backend->batches;preview(30,true,30);CHECK(backend->batches==writer && backend->released());CHECK(p.callback(p.resolve("kernel32.dll","CloseHandle"),std::array<U32,1>{handle})==1);++result.guards;
+    p.state().mutable_files.reset();CHECK(backend->released());CHECK(!p.gui() && !p.directdraw());return result;
+}
 int main(int argc,char** argv){try{
     CHECK(argc==2);const auto root=std::filesystem::path(argv[1]).parent_path()/("save-inventory-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(std::filesystem::create_directory(root));
     unsigned readers{},guards{};for(bool linear:{false,true})for(bool references:{false,true}){const auto baseline=exercise(root,linear,false,references),scoped=exercise(root,linear,true,references);readers+=baseline.readers+scoped.readers;guards+=scoped.guards;}
@@ -248,11 +299,13 @@ int main(int argc,char** argv){try{
     readers+=full_bank(root);
     const auto ahead_calls=read_ahead_bank(root);index_calls+=ahead_calls;
     const auto repeat_calls=repeated_list(root);index_calls+=repeat_calls;
+    const auto previews=preview_pages(root);readers+=previews.reads;index_calls+=previews.indexes;guards+=previews.guards;
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.save-inventory.v1\",\"actual_static_reader_calls\":"<<readers<<",\"guard_cases\":"<<guards
         <<",\"actual_static_index_calls\":"<<index_calls<<",\"chapter_index_batch\":true,\"chapter_namespace_separate\":true,\"missing_chapter_queries_batched\":true,\"baseline_two_namespace_metadata_queries\":200,\"batched_two_namespace_directory_queries\":2,\"batched_absent_chapter_directory_queries\":2,\"full_bank_slots\":100,\"full_bank_single_inventory\":true,\"root_previews_ignored\":true"
           ",\"slots_per_fixture\":100,\"present_slots\":2,\"baseline_metadata_queries_per_fixture\":100,\"scoped_metadata_queries_per_fixture\":0,\"scoped_directory_lists_per_fixture\":1,\"descriptor_opens_per_fixture\":2"
           ",\"read_ahead_index_calls\":"<<ahead_calls<<",\"full_bank_read_ahead_batches\":7,\"maximum_read_ahead_files\":16,\"read_ahead_only_manual_slots\":true,\"read_ahead_single_file_bypass\":true,\"read_ahead_handles_released\":true,\"read_ahead_failure_retries\":true,\"read_ahead_writers_and_workers_bypass\":true"
           ",\"repeat_list_calls\":"<<repeat_calls<<",\"repeat_list_rounds\":20,\"repeat_list_directory_queries\":1,\"list_metadata_maximum_age_ms\":2000,\"list_payload_reads_fresh\":true,\"full_read_new_files_immediate\":true,\"list_expiry_and_mutation_checked\":true,\"list_cached_openers_hold_no_descriptors\":true"
+          ",\"page_preview_calls\":"<<previews.reads<<",\"page_preview_guards\":"<<previews.guards<<",\"page_preview_real_stack_checks\":"<<previews.stack_checks<<",\"maximum_page_preview_files\":10,\"page_preview_batches_per_full_page\":1,\"page_preview_slow_update_checked\":true,\"maximum_preview_scope_ms\":1000,\"page_preview_boundaries_checked\":true,\"page_preview_confirmed_loads_excluded\":true,\"page_preview_sparse_and_failures_checked\":true,\"page_preview_mode_transition_checked\":true,\"page_preview_no_ui_executed\":true"
           ",\"same_static_save_reader\":true,\"prepared_reads_checked\":true,\"writers_bypass_read_reference\":true,\"title_reader_batch\":true,\"scope_audit_checked\":true,\"payload_reads_fresh\":true,\"write_invalidation\":true,\"source_frame_invalidation\":true,\"ordinary_and_worker_reads_fresh\":true,\"inventory_lifetime_bounded\":true,\"original_saves_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS unchanged static save reader: per-slot metadata lookup replaced by one inventory for 100 own-fixture slots; guards and fresh payload reads.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}
