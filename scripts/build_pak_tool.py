@@ -15,7 +15,7 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 
 
 def low_priority():
@@ -77,13 +77,14 @@ def main():
             struct.unpack_from('<H', data, pe+24+68)[0] != 2):
         raise RuntimeError('Expected an AMD64 Windows GUI executable (without a console window)')
     output.mkdir(parents=True, exist_ok=True)
-    exe = output / 'WA2_PAK_Tool.exe'
-    shutil.copy2(build / exe.name, exe)
+    # Versioned delivery names allow packaging while an earlier GUI is open.
+    exe = output / f'WA2_PAK_Tool-{VERSION}.exe'
+    shutil.copy2(build / 'WA2_PAK_Tool.exe', exe)
     shutil.copy2(ROOT / 'docs/PAK_TOOL.md', output / 'README.md')
     shutil.copy2(ROOT / 'LICENSE', output / 'LICENSE.txt')
     bundle = output / f'WA2-PAK-Tool-{VERSION}-win64.zip'
     with zipfile.ZipFile(bundle, 'w', zipfile.ZIP_DEFLATED) as archive:
-        for name in ('WA2_PAK_Tool.exe', 'README.md', 'LICENSE.txt'):
+        for name in (exe.name, 'README.md', 'LICENSE.txt'):
             archive.write(output / name, name)
     hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in (exe, bundle)}
     (output / 'SHA256SUMS.txt').write_text(''.join(f'{digest}  {name}\n' for name, digest in hashes.items()), encoding='ascii')

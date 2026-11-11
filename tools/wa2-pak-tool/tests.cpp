@@ -1,4 +1,5 @@
 #include "pak.hpp"
+#include "i18n.hpp"
 #include "engine/resource_archive.hpp"
 #include <algorithm>
 #include <array>
@@ -98,6 +99,28 @@ void codec_tests() {
     require(decode_name(encode_name("字库.txt", 936), 936) == "字库.txt", "GBK codec");
     require(decode_name(encode_name("Україна.txt", 65001), 65001) == "Україна.txt", "UTF8 codec");
     rejects([] { encode_name("Україна.txt", 932); }, "unrepresentable names silently substituted");
+}
+void language_tests() {
+    using namespace wa2::paktool::ui;
+    require(default_language == Language::english, "tool must default to English");
+    require(parse_language("") == Language::english, "missing preference must use English");
+    require(parse_language("unsupported") == Language::english, "unknown preference must use English");
+    const std::wstring path = L"日本語/Україна/Pack PAK.txt";
+    for(const auto& entry : languages) {
+        require(parse_language(language_code(entry.id)) == entry.id, "saved language code must roundtrip");
+        const auto label = tr(entry.id, Text::pack_button);
+        require(entry.id == Language::english || label != tr(Language::english, Text::pack_button), "translated pack button missing");
+        const auto packed = progress_text(entry.id, ProgressStage::packing_file, path);
+        require(packed.ends_with(path), "progress translation modified a resource name");
+        require(packed.starts_with(tr(entry.id, Text::packing_file)), "progress used a different language");
+        const auto error = error_text(entry.id, ErrorKind::unsafe_path, L"Unsafe archive path: ../outside");
+        require(error.ends_with(L"Unsafe archive path: ../outside"), "technical diagnostic was lost");
+        if(entry.id != Language::english) require(error.starts_with(tr(entry.id, Text::error_unsafe)), "error summary used a different language");
+    }
+    require(progress_text(Language::english, ProgressStage::unpacked) == L"Extraction complete", "completion default is not English");
+    require(tr(static_cast<Language>(999), Text::ready) == L"Ready", "invalid language must fall back to English");
+    const Error error(ErrorKind::read, "Cannot read file");
+    require(error.kind == ErrorKind::read && std::string_view(error.what()) == "Cannot read file", "error classification lost details");
 }
 void roundtrips(const fs::path& root) {
     const auto folder = root/fs::u8path("源文件夹"); fs::create_directory(folder);
@@ -211,15 +234,15 @@ void malformed_tests(const fs::path& root) {
     rejects([&] { pack(malicious, root/"malicious.pak"); }, "invalid manifest header accepted");
     std::atomic_bool cancel = false;
     Options stopped; stopped.cancel = &cancel;
-    stopped.progress = [&](unsigned, std::string_view text) { if(text.starts_with("正在打包：")) cancel = true; };
+    stopped.progress = [&](unsigned, ProgressStage stage, std::string_view) { if(stage == ProgressStage::packing_file) cancel = true; };
     rejects([&] { pack(root/fs::u8path("源文件夹"), root/"cancelled.pak", stopped); }, "cancellation ignored");
     require(!fs::exists(root/"cancelled.pak"), "cancelled output published"); no_staging(root);
     cancel = false;
-    stopped.progress = [&](unsigned, std::string_view text) { if(text.starts_with("正在解包：")) cancel = true; };
+    stopped.progress = [&](unsigned, ProgressStage stage, std::string_view) { if(stage == ProgressStage::unpacking_file) cancel = true; };
     rejects([&] { unpack(root/"groups.pak", root/"cancelled", stopped); }, "extract cancellation ignored");
     require(!fs::exists(root/"cancelled"), "cancelled extraction published"); no_staging(root);
     Options race; race.compress = false;
-    race.progress = [&](unsigned, std::string_view text) { if(text.starts_with("正在打包：")) put(root/"race.pak", "keep"); };
+    race.progress = [&](unsigned, ProgressStage stage, std::string_view) { if(stage == ProgressStage::packing_file) put(root/"race.pak", "keep"); };
     rejects([&] { pack(root/fs::u8path("源文件夹"), root/"race.pak", race); }, "concurrent target overwritten");
     require(get(root/"race.pak") == Bytes({'k','e','e','p'}), "concurrent target changed"); no_staging(root);
     put(root/"publish-source", "source"); put(root/"publish-destination", "destination");
@@ -258,7 +281,7 @@ int main(int argc, char** argv) {
         if(!fs::create_directory(root)) throw std::runtime_error("test directory already exists");
         // Keep fixtures on failure; only remove this verified, exclusively-owned
         // absolute directory after all assertions have passed.
-        codec_tests(); roundtrips(root); format_fixtures(root); malformed_tests(root); movie_tests(root); no_staging(root);
+        language_tests(); codec_tests(); roundtrips(root); format_fixtures(root); malformed_tests(root); movie_tests(root); no_staging(root);
         require(root.is_absolute() && root.parent_path() == parent && fs::canonical(root) == root && !is_link(root), "test cleanup containment");
         fs::remove_all(root);
         std::cout << "PAK component checks passed: " << assertions << " assertions; no game process or screen used\n";

@@ -1,11 +1,15 @@
-# WA2 PAK 打包 / 解包工具 1.0.0
+# WA2 PAK 打包 / 解包工具 1.1.0
 
-独立的 Windows x64 图形工具。双击 `WA2_PAK_Tool.exe` 即可使用，无需安装 Python、运行游戏或提供游戏 EXE。工具不附带游戏资源。
+独立的 Windows x64 图形工具。双击 `WA2_PAK_Tool-1.1.0.exe` 即可使用，无需安装 Python、运行游戏或提供游戏 EXE。工具不附带游戏资源。
+
+首次启动默认 **English**。顶部 **Language** 下拉框可选择英文、简体中文、繁体中文、日语、韩语、乌克兰语、俄语、法语、德语、西班牙语、葡萄牙语，共 11 种语言。切换立即生效，并记住上次选择；缺少或无法识别偏好时使用英文。
+
+界面、选择器标题、进度、结果和错误摘要随工具语言切换；详细诊断统一为英文，Windows 系统选择器自身的标准按钮沿用系统语言。**界面语言不改变文件名编码、资源内容或游戏语言。**
 
 ## 使用
 
-- **打包**：点击“选择文件夹 → 打包 PAK”，选择源文件夹，再选择 PAK 的保存位置和新文件名。新包使用 **KCAP**；源文件夹本身不会成为包内的额外一层目录。PAK 请保存在源文件夹之外。
-- **解包**：点击“选择 PAK → 解包文件夹”，选择 PAK，再选择输出位置。工具会在该位置下新建与 PAK 同名的文件夹；重名时添加数字后缀。
+- **打包**：点击 **Choose folder → Pack PAK**（选择文件夹 → 打包 PAK），选择源文件夹，再选择 PAK 的保存位置和新文件名。新包使用 **KCAP**；源文件夹本身不会成为包内的额外一层目录。PAK 请保存在源文件夹之外。
+- **解包**：点击 **Choose PAK → Unpack**（选择 PAK → 解包），选择 PAK，再选择输出位置。工具会在该位置下新建与 PAK 同名的文件夹；重名时添加数字后缀。
 - 修改解包后的内容，再选择该解包文件夹打包即可。**请保留 `.wa2pak-manifest` 清单**：它记录原文件名的字节、分组、包类型和保留字段，不会作为资源打进 PAK。已有文件名不重新转码；新增文件按所选编码命名。删除的文件不会重新打包。
 
 可用“取消”停止操作。原 PAK 和已有目标不会被覆盖；出错或取消时清理本次临时输出。请勿在操作期间修改源文件。
@@ -30,14 +34,16 @@
 python scripts/build_pak_tool.py
 ```
 
-输出为 `out/pak-tool/WA2_PAK_Tool.exe` 和 `WA2-PAK-Tool-1.0.0-win64.zip`。构建脚本隐藏运行编译器、使用低于正常优先级及单 CPU / 单任务，然后执行独立文件与编解码测试；无需读取任何游戏 EXE 或生成的游戏代码。
+输出为 `out/pak-tool/WA2_PAK_Tool-1.1.0.exe` 和 `WA2-PAK-Tool-1.1.0-win64.zip`。构建脚本隐藏运行编译器、使用低于正常优先级及单 CPU / 单任务，然后执行独立文件与编解码测试；无需读取任何游戏 EXE 或生成的游戏代码。文件名含版本号，可以与旧版工具共存。
 
-测试覆盖压缩往返、既有资源读取器兼容、KCAP/LAC、分组及同名文件、三种文件名编码、空文件、视频原样复制、损坏索引、路径越界和取消清理。这些检查不替代图形界面人工试用或游戏内素材兼容性验证。
+测试覆盖压缩往返、既有资源读取器兼容、KCAP/LAC、分组及同名文件、三种文件名编码、空文件、视频原样复制、损坏索引、路径越界和取消清理，以及英文默认值、语言代码往返、多语言进度和错误摘要。翻译表在编译时检查完整性。这些检查不替代图形界面人工试用或游戏内素材兼容性验证。
 
 ## English quick guide
 
 Windows x64, standalone; no Python or game EXE required.
 
+- English is the default on first launch. Use the visible **Language** dropdown to switch instantly between English, Simplified/Traditional Chinese, Japanese, Korean, Ukrainian, Russian, French, German, Spanish and Portuguese. The last choice is saved. A missing or unknown preference falls back to English.
+- Buttons, picker titles, progress, results and error summaries are localized. Detailed diagnostics remain English; standard Windows picker controls follow Windows. UI language never changes filename encoding or resource contents.
 - **Left button**: choose an input folder, then save a new PAK outside that folder.
 - **Right button**: choose a PAK, then an output parent folder. A new subfolder is created automatically.
 - Keep `.wa2pak-manifest` when editing and repacking extracted files. It preserves original filename bytes, groups and archive type; it is excluded from archive contents.

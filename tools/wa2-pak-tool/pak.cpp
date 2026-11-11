@@ -30,39 +30,39 @@ struct Index {
     std::vector<Entry> entries;
 };
 void check(const Options& options) { if(options.cancel && options.cancel->load()) throw Cancelled(); }
-void progress(const Options& options, unsigned percent, std::string_view text) {
+void progress(const Options& options, unsigned percent, ProgressStage stage, std::string_view detail = {}) {
     check(options);
-    if(options.progress) options.progress(std::min(percent, 100u), text);
+    if(options.progress) options.progress(std::min(percent, 100u), stage, detail);
 }
 std::uint32_t u32(const std::uint8_t* data) {
     return std::uint32_t(data[0]) | std::uint32_t(data[1]) << 8 | std::uint32_t(data[2]) << 16 | std::uint32_t(data[3]) << 24;
 }
 void word(Bytes& data, unsigned at, std::uint64_t value) {
-    if(value > word_limit || at + 4 > data.size()) throw Error("PAK 超过格式的 4 GiB 大小或索引限制");
+    if(value > word_limit || at + 4 > data.size()) throw Error(ErrorKind::size_limit, "PAK exceeds the format's 4 GiB size or index limit");
     for(unsigned i = 0; i < 4; ++i) data[at + i] = std::uint8_t(value >> (8 * i));
 }
 void read(std::istream& input, std::span<std::uint8_t> bytes) {
     if(!bytes.empty() && !input.read(reinterpret_cast<char*>(bytes.data()), std::streamsize(bytes.size())))
-        throw Error("文件读取不完整，可能已损坏或被其他程序修改");
+        throw Error(ErrorKind::read, "Incomplete file read; the source may be damaged or have changed");
 }
 void write(std::ostream& output, std::span<const std::uint8_t> bytes) {
     if(!bytes.empty()) output.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-    if(!output) throw Error("写入失败，请检查剩余空间和文件夹权限");
+    if(!output) throw Error(ErrorKind::write, "Cannot write output; check free space and folder permissions");
 }
 void seek(std::istream& input, std::uint64_t offset) {
     input.clear(); input.seekg(std::streamoff(offset));
-    if(!input) throw Error("无法定位 PAK 数据");
+    if(!input) throw Error(ErrorKind::read, "Cannot seek to PAK data");
 }
 std::ifstream open_input(const fs::path& path) {
     std::ifstream input(path, std::ios::binary);
-    if(!input) throw Error("无法读取文件：" + utf8(path));
+    if(!input) throw Error(ErrorKind::read, "Cannot read file: " + utf8(path));
     return input;
 }
 void finish(std::ofstream& output) {
     output.flush();
-    if(!output) throw Error("写入失败，请检查剩余空间");
+    if(!output) throw Error(ErrorKind::write, "Cannot write output; check free space");
     output.close();
-    if(output.fail()) throw Error("关闭输出文件失败");
+    if(output.fail()) throw Error(ErrorKind::write, "Cannot close the output file");
 }
 void copy(std::istream& input, std::ostream& output, std::uint64_t size, const Options& options) {
     std::array<std::uint8_t, 256 * 1024> buffer;
@@ -77,7 +77,7 @@ bool within(const fs::path& parent, const fs::path& child) {
     return a == b || (b.size() > a.size() && b.compare(0, a.size(), a) == 0 && (a.back() == '/' || b[a.size()] == '/'));
 }
 void no_links(const fs::path& path) {
-    if(is_link(path)) throw Error("不处理符号链接或目录联接：" + utf8(path));
+    if(is_link(path)) throw Error(ErrorKind::link, "Symbolic links and directory junctions are not supported: " + utf8(path));
 }
 // An exclusively-created directory owns every temporary file. Cleanup is only
 // allowed after checking its absolute parent and excluding reparse points.
@@ -91,7 +91,7 @@ public:
             path_ = parent_ / leaf;
             if(fs::create_directory(path_)) return;
         }
-        throw Error("无法创建临时工作目录");
+        throw Error(ErrorKind::write, "Cannot create a temporary working directory");
     }
     Stage(const Stage&) = delete;
     ~Stage() {
@@ -107,9 +107,9 @@ public:
 };
 fs::path destination_path(const fs::path& destination) {
     if(destination.filename().empty() || destination.filename() == "." || destination.filename() == "..")
-        throw Error("目标路径无效");
+        throw Error(ErrorKind::invalid_target, "Invalid destination path");
     auto result = fs::canonical(fs::absolute(destination).parent_path()) / destination.filename();
-    if(fs::exists(result) || is_link(result)) throw Error("目标已存在，请选择新的文件或文件夹名称：" + utf8(result));
+    if(fs::exists(result) || is_link(result)) throw Error(ErrorKind::target_exists, "Destination exists; choose a new file or folder name: " + utf8(result));
     return result;
 }
 std::string hex(std::string_view bytes) {
@@ -120,11 +120,11 @@ std::string hex(std::string_view bytes) {
 }
 std::string hex(const Bytes& bytes) { return hex({reinterpret_cast<const char*>(bytes.data()), bytes.size()}); }
 std::string unhex(std::string_view text) {
-    if(text.size() % 2) throw Error("PAK 清单格式错误");
+    if(text.size() % 2) throw Error(ErrorKind::format, "Invalid PAK manifest format");
     const auto nibble = [](char c) -> unsigned {
         if(c >= '0' && c <= '9') return c - '0';
         if(c >= 'a' && c <= 'f') return c - 'a' + 10;
-        throw Error("PAK 清单包含无效十六进制数据");
+        throw Error(ErrorKind::format, "Invalid hexadecimal data in the PAK manifest");
     };
     std::string result; result.reserve(text.size() / 2);
     for(std::size_t i = 0; i < text.size(); i += 2) result += char((nibble(text[i]) << 4) | nibble(text[i+1]));
@@ -141,25 +141,25 @@ std::vector<std::string> split(const std::string& line) {
     }
 }
 void validate_codepage(unsigned cp) {
-    if(cp != 932 && cp != 936 && cp != 65001) throw Error("文件名编码仅支持 Shift-JIS、GBK 和 UTF-8");
+    if(cp != 932 && cp != 936 && cp != 65001) throw Error(ErrorKind::filename, "Supported filename encodings are Shift-JIS, GBK and UTF-8");
 }
 // Check traversal AFTER decoding: a Shift-JIS trail byte may be 0x5c.
 fs::path safe_relative(std::string text, bool repair = false) {
-    if(text.empty() || text.find('\0') != std::string::npos) throw Error("PAK 包含空文件名或 NUL 字符");
+    if(text.empty() || text.find('\0') != std::string::npos) throw Error(ErrorKind::unsafe_path, "PAK contains an empty name or NUL character");
     std::replace(text.begin(), text.end(), '\\', '/');
-    if(text.front() == '/' || text.find(':') != std::string::npos) throw Error("PAK 包含绝对路径或驱动器路径");
+    if(text.front() == '/' || text.find(':') != std::string::npos) throw Error(ErrorKind::unsafe_path, "PAK contains an absolute or drive-qualified path");
     fs::path result;
     std::istringstream stream(text); std::string part;
     while(std::getline(stream, part, '/')) {
-        if(part.empty() || part == "." || part == "..") throw Error("PAK 包含不安全的相对路径");
+        if(part.empty() || part == "." || part == "..") throw Error(ErrorKind::unsafe_path, "PAK contains an unsafe relative path");
         for(char& c : part) {
             if(static_cast<unsigned char>(c) < 32 || c == '<' || c == '>' || c == '"' || c == '|' || c == '?' || c == '*') {
-                if(!repair) throw Error("PAK 清单或文件名包含不支持的字符");
+                if(!repair) throw Error(ErrorKind::filename, "Unsupported characters in a filename or PAK manifest path");
                 c = '_';
             }
         }
         if(part.back() == '.' || part.back() == ' ') {
-            if(!repair) throw Error("文件名末尾不能是空格或点");
+            if(!repair) throw Error(ErrorKind::filename, "Filenames must not end with a space or period");
             while(!part.empty() && (part.back() == '.' || part.back() == ' ')) part.pop_back();
             part += '_';
         }
@@ -167,14 +167,14 @@ fs::path safe_relative(std::string text, bool repair = false) {
         for(char& c : base) if(c >= 'a' && c <= 'z') c -= 'a' - 'A';
         if(base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" ||
            (base.size() == 4 && (base.starts_with("COM") || base.starts_with("LPT")) && base[3] >= '1' && base[3] <= '9')) {
-            if(!repair) throw Error("文件名使用了 Windows 保留名称");
+            if(!repair) throw Error(ErrorKind::filename, "Filename uses a Windows reserved device name");
             part = "_" + part;
         }
         // Also validate the UTF-8 representation even for a hand-edited manifest.
         encode_name(part, 65001);
         result /= fs::u8path(part);
     }
-    if(result.empty() || result.has_root_path()) throw Error("无效的相对路径");
+    if(result.empty() || result.has_root_path()) throw Error(ErrorKind::unsafe_path, "Invalid relative path");
     return result;
 }
 fs::path with_suffix(const fs::path& path, unsigned index) {
@@ -215,25 +215,25 @@ std::string movie_extension(std::span<const std::uint8_t> h) {
     return {};
 }
 Index read_index(std::ifstream& input, std::uint64_t size, unsigned codepage, const Options& options) {
-    if(size < 4) throw Error("文件太短，不是有效的 WA2 PAK");
+    if(size < 4) throw Error(ErrorKind::format, "File is too short to be a valid WA2 PAK");
     Bytes header(std::size_t(std::min<std::uint64_t>(512, size))); read(input, header);
     Index result; result.codepage = codepage;
     const bool kcap = std::equal(header.begin(), header.begin()+4, "KCAP");
     const bool lac = std::equal(header.begin(), header.begin()+4, "LAC\0");
     if(!kcap && !lac) {
         const auto extension = movie_extension(header);
-        if(extension.empty()) throw Error("不支持的 PAK 格式（支持 WA2 的 KCAP/LAC 资源包和常用直接视频 PAK）");
+        if(extension.empty()) throw Error(ErrorKind::format, "Unsupported PAK format; expected WA2 KCAP/LAC or a recognized direct-video PAK");
         result.format = Format::movie;
         Entry entry; entry.local = fs::u8path("video" + extension); entry.stored = entry.expanded = size;
         result.entries.push_back(std::move(entry)); return result;
     }
     result.format = kcap ? Format::kcap : Format::lac;
     const unsigned start = kcap ? 16 : 8, stride = kcap ? 44 : 40;
-    if(size < start) throw Error("PAK 头部不完整");
+    if(size < start) throw Error(ErrorKind::format, "Truncated PAK header");
     result.header.assign(header.begin(), header.begin()+start);
     const auto count = u32(header.data() + (kcap ? 12 : 4));
     const auto end = std::uint64_t(start) + std::uint64_t(stride) * count;
-    if(count > member_limit || end > size) throw Error("PAK 索引越界或文件数量超过上限");
+    if(count > member_limit || end > size) throw Error(ErrorKind::format, "PAK index is out of bounds or exceeds the member-count limit");
     seek(input, start); Bytes table(std::size_t(stride) * count); read(input, table);
     result.entries.reserve(count);
     std::uint64_t total = 0;
@@ -248,21 +248,21 @@ Index read_index(std::ifstream& input, std::uint64_t size, unsigned codepage, co
             entry.flags = row[31]; entry.offset = u32(row+36); entry.stored = u32(row+32);
             for(unsigned i = 0; i < 31 && row[i]; ++i) entry.name += char(row[i] ^ 255);
         }
-        if(entry.name.empty()) throw Error("PAK 索引包含空文件名");
+        if(entry.name.empty()) throw Error(ErrorKind::format, "PAK index contains an empty filename");
         if((!entry.directory && entry.flags > 1) ||
            (entry.stored && (entry.offset < end || entry.offset > size || entry.stored > size-entry.offset)))
-            throw Error("PAK 成员越界或使用了未知压缩方式（索引 " + std::to_string(n) + "）");
-        if(!entry.stored && !entry.directory && entry.offset > size) throw Error("空文件的索引越界");
+            throw Error(ErrorKind::format, "PAK member is out of bounds or uses unknown compression (index " + std::to_string(n) + ")");
+        if(!entry.stored && !entry.directory && entry.offset > size) throw Error(ErrorKind::format, "Empty member has an out-of-bounds offset");
         entry.expanded = entry.stored;
         if(entry.flags == 1 && !entry.directory) {
             const unsigned prefix = kcap ? 8 : 4;
-            if(entry.stored < prefix) throw Error("压缩文件缺少长度头");
+            if(entry.stored < prefix) throw Error(ErrorKind::format, "Compressed member is missing its length header");
             std::array<std::uint8_t, 8> packed{}; seek(input, entry.offset); read(input, std::span(packed).first(prefix));
             if(kcap && u32(packed.data()) != entry.stored && std::uint64_t(u32(packed.data())) + 8 != entry.stored)
-                throw Error("KCAP 压缩长度头与索引不一致");
+                throw Error(ErrorKind::format, "KCAP compressed length does not match the index");
             entry.expanded = u32(packed.data() + (kcap ? 4 : 0));
         }
-        if(entry.expanded > options.maximum_expanded - total) throw Error("解包展开总量超过安全上限（默认 64 GiB）");
+        if(entry.expanded > options.maximum_expanded - total) throw Error(ErrorKind::size_limit, "Total extracted size exceeds the safety limit (default: 64 GiB)");
         total += entry.expanded; result.entries.push_back(std::move(entry));
     }
     return result;
@@ -276,7 +276,7 @@ void expand(std::istream& input, std::ostream& output, std::uint64_t stored, std
     auto get = [&]() -> std::uint8_t {
         if(next == available) {
             check(options); available = std::size_t(std::min<std::uint64_t>(source.size(), stored)); next = 0;
-            if(!available) throw Error("LZSS 压缩数据被截断");
+            if(!available) throw Error(ErrorKind::format, "Truncated LZSS stream");
             read(input, std::span(source).first(available)); stored -= available;
         }
         return source[next++];
@@ -294,7 +294,7 @@ void expand(std::istream& input, std::ostream& output, std::uint64_t stored, std
             else {
                 const auto low = get(), high = get(); unsigned offset = low | ((high & 0xf0u) << 4);
                 const auto count = (high & 15u) + 3;
-                if(count > expanded-written) throw Error("LZSS 解压长度超出声明值");
+                if(count > expanded-written) throw Error(ErrorKind::format, "LZSS output exceeds its declared size");
                 for(unsigned n = 0; n < count; ++n) put(ring[(offset+n) & 4095]);
                 written += count;
             }
@@ -314,49 +314,49 @@ void write_manifest(const fs::path& root, const Index& index) {
 }
 Index read_manifest(const fs::path& root) {
     const auto path = root / manifest_name; no_links(path);
-    if(fs::file_size(path) > 256ull * 1024 * 1024) throw Error("PAK 清单过大");
+    if(fs::file_size(path) > 256ull * 1024 * 1024) throw Error(ErrorKind::size_limit, "PAK manifest is too large");
     auto input = open_input(path); std::string line;
-    if(!std::getline(input, line)) throw Error("PAK 清单为空");
+    if(!std::getline(input, line)) throw Error(ErrorKind::format, "PAK manifest is empty");
     if(!line.empty() && line.back() == '\r') line.pop_back();
     const auto fields = split(line);
-    if(fields.size() != 5 || fields[0] != "WA2PAK" || fields[1] != "1") throw Error("不支持的 PAK 清单版本");
+    if(fields.size() != 5 || fields[0] != "WA2PAK" || fields[1] != "1") throw Error(ErrorKind::format, "Unsupported PAK manifest version");
     Index result;
     if(fields[2] == "KCAP") result.format = Format::kcap;
     else if(fields[2] == "LAC") result.format = Format::lac;
     else if(fields[2] == "MOVIE") result.format = Format::movie;
-    else throw Error("PAK 清单的类型无效");
+    else throw Error(ErrorKind::format, "Invalid archive type in the PAK manifest");
     if(fields[3] == "932") result.codepage = 932;
     else if(fields[3] == "936") result.codepage = 936;
     else if(fields[3] == "65001") result.codepage = 65001;
-    else throw Error("PAK 清单的文件名编码无效");
+    else throw Error(ErrorKind::format, "Invalid filename encoding in the PAK manifest");
     const auto header = unhex(fields[4]); result.header.assign(header.begin(), header.end());
     if(result.header.size() != (result.format == Format::kcap ? 16u : result.format == Format::lac ? 8u : 0u))
-        throw Error("PAK 清单的头部长度错误");
+        throw Error(ErrorKind::format, "Invalid header length in the PAK manifest");
     if(result.format != Format::movie && !std::equal(result.header.begin(), result.header.begin()+4,
-            result.format == Format::kcap ? "KCAP" : "LAC\0")) throw Error("PAK 清单的文件头标识错误");
+            result.format == Format::kcap ? "KCAP" : "LAC\0")) throw Error(ErrorKind::format, "Invalid header signature in the PAK manifest");
     std::set<std::string> files;
     while(std::getline(input, line)) {
         if(!line.empty() && line.back() == '\r') line.pop_back();
         const auto parts = split(line);
-        if(parts.size() != 3 || (parts[0] != "D" && parts[0] != "F")) throw Error("PAK 清单条目错误");
+        if(parts.size() != 3 || (parts[0] != "D" && parts[0] != "F")) throw Error(ErrorKind::format, "Invalid PAK manifest entry");
         Entry entry; entry.directory = parts[0] == "D"; entry.local = safe_relative(unhex(parts[2]));
-        if(path_key(entry.local) == path_key(fs::u8path(manifest_name))) throw Error("PAK 清单不能引用自身");
+        if(path_key(entry.local) == path_key(fs::u8path(manifest_name))) throw Error(ErrorKind::unsafe_path, "PAK manifest must not reference itself");
         const auto record = unhex(parts[1]); entry.record.assign(record.begin(), record.end());
         if(entry.record.size() != (result.format == Format::kcap ? 44u : result.format == Format::lac ? 40u : 0u) ||
-           (entry.directory && result.format != Format::kcap)) throw Error("PAK 清单记录长度或类型错误");
+           (entry.directory && result.format != Format::kcap)) throw Error(ErrorKind::format, "Invalid record length or type in the PAK manifest");
         if(result.format == Format::kcap) {
             for(unsigned i = 0; i < 24 && entry.record[4+i]; ++i) entry.name += char(entry.record[4+i]);
         } else if(result.format == Format::lac) {
             for(unsigned i = 0; i < 31 && entry.record[i]; ++i) entry.name += char(entry.record[i] ^ 255);
         }
-        if(result.format != Format::movie && entry.name.empty()) throw Error("PAK 清单记录缺少原文件名");
-        if(!entry.directory && !files.insert(path_key(entry.local)).second) throw Error("PAK 清单重复引用同一个文件");
-        if(result.entries.size() == member_limit) throw Error("PAK 清单文件数量超过上限");
+        if(result.format != Format::movie && entry.name.empty()) throw Error(ErrorKind::format, "PAK manifest record has no original filename");
+        if(!entry.directory && !files.insert(path_key(entry.local)).second) throw Error(ErrorKind::format, "PAK manifest references the same file more than once");
+        if(result.entries.size() == member_limit) throw Error(ErrorKind::size_limit, "PAK manifest exceeds the member-count limit");
         result.entries.push_back(std::move(entry));
     }
-    if(!input.eof()) throw Error("读取 PAK 清单失败");
+    if(!input.eof()) throw Error(ErrorKind::read, "Cannot read the PAK manifest");
     if(result.format == Format::movie && (result.entries.size() != 1 || result.entries[0].directory))
-        throw Error("视频 PAK 清单必须有且只有一个视频文件");
+        throw Error(ErrorKind::format, "A direct-video PAK manifest must reference exactly one video file");
     return result;
 }
 std::vector<fs::path> inventory(const fs::path& root, const Options& options, std::vector<fs::path>& directories) {
@@ -366,16 +366,16 @@ std::vector<fs::path> inventory(const fs::path& root, const Options& options, st
         if(item.is_directory()) {
             const auto relative = item.path().lexically_relative(root); safe_relative(utf8(relative));
             directories.push_back(relative);
-            if(directories.size() > member_limit) throw Error("源目录文件夹数量超过上限");
+            if(directories.size() > member_limit) throw Error(ErrorKind::size_limit, "Source folder exceeds the directory-count limit");
             continue;
         }
-        if(!item.is_regular_file()) throw Error("源目录中存在非常规文件：" + utf8(item.path()));
+        if(!item.is_regular_file()) throw Error(ErrorKind::format, "Source contains a non-regular file: " + utf8(item.path()));
         const auto relative = item.path().lexically_relative(root);
         if(path_key(relative) == path_key(fs::u8path(manifest_name))) continue;
         safe_relative(utf8(relative));
-        if(!keys.insert(path_key(relative)).second) throw Error("源目录存在大小写冲突的文件名");
+        if(!keys.insert(path_key(relative)).second) throw Error(ErrorKind::filename, "Source contains filenames that differ only by case");
         result.push_back(relative);
-        if(result.size() > member_limit) throw Error("源目录文件数量超过上限");
+        if(result.size() > member_limit) throw Error(ErrorKind::size_limit, "Source folder exceeds the file-count limit");
     }
     std::sort(result.begin(), result.end(), [](const auto& a, const auto& b) { return utf8(a) < utf8(b); });
     std::sort(directories.begin(), directories.end(), [](const auto& a, const auto& b) { return utf8(a) < utf8(b); });
@@ -384,7 +384,7 @@ std::vector<fs::path> inventory(const fs::path& root, const Options& options, st
 Entry new_entry(const fs::path& local, std::string name, bool directory, Format format) {
     if(name.empty() || name.size() > (format == Format::kcap ? 24u : 31u) || name.find('\0') != std::string::npos ||
        (format == Format::lac && name.find(char(255)) != std::string::npos))
-        throw Error("包内名称超出格式上限（KCAP 24 字节、LAC 31 字节）：" + utf8(local));
+        throw Error(ErrorKind::filename, "Archive name exceeds the format limit (KCAP: 24 bytes; LAC: 31 bytes): " + utf8(local));
     Entry entry; entry.local = local; entry.name = std::move(name); entry.directory = directory;
     entry.record.resize(format == Format::kcap ? 44 : 40);
     if(format == Format::kcap) std::copy(entry.name.begin(), entry.name.end(), entry.record.begin()+4);
@@ -400,14 +400,14 @@ void prepare_entries(Index& index, const fs::path& root, const std::vector<fs::p
     for(auto& entry : index.entries) {
         const auto path = root / entry.local;
         if(entry.directory) {
-            if(fs::exists(path) && !fs::is_directory(path)) throw Error("清单中的文件夹已被替换成文件：" + utf8(entry.local));
+            if(fs::exists(path) && !fs::is_directory(path)) throw Error(ErrorKind::source_changed, "A manifest directory has been replaced by a file: " + utf8(entry.local));
             blocks.push_back({entry, {}}); block = blocks.size()-1;
             directories.try_emplace(path_key(entry.local), block);
             for(auto parent = entry.local.parent_path(); !parent.empty(); parent = parent.parent_path())
                 implied_parents.insert(path_key(parent));
         } else if(fs::exists(path)) {
             no_links(path);
-            if(!fs::is_regular_file(path)) throw Error("清单中的文件已被替换成文件夹");
+            if(!fs::is_regular_file(path)) throw Error(ErrorKind::source_changed, "A manifest file has been replaced by a directory");
             existing.insert(path_key(entry.local)); blocks[block].files.push_back(entry);
         }
     }
@@ -434,13 +434,13 @@ void prepare_entries(Index& index, const fs::path& root, const std::vector<fs::p
         if(item.marker && (fs::is_directory(root/item.marker->local) || !item.files.empty())) index.entries.push_back(std::move(*item.marker));
         for(auto& entry : item.files) index.entries.push_back(std::move(entry));
     }
-    if(index.entries.size() > member_limit) throw Error("PAK 索引条目超过上限");
+    if(index.entries.size() > member_limit) throw Error(ErrorKind::size_limit, "PAK index exceeds the entry-count limit");
 }
 }
 
 std::vector<std::uint8_t> compress_lzss(const Bytes& input, const Options& options) {
     // Offline hash-chain encoder; no game or guest CPU runtime is linked here.
-    if(input.size() > 256ull * 1024 * 1024) throw Error("单次压缩输入超过 256 MiB");
+    if(input.size() > 256ull * 1024 * 1024) throw Error(ErrorKind::size_limit, "Compression input exceeds 256 MiB");
     check(options);
     std::array<int, 65536> heads; heads.fill(-1); std::array<int, 4096> previous; previous.fill(-1);
     const auto hash = [&](std::size_t at) { return (unsigned(input[at])*251 + unsigned(input[at+1])*31 + input[at+2]) & 65535; };
@@ -474,7 +474,7 @@ std::vector<std::uint8_t> compress_lzss(const Bytes& input, const Options& optio
 }
 
 Result unpack(const fs::path& archive, const fs::path& destination, const Options& options) {
-    progress(options, 0, "正在检查 PAK 索引…");
+    progress(options, 0, ProgressStage::checking_index);
     const auto target = destination_path(destination); no_links(archive);
     auto input = open_input(archive); const auto size = fs::file_size(archive);
     const auto cp = options.codepage ? options.codepage : 932; validate_codepage(cp);
@@ -498,10 +498,10 @@ Result unpack(const fs::path& archive, const fs::path& destination, const Option
     for(const auto& entry : index.entries) {
         check(options);
         if(entry.directory) { fs::create_directories(tree / entry.local); continue; }
-        progress(options, total ? unsigned(done * 99 / total) : 0, "正在解包：" + utf8(entry.local));
+        progress(options, total ? unsigned(done * 99 / total) : 0, ProgressStage::unpacking_file, utf8(entry.local));
         const auto output_path = tree / entry.local; fs::create_directories(output_path.parent_path());
         std::ofstream output(output_path, std::ios::binary);
-        if(!output) throw Error("无法创建输出文件：" + utf8(entry.local));
+        if(!output) throw Error(ErrorKind::write, "Cannot create output file: " + utf8(entry.local));
         seek(input, entry.offset);
         if(entry.flags == 1 && index.format != Format::movie) {
             const unsigned prefix = index.format == Format::kcap ? 8 : 4; seek(input, entry.offset+prefix);
@@ -510,31 +510,31 @@ Result unpack(const fs::path& archive, const fs::path& destination, const Option
         finish(output); done += entry.expanded;
     }
     write_manifest(tree, index); check(options);
-    if(fs::exists(target)) throw Error("目标文件夹在操作期间被其他程序创建，未覆盖");
+    if(fs::exists(target)) throw Error(ErrorKind::target_exists, "Another program created the destination folder; it was not overwritten");
     publish_no_replace(tree, target);
     // Completion must not turn an already-published result into cancellation.
-    if(options.progress) options.progress(100, "解包完成");
+    if(options.progress) options.progress(100, ProgressStage::unpacked, {});
     return {target, index.format, count, done};
 }
 
 Result pack(const fs::path& folder, const fs::path& destination, const Options& options) {
-    progress(options, 0, "正在扫描源文件夹…"); no_links(folder);
+    progress(options, 0, ProgressStage::scanning_folder); no_links(folder);
     const auto root = fs::canonical(folder), target = destination_path(destination);
-    if(!fs::is_directory(root)) throw Error("请选择一个文件夹");
-    if(within(root, target)) throw Error("请把 PAK 保存在源文件夹之外，避免把输出文件打进包里");
+    if(!fs::is_directory(root)) throw Error(ErrorKind::invalid_target, "Please select a folder");
+    if(within(root, target)) throw Error(ErrorKind::invalid_target, "Save the PAK outside the source folder to avoid packing the output into itself");
     std::vector<fs::path> folders;
     auto files = inventory(root, options, folders); Index index;
     if(fs::exists(root/manifest_name)) index = read_manifest(root);
     const auto cp = options.codepage ? options.codepage : index.codepage; validate_codepage(cp);
     if(index.format == Format::movie) {
         if(files.size() != 1 || path_key(files[0]) != path_key(index.entries[0].local))
-            throw Error("直接视频 PAK 的文件夹必须只保留清单中指定的视频文件");
+            throw Error(ErrorKind::format, "A direct-video PAK folder must contain only the video referenced by its manifest");
         Stage stage(target.parent_path()); const auto temporary = stage.path()/"result.pak";
         auto input = open_input(root/files[0]); std::ofstream output(temporary, std::ios::binary);
         const auto size = fs::file_size(root/files[0]);
-        progress(options, 5, "正在复制直接视频 PAK（不转码）…"); copy(input, output, size, options); finish(output); check(options);
+        progress(options, 5, ProgressStage::copying_movie); copy(input, output, size, options); finish(output); check(options);
         publish_no_replace(temporary, target);
-        if(options.progress) options.progress(100, "打包完成");
+        if(options.progress) options.progress(100, ProgressStage::packed, {});
         return {target, Format::movie, 1, size};
     }
     prepare_entries(index, root, files, folders, cp);
@@ -552,10 +552,10 @@ Result pack(const fs::path& folder, const fs::path& destination, const Options& 
     for(auto& entry : index.entries) {
         check(options); entry.offset = offset; entry.stored = 0;
         if(!entry.directory) {
-            progress(options, total ? unsigned(done * 99 / total) : 0, "正在打包：" + utf8(entry.local));
+            progress(options, total ? unsigned(done * 99 / total) : 0, ProgressStage::packing_file, utf8(entry.local));
             const auto path = root/entry.local; no_links(path);
             auto input = open_input(path); const auto size = fs::file_size(path);
-            if(size > word_limit) throw Error("成员文件超过 4 GiB：" + utf8(entry.local));
+            if(size > word_limit) throw Error(ErrorKind::size_limit, "Member file exceeds 4 GiB: " + utf8(entry.local));
             entry.flags = 0;
             const unsigned prefix = kcap ? 8 : 4;
             // Empty KCAP files need a real compressed payload so they cannot be
@@ -567,17 +567,17 @@ Result pack(const fs::path& folder, const fs::path& destination, const Options& 
                 if(packed.size()+prefix < size || empty_file) {
                     Bytes header(prefix); word(header, kcap ? 4 : 0, size);
                     if(kcap) word(header, 0, packed.size()+prefix);
-                    if(offset+header.size()+packed.size() > word_limit) throw Error("PAK 总大小超过 4 GiB");
+                    if(offset+header.size()+packed.size() > word_limit) throw Error(ErrorKind::size_limit, "Total PAK size exceeds 4 GiB");
                     write(output, header); write(output, packed); entry.flags = 1; entry.stored = header.size()+packed.size();
                 } else {
-                    if(offset+size > word_limit) throw Error("PAK 总大小超过 4 GiB");
+                    if(offset+size > word_limit) throw Error(ErrorKind::size_limit, "Total PAK size exceeds 4 GiB");
                     write(output, bytes); entry.stored = size;
                 }
             } else {
-                if(offset+size > word_limit) throw Error("PAK 总大小超过 4 GiB");
+                if(offset+size > word_limit) throw Error(ErrorKind::size_limit, "Total PAK size exceeds 4 GiB");
                 copy(input, output, size, options); entry.stored = size;
             }
-            if(fs::file_size(path) != size) throw Error("源文件在打包期间发生变化：" + utf8(entry.local));
+            if(fs::file_size(path) != size) throw Error(ErrorKind::source_changed, "Source file changed while packing: " + utf8(entry.local));
             done += size; ++count; offset += entry.stored;
         }
         if(kcap) {
@@ -590,9 +590,9 @@ Result pack(const fs::path& folder, const fs::path& destination, const Options& 
     output.seekp(start);
     for(const auto& entry : index.entries) write(output, entry.record);
     finish(output); check(options);
-    if(fs::exists(target)) throw Error("目标文件在操作期间被其他程序创建，未覆盖");
+    if(fs::exists(target)) throw Error(ErrorKind::target_exists, "Another program created the destination file; it was not overwritten");
     publish_no_replace(temporary, target);
-    if(options.progress) options.progress(100, "打包完成");
+    if(options.progress) options.progress(100, ProgressStage::packed, {});
     return {target, index.format, count, offset};
 }
 }

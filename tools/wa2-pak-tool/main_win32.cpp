@@ -4,24 +4,32 @@
 #include <commctrl.h>
 #include <shobjidl.h>
 #include "pak.hpp"
+#include "i18n.hpp"
 #include <atomic>
-#include <memory>
 #include <mutex>
 #include <thread>
 
 namespace {
 using namespace wa2::paktool;
-constexpr int pack_id = 101, unpack_id = 102, cancel_id = 103;
+using ui::Language;
+using ui::Text;
+constexpr int pack_id = 101, unpack_id = 102, cancel_id = 103, language_id = 104;
 constexpr UINT finished_message = WM_APP + 1;
-HWND window, pack_button, unpack_button, cancel_button, codepage_box, compression_box, status, bar;
+HWND window, heading, introduction, language_label, language_box, pack_button, unpack_button,
+     cancel_button, encoding_label, codepage_box, compression_box, help, status, bar;
 HFONT font, title_font;
+Language language = ui::default_language;
 std::thread worker;
 std::atomic_bool cancelled = false;
 bool running = false;
+enum class State { idle, preparing, working, success, cancelled, failure };
 struct Update {
+    State state = State::idle;
     unsigned percent{};
-    std::wstring text, result;
-    bool success{}, cancelled{};
+    ProgressStage stage = ProgressStage::scanning_folder;
+    std::wstring detail;
+    Result result;
+    ErrorKind error = ErrorKind::general;
 };
 std::mutex update_mutex;
 Update update;
@@ -29,12 +37,63 @@ Update update;
 std::wstring wide(std::string_view text) {
     if(text.empty()) return {};
     const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), int(text.size()), nullptr, 0);
-    if(!count) return L"发生文件系统错误，请检查路径和权限。";
+    if(!count) return L"File system error. Check the paths and permissions.";
     std::wstring result(count, L'\0');
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), int(text.size()), result.data(), count);
     return result;
 }
-void fail(const std::wstring& text) { MessageBoxW(window, text.c_str(), L"WA2 PAK 工具", MB_OK | MB_ICONERROR); }
+const wchar_t* tr(Text text) { return ui::tr(language, text).data(); }
+void fail(const std::wstring& text) { MessageBoxW(window, text.c_str(), tr(Text::window_title), MB_OK | MB_ICONERROR); }
+Language load_language() {
+    char code[32]{}; DWORD size = sizeof(code);
+    if(RegGetValueA(HKEY_CURRENT_USER, "Software\\WA2PakTool", "Language", RRF_RT_REG_SZ, nullptr, code, &size) != ERROR_SUCCESS)
+        return ui::default_language;
+    code[sizeof(code)-1] = '\0';
+    return ui::parse_language(code);
+}
+bool save_language(Language value) {
+    HKEY key{};
+    if(RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\WA2PakTool", 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key, nullptr) != ERROR_SUCCESS)
+        return false;
+    const auto code = ui::language_code(value);
+    const auto result = RegSetValueExA(key, "Language", 0, REG_SZ, reinterpret_cast<const BYTE*>(code.data()), DWORD(code.size()+1));
+    RegCloseKey(key); return result == ERROR_SUCCESS;
+}
+std::wstring render_update(const Update& value) {
+    switch(value.state) {
+    case State::idle: return tr(Text::ready);
+    case State::preparing: return tr(Text::preparing);
+    case State::working: return ui::progress_text(language, value.stage, value.detail);
+    case State::cancelled: return tr(Text::cancelled);
+    case State::failure: return ui::error_text(language, value.error, value.detail);
+    case State::success: {
+        wchar_t bytes[80]; swprintf(bytes, 80, L"%.2f MiB", double(value.result.bytes)/(1024*1024));
+        return std::wstring(tr(value.stage == ProgressStage::packed ? Text::packed : Text::unpacked)) + L" · " +
+               tr(Text::files) + L": " + std::to_wstring(value.result.files) + L"\r\n" + value.result.output.wstring() + L"\r\n" + bytes;
+    }
+    }
+    return tr(Text::error_general);
+}
+void refresh_status() {
+    Update value; { std::lock_guard lock(update_mutex); value = update; }
+    SendMessageW(bar, PBM_SETPOS, value.percent, 0);
+    const auto text = running && cancelled ? std::wstring(tr(Text::cancelling)) : render_update(value);
+    SetWindowTextW(status, text.c_str());
+}
+void apply_language() {
+    SetWindowTextW(window, tr(Text::window_title)); SetWindowTextW(heading, tr(Text::heading));
+    SetWindowTextW(introduction, tr(Text::introduction)); SetWindowTextW(language_label, tr(Text::language_label));
+    SetWindowTextW(pack_button, tr(Text::pack_button)); SetWindowTextW(unpack_button, tr(Text::unpack_button));
+    SetWindowTextW(encoding_label, tr(Text::name_encoding)); SetWindowTextW(compression_box, tr(Text::compression));
+    SetWindowTextW(help, tr(Text::help)); SetWindowTextW(cancel_button, tr(Text::cancel));
+    auto selected = SendMessageW(codepage_box, CB_GETCURSEL, 0, 0); if(selected == CB_ERR) selected = 0;
+    SendMessageW(codepage_box, CB_RESETCONTENT, 0, 0);
+    for(const auto text : {Text::encoding_auto, Text::encoding_sjis, Text::encoding_gbk})
+        SendMessageW(codepage_box, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(tr(text)));
+    SendMessageW(codepage_box, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(L"UTF-8"));
+    SendMessageW(codepage_box, CB_SETCURSEL, selected, 0);
+    refresh_status();
+}
 template<class T> struct Com {
     T* value{};
     ~Com() { if(value) value->Release(); }
@@ -44,17 +103,16 @@ fs::path choose(bool folder, bool save, const fs::path& suggested = {}) {
     Com<IFileDialog> dialog;
     const auto hr = CoCreateInstance(save && !folder ? CLSID_FileSaveDialog : CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER,
                                     IID_IFileDialog, reinterpret_cast<void**>(&dialog.value));
-    if(FAILED(hr)) throw Error("无法打开系统文件选择器");
+    if(FAILED(hr)) throw Error("Cannot open the system file picker");
     DWORD flags{}; dialog->GetOptions(&flags);
     flags |= FOS_FORCEFILESYSTEM | FOS_NOCHANGEDIR | FOS_PATHMUSTEXIST;
     if(folder) flags |= FOS_PICKFOLDERS;
     else if(!save) flags |= FOS_FILEMUSTEXIST;
-    if(save) flags &= ~FOS_OVERWRITEPROMPT; // Existing targets are refused below.
-    if(FAILED(dialog->SetOptions(flags))) throw Error("无法设置系统文件选择器");
-    dialog->SetTitle(folder ? (save ? L"选择解包位置（会在其中新建同名文件夹）" : L"选择要打包的文件夹") :
-                               save ? L"保存 PAK（请选择新文件名）" : L"选择要解包的 PAK");
+    if(save) flags &= ~FOS_OVERWRITEPROMPT;
+    if(FAILED(dialog->SetOptions(flags))) throw Error("Cannot configure the system file picker");
+    dialog->SetTitle(tr(folder ? (save ? Text::choose_destination : Text::choose_source) : (save ? Text::save_pak : Text::choose_pak)));
     if(!folder) {
-        const COMDLG_FILTERSPEC filters[]{{L"WA2 资源包 (*.pak)", L"*.pak"}, {L"所有文件", L"*.*"}};
+        const COMDLG_FILTERSPEC filters[]{{L"PAK (*.pak)", L"*.pak"}, {tr(Text::all_files), L"*.*"}};
         dialog->SetFileTypes(2, filters); dialog->SetDefaultExtension(L"pak");
     }
     if(!suggested.empty()) {
@@ -66,14 +124,14 @@ fs::path choose(bool folder, bool save, const fs::path& suggested = {}) {
     for(;;) {
         const auto result = dialog->Show(window);
         if(result == HRESULT_FROM_WIN32(ERROR_CANCELLED)) return {};
-        if(FAILED(result)) throw Error("系统文件选择失败");
+        if(FAILED(result)) throw Error("The system file picker failed");
         Com<IShellItem> item;
-        if(FAILED(dialog->GetResult(&item.value))) throw Error("无法读取选择的路径");
+        if(FAILED(dialog->GetResult(&item.value))) throw Error("Cannot read the selected path");
         PWSTR name{};
-        if(FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &name))) throw Error("所选位置不是本机文件路径");
+        if(FAILED(item->GetDisplayName(SIGDN_FILESYSPATH, &name))) throw Error("The selected location is not a local filesystem path");
         fs::path path(name); CoTaskMemFree(name);
         if(save && !folder && fs::exists(path)) {
-            MessageBoxW(window, L"为保留原文件，请选择一个尚不存在的 PAK 文件名。", L"目标文件已存在", MB_OK | MB_ICONINFORMATION);
+            MessageBoxW(window, tr(Text::exists_message), tr(Text::exists_title), MB_OK | MB_ICONINFORMATION);
             continue;
         }
         return path;
@@ -82,6 +140,8 @@ fs::path choose(bool folder, bool save, const fs::path& suggested = {}) {
 void controls(bool busy) {
     EnableWindow(pack_button, !busy); EnableWindow(unpack_button, !busy);
     EnableWindow(codepage_box, !busy); EnableWindow(compression_box, !busy); EnableWindow(cancel_button, busy);
+    // The worker only publishes typed stages and data, so language switching is
+    // safe even during a job and immediately re-renders progress/results.
 }
 void start(bool packing) {
     if(running) return;
@@ -103,34 +163,36 @@ void start(bool packing) {
         options.codepage = selected == 1 ? 932 : selected == 2 ? 936 : selected == 3 ? 65001 : 0;
         options.compress = SendMessageW(compression_box, BM_GETCHECK, 0, 0) == BST_CHECKED;
         options.cancel = &cancelled;
-        options.progress = [](unsigned percent, std::string_view text) {
-            std::lock_guard lock(update_mutex); update.percent = percent; update.text = wide(text);
+        options.progress = [](unsigned percent, ProgressStage stage, std::string_view detail) {
+            std::lock_guard lock(update_mutex);
+            update.state = State::working; update.percent = percent; update.stage = stage; update.detail = wide(detail);
         };
-        cancelled = false; { std::lock_guard lock(update_mutex); update = {}; update.text = L"准备中…"; }
-        running = true; controls(true); SendMessageW(bar, PBM_SETPOS, 0, 0); SetWindowTextW(status, L"准备中…");
-        SetTimer(window, 1, 100, nullptr);
+        cancelled = false; { std::lock_guard lock(update_mutex); update = {}; update.state = State::preparing; }
+        running = true; controls(true); refresh_status(); SetTimer(window, 1, 100, nullptr);
         try {
             worker = std::thread([packing, source, destination, options] {
                 SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
                 try {
                     const auto result = packing ? pack(source, destination, options) : unpack(source, destination, options);
-                    const auto mb = double(result.bytes) / (1024 * 1024);
-                    wchar_t bytes[80]; swprintf(bytes, 80, L"%.2f MiB", mb);
-                    const auto text = (packing ? L"打包完成" : L"解包完成") + std::wstring(L"，") + std::to_wstring(result.files) + L" 个文件\r\n" +
-                                      result.output.wstring() + L"\r\n" + bytes;
-                    std::lock_guard lock(update_mutex); update.success = true; update.percent = 100; update.result = text;
+                    std::lock_guard lock(update_mutex); update.state = State::success; update.percent = 100;
+                    update.result = result; update.stage = packing ? ProgressStage::packed : ProgressStage::unpacked;
                 } catch(const Cancelled&) {
-                    std::lock_guard lock(update_mutex); update.cancelled = true; update.result = L"已取消，未生成不完整的目标文件。";
+                    std::lock_guard lock(update_mutex); update.state = State::cancelled;
                 } catch(const std::exception& error) {
-                    std::lock_guard lock(update_mutex); update.result = wide(error.what());
+                    const auto* known = dynamic_cast<const Error*>(&error);
+                    std::lock_guard lock(update_mutex); update.state = State::failure;
+                    update.error = known ? known->kind : ErrorKind::general; update.detail = wide(error.what());
                 }
                 PostMessageW(window, finished_message, 0, 0);
             });
         } catch(...) { running = false; controls(false); KillTimer(window, 1); throw; }
-    } catch(const std::exception& error) { fail(wide(error.what())); }
+    } catch(const std::exception& error) {
+        const auto* known = dynamic_cast<const Error*>(&error);
+        fail(ui::error_text(language, known ? known->kind : ErrorKind::general, wide(error.what())));
+    }
 }
-HWND control(const wchar_t* klass, const wchar_t* text, DWORD style, int x, int y, int width, int height, int id = 0) {
-    const auto handle = CreateWindowExW(0, klass, text, WS_CHILD | WS_VISIBLE | style, x, y, width, height, window,
+HWND control(const wchar_t* klass, DWORD style, int x, int y, int width, int height, int id = 0) {
+    const auto handle = CreateWindowExW(0, klass, L"", WS_CHILD | WS_VISIBLE | style, x, y, width, height, window,
                                       reinterpret_cast<HMENU>(INT_PTR(id)), GetModuleHandleW(nullptr), nullptr);
     SendMessageW(handle, WM_SETFONT, reinterpret_cast<WPARAM>(font), TRUE); return handle;
 }
@@ -142,47 +204,48 @@ LRESULT CALLBACK procedure(HWND handle, UINT message, WPARAM wparam, LPARAM lpar
                            CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei UI");
         title_font = CreateFontW(-25, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                                  CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Microsoft YaHei UI");
-        const auto heading = control(L"STATIC", L"WA2 PAK 打包 / 解包", 0, 24, 18, 590, 38);
+        heading = control(L"STATIC", 0, 25, 18, 604, 38);
         SendMessageW(heading, WM_SETFONT, reinterpret_cast<WPARAM>(title_font), TRUE);
-        control(L"STATIC", L"选择文件夹生成 PAK，或选择 PAK 解包到新文件夹。", 0, 25, 65, 600, 26);
-        pack_button = control(L"BUTTON", L"选择文件夹 → 打包 PAK", BS_PUSHBUTTON | WS_TABSTOP, 25, 108, 294, 52, pack_id);
-        unpack_button = control(L"BUTTON", L"选择 PAK → 解包文件夹", BS_PUSHBUTTON | WS_TABSTOP, 335, 108, 294, 52, unpack_id);
-        control(L"STATIC", L"文件名编码", 0, 25, 183, 100, 27);
-        codepage_box = control(WC_COMBOBOXW, L"", CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, 130, 179, 347, 180);
-        for(const auto* label : {L"自动保留（新包默认 Shift-JIS）", L"日文 Shift-JIS / CP932", L"简体中文 GBK / CP936", L"UTF-8"})
-            SendMessageW(codepage_box, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(label));
-        SendMessageW(codepage_box, CB_SETCURSEL, 0, 0);
-        compression_box = control(L"BUTTON", L"LZSS 压缩（较慢；无收益的文件保留原样）", BS_AUTOCHECKBOX | WS_TABSTOP, 25, 222, 570, 29);
+        language_label = control(L"STATIC", 0, 25, 73, 165, 27);
+        language_box = control(WC_COMBOBOXW, CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, 200, 69, 429, 320, language_id);
+        for(const auto& entry : ui::languages) SendMessageW(language_box, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(entry.name.data()));
+        SendMessageW(language_box, CB_SETCURSEL, WPARAM(language), 0);
+        introduction = control(L"STATIC", 0, 25, 113, 604, 44);
+        pack_button = control(L"BUTTON", BS_PUSHBUTTON | BS_MULTILINE | WS_TABSTOP, 25, 169, 294, 56, pack_id);
+        unpack_button = control(L"BUTTON", BS_PUSHBUTTON | BS_MULTILINE | WS_TABSTOP, 335, 169, 294, 56, unpack_id);
+        encoding_label = control(L"STATIC", 0, 25, 245, 175, 42);
+        codepage_box = control(WC_COMBOBOXW, CBS_DROPDOWNLIST | WS_TABSTOP | WS_VSCROLL, 210, 241, 419, 180);
+        compression_box = control(L"BUTTON", BS_AUTOCHECKBOX | BS_MULTILINE | WS_TABSTOP, 25, 297, 604, 44);
         SendMessageW(compression_box, BM_SETCHECK, BST_CHECKED, 0);
-        control(L"STATIC", L"支持 KCAP / LAC；重新打包时请保留解包目录内的清单文件。\r\n解包文件名乱码时，可更改编码后重新解包。原文件不会被覆盖。", 0, 25, 265, 605, 48);
-        bar = control(PROGRESS_CLASSW, L"", PBS_SMOOTH, 25, 337, 604, 20);
+        help = control(L"STATIC", 0, 25, 354, 604, 72);
+        bar = control(PROGRESS_CLASSW, PBS_SMOOTH, 25, 441, 604, 20);
         SendMessageW(bar, PBM_SETRANGE32, 0, 100);
-        status = control(L"STATIC", L"就绪", SS_LEFT, 25, 373, 600, 90);
-        cancel_button = control(L"BUTTON", L"取消", BS_PUSHBUTTON | WS_TABSTOP, 529, 475, 100, 35, cancel_id);
-        controls(false); return 0;
+        status = control(L"STATIC", SS_LEFT, 25, 477, 604, 92);
+        cancel_button = control(L"BUTTON", BS_PUSHBUTTON | WS_TABSTOP, 499, 585, 130, 35, cancel_id);
+        controls(false); apply_language(); return 0;
     }
     case WM_COMMAND:
         if(LOWORD(wparam) == pack_id) start(true);
         else if(LOWORD(wparam) == unpack_id) start(false);
         else if(LOWORD(wparam) == cancel_id && running) {
-            cancelled = true; EnableWindow(cancel_button, FALSE); SetWindowTextW(status, L"正在取消…");
+            cancelled = true; EnableWindow(cancel_button, FALSE); refresh_status();
+        } else if(LOWORD(wparam) == language_id && HIWORD(wparam) == CBN_SELCHANGE) {
+            const auto selected = SendMessageW(language_box, CB_GETCURSEL, 0, 0);
+            language = selected >= 0 && std::size_t(selected) < ui::languages.size() ? ui::languages[std::size_t(selected)].id : ui::default_language;
+            apply_language();
+            if(!save_language(language)) SetWindowTextW(status, tr(Text::preference_not_saved));
         }
         return 0;
-    case WM_TIMER: {
-        std::lock_guard lock(update_mutex);
-        SendMessageW(bar, PBM_SETPOS, update.percent, 0);
-        SetWindowTextW(status, cancelled ? L"正在取消…" : update.text.c_str()); return 0;
-    }
+    case WM_TIMER: refresh_status(); return 0;
     case finished_message: {
         if(worker.joinable()) worker.join();
-        running = false; KillTimer(handle, 1); controls(false);
-        Update result; { std::lock_guard lock(update_mutex); result = update; }
-        SendMessageW(bar, PBM_SETPOS, result.percent, 0); SetWindowTextW(status, result.result.c_str());
-        if(!result.success && !result.cancelled) fail(result.result);
+        running = false; KillTimer(handle, 1); controls(false); refresh_status();
+        Update value; { std::lock_guard lock(update_mutex); value = update; }
+        if(value.state == State::failure) fail(render_update(value));
         return 0;
     }
     case WM_CLOSE:
-        if(running) { cancelled = true; EnableWindow(cancel_button, FALSE); SetWindowTextW(status, L"正在取消，完成后可关闭窗口…"); }
+        if(running) { cancelled = true; EnableWindow(cancel_button, FALSE); refresh_status(); }
         else DestroyWindow(handle);
         return 0;
     case WM_DESTROY:
@@ -195,7 +258,7 @@ LRESULT CALLBACK procedure(HWND handle, UINT message, WPARAM wparam, LPARAM lpar
 }
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     SetPriorityClass(GetCurrentProcess(), BELOW_NORMAL_PRIORITY_CLASS);
-    SetProcessDPIAware();
+    SetProcessDPIAware(); language = load_language();
     const auto initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     if(FAILED(initialized)) return 1;
     INITCOMMONCONTROLSEX common{sizeof(common), ICC_PROGRESS_CLASS}; InitCommonControlsEx(&common);
@@ -204,8 +267,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {
     klass.hIcon = LoadIconW(nullptr, IDI_APPLICATION); klass.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW+1);
     RegisterClassW(&klass);
     const DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-    RECT rectangle{0, 0, 654, 530}; AdjustWindowRectEx(&rectangle, style, FALSE, 0);
-    window = CreateWindowExW(0, klass.lpszClassName, L"WA2 PAK 工具", style, CW_USEDEFAULT, CW_USEDEFAULT,
+    RECT rectangle{0, 0, 654, 638}; AdjustWindowRectEx(&rectangle, style, FALSE, 0);
+    window = CreateWindowExW(0, klass.lpszClassName, tr(Text::window_title), style, CW_USEDEFAULT, CW_USEDEFAULT,
                            rectangle.right-rectangle.left, rectangle.bottom-rectangle.top, nullptr, nullptr, instance, nullptr);
     if(!window) { CoUninitialize(); return 1; }
     ShowWindow(window, show); MSG message{};
