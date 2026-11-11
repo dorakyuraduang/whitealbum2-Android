@@ -40,6 +40,7 @@
 !/tools/SDL-release-2.32.10/
 !/tools/mojoshader-main/
 !/tools/mojoshader_assembler-main/
+!/tools/wa2-pak-tool/
 # Generated game functions, raw initial RAM, CFGs and historical check inputs
 # remain local. They are not covered by the project MIT grant.
 /generated/

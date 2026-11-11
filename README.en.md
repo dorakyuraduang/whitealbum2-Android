@@ -117,6 +117,7 @@ and can be translated before selection.
 
 ## Documentation and development
 
+- [Windows PAK pack/unpack tool](docs/PAK_TOOL.md): folder-to-PAK and PAK-to-folder; KCAP/LAC support.
 - [Android setup](docs/ANDROID.md)
 - [Ukrainian resource preparation and captions](docs/UKRAINIAN_SUPPORT.md)
 - [External caption format](docs/EXTERNAL_SUBTITLES.en.md)
