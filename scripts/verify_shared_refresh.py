@@ -150,6 +150,7 @@ def main():
         if inventory['actual_static_index_calls']<1600 or not all(inventory[key] for key in ('chapter_index_batch','chapter_namespace_separate','missing_chapter_queries_batched')):raise ValueError('Incomplete initial chapter-index checks')
         if inventory.get('full_bank_slots')!=100 or not inventory.get('full_bank_single_inventory') or not inventory.get('root_previews_ignored'):raise ValueError('Missing full 100-slot canonical save-bank check')
         if inventory.get('read_ahead_index_calls',0)<100 or inventory.get('full_bank_read_ahead_batches')!=7 or inventory.get('maximum_read_ahead_files')!=16 or not all(inventory.get(k) for k in ('read_ahead_handles_released','read_ahead_failure_retries','read_ahead_writers_and_workers_bypass')):raise ValueError('Missing bounded save read-ahead ownership/guard checks')
+        if not inventory.get('read_ahead_only_manual_slots') or not inventory.get('read_ahead_single_file_bypass'):raise ValueError('Read ahead includes unrelated files or single-file batches')
         progress=reports['io_diagnostics']
         if progress['selected_directory_written'] or not all(progress[key] for key in ('atomic_replacement','unchanged_io_not_rewritten','resource_activity_sampled','rate_and_count_bounded','failed_write_retry','optional_sink_failure_isolated','guest_errors_preserved')):raise ValueError('Incomplete bounded I/O diagnostic checks')
         reuse=reports['resource_reuse']

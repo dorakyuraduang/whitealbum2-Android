@@ -16,7 +16,9 @@ import java.util.LinkedHashSet;
 final class GameDocuments {
     private final ContentResolver resolver;
     private final Uri tree;
-    private final DocumentDirectory<Uri,Node> directories=new DocumentDirectory<>(this::children,item->item.name);
+    private final DocumentDirectory<Uri,Node> directories=new DocumentDirectory<>(this::children,this::pathChildren,item->item.name);
+    private static final String[] PATH_FIELDS = { DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE };
     private static final String[] FIELDS = { DocumentsContract.Document.COLUMN_DOCUMENT_ID,
         DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE,
         DocumentsContract.Document.COLUMN_SIZE, DocumentsContract.Document.COLUMN_LAST_MODIFIED,
@@ -29,11 +31,16 @@ final class GameDocuments {
     }
     GameDocuments(ContentResolver resolver, Uri tree) { this.resolver=resolver; this.tree=tree; }
     private Node node(Cursor cursor) throws IOException {
+        return node(cursor,false);
+    }
+    private Node node(Cursor cursor,boolean pathOnly) throws IOException {
         String id=cursor.getString(0), name=cursor.getString(1);
         if(id==null || name==null)throw new IOException("Incomplete game-directory document metadata");
         boolean directory=DocumentsContract.Document.MIME_TYPE_DIR.equals(cursor.getString(2));
-        return new Node(DocumentsContract.buildDocumentUriUsingTree(tree,id),name,directory,
-            cursor.isNull(3)?-1:cursor.getLong(3),cursor.isNull(4)?0:Math.max(0,cursor.getLong(4)),cursor.isNull(5)?0:cursor.getInt(5));
+        // A traversed file is only a name/type collision. Do not allocate its
+        // URI or fetch size/time/write flags unless full metadata is requested.
+        return new Node(pathOnly && !directory?null:DocumentsContract.buildDocumentUriUsingTree(tree,id),name,directory,
+            pathOnly || cursor.isNull(3)?-1:cursor.getLong(3),pathOnly || cursor.isNull(4)?0:Math.max(0,cursor.getLong(4)),pathOnly || cursor.isNull(5)?0:cursor.getInt(5));
     }
     private Node inspect(Uri uri) throws IOException {
         try(Cursor cursor=resolver.query(uri,FIELDS,null,null,null)) {
@@ -42,11 +49,17 @@ final class GameDocuments {
         }
     }
     private ArrayList<Node> children(Uri parent) throws IOException {
+        return children(parent,false);
+    }
+    private ArrayList<Node> pathChildren(Uri parent) throws IOException {
+        return children(parent,true);
+    }
+    private ArrayList<Node> children(Uri parent,boolean pathOnly) throws IOException {
         ArrayList<Node> result=new ArrayList<>();
         Uri uri=DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getDocumentId(parent));
-        try(Cursor cursor=resolver.query(uri,FIELDS,null,null,null)) {
+        try(Cursor cursor=resolver.query(uri,pathOnly?PATH_FIELDS:FIELDS,null,null,null)) {
             if(cursor==null)throw new IOException("Cannot inspect selected game directory");
-            while(cursor.moveToNext()){if(result.size()>=10000)throw new IOException("Game directory has too many entries");result.add(node(cursor));}
+            while(cursor.moveToNext()){if(result.size()>=10000)throw new IOException("Game directory has too many entries");result.add(node(cursor,pathOnly));}
         }
         return result;
     }
@@ -56,12 +69,12 @@ final class GameDocuments {
     private Uri parent(String[] parts,boolean create) throws IOException {
         Uri parent=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
         for(int n=0;n+1<parts.length;++n) {
-            Node folder=child(parent,parts[n]);
+            Node folder=directories.path(parent).find(parts[n]);
             if(folder==null && create) {
                 Uri made=DocumentsContract.createDocument(resolver,parent,DocumentsContract.Document.MIME_TYPE_DIR,parts[n]);
                 if(made==null)throw new IOException("Cannot create game save directory");folder=inspect(made);
                 if(!folder.name.equals(parts[n]))throw new IOException("Provider changed game save directory name");
-                directories.at(parent).put(folder);
+                directories.path(parent).put(folder);
             }
             if(folder==null)return null;if(!folder.directory)throw new IOException("Game save directory has the wrong file type");parent=folder.uri;
         }
@@ -155,6 +168,7 @@ final class GameDocuments {
         return uri;
     }
     synchronized int[] compatibleReadBatch(String[] paths,String[] references) throws IOException {
+        directories.clear();
         if(paths==null || references==null || paths.length!=references.length || paths.length<1 || paths.length>DocumentReadBatch.LIMIT)
             throw new IOException("Invalid resolved document read batch");
         final Uri[] uris=new Uri[paths.length];
@@ -170,16 +184,39 @@ final class GameDocuments {
     }
     private String[] metadataRecords(String path,boolean list,boolean reference) throws IOException {
         directories.clear();
-        CompatibleStoragePath.parts(path,list || CompatibleStoragePath.valid(path,true));
-        Uri root=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
-        Node found=inspect(root);
-        if(!path.isEmpty()){String[] parts=path.split("/");for(int n=0;n<parts.length;++n){if(!found.directory)return new String[0];found=n+1==parts.length && CompatibleStoragePath.valid(path,false)?GameFilePublication.recover(new Files(found.uri),parts[n]):child(found.uri,parts[n]);if(found==null)return new String[0];}}
-        ArrayList<Node> entries=new ArrayList<>();if(list){if(!found.directory)return new String[0];Files files=new Files(found.uri);LinkedHashSet<String> names=new LinkedHashSet<>();for(Node item:files.index.entries()){String name=item.name;if(name.endsWith(GameFilePublication.STAGE))name=name.substring(0,name.length()-GameFilePublication.STAGE.length());else if(name.endsWith(GameFilePublication.BACKUP))name=name.substring(0,name.length()-GameFilePublication.BACKUP.length());names.add(name);}for(String name:names){String child=path.isEmpty()?name:path+"/"+name;if(!CompatibleStoragePath.valid(child,false) && !CompatibleStoragePath.valid(child,true))continue;Node file=CompatibleStoragePath.valid(child,false)?GameFilePublication.recover(files,name):child(found.uri,name);if(file!=null)entries.add(file);}}else entries.add(found);
+        boolean directory=list || CompatibleStoragePath.valid(path,true);
+        String[] parts=CompatibleStoragePath.parts(path,directory);
+        Uri address=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
+        // Resolve ancestors with only IDs/names/types. Query full metadata
+        // for the requested file or listed children, never every ancestor.
+        for(int n=0;n<parts.length-(directory?0:1);++n){
+            Node folder=directories.path(address).find(parts[n]);
+            if(folder==null || !folder.directory)return new String[0];address=folder.uri;
+        }
+        ArrayList<Node> entries=new ArrayList<>();
+        if(list){
+            Files files=new Files(address);LinkedHashSet<String> names=new LinkedHashSet<>();
+            for(Node item:files.index.entries()){
+                String name=item.name;
+                if(name.endsWith(GameFilePublication.STAGE))name=name.substring(0,name.length()-GameFilePublication.STAGE.length());
+                else if(name.endsWith(GameFilePublication.BACKUP))name=name.substring(0,name.length()-GameFilePublication.BACKUP.length());
+                names.add(name);
+            }
+            for(String name:names){
+                String child=path.isEmpty()?name:path+"/"+name;
+                if(!CompatibleStoragePath.valid(child,false) && !CompatibleStoragePath.valid(child,true))continue;
+                Node file=CompatibleStoragePath.valid(child,false)?GameFilePublication.recover(files,name):child(address,name);
+                if(file!=null)entries.add(file);
+            }
+        }else{
+            Node found=directory?inspect(address):GameFilePublication.recover(new Files(address),parts[parts.length-1]);
+            if(found!=null)entries.add(found);
+        }
         ArrayList<String> result=new ArrayList<>();for(Node item:entries){String child=path.isEmpty()?item.name:path+"/"+item.name;
             if(list && !CompatibleStoragePath.valid(child,item.directory))continue;
             if(!item.directory && (item.name.endsWith(GameFilePublication.STAGE) || item.name.endsWith(GameFilePublication.BACKUP)))continue;
             result.add(item.name);result.add(Long.toString(Math.max(0,item.size)));result.add(Long.toString(item.modified));result.add(item.directory?"16":"128");
-            if(reference){String address=item.directory?"":item.uri.toString();result.add(address.length()<=1024?address:"");}
+            if(reference){String referenceAddress=item.directory?"":item.uri.toString();result.add(referenceAddress.length()<=1024?referenceAddress:"");}
         }
         return result.toArray(new String[0]);
     }

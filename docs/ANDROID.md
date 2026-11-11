@@ -4,12 +4,20 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.77-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.77-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.77-shared-aot-replace-native.apk` to update the experimental
+is **0.2.78-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.78-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.78-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.78 reduces directory traversal work: ancestor queries request only document
+IDs, names and types. Full size/time/write metadata is fetched for the requested
+file or final directory listing. Listing a nested bank no longer stats the
+selected root separately. Light and full indexes remain operation-scoped, with
+full metadata taking precedence after publication. Read ahead excludes Sys.sav
+and the quick save, and skips one-file batches. The original save paths and
+bytes are unchanged; loading-time gains still require a fresh device run.
 
 0.2.77 batches only the original 24-byte save-list index scan. The common C++
 policy admits one group of at most 16 read-only streams; the Android OS adapter

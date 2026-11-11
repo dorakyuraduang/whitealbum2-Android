@@ -150,6 +150,8 @@ unsigned full_bank(const std::filesystem::path& root){
         std::ofstream output(bank/name,std::ios::binary);output.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());CHECK(output.good());
         write(selected/name,0xee);
     }
+    // These are not manual list slots and must not enter speculative batches.
+    write(bank/"Sys.sav",0xff);write(bank/"save_Q.sav",0xfe);
     wr::ProcessOptions options;options.data_root=selected/"private";options.prefer_linear_memory=true;CHECK(std::filesystem::create_directory(options.data_root));
     wa2::aot::Runtime runtime(options);auto& p=runtime.process();auto& m=p.memory;
     auto backend=std::make_shared<Counted>(c::local_files(selected),true);
@@ -182,7 +184,8 @@ unsigned read_ahead_bank(const std::filesystem::path& root){
     // Claimed streams are never reused. A repeat gets a new ordinary stream.
     const auto opened=backend->opens;index(0);CHECK(backend->opens==opened+1);
     // Nonsequential pages release unused descriptors before the next batch.
-    m.store(0xa3a130,++frame,32);index(0);index(50);index(99);
+    m.store(0xa3a130,++frame,32);index(0);index(50);
+    const auto single_batches=backend->batches;index(99);CHECK(backend->batches==single_batches && backend->released());
     const auto preview_batches=backend->batches,preview_opens=backend->opens;
     CHECK(p.callback(0x4234c0,std::array<U32,6>{99,0,0,0,0,0},false)==1);
     CHECK(backend->batches==preview_batches && backend->opens==preview_opens+1 && backend->released());
@@ -212,7 +215,7 @@ int main(int argc,char** argv){try{
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.save-inventory.v1\",\"actual_static_reader_calls\":"<<readers<<",\"guard_cases\":"<<guards
         <<",\"actual_static_index_calls\":"<<index_calls<<",\"chapter_index_batch\":true,\"chapter_namespace_separate\":true,\"missing_chapter_queries_batched\":true,\"baseline_two_namespace_metadata_queries\":200,\"batched_two_namespace_directory_queries\":2,\"batched_absent_chapter_directory_queries\":2,\"full_bank_slots\":100,\"full_bank_single_inventory\":true,\"root_previews_ignored\":true"
           ",\"slots_per_fixture\":100,\"present_slots\":2,\"baseline_metadata_queries_per_fixture\":100,\"scoped_metadata_queries_per_fixture\":0,\"scoped_directory_lists_per_fixture\":1,\"descriptor_opens_per_fixture\":2"
-          ",\"read_ahead_index_calls\":"<<ahead_calls<<",\"full_bank_read_ahead_batches\":7,\"maximum_read_ahead_files\":16,\"read_ahead_handles_released\":true,\"read_ahead_failure_retries\":true,\"read_ahead_writers_and_workers_bypass\":true"
+          ",\"read_ahead_index_calls\":"<<ahead_calls<<",\"full_bank_read_ahead_batches\":7,\"maximum_read_ahead_files\":16,\"read_ahead_only_manual_slots\":true,\"read_ahead_single_file_bypass\":true,\"read_ahead_handles_released\":true,\"read_ahead_failure_retries\":true,\"read_ahead_writers_and_workers_bypass\":true"
           ",\"same_static_save_reader\":true,\"prepared_reads_checked\":true,\"writers_bypass_read_reference\":true,\"title_reader_batch\":true,\"scope_audit_checked\":true,\"payload_reads_fresh\":true,\"write_invalidation\":true,\"source_frame_invalidation\":true,\"ordinary_and_worker_reads_fresh\":true,\"inventory_lifetime_bounded\":true,\"original_saves_opened\":false,\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_created\":false,\"audio_device_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS unchanged static save reader: per-slot metadata lookup replaced by one inventory for 100 own-fixture slots; guards and fresh payload reads.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

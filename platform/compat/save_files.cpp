@@ -26,6 +26,7 @@ bool file_name(std::string_view name){return name=="sys.sav" || name=="system.in
     (name.size()==11 && name.starts_with("save_") && name.ends_with(".sav") && name[5]>='0' && name[5]<='9' && name[6]>='0' && name[6]<='9');}
 bool folder_name(std::string_view name){return name.empty() || name=="documents" || name=="documents/leaf" || name==main_folder || name=="documents/leaf/white album2 -closing chapter-" || name=="documents/leaf/white album2 -introductory chapter-";}
 bool save_name(std::string_view name){return file_name(name) && name.ends_with(".sav");}
+bool manual_save(std::string_view name){return name.size()==11 && name.starts_with("save_") && save_name(name);}
 std::optional<std::string> mapped(std::string_view value,bool folder=false){
     auto path=fold(value);if(path==".")path.clear();if(path.find('\0')!=path.npos || path.find(':')!=path.npos || path.starts_with('/') || path.find("..")!=path.npos)return {};
     if(folder){if(!folder_name(path))return {};return path==main_folder?std::string{}:path;}
@@ -109,16 +110,16 @@ class Saves final:public wr::MutableFiles {
                 cache.expires=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);
             }else ++cache.chapter_hits;
             if(auto item=found->second.find(leaf);item!=found->second.end()){
-                if(prepare && save_name(leaf) && !cache.read_ahead.contains(fold(path)))if(auto* ahead=dynamic_cast<ReadAheadFiles*>(files_.get())){
+                if(prepare && manual_save(leaf) && !cache.read_ahead.contains(fold(path)))if(auto* ahead=dynamic_cast<ReadAheadFiles*>(files_.get())){
                     // Keep only one bounded descriptor batch alive, even if
                     // the user jumps between distant pages/slot numbers.
                     cache.release_reads();
                     std::vector<ReadAheadFile> batch;
                     for(auto next=item;next!=found->second.end() && batch.size()<ReadAheadFiles::limit;++next){
                         auto& info=next->second;const auto name=directory.empty()?info.name:directory+"/"+info.name;
-                        if(save_name(next->first) && !(info.attributes&16) && info.open_read && !cache.read_ahead.contains(fold(name)))batch.push_back({name,&info});
+                        if(manual_save(next->first) && !(info.attributes&16) && info.open_read && !cache.read_ahead.contains(fold(name)))batch.push_back({name,&info});
                     }
-                    if(!batch.empty()){
+                    if(batch.size()>1){
                         for(const auto& request:batch)cache.original_openers.emplace_back(request.info,request.info->open_read);
                         Inventory::Timer timer(cache.read_batches,cache.read_ahead_ns);cache.read_ahead_files+=ahead->prepare_reads(batch);
                         for(const auto& request:batch)cache.read_ahead.insert(fold(request.path));

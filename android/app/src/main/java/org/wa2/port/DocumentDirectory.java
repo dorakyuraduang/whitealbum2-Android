@@ -31,10 +31,21 @@ final class DocumentDirectory<K,T> {
         void remove(String name){entries.remove(key(name));ambiguous.remove(key(name));}
     }
     private final Reader<K,T> reader;
+    private final Reader<K,T> pathReader;
     private final Name<T> names;
     private final HashMap<K,Snapshot> snapshots=new HashMap<>();
-    DocumentDirectory(Reader<K,T> reader,Name<T> names){this.reader=reader;this.names=names;}
-    void clear(){snapshots.clear();}
+    private final HashMap<K,Snapshot> pathSnapshots=new HashMap<>();
+    DocumentDirectory(Reader<K,T> reader,Name<T> names){this(reader,reader,names);}
+    DocumentDirectory(Reader<K,T> reader,Reader<K,T> pathReader,Name<T> names){this.reader=reader;this.pathReader=pathReader;this.names=names;}
+    void clear(){snapshots.clear();pathSnapshots.clear();}
+    // A light path entry must never stand in for full file metadata. Once
+    // loaded, the full index also carries any publication/mutation updates.
+    Snapshot path(K parent) throws IOException {
+        Snapshot full=snapshots.get(parent);if(full!=null)return full;
+        Snapshot found=pathSnapshots.get(parent);
+        if(found==null){found=new Snapshot(pathReader.children(parent));pathSnapshots.put(parent,found);}
+        return found;
+    }
     Snapshot at(K parent) throws IOException {
         Snapshot found=snapshots.get(parent);
         if(found==null){found=new Snapshot(reader.children(parent));snapshots.put(parent,found);}
