@@ -99,7 +99,7 @@ def main():
         except (OSError,ValueError):
             run([sys.executable,ROOT/'scripts/verify_portable_shaders.py']);shaders=fresh(ROOT/'logs/portable-shader-verification.json')
         tracked=[Path(__file__),ROOT/'tests/shared-host-refresh/CMakeLists.txt',reference_path,archive,ROOT/'config/porting_contract.json',ROOT/'config/release.json']
-        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')]
+        tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')]
         tracked += [ROOT/'scripts/prepare_shared_chroma.py',ROOT/chroma['reference_file']]
         tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
         tracked += [ROOT/'scripts/prepare_shared_progress.py']
@@ -117,7 +117,7 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -161,6 +161,8 @@ def main():
         loading=reports['resource_loading']
         if loading['exact_output_cases']<60 or loading['unchanged_failure_cases']<20 or not loading['paged_and_contiguous_memory']:raise ValueError('Incomplete general resource loading checks')
         profiles=reports['profile_batch']
+        pc_loose=reports['pc_loose_resources']
+        if pc_loose['static_reader_calls']!=52 or pc_loose['profiles']!=4 or pc_loose['guards']<12 or not all(pc_loose[k] for k in ('pc_script_and_font_priority','main_ic_separate','partial_font_patch_falls_back_to_en_group','legacy_loose_folders_preserved','prepared_sidecars_not_required','private_resource_fallback_forbidden')):raise ValueError('Incomplete PC loose script/font fallback checks')
         loose=reports['loose_resources']
         if loose['static_resource_reader_calls']<24 or loose['guard_cases']<40 or loose['resource_group_cases']!=10 or loose['encoded_filename_cases']!=8 or loose['static_resource_check_calls']<4 or not all(loose[k] for k in ('external_before_patch_and_pak','missing_external_falls_back','ic_and_case_insensitive_paths','fresh_stream_contents','name_cache_expiry','resource_namespace_read_only','source_optional_backup_not_fatal','private_resource_fallback_forbidden','canonical_saves_preserved')):raise ValueError('Incomplete loose resource/source reader checks')
         if reports['language_resources']['loose_language_alias_cases']<20 or not reports['language_resources']['loose_script_and_font_language_isolation']:raise ValueError('Incomplete language-specific loose resource alias checks')

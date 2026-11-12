@@ -48,8 +48,8 @@ final class LaunchSettings {
     static boolean showMenu(Context context) {return !profile(context).enabled(LaunchProfile.HIDE_MENU);}
     static int language(Context context) {return profile(context).language;}
     static String languageLabel(Context context) {return profile(context).languageLabel();}
-    static String script(Context context) { return profile(context).scriptArchive(); }
-    static String font(Context context) { return profile(context).fontArchive(); }
+    static String script(Context context) { return profile(context).scriptLocation(); }
+    static String font(Context context) { return profile(context).fontLocation(); }
     static String subtitle(Context context) {return profile(context).subtitle;}
     static String[] gameArguments(Context context) { return profile(context).gameArguments(); }
     static boolean saving(Context context) {LaunchProfileStore current=store(context);return current!=null && current.dirty();}

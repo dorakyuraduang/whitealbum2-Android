@@ -90,6 +90,9 @@ public:
 }
 ResourceMount::ResourceMount(std::vector<wr::ReadOnlyFileInfo> files,std::function<std::FILE*(std::string_view)> open,std::shared_ptr<wr::ReadOnlyFiles> loose):open_(std::move(open)),loose_(std::move(loose)){
     if(!open_)throw std::invalid_argument("resource opener is required");if(files.size()>10000)throw std::invalid_argument("too many mounted archives");
+    // Known script/font directories can exist without a same-named PAK:
+    // the PC patches keep loose overrides above the grouped en.pak fallback.
+    if(loose_)for(const auto* group:{"ck-gal","fon","script","fnt","en","fon_en","ua","font_ua"})groups_.insert(group);
     for(auto& info:files){const auto folded=key(info.name);if(!archive_name(folded))throw std::invalid_argument("invalid mounted archive filename");
         auto group=std::string_view(folded);if(group.starts_with("ic/"))group.remove_prefix(3);groups_.emplace(group.substr(0,group.size()-4));
         info.attributes=0x21;if(!files_.emplace(folded,std::move(info)).second)throw std::invalid_argument("ambiguous mounted archive filename");}

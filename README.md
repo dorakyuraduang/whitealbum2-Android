@@ -2,7 +2,7 @@
 
 **简体中文** · [English](README.en.md)
 
-面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.82-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
+面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.83-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
 
 **[下载与发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
 
@@ -17,29 +17,22 @@
 
 影片支持 MP4/MOV、MKV/WebM、AVI、WMV/ASF、MPEG/TS、FLV 等常用格式，以及原版和 **Final Full Patch 1.0.3.0** 的视频 PAK。保留游戏原文件名和 `IC` 路径；无法读取、解析或解码的影片会自动跳过并继续剧情，原因记录在运行诊断中。详见[影片格式与容错](docs/MOVIE_FORMATS.md)。
 
-游戏语言默认中文，所选文件夹根目录需有对应的脚本包和字库包：
+游戏语言默认中文。所选文件夹保留完整原版资源，再按语言放置补丁：
 
 | 游戏语言 | 脚本包 | 字库包 |
 | --- | --- | --- |
 | 简体中文（默认） | `ck-gal.pak` | `fon.pak` |
 | 日本語 | `script.pak` | `fnt.pak` |
-| English | `en.pak` | `fon_en.pak` |
-| Українська | `ua.pak` | `font_ua.pak` |
+| English | `en.pak`，外置覆盖用 `script/`、`IC/script/` | 外置 `fnt/`，缺少的图集从 `en.pak` 的 `fnt` 分组读取 |
+| Українська | PC 补丁的 `en.pak`、`script/`、`IC/script/` | PC 补丁的 `fnt/`，其余图集从 `en.pak` 读取 |
 
 这两类包还需配合完整的背景、立绘、音频、影片等原版资源。启动器界面默认跟随手机系统首选语言，无对应翻译时使用英文；手动选择后记住该选择。界面语言与游戏语言分别设置。
 
-支持少量[外置资源覆盖](docs/LOOSE_RESOURCES.md)：图片放在所选游戏目录的 `grp/`、`bak/`、`char/` 中，保留原文件名和需要的 `IC/` 前缀；脚本、字库目录使用所选语言对应的 PAK 名去掉 `.pak`。优先读取外置文件，缺失时回退到 PAK；仍需完整游戏资源。
+支持[外置资源覆盖](docs/LOOSE_RESOURCES.md)：图片使用 `grp/`、`bak/`、`char/`，日、英、乌克兰语脚本和字库优先使用 PC 布局的 `script/`、`IC/script/`、`fnt/`；中文保持 `ck-gal/`、`fon/`。保留原文件名，外置文件优先，缺失时回退到包内资源。
 
-英文补丁还需保留原版 `script.pak` 作为基础数据后备。在启动页选择 **English** 即应用英文资源；`fon_en.pak` 必须是配套游戏字库 PAK。已有带 `fnt` 分组的英文 `en.pak` 可用 `python scripts/prepare_english_font.py --root "游戏目录"` 生成独立字库，原包保持不变，详见[语言资源说明](docs/LANGUAGE_RESOURCES.md)。
+英文选择 **English**；UA **0.1.5** 补丁选择 **Українська**，保留它所需的姓名与文字处理。两者都保留原版 `script.pak` 和 `IC` 资源，脚本不转码，`.txt`/`.bnr` 配对放置。PC 补丁自带的 `en.pak`、`script/`、`IC/script/`、`fnt/` 可直接按原布局复制，不需要再打包。
 
-英文字库应从同一份 `en.pak` 生成。请先备份已有的 `fon_en.pak`；把中文字库改名不能得到配套英文字库。
-
-乌克兰语已适配 UA 补丁 **0.1.5**，在启动页的“游戏语言”中选择 **Українська**。两个配套文件使用游戏的 **KCAP 格式**，制作内容如下：
-
-- **`ua.pak`**：保留补丁 `en.pak` 中的 `bak`、`grp` 分组，以其 `script` 分组为基础覆盖乌克兰语 `script/` 文件；将 `IC/script/` 单独放入 **`ic/script`** 分组，避免同名场景互相覆盖。
-- **`font_ua.pak`**：将补丁 `fnt/` 中的两张大号字体图集，与 `en.pak` 的 `fnt` 分组中的两张小号图集合并，四张图直接放在包内，保留原文件名。
-
-脚本保留原编码和 `.txt`/`.bnr` 配对。可用[资源准备工具](scripts/prepare_ukrainian_resources.py)从原始 0.1.5 ZIP 生成两个包，放到所选游戏目录根目录，并保留原版 `script.pak`、`IC` 子目录等完整资源；具体步骤见[乌克兰语说明](docs/UKRAINIAN_SUPPORT.md)。
+旧版已准备的 `fon_en.pak`，或 `ua.pak`、`font_ua.pak` 仍可使用；对应旧版外置目录也保留兼容。详见[语言资源](docs/LANGUAGE_RESOURCES.md)与[乌克兰语说明](docs/UKRAINIAN_SUPPORT.md)。补丁 EXE/DLL 不参与运行。
 
 ## 存档、配置与字幕
 

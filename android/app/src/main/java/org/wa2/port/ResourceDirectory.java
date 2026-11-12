@@ -103,12 +103,12 @@ final class ResourceDirectory {
         try { Uri tree = Uri.parse(saved); return validTree(tree) ? tree : null; }
         catch (RuntimeException error) { return null; }
     }
-    static void validatePreparedLanguages(Context application,String script,String font) throws IOException {
+    static void validatePreparedSelection(Context application) throws IOException {
         Uri tree=selectedTree(application);
         synchronized(LOCK){
             if(tree==null || !tree.equals(preparedTree) || preparedArchives==null)throw new IOException("请先重新检查游戏资源文件夹。");
-            for(String name:new String[]{script,font})if(!name.isEmpty() && preparedArchives.find(name)==null)
-                throw new IOException("所选游戏语言缺少资源包："+name+"。请把对应 PAK 放入游戏目录根目录，或选择其他游戏语言。");
+            // Script/font fallbacks belong to the common host. Requiring a
+            // sidecar PAK here would reject valid PC-style loose resources.
         }
     }
 

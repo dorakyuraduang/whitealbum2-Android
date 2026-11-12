@@ -32,6 +32,8 @@ final class LaunchProfile {
     // actual archive routing and language-specific default-name data.
     String scriptArchive(){return language==UKRAINIAN?"ua.pak":language==ENGLISH?"en.pak":language==JAPANESE?"script.pak":"ck-gal.pak";}
     String fontArchive(){return language==UKRAINIAN?"font_ua.pak":language==ENGLISH?"fon_en.pak":language==JAPANESE?"fnt.pak":"fon.pak";}
+    String scriptLocation(){return language==ENGLISH?"script/ · IC/script/ · en.pak":language==UKRAINIAN?"script/ · IC/script/ · en.pak / ua.pak":scriptArchive();}
+    String fontLocation(){return language==ENGLISH?"fnt/ · en.pak / fon_en.pak":language==UKRAINIAN?"fnt/ · en.pak / font_ua.pak":fontArchive();}
     static LaunchProfile defaults(){return new LaunchProfile(FPS|LONG_PRESS|CHINESE_SUBTITLES);}
     boolean enabled(int flag){return (flags&flag)!=0;}
     LaunchProfile with(int flag,boolean value){

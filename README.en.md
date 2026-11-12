@@ -3,7 +3,7 @@
 [简体中文](README.md) · **English**
 
 A static-recompilation port for **Android ARM64**, using shared game logic
-across platforms. Current development version: **0.2.82-shared-aot**.
+across platforms. Current development version: **0.2.83-shared-aot**.
 Supply your own original PAK resources; whole-archive extraction is not required.
 
 **[Downloads and releases](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
@@ -25,52 +25,36 @@ and `IC` paths. Unreadable or undecodable movies are skipped so the story can
 continue; the reason is retained in runtime diagnostics. See [movie formats and
 failure handling](docs/MOVIE_FORMATS.md).
 
-Chinese is the default. Put the selected language's script and font packs in
-the root of the game folder:
+Chinese is the default. Retain the complete original resources and add the
+selected language's patch:
 
 | Game language | Script pack | Font pack |
 | --- | --- | --- |
 | 简体中文 / Chinese (default) | `ck-gal.pak` | `fon.pak` |
 | 日本語 / Japanese | `script.pak` | `fnt.pak` |
-| English | `en.pak` | `fon_en.pak` |
-| Українська / Ukrainian | `ua.pak` | `font_ua.pak` |
+| English | `en.pak`; loose overrides in `script/`, `IC/script/` | Loose `fnt/`; remaining atlases from the `fnt` group in `en.pak` |
+| Українська / Ukrainian | PC patch's `en.pak`, `script/`, `IC/script/` | PC patch's `fnt/`; remaining atlases from `en.pak` |
 
 You also need the complete original graphics, audio, movie and other resources.
 The launcher follows the phone's primary system language, falling back to English
 when unsupported. A manual **Interface language** choice is remembered and takes
 priority. **Game language** independently selects game resources.
 
-Optional [loose resource overrides](docs/LOOSE_RESOURCES.md) go under `grp/`,
-`bak/` or `char/` in the selected game folder. Keep original filenames and any
-required `IC/` prefix. Script/font folders use the selected language's PAK name
-without `.pak`. Loose files take priority; missing files fall back to PAKs.
-Complete game resources are still required.
+[Loose resource overrides](docs/LOOSE_RESOURCES.md) use `grp/`, `bak/` and
+`char/` for graphics. Japanese, English and Ukrainian use the PC folders
+`script/`, `IC/script/` and `fnt/`; Chinese keeps `ck-gal/` and `fon/`.
+Keep original filenames and `.txt`/`.bnr` pairs. Loose files take priority;
+missing files fall back to packed resources.
 
-For English, retain the original `script.pak` for base script data and select
-**English** in the launcher. `fon_en.pak` must contain the matching game font
-atlases. If your English `en.pak` contains an `fnt` directory, generate a separate
-font pack with `python scripts/prepare_english_font.py --root "your game folder"`.
-This copies packed font members without decompressing them or changing `en.pak`.
-Back up an existing `fon_en.pak` before generation. Renaming the Chinese font
-pack does not produce the matching English fonts.
-See [resource and patch details](docs/LANGUAGE_RESOURCES.md).
+Select **English** for the English patch or **Українська** for UA **0.1.5**.
+Ukrainian retains its matching names and text handling. Keep the original
+`script.pak`, `IC` resources and original script encoding. Copy the patch's
+`en.pak`, `script/`, `IC/script/` and `fnt/` with the same layout as on PC;
+no repacking is required.
 
-Ukrainian support targets the UA **0.1.5** patch. Select **Українська** under
-**Game language**. Prepare these two archives using the game's **KCAP format**:
-
-- **`ua.pak`**: Keep the `bak` and `grp` groups from the patch's `en.pak`.
-  Use its `script` group as the base and overlay the Ukrainian `script/` files.
-  Store `IC/script/` in a separate **`ic/script`** group to preserve scenes with
-  identical filenames.
-- **`font_ua.pak`**: Combine the two large font atlases from the patch's `fnt/`
-  folder with the two small atlases from the `fnt` group in its `en.pak`.
-  Put all four directly inside the font archive, preserving their filenames.
-
-Keep the original script encoding and `.txt`/`.bnr` pairs. The
-[resource preparation tool](scripts/prepare_ukrainian_resources.py) generates
-both packs from the original 0.1.5 ZIP. Put them in the selected game folder's
-root and retain the original `script.pak`, `IC` subfolder and other game resources. See the
-[preparation guide](docs/UKRAINIAN_SUPPORT.md) for the procedure.
+Previously prepared `fon_en.pak`, or `ua.pak` and `font_ua.pak`, remain supported,
+as do their legacy loose folders. See [language resources](docs/LANGUAGE_RESOURCES.md)
+and [Ukrainian support](docs/UKRAINIAN_SUPPORT.md). Patch EXE/DLL files are not run.
 
 ## Saves, settings and captions
 

@@ -233,7 +233,7 @@ public final class LauncherActivity extends Activity {
         new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             String problem = null; int count = 0;boolean ready=false;
-            try {Uri previous=ResourceDirectory.selectedTree(application);count = ResourceDirectory.prepareSelection(application, tree, flags);LaunchSettings.prepare(application,tree,tree.equals(previous));ready=true;if(launch){ResourceDirectory.validatePreparedLanguages(application,LaunchSettings.script(application),LaunchSettings.font(application));String external=LaunchSettings.subtitle(application);if(LaunchSettings.chineseSubtitles(application) && !external.isEmpty())ExternalSubtitles.validate(application,external);}}
+            try {Uri previous=ResourceDirectory.selectedTree(application);count = ResourceDirectory.prepareSelection(application, tree, flags);LaunchSettings.prepare(application,tree,tree.equals(previous));ready=true;if(launch){ResourceDirectory.validatePreparedSelection(application);String external=LaunchSettings.subtitle(application);if(LaunchSettings.chineseSubtitles(application) && !external.isEmpty())ExternalSubtitles.validate(application,external);}}
             catch (LinkageError error) {problem="Subtitle validation module: "+error.getMessage();}
             catch (Exception error) {problem=error.getMessage();if(problem==null)problem=error.toString();}
             final String failure = problem; final int found = count;final boolean loaded=ready;

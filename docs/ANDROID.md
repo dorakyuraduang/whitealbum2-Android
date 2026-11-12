@@ -4,20 +4,22 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.82-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.82-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.82-shared-aot-replace-native.apk` to update the experimental
+is **0.2.83-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.83-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.83-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
 
-0.2.82 restores the existing loader's loose-file priority in the selected
-resource directory. Graphics use `grp/`, `bak/` and `char/`; script and font
-folders follow the selected language's archive stems. The shared policy is
-read-only, falls back to PAKs only when files are missing, and preserves the
-separate save/configuration paths. Android reads through the authorized tree
-without copying resource files into private storage. See
-[loose resource layout and validation limits](LOOSE_RESOURCES.md).
+0.2.83 corrects the 0.2.82 loose script/font routing: Japanese, English and
+Ukrainian first read `script/`, `IC/script/` and `fnt/` in the selected tree.
+Legacy language-named loose folders are secondary fallbacks. Missing translated
+font sidecars use the four font atlases in the patch's `en.pak` `fnt` group.
+Ukrainian can use the unmodified PC patch layout when no prepared `ua.pak` exists;
+its existing language setting, names and text policy remain supported.
+Archive validation runs in the common C++ host, preventing Android preflight
+from rejecting valid grouped-font fallback. No resources are copied into
+private storage. See [loose resource layout and validation limits](LOOSE_RESOURCES.md).
 
 0.2.81 reduces redundant configuration I/O in the cached source main's final
 integer-settings sequence. Only that certified wrapper/caller, on the main

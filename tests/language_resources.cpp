@@ -120,6 +120,8 @@ int main(int argc,char** argv){try{
     for(const auto language:{r::GameLanguage::chinese,r::GameLanguage::japanese,r::GameLanguage::english}){
         const auto profile=r::language_profile(language);
         for(const auto target:{profile.script,profile.font})for(int failure=0;failure<3;++failure){
+            // Missing translated font sidecars now use the patch's fnt group.
+            if(language==r::GameLanguage::english && target==profile.font && failure==0)continue;
             auto files=entries;if(!failure)std::erase_if(files,[&](const auto& entry){return entry.name==target;});
             auto invalid=std::make_shared<pc::ResourceMount>(files,[&](std::string_view name){
                 const auto physical=name==target?(failure==1?"bad.pak":target==profile.script?profile.font:profile.script):name;
@@ -145,14 +147,16 @@ int main(int argc,char** argv){try{
     CHECK(selected->state().reports.at("language_resources")().find("\"chinese_subtitles\":false")!=std::string::npos);
     unsigned loose_aliases{};
     for(const auto language:{r::GameLanguage::chinese,r::GameLanguage::japanese,r::GameLanguage::english}){
+        const auto loose_root=root/("loose-"+std::to_string(unsigned(language)));std::filesystem::create_directory(loose_root);
+        for(const auto& [name,data]:packs){const auto path=loose_root/name;std::filesystem::create_directories(path.parent_path());std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(data.data()),data.size());}
         const auto profile=r::language_profile(language);const auto script=std::string(profile.script.substr(0,profile.script.size()-4)),font=std::string(profile.font.substr(0,profile.font.size()-4));
-        for(const auto& group:{script,font})for(const auto* prefix:{"","IC/"}){const auto dir=root/prefix/group;std::filesystem::create_directories(dir);std::ofstream(dir/"loose.bin",std::ios::binary).put(char(0x70+unsigned(language)));}
-        auto q=process();pc::install_resource_mount(*q,pc::local_resource_mount(root));pc::select_language_resources(*q,{language,true});auto view=q->state().read_only_files;
+        for(const auto& group:{script,font})for(const auto* prefix:{"","IC/"}){const auto dir=loose_root/prefix/group;std::filesystem::create_directories(dir);std::ofstream(dir/"loose.bin",std::ios::binary).put(char(0x70+unsigned(language)));}
+        auto q=process();pc::install_resource_mount(*q,pc::local_resource_mount(loose_root));pc::select_language_resources(*q,{language,true});auto view=q->state().read_only_files;
         for(const auto* logical:{"ck-gal/loose.bin","script/loose.bin","fon/loose.bin","fnt/loose.bin","IC/ck-gal/loose.bin","IC/fon/loose.bin"}){
             CHECK(view->owns_path(logical));auto info=view->info(logical);CHECK(info && info->size==1);std::unique_ptr<FILE,decltype(&std::fclose)> input(view->open(logical),std::fclose);CHECK(input && std::fgetc(input.get())==int(0x70+unsigned(language)));++loose_aliases;
         }
         CHECK(!view->list("fon").empty());++loose_aliases;
-        if(language!=r::GameLanguage::chinese){std::ofstream(root/"ck-gal"/"chinese-only.bin").put('x');CHECK(!view->info("ck-gal/chinese-only.bin") && view->owns_path("ck-gal/chinese-only.bin"));++loose_aliases;}
+        if(language!=r::GameLanguage::chinese){std::filesystem::create_directories(loose_root/"ck-gal");std::ofstream(loose_root/"ck-gal"/"chinese-only.bin").put('x');CHECK(!view->info("ck-gal/chinese-only.bin") && view->owns_path("ck-gal/chinese-only.bin"));++loose_aliases;}
     }
     std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.language-resources.v3\",\"checks\":"<<checks<<",\"guards\":"<<guards<<",\"archive_aliases\":"<<aliases<<",\"shared_argument_combinations\":"<<argument_cases<<",\"english_native_resource_cases\":"<<english_native_cases<<",\"loose_language_alias_cases\":"<<loose_aliases<<",\"loose_script_and_font_language_isolation\":true,\"english_font_metadata_guard\":true,\"english_grouped_override_and_base_script_fallback\":true,\"default_chinese_pair\":true,\"automatic_matched_pairs\":true,\"root_ic_and_file_apis_checked\":true,\"patch_priority_preserved\":true,\"invalid_selection_not_published\":true,\"source_executable_opened\":false,\"original_resource_files_opened\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(report);
     std::cout<<"PASS language profiles: matching script/font pairs, aliases, separate file streams and validation.\n";return 0;
