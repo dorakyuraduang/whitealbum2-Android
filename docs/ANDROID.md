@@ -25,6 +25,14 @@ avoided unchanged writes. Finite own-file checks invoke the unchanged setter
 with certified synthetic caller frames; no source exit or UI code is run.
 Those counts are not a measured phone exit duration.
 
+Device follow-up: after manually exiting 0.2.81, the user reported a noticeably
+faster exit. UID-filtered `WA2IO` counters recorded 53 setting-write requests,
+51 snapshot hits, two physical reads, all 53 unchanged writes avoided, zero
+commit attempts and zero failures. The profile writer accumulated 30.55 ms,
+including 30.35 ms of reads. This measures that adapter only, not the complete
+exit or a before/after exit speedup. No process takeover, game launch or screen
+access was performed by the verification tools.
+
 0.2.80 also batches preview opens for the two cached ten-slot page-fill call
 sites. Slow page processing retains one prepared group within the same source
 update for at most one second, bounded by the original listing deadline; other
