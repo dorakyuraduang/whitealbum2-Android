@@ -2,6 +2,7 @@
 #include "resource_mount.hpp"
 #include <winrecomp/process.hpp>
 #include <winrecomp/win32_state.hpp>
+#include <winrecomp/path_name.hpp>
 #include <algorithm>
 #include <array>
 #include <map>
@@ -9,7 +10,7 @@
 namespace wa2::platform::compat {
 namespace {
 std::string fold(std::string_view value){
-    std::string name(value);for(auto& c:name){if(c=='\\')c='/';else if(c>='A' && c<='Z')c=char(c+32);}
+    std::string name=wr::normalize_windows_name(value,true);
     while(name.starts_with("./"))name.erase(0,2);return name;
 }
 static constexpr std::array<std::string_view,4> font_members{
@@ -19,6 +20,11 @@ class SelectedResources final:public wr::ReadOnlyFiles {
     std::shared_ptr<wr::ReadOnlyFiles> original_;
     struct Alias {std::string physical;wr::ReadOnlyFileInfo info;};
     std::map<std::string,Alias,std::less<>> aliases_;
+    std::map<std::string,std::string,std::less<>> folders_;
+    std::string resource_path(std::string_view path)const{
+        auto name=fold(path);const auto begin=name.starts_with("ic/")?3u:0u;const auto slash=name.find('/',begin);const auto group=name.substr(begin,slash==name.npos?name.size()-begin:slash-begin);
+        if(const auto found=folders_.find(group);found!=folders_.end())name.replace(begin,group.size(),found->second);return name;
+    }
     std::optional<resource::Archive> english_,base_script_,ic_script_;
     bool ukrainian_{};
     std::map<std::string,std::pair<std::uint32_t,std::uint32_t>,std::less<>> directories_;
@@ -80,6 +86,7 @@ public:
     void select(std::string_view physical,std::array<std::string_view,2> targets){
         if(physical.empty())return;
         const auto name=std::string(physical);
+        const auto stem=fold(physical.substr(0,physical.size()-4));for(const auto target:targets)folders_.insert_or_assign(std::string(target.substr(0,target.size()-4)),stem);
         const auto info=original_->info(name);
         if(!info || (info->attributes&16))throw resource::NotFound("Selected language PAK is missing: "+name);
         for(const auto target:targets)for(const auto prefix:{"","IC/"}){
@@ -93,10 +100,11 @@ public:
     }
     std::optional<wr::ReadOnlyFileInfo> info(std::string_view path)const override{
         if(const auto it=aliases_.find(fold(path));it!=aliases_.end())return it->second.info;
-        return original_->info(path);
+        auto result=original_->info(resource_path(path));if(result)result->name=std::string(path);return result;
     }
+    bool owns_path(std::string_view path)const override{return aliases_.contains(fold(path)) || original_->owns_path(resource_path(path));}
     std::vector<wr::ReadOnlyFileInfo> list(std::string_view path)const override{
-        auto result=original_->list(path);auto directory=fold(path);if(directory==".")directory.clear();
+        auto result=original_->list(resource_path(path));auto directory=fold(path);if(directory==".")directory.clear();
         if(!directory.empty() && directory!="ic")return result;
         const auto prefix=directory.empty()?std::string{}:directory+"/";
         for(const auto& [name,alias]:aliases_){
@@ -110,7 +118,7 @@ public:
     }
     std::FILE* open(std::string_view path)override{
         if(const auto it=aliases_.find(fold(path));it!=aliases_.end())return original_->open(it->second.physical);
-        return original_->open(path);
+        return original_->open(resource_path(path));
     }
 };
 void check_pack(wr::Process& process,const std::string& name,bool font){

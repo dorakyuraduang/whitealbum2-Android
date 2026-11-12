@@ -22,6 +22,9 @@ final class ResourceDirectory {
     private static final int REQUEST_DIRECTORY = 0x5741;
     private static final Object LOCK = new Object();
     private static final Object STORAGE_LOCK = new Object();
+    private static final Object LOOSE_LOCK = new Object();
+    private static ReadOnlyDocuments looseDocuments;
+    private static int looseGeneration=-1;
     private static final int TREE_ACCESS = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
     private static final String PREFERENCES = "resource-directory";
     private static final String TREE_KEY = "tree-uri";
@@ -54,6 +57,7 @@ final class ResourceDirectory {
             failure = null;
             gameFailure = null;
             token = ++generation;
+            looseDocuments=null;looseGeneration=-1;
         }
         String saved = preferences().getString(TREE_KEY, null);
         Uri tree = saved == null ? null : Uri.parse(saved);
@@ -84,6 +88,7 @@ final class ResourceDirectory {
             failure = "Resource directory was closed";
             gameFailure = null;
             ++generation;
+            looseDocuments=null;looseGeneration=-1;
             LOCK.notifyAll();
         }
     }
@@ -316,6 +321,16 @@ final class ResourceDirectory {
 
     public static int gameStorageToken() throws IOException {
         synchronized (LOCK) { awaitArchives(); if (activeTree == null) throw new IOException("Game storage needs an authorized directory"); return generation; }
+    }
+    private static ReadOnlyDocuments looseDocuments(int token) throws IOException {
+        synchronized(LOCK){awaitArchives();if(activeTree==null || token!=generation)throw new IOException("Resource directory changed; restart the game");
+            if(looseDocuments==null || looseGeneration!=token || !looseDocuments.belongsTo(activeTree)){looseDocuments=new ReadOnlyDocuments(context.getContentResolver(),activeTree);looseGeneration=token;}return looseDocuments;}
+    }
+    public static String[] looseResourceMetadata(String name,int token,boolean list) throws IOException {
+        ReadOnlyDocuments files=looseDocuments(token);synchronized(LOOSE_LOCK){return files.metadata(name,list);}
+    }
+    public static int openLooseResource(String name,int token) throws IOException {
+        ReadOnlyDocuments files=looseDocuments(token);synchronized(LOOSE_LOCK){return files.open(name);}
     }
     private static GameDocuments gameDocuments(int token) throws IOException {
         synchronized (LOCK) {

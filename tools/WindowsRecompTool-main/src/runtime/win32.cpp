@@ -2,6 +2,7 @@
 #include "winrecomp/win32_state.hpp"
 #include "winrecomp/heap_cache.hpp"
 #include "winrecomp/nls_reference.hpp"
+#include "winrecomp/path_name.hpp"
 #include <algorithm>
 #include <chrono>
 #include <cstring>
@@ -54,9 +55,9 @@ U32 stream_type(std::FILE* file) {
 #endif
 }
 std::filesystem::path guest_path(Process& p,const std::string& name) {
-    std::string local=name;std::replace(local.begin(),local.end(),'\\','/');
+    std::string local=normalize_windows_name(name);if(p.state().path_to_utf8)local=p.state().path_to_utf8(local);
     if(!p.state().current_directory.empty() && p.state().current_directory.find(':')!=std::string::npos && !local.empty() && local.front()!='/' && local.find(':')==std::string::npos)local=p.state().current_directory+"/"+local;
-    local=std::filesystem::path(local).lexically_normal().generic_string();
+    local=utf8_file_name(utf8_file_path(local).lexically_normal());
     auto folded=local;for(auto& ch:folded)ch=char(std::tolower(static_cast<unsigned char>(ch)));
     for(const auto& [key,grant]:p.state().selected_paths)if(folded==key || (grant.directory && folded.starts_with(key+"/"))){
         // A selection may have an ASCII virtual alias. Native Unicode paths
@@ -64,8 +65,8 @@ std::filesystem::path guest_path(Process& p,const std::string& name) {
         // still work because an exact match has an empty relative suffix.
         const auto suffix=local.size()==key.size()?std::string{}:local.substr(key.size()+1);
         const auto root=std::filesystem::weakly_canonical(grant.path);
-        auto result=std::filesystem::weakly_canonical(suffix.empty()?root:root/std::filesystem::path(suffix));
-        auto canonical=result.generic_string(),allowed=root.generic_string();
+        auto result=std::filesystem::weakly_canonical(suffix.empty()?root:root/utf8_file_path(suffix));
+        auto canonical=utf8_file_name(result),allowed=utf8_file_name(root);
         for(auto* value:{&canonical,&allowed})for(auto& ch:*value)ch=char(std::tolower(static_cast<unsigned char>(ch)));
         if(canonical==allowed || (grant.directory && canonical.starts_with(allowed+"/")))return result;
         throw GuestFault(FaultKind::unsupported,p.cpu.eip,"path escapes selected native folder");
@@ -74,17 +75,18 @@ std::filesystem::path guest_path(Process& p,const std::string& name) {
     else if(folded.starts_with("c:/winrecomp/"))local=local.substr(13);
     else if(!p.state().current_directory.empty() && !local.empty() && local.front()!='/' && local.find(':')==std::string::npos)local=p.state().current_directory+"/"+local;
     if(local.empty() || local.find(':')!=std::string::npos || local.starts_with('/'))throw GuestFault(FaultKind::unsupported,p.cpu.eip,"absolute guest paths are not enabled");
-    auto result=std::filesystem::weakly_canonical(p.options.data_root/std::filesystem::path(local));
+    auto result=std::filesystem::weakly_canonical(p.options.data_root/utf8_file_path(local));
     auto root=p.options.data_root.begin(),file=result.begin();
     for(;root!=p.options.data_root.end();++root,++file)if(file==result.end() || *file!=*root)throw GuestFault(FaultKind::unsupported,p.cpu.eip,"guest path escapes configured data root");
     return result;
 }
 std::string mounted_name(Process& p,const std::filesystem::path& path){
-    const auto name=path.lexically_relative(p.options.data_root);if(name.empty())return "../";return name.generic_string();
+    const auto name=path.lexically_relative(p.options.data_root);if(name.empty())return "../";return utf8_file_name(name);
 }
 std::optional<ReadOnlyFileInfo> mounted_info(Process& p,const std::filesystem::path& path){
     return p.state().read_only_files?p.state().read_only_files->info(mounted_name(p,path)):std::nullopt;
 }
+bool mounted_owns(Process& p,const std::filesystem::path& path){return p.state().read_only_files && p.state().read_only_files->owns_path(mounted_name(p,path));}
 std::filesystem::path file_identity(Process& p,const std::filesystem::path& path){auto* files=mutable_files_for(p,path);return files && !mounted_info(p,path)?p.options.data_root/files->identity(mounted_name(p,path)):path;}
 bool mounted_pattern(std::string pattern,std::string name){
     if(pattern=="*.*")pattern="*";for(auto* text:{&pattern,&name})for(auto& c:*text)if(c>='A' && c<='Z')c=char(c+32);
@@ -602,7 +604,9 @@ void install_win32(Process& p) {
         const bool write=(access&0x40000000u)!=0,read=(access&0x80000000u)!=0;
         if(!read && !write)throw GuestFault(FaultKind::unsupported,q.cpu.eip,"metadata-only CreateFileA not implemented");
         if((write || creation!=3) && !q.options.allow_file_write){q.set_error(5);return 0xffffffffu;}
+        const bool resource=mounted_owns(q,path);if(resource && (write || creation!=3)){q.set_error(5);return 0xffffffffu;}
         const auto mounted=mounted_info(q,path);if(mounted && ((mounted->attributes&16) || write || creation!=3)){q.set_error(5);return 0xffffffffu;}
+        if(resource && !mounted){q.set_error(2);return 0xffffffffu;}
         auto* external=mutable_files_for(q,path);const auto logical=mounted_name(q,path);
         std::optional<MutableFiles::OpenPlan> plan;if(external && !mounted)plan=external->prepare_open(logical);
         std::error_code ec;bool exists=mounted.has_value() || (plan?plan->info.has_value():std::filesystem::exists(path,ec));if(ec){q.set_error(3);return 0xffffffffu;}
@@ -614,7 +618,7 @@ void install_win32(Process& p) {
         for(const auto& [id,old]:q.state().files){(void)id;if(old.path==identity &&
             ((read && !(old.share&1)) || (write && !(old.share&2)) || (old.read && !(share&1)) || (old.write && !(share&2)))){q.set_error(32);return 0xffffffffu;}}
         std::FILE* file=nullptr;U32 open_error_code{};
-        if(mounted){file=q.state().read_only_files->open(mounted_name(q,path));if(!file){q.set_error(file_error(errno));return 0xffffffffu;}}
+        if(mounted){file=mounted->open_read?mounted->open_read(open_error_code):q.state().read_only_files->open(mounted_name(q,path));if(!file){q.set_error(open_error_code?open_error_code:file_error(errno));return 0xffffffffu;}}
         else if(plan){file=plan->open(read,write,creation,open_error_code);if(!file){q.set_error(open_error_code);return 0xffffffffu;}}
         else {
 #ifdef _WIN32
@@ -739,6 +743,7 @@ void install_win32(Process& p) {
         for(unsigned n=0;n<words.size();++n)q.memory.store(dest+n*4,words[n],32);return 1;});
     kernel(p,"CreateDirectoryA",2,[](auto& q){auto path=guest_path(q,q.read_string(arg(q,0)));if(arg(q,1))throw GuestFault(FaultKind::unsupported,q.cpu.eip,"directory security descriptors not implemented");
         if(!q.options.allow_file_write){q.set_error(5);return 0;}
+        if(mounted_owns(q,path)){q.set_error(5);return 0;}
         if(auto* files=mutable_files_for(q,path)){const auto error=files->directory(mounted_name(q,path));if(error)q.set_error(error);return error?0:1;}
 #ifdef _WIN32
         if(!::CreateDirectoryW(path.c_str(),nullptr)){q.set_error(::GetLastError());return 0;}
@@ -747,7 +752,7 @@ void install_win32(Process& p) {
 #endif
         return 1;});
     kernel(p,"RemoveDirectoryA",1,[](auto& q){auto path=guest_path(q,q.read_string(arg(q,0)));if(!q.options.allow_file_write || path==q.options.data_root){q.set_error(5);return 0;}
-        if(mounted_info(q,path)){q.set_error(5);return 0;}
+        if(mounted_owns(q,path) || mounted_info(q,path)){q.set_error(5);return 0;}
         if(auto* files=mutable_files_for(q,path)){const auto error=files->remove(mounted_name(q,path),true);if(error)q.set_error(error);return error?0:1;}
 #ifdef _WIN32
         if(!::RemoveDirectoryW(path.c_str())){q.set_error(::GetLastError());return 0;}
@@ -756,7 +761,7 @@ void install_win32(Process& p) {
 #endif
         return 1;});
     kernel(p,"DeleteFileA",1,[](auto& q){auto path=guest_path(q,q.read_string(arg(q,0)));if(!q.options.allow_file_write || path==q.options.data_root){q.set_error(5);return 0;}
-        if(mounted_info(q,path)){q.set_error(5);return 0;}
+        if(mounted_owns(q,path) || mounted_info(q,path)){q.set_error(5);return 0;}
         for(const auto& [id,old]:q.state().files){(void)id;if(old.path==file_identity(q,path) && !(old.share&4)){q.set_error(32);return 0;}}
         if(auto* files=mutable_files_for(q,path)){const auto error=files->remove(mounted_name(q,path),false);if(error)q.set_error(error);return error?0:1;}
 #ifdef _WIN32
@@ -768,6 +773,7 @@ void install_win32(Process& p) {
     kernel(p,"GetCurrentDirectoryA",2,[](auto& q){std::string name;if(q.state().current_directory.find(':' )!=std::string::npos)name=q.state().current_directory;else{name="C:\\WinRecomp";if(!q.state().current_directory.empty()){name+='\\';name+=q.state().current_directory;}}std::replace(name.begin(),name.end(),'/','\\');auto size=arg(q,0),at=arg(q,1);if(size<=name.size())return U32(name.size()+1);q.memory.copy_in(at,std::span(reinterpret_cast<const std::uint8_t*>(name.c_str()),name.size()+1));return U32(name.size());});
     kernel(p,"GetFileAttributesA",1,[](auto& q){const auto path=guest_path(q,q.read_string(arg(q,0)));
         if(const auto info=mounted_info(q,path))return info->attributes;
+        if(mounted_owns(q,path)){q.set_error(2);return 0xffffffffu;}
         if(auto* files=mutable_files_for(q,path)){const auto info=files->info(mounted_name(q,path));if(!info){q.set_error(2);return 0xffffffffu;}return info->attributes;}
 #ifdef _WIN32
         const auto attrs=::GetFileAttributesW(path.c_str());if(attrs==INVALID_FILE_ATTRIBUTES)q.set_error(::GetLastError());return U32(attrs);
@@ -777,7 +783,7 @@ void install_win32(Process& p) {
 #endif
     });
     kernel(p,"SetFileAttributesA",2,[](auto& q){auto path=guest_path(q,q.read_string(arg(q,0)));const auto flags=arg(q,1);
-        if(mounted_info(q,path)){q.set_error(5);return 0;}
+        if(mounted_owns(q,path) || mounted_info(q,path)){q.set_error(5);return 0;}
         if(!q.options.allow_file_write || path==q.options.data_root){q.set_error(5);return 0;}
         if(auto* files=mutable_files_for(q,path)){const auto error=files->attributes(mounted_name(q,path),flags);if(error)q.set_error(error);return error?0:1;}
 #ifdef _WIN32
@@ -791,7 +797,7 @@ void install_win32(Process& p) {
     kernel(p,"MoveFileA",2,[](auto& q){auto from=guest_path(q,q.read_string(arg(q,0))),to=guest_path(q,q.read_string(arg(q,1)));
         if(!q.options.allow_file_write || from==q.options.data_root || to==q.options.data_root){q.set_error(5);return 0;}
         for(const auto& [id,file]:q.state().files){(void)id;if((file.path==file_identity(q,from) || file.path==file_identity(q,to)) && !(file.share&4)){q.set_error(32);return 0;}}
-        if(mounted_info(q,from) || mounted_info(q,to)){q.set_error(5);return 0;}
+        if(mounted_owns(q,from) || mounted_owns(q,to) || mounted_info(q,from) || mounted_info(q,to)){q.set_error(5);return 0;}
         auto* from_files=mutable_files_for(q,from);auto* to_files=mutable_files_for(q,to);if(bool(from_files)!=bool(to_files)){q.set_error(17);return 0;}
         if(from_files){const auto error=from_files->move(mounted_name(q,from),mounted_name(q,to));if(error)q.set_error(error);return error?0:1;}
 #ifdef _WIN32

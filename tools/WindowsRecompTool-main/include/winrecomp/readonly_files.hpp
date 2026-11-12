@@ -26,6 +26,9 @@ public:
     virtual std::optional<ReadOnlyFileInfo> info(std::string_view logical) const=0;
     virtual std::vector<ReadOnlyFileInfo> list(std::string_view directory) const=0;
     virtual std::FILE* open(std::string_view logical)=0;
+    // Optional authoritative read-only namespace, including missing members.
+    // Prevents a failed resource lookup/write from entering a writable mount.
+    virtual bool owns_path(std::string_view) const {return false;}
 };
 // A separately mounted writable namespace. Streams are seekable ordinary file
 // descriptors; resources remain in ReadOnlyFiles. Errors use Win32 codes so

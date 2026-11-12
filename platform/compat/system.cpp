@@ -5,6 +5,7 @@
 #include "../../port/guest_api.hpp"
 #include "../clock.hpp"
 #include <winrecomp/resources.hpp>
+#include <winrecomp/path_name.hpp>
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -89,6 +90,9 @@ std::string format_text(Process& p,U32 format,U32 arguments){
 }
 }
 void install_system(wr::Process& p,ProfileReadHook before_profile_read,ProfileReadScope profile_scope,ProfileWriteScope write_scope){
+    p.state().path_to_utf8=[](std::string_view text){if(wr::utf8_path_name(text))return std::string(text);
+        for(const auto cp:{936u,932u})try{const auto wide=decode_text(cp,{reinterpret_cast<const std::uint8_t*>(text.data()),text.size()},true);const auto out=encode_text(65001,wide,{},true);return std::string(out.bytes.begin(),out.bytes.end());}catch(const EncodingError&){}
+        throw EncodingError("Unsupported ANSI file path encoding");};
     const auto profiles=std::make_shared<ProfileReader>(std::move(profile_scope));
     const auto writer=std::make_shared<ProfileWriter>(std::move(write_scope));
     p.state().reports["profile_io"]=[profiles]{return profiles->report();};
@@ -112,6 +116,7 @@ void install_system(wr::Process& p,ProfileReadHook before_profile_read,ProfileRe
         if(!(info && (info->attributes&16)) && !std::filesystem::is_directory(path,ec))return error(q,3);
         const auto relative=path.lexically_relative(q.options.data_root);if(relative.empty() || *relative.begin()=="..")throw GuestFault(FaultKind::unsupported,q.cpu.eip,"working directory outside process data root");q.state().current_directory=info && (info->attributes&16)?info->name:relative=="."?"":relative.generic_string();return 1u;});
     kernel("CopyFileA",3,[](Process& q,Args a){if(!q.options.allow_file_write)return error(q,5);const auto from=guest_file_path(q,q.read_string(a[0])),to=guest_file_path(q,q.read_string(a[1]));std::error_code ec;
+        if(mounted_resource_path(q,to))return error(q,5);
         auto* destination=wr::mutable_files_for(q,to);if(destination || wr::mutable_files_for(q,from)){const auto name=to.lexically_relative(q.options.data_root).generic_string();if(mounted_resource_info(q,to))return error(q,5);if(a[2] && (destination?destination->info(name).has_value():std::filesystem::exists(to)))return error(q,80);std::shared_ptr<resource::Source> source;try{source=open_process_resource(q,from);}catch(const resource::NotFound&){return error(q,2);}if(source->size()>64u*1024*1024)throw std::runtime_error("Selected-directory copy exceeds its bound");std::vector<std::uint8_t> bytes(std::size_t(source->size()));source->read_at(0,bytes);if(destination)destination->replace(name,bytes);else{std::ofstream output(to,std::ios::binary|std::ios::trunc);output.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));output.close();if(!output)return error(q,5);}return 1u;}
         if(mounted_resource_info(q,to))return error(q,5);const auto result=std::filesystem::copy_file(from,to,a[2]?std::filesystem::copy_options::none:std::filesystem::copy_options::overwrite_existing,ec);
         if(!result)return error(q,ec==std::errc::file_exists?80:ec==std::errc::no_such_file_or_directory?2:5);return 1u;});

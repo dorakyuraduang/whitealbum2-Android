@@ -2,7 +2,7 @@
 
 **简体中文** · [English](README.en.md)
 
-面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.81-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
+面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.82-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
 
 **[下载与发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
 
@@ -27,6 +27,8 @@
 | Українська | `ua.pak` | `font_ua.pak` |
 
 这两类包还需配合完整的背景、立绘、音频、影片等原版资源。启动器界面默认跟随手机系统首选语言，无对应翻译时使用英文；手动选择后记住该选择。界面语言与游戏语言分别设置。
+
+支持少量[外置资源覆盖](docs/LOOSE_RESOURCES.md)：图片放在所选游戏目录的 `grp/`、`bak/`、`char/` 中，保留原文件名和需要的 `IC/` 前缀；脚本、字库目录使用所选语言对应的 PAK 名去掉 `.pak`。优先读取外置文件，缺失时回退到 PAK；仍需完整游戏资源。
 
 英文补丁还需保留原版 `script.pak` 作为基础数据后备。在启动页选择 **English** 即应用英文资源；`fon_en.pak` 必须是配套游戏字库 PAK。已有带 `fnt` 分组的英文 `en.pak` 可用 `python scripts/prepare_english_font.py --root "游戏目录"` 生成独立字库，原包保持不变，详见[语言资源说明](docs/LANGUAGE_RESOURCES.md)。
 

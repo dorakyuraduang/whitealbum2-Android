@@ -38,12 +38,17 @@ int main(int argc,char** argv){try{
         {"fnt.pak",pak({{fonts[0],0x21}})},{"patch.pak",pak({{"1001.txt",0x81}})}};
     std::vector<wr::ReadOnlyFileInfo> entries;
     for(const auto& [name,data]:files){auto path=root/name;std::filesystem::create_directories(path.parent_path());std::ofstream out(path,std::ios::binary);out.write(reinterpret_cast<const char*>(data.data()),data.size());out.close();CHECK(out);entries.push_back({name,data.size(),1,0x21});}
-    const auto mount=std::make_shared<pc::ResourceMount>(entries,[&](std::string_view name){return std::fopen((root/std::string(name)).string().c_str(),"rb");});
+    for(const auto* folder:{"ua","font_ua","IC/ua","IC/font_ua"}){std::filesystem::create_directories(root/folder);std::ofstream(root/folder/"loose.bin").put(char(0x91));}
+    std::filesystem::create_directory(root/"ck-gal");std::ofstream(root/"ck-gal"/"chinese-only.bin").put('c');
+    const auto mount=pc::local_resource_mount(root);unsigned loose_aliases{};
     for(bool linear:{false,true}){
         wr::ProcessOptions options;options.data_root=root;options.prefer_linear_memory=linear;
         wr::Process p(wr::FunctionExecutor{[](auto&,auto&){throw std::runtime_error("No source instructions in resource checks");return false;}},options);
         wr::U32 target{};p.replace_api("kernel32.dll","HeapAlloc",3,[&](auto&){return target;});
-        wr::install_wa2_native_resources(p);pc::install_resource_mount(p,mount);pc::select_language_resources(p,{r::GameLanguage::ukrainian,true});p.load(a::initial_image());
+        wr::install_wa2_native_resources(p);pc::install_resource_mount(p,mount);pc::select_language_resources(p,{r::GameLanguage::ukrainian,true});
+        for(const auto* path:{"ck-gal/loose.bin","fon/loose.bin","IC/ck-gal/loose.bin","IC/fon/loose.bin"}){auto info=p.state().read_only_files->info(path);CHECK(info && info->size==1);std::unique_ptr<FILE,decltype(&std::fclose)> input(p.state().read_only_files->open(path),std::fclose);CHECK(input && std::fgetc(input.get())==0x91);++loose_aliases;}
+        CHECK(!p.state().read_only_files->info("ck-gal/chinese-only.bin"));++loose_aliases;
+        p.load(a::initial_image());
         target=p.allocate_bytes(4096);const auto output=p.allocate_bytes(4096);
         const std::array<std::tuple<std::string,std::string,unsigned>,9> cases{{
             {"ck-gal.pak","1001.txt",0x32},{"IC/ck-gal.pak","1001.txt",0x42},
@@ -88,6 +93,6 @@ int main(int argc,char** argv){try{
     {a::Runtime runtime({}, {}, {},true,catalogue);runtime.load(a::initial_image());auto& p=runtime.process();const auto args=p.allocate_bytes(4096);p.memory.store(args,2,32);p.memory.store(args+4,9763,32);p.memory.store(0x4be4cc,1002,32);
         auto bound=a::find_source_subtitles(p.memory);a::source_subtitle_return(*bound,0x40f400,p.cpu,p.memory,args,500);CHECK(bound->current(500) && !p.executed_instructions);}
     for(const auto& bad:std::vector<std::string>{"{", "{}", "{\n1 2 3\n0 5 X\n}","{\n1 2 3 4 5\n0 5 X\n}","{\n65536 2 3 4\n0 5 X\n}","{\n1 2 3 4\n0 0 X\n}","{\n1 2 3 4\n4294967295 1 X\n}","{\n1 2 3 4\n0 5\n}","{\n1 2 3 4\n0 5 X\n0 1 Y\n}",legacy+legacy,"{\n1 2 3 4\n0 5 "+std::string(513,'x')+"\n}"})rejects([&]{s::parse_external(bytes(bad));});
-    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.ukrainian.v1\",\"checks\":"<<checks<<",\"guards\":"<<guards<<",\"resource_callback_cases\":"<<resource_cases<<",\"text_policy_cases\":"<<policy_cases<<",\"main_ic_separate\":true,\"matched_font_and_names\":true,\"localized_prompts\":true,\"source_code_immutable\":true,\"legacy_subtitle_audio_binding\":true,\"legacy_newlines_and_overlaps\":true,\"source_executable_opened\":false,\"original_resource_files_opened\":false,\"game_launched\":false,\"screen_access\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";CHECK(report);
+    std::ofstream report(argv[1]);report<<"{\"schema\":\"wa2.ukrainian.v1\",\"checks\":"<<checks<<",\"guards\":"<<guards<<",\"resource_callback_cases\":"<<resource_cases<<",\"text_policy_cases\":"<<policy_cases<<",\"loose_ukrainian_alias_cases\":"<<loose_aliases<<",\"main_ic_separate\":true,\"matched_font_and_names\":true,\"localized_prompts\":true,\"source_code_immutable\":true,\"legacy_subtitle_audio_binding\":true,\"legacy_newlines_and_overlaps\":true,\"source_executable_opened\":false,\"original_resource_files_opened\":false,\"game_launched\":false,\"screen_access\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";CHECK(report);
     std::cout<<"PASS shared Ukrainian resources, source text policy, names/prompts and selected Todokanai subtitles.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

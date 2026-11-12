@@ -35,6 +35,7 @@ struct Win32State {
     std::uint64_t heap_pool_reuses{},heap_pool_retained{},heap_pool_evictions{};
     std::map<U32,File> files;
     std::shared_ptr<ReadOnlyFiles> read_only_files;
+    std::function<std::string(std::string_view)> path_to_utf8;
     std::shared_ptr<MutableFiles> mutable_files;
     std::map<U32,U32> tls;
     std::set<U32> tls_used;
