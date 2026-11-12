@@ -44,6 +44,10 @@ It returns `completed_run` separately from the newest `last_run` progress/exit
 snapshot, so a later teardown progress write cannot hide a full exit report.
 The selected renderer timing and static-work counters contain no pixels or
 game UI input, and no Activity is started.
+The report also includes `profile_write_io` when available and the existing
+`api_call_counts` timing samples. The latter samples the first call and every
+127th call; a sample is not the complete exit duration and must not be presented
+as a measured total by multiplying it by the call count.
 `measure` compares repeated reads of the same small INI through the actual
 installed adapter and a temporary private-cache fixture. It reports timings and
 byte counts, never the INI contents or authorized URI. The adapter ordinarily

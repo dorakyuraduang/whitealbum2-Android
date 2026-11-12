@@ -4,12 +4,26 @@ Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
 The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.80-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.80-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.80-shared-aot-replace-native.apk` to update the experimental
+is **0.2.81-shared-aot**. Use the
+standard `out/android/WA2-arm64-0.2.81-shared-aot.apk` for the retained AOT application, or
+`out/android/WA2-0.2.81-shared-aot-replace-native.apk` to update the experimental
 0.3.x app in place. The latter retains its application ID and signing identity;
 both APKs have identical DEX/native game code. No app is uninstalled by the
 build tools. Native-format manual saves remain present but are not AOT saves.
+
+0.2.81 reduces redundant configuration I/O in the cached source main's final
+integer-settings sequence. Only that certified wrapper/caller, on the main
+thread with no source file writer open, may reuse one loaded or successfully
+committed profile for the same source update, namespace and storage revision,
+for at most 250 ms and 256 KiB. Unchanged values avoid a replacement; every
+changed value still commits before returning, with the original publication
+and durability checks. Unchanged calls do not extend the age limit. Ordinary
+API writes, workers and other callers keep fresh reads and immediate writes;
+explicit flush, configuration reads, failed I/O and mutations invalidate the
+snapshot. `profile_write_io` records calls, loads, commit attempts/times and
+avoided unchanged writes. Finite own-file checks invoke the unchanged setter
+with certified synthetic caller frames; no source exit or UI code is run.
+Those counts are not a measured phone exit duration.
 
 0.2.80 also batches preview opens for the two cached ten-slot page-fill call
 sites. Slow page processing retains one prepared group within the same source

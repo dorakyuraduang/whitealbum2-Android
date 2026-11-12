@@ -66,7 +66,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     wr::install_wa2_native_vorbis(process_,true);
     wr::install_wa2_registry(process_);
     wa2::platform::compat::install_scheduler(process_,[this](auto ms,auto caller){return source_fast_forward_idle(process_.memory,ms,caller);});
-    wa2::platform::compat::install_system(process_,prepare_movie_profile,profile_read_scope);
+    wa2::platform::compat::install_system(process_,prepare_movie_profile,profile_read_scope,profile_write_scope);
     wa2::platform::compat::install_text(process_);
     wa2::platform::compat::install_locale(process_);
     wr::install_wa2_exceptions(process_);

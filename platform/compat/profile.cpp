@@ -125,6 +125,42 @@ void ProfileReader::clear(){state_->entries.clear();}
 std::string ProfileReader::report()const{
     const auto& s=*state_;return "{\"reads\":"+std::to_string(s.reads)+",\"snapshot_hits\":"+std::to_string(s.hits)+",\"physical_loads\":"+std::to_string(s.loads)+",\"physical_load_ns\":"+std::to_string(s.load_ns)+",\"maximum_physical_load_ns\":"+std::to_string(s.maximum_load_ns)+",\"large_profile_declines\":"+std::to_string(s.declines)+",\"cached_profiles\":"+std::to_string(s.entries.size())+",\"maximum_age_ms\":250,\"maximum_profiles\":4,\"writes_deferred\":false}";
 }
+struct ProfileWriter::State {
+    struct Entry {Profile profile;std::filesystem::path path;std::shared_ptr<wr::MutableFiles> files;std::uint64_t scope{},revision{};std::chrono::steady_clock::time_point expires;};
+    ProfileWriteScope scope;std::optional<Entry> entry;
+    std::uint64_t calls{},hits{},loads{},load_ns{},commits{},commit_ns{},maximum_commit_ns{},unchanged{},failures{},total_ns{};
+};
+ProfileWriter::ProfileWriter(ProfileWriteScope scope):state_(std::make_shared<State>()){state_->scope=std::move(scope);}
+void ProfileWriter::clear(){state_->entry.reset();}
+void ProfileWriter::write(wr::Process& process,const std::filesystem::path& path,std::string section,std::optional<std::string> key,std::optional<std::string> value){
+    auto& state=*state_;++state.calls;const auto start=std::chrono::steady_clock::now();
+    struct Timer {std::uint64_t& total;std::chrono::steady_clock::time_point begin=std::chrono::steady_clock::now();~Timer(){total+=std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count());}} total{state.total_ns};
+    try{
+        const auto scope=state.scope?state.scope(process):std::nullopt;
+        auto* files=wr::mutable_files_for(process,path);const auto revision=save_files_revision(files);
+        const bool admitted=scope && revision && key && value;
+        auto expires=start+std::chrono::milliseconds(250);Profile profile;
+        if(admitted && state.entry && state.entry->path==path && state.entry->files.get()==files && state.entry->scope==*scope && state.entry->revision==*revision && start<state.entry->expires){
+            profile=state.entry->profile;expires=state.entry->expires;++state.hits;
+        }else{state.entry.reset();++state.loads;Timer loading{state.load_ns};profile=read_profile(process,path);}
+        const bool unchanged=admitted && profile.get(section,*key)==value;
+        profile.set(std::move(section),std::move(key),std::move(value));
+        if(unchanged)++state.unchanged;
+        else{
+            const auto begin=std::chrono::steady_clock::now();++state.commits;
+            try{Timer committing{state.commit_ns};save_profile(process,profile,path);}
+            catch(...){state.maximum_commit_ns=std::max(state.maximum_commit_ns,std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count()));throw;}
+            state.maximum_commit_ns=std::max(state.maximum_commit_ns,std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count()));
+            expires=std::chrono::steady_clock::now()+std::chrono::milliseconds(250);
+        }
+        state.entry.reset();
+        if(admitted && profile.bytes().size()<=256*1024)if(const auto current=save_files_revision(files))
+            state.entry.emplace(State::Entry{std::move(profile),path,process.state().mutable_files,*scope,*current,expires});
+    }catch(...){state.entry.reset();++state.failures;throw;}
+}
+std::string ProfileWriter::report()const{
+    const auto& s=*state_;return "{\"calls\":"+std::to_string(s.calls)+",\"snapshot_hits\":"+std::to_string(s.hits)+",\"physical_loads\":"+std::to_string(s.loads)+",\"physical_load_ns\":"+std::to_string(s.load_ns)+",\"commit_attempts\":"+std::to_string(s.commits)+",\"commit_ns\":"+std::to_string(s.commit_ns)+",\"maximum_commit_ns\":"+std::to_string(s.maximum_commit_ns)+",\"unchanged_source_writes_avoided\":"+std::to_string(s.unchanged)+",\"failures\":"+std::to_string(s.failures)+",\"total_ns\":"+std::to_string(s.total_ns)+",\"maximum_age_ms\":250,\"maximum_profiles\":1,\"maximum_profile_bytes\":262144,\"writes_deferred\":false}";
+}
 std::string encode_profile_struct(std::span<const std::uint8_t> bytes){
     constexpr char digits[]="0123456789ABCDEF";std::string text;std::uint8_t sum{};text.reserve((bytes.size()+1)*2);
     auto append=[&](unsigned b){text+=digits[b>>4];text+=digits[b&15];};for(auto b:bytes){append(b);sum=std::uint8_t(sum+b);}append(sum);return text;
