@@ -106,6 +106,7 @@ def main():
         tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
         tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'scripts/verify_glyph_precision.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp',ROOT/'tests/glyph_cache.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
+        tracked += [ROOT/'scripts/verify_resource_lookup.py',ROOT/'tests/resource_lookup.cpp',ROOT/'generated/wa2-win64/code_page_1112.cpp']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
         tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
         tracked += [ROOT/('logs/media-codec-'+host+'-build.json') for host in ('windows','arm64')]
@@ -120,6 +121,7 @@ def main():
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
         tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','glyph_cache','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
+        tests['resource_lookup']='wa2_refresh_resource_lookup'
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -130,6 +132,11 @@ def main():
         if not reports['counter_reader']['passed'] or reports['counter_reader']['parser_cases']<12:raise ValueError('Incomplete bounded counter assembly checks')
         recipe_path=build/'text_flow_recipe.json';run([sys.executable,ROOT/'tests/text_flow_recipe.py',recipe_path]);reports['text_flow_recipe']=json.loads(recipe_path.read_text())
         if not reports['text_flow_recipe']['passed'] or reports['text_flow_recipe']['rejections']<9:raise ValueError('Incomplete text flow preparation guards')
+        lookup=reports['resource_lookup']
+        if lookup['queries']!=574 or lookup['diagnostics']!=116 or lookup['guards']!=10 or lookup['mutations']!=4 or not lookup['no_open_archive_required'] or lookup['old_error_reproduced']:raise ValueError('Incomplete source directory lookup checks')
+        run([sys.executable,ROOT/'scripts/verify_resource_lookup.py']);lookup_reference=fresh(ROOT/'logs/resource-lookup-reference.json')
+        if lookup_reference['native_library_sha256']!=digest(build/'shared_aot/libwa2_function_process.a') or lookup_reference['query_cases']!=574 or lookup_reference['diagnostics']!=116 or lookup_reference['checked_cached_locations']!=123:raise ValueError('Incomplete cached-source resource lookup comparison')
+        reports['resource_lookup_reference']=lookup_reference
         run([sys.executable,ROOT/'scripts/verify_glyph_precision.py']);precision=fresh(ROOT/'logs/glyph-precision-check.json')
         if precision['shared_library_sha256']!=digest(build/'shared_aot/libwa2_shared_aot.a') or precision['exact_full_text_cases']!=40 or not precision['source_control_word_preserved'] or not precision['unsupported_crossings_use_source']:raise ValueError('Incomplete wider-precision glyph checks')
         reports['glyph_precision']=precision

@@ -1580,6 +1580,14 @@ local text transfers. Reserved sequence 65 follows the 64 progress snapshots.
 This writes no extra diagnostic file and preserves LastError/errno even when
 an optional report/sink fails. It is distinct from the existing final JSON file.
 
+Resource lookup at the existing manager entry reads its initialized 40-byte
+directory records directly. It preserves the cached source midpoint for
+duplicate names and performs no archive reopen just to answer a query.
+Missing members retain the source's optional cdecl logging callback followed
+by its stdcall prompt, with fresh prompt-target/text reads after the callback.
+Invalid directory ranges and unknown callback targets remain explicit faults.
+Other resource loaders retain their archive and decompression validation.
+
 Single-tile integer glyphs validate the complete font-handle table range but
 load only the texture handle that their admitted geometry uses. Crossing or
 other arithmetic paths retain their full table snapshot. Current handles and

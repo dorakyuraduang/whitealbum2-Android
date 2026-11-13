@@ -12,6 +12,8 @@ foreach(name selected_save_files portable_system resource_mount test_profile por
     add_executable(wa2_refresh_${name} "${WA2_ROOT}/tests/${name}.cpp")
     target_link_libraries(wa2_refresh_${name} PRIVATE wa2_function_process)
 endforeach()
+add_executable(wa2_refresh_resource_lookup "${WA2_ROOT}/tests/resource_lookup.cpp")
+target_link_libraries(wa2_refresh_resource_lookup PRIVATE wa2_function_process)
 add_executable(wa2_refresh_movie_codecs "${WA2_ROOT}/tests/movie_codecs.cpp")
 target_link_libraries(wa2_refresh_movie_codecs PRIVATE wa2_function_process wa2_movie)
 add_executable(wa2_refresh_movie_formats "${WA2_ROOT}/tests/movie_formats.cpp")

@@ -375,6 +375,18 @@ static geometry and sprite paths; the old library stays in the test binaries.
 Saved reports bind both archives/binaries and all changed comparison inputs.
 These bounded memory checks do not establish whole-game or phone performance.
 
+`tests/resource_lookup.cpp` covers 574 queries and 116 missing-file diagnostic
+paths in paged/contiguous owned RAM, including duplicate midpoints, ASCII case
+folding, Shift-JIS bytes, fresh table contents and mutable diagnostic callbacks.
+No open backing archive is required for lookup. Ten guards check invalid
+directory/index/range state and preserve rejection of unknown callback targets.
+`scripts/verify_resource_lookup.py` statically lowers 123 existing checked C++
+locations from the private cache into a test-only reference. It checks their
+cached initial bytes and compares exact query and callback text/order snapshots
+against the actual native adapter. No source EXE or instruction decoder is used;
+the reference never enters a shipped host. This does not prove that all game
+resources are present or that complete gameplay is compatible.
+
 The current refresh suite also runs `tests/novel_cpu.cpp` through the complete
 cached text-formatting helper, rather than invoking each glyph as a separate
 outer entry. Constructed ASCII and two-byte text runs compare the static chain

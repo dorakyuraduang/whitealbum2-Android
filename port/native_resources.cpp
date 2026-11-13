@@ -3,6 +3,7 @@
 #include "native_resources.hpp"
 #include "guest_api.hpp"
 #include "resource_archive.hpp"
+#include "resource_lookup.hpp"
 #include "decoded_resource_cache.hpp"
 #include "file_io.hpp"
 #include "native_backend.hpp"
@@ -37,6 +38,7 @@ struct ResourceState {
     std::deque<LoadTrace> load_trace;
     std::uint64_t lookups{},loads{},decodes{},image_decodes{},single_pass_images{},image_loads{},image_checks{},missing_archives{},bytes{},declined{},errors{},index_opens{},index_hits{},cache_clock{};
     std::uint64_t direct_resource_decodes{},resource_staging_bytes_avoided{};
+    std::uint64_t source_directory_lookups{},missing_lookups{},missing_diagnostics{};
     std::uint64_t image_payload_reads{},image_payload_bytes{};
     U32 heap_alloc{},heap_free{},get_heap{},debug_string{};
     bool supported(Process& p,U32 entry) {
@@ -87,6 +89,18 @@ struct ResourceState {
         return p.memory.load(entry+32,32)==member.stored_size && p.memory.load(entry+36,32)==member.offset &&
             bool(p.memory.load(entry+31,8))==member.compressed &&
             wa2::resource::compare_names(std::string_view(reinterpret_cast<const char*>(name.data()),length),member.name)==0;
+    }
+    struct Directory {U32 record{},table{},count{};};
+    Directory directory(Process& p,U32 manager,U32 index) {
+        p.memory.check(manager,20,Memory::Read);
+        const auto begin=p.memory.load(manager+12,32),end=p.memory.load(manager+16,32);
+        if(end<begin || (end-begin)%0x148 || index>=(end-begin)/0x148)
+            throw GuestFault(FaultKind::unsupported,0x4588a0,"resource lookup: archive index outside initialized directory");
+        const auto record=begin+index*0x148;
+        const auto count=p.memory.load(record+4,32),table=p.memory.load(record+0x110,32);
+        if(std::uint64_t(table)+std::uint64_t(count)*40>0x100000000ull)
+            throw GuestFault(FaultKind::memory,table,"resource lookup: member directory wraps address space");
+        return {record,table,count};
     }
     bool direct_resource_memory(Process& p) {auto scope=p.memory.execution_scope();return scope.linear_base()!=nullptr;}
     // Packed input has already been validated before the legacy file seek and
@@ -286,18 +300,25 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
     },true);
     p.register_native_function(0x4588a0,3,[state](Process& q)->std::optional<U32> {
         if(!state->supported(q,0x4588a0))return std::nullopt;
-        try {
-            const auto manager=q.cpu.r[ECX],index=q.argument(0);const auto* archive=state->get(q,manager,index);
-            if(!archive){++state->declined;return std::nullopt;}
-            const auto found=archive->find(q.read_string(q.argument(1),1024));
-            // The diagnostic branch can invoke a mutable game callback.
-            if(found==wa2::resource::Archive::missing && q.argument(2)){++state->declined;return std::nullopt;}
-            if(found!=wa2::resource::Archive::missing && !state->matches(q,manager,index,found,archive->members()[found])) {
-                ++state->declined;return std::nullopt;
+        const auto directory=state->directory(q,q.cpu.r[ECX],q.argument(0));
+        const auto name=q.argument(1);const auto requested=q.read_string(name,1024);
+        const auto found=wa2::resource::find_directory_record(directory.count,requested,[&](std::size_t index){
+            return q.read_string(directory.table+U32(index*40),1024);
+        });
+        ++state->lookups;++state->source_directory_lookups;
+        if(found==wa2::resource::Archive::missing){
+            ++state->missing_lookups;
+            if(q.argument(2)){
+                // Cached source 0x4589cf..0x4589ed: the cdecl logging callback
+                // precedes the stdcall prompt. Reload the prompt target and
+                // preserve the original text pointer after that mutable call.
+                q.callback(q.memory.load(0x4c227c,32),std::array<U32,3>{0x4a6bc8,directory.record+10,name},false);
+                q.callback(q.memory.load(0x4a12cc,32),std::array<U32,4>{0,name,0x4a6bb8,0x10});
+                ++state->missing_diagnostics;
             }
-            ++state->lookups;return found==wa2::resource::Archive::missing ? 0xffffffffu : U32(found);
-        } catch(const wa2::resource::Error&) {++state->declined;return std::nullopt;}
-          catch(const std::bad_alloc&) {++state->declined;return std::nullopt;}
+            return 0xffffffffu;
+        }
+        return U32(found);
     });
     p.register_native_function(0x458050,3,[state](Process& q)->std::optional<U32> {
         if(!state->supported(q,0x458050))return std::nullopt;
@@ -354,6 +375,8 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         std::ostringstream detail;detail<<"[";bool first=true;
         for(const auto& [name,time]:state->timing){if(!first)detail<<',';first=false;detail<<"{\"stage\":\""<<name<<"\",\"calls\":"<<time.calls<<",\"total_ns\":"<<time.total<<",\"max_ns\":"<<time.maximum<<'}';}detail<<"]";
         return "{\"backend\":\"portable-cpp-archive\",\"lookups\":"+std::to_string(state->lookups)+
+            ",\"source_directory_lookups\":"+std::to_string(state->source_directory_lookups)+
+            ",\"missing_lookups\":"+std::to_string(state->missing_lookups)+",\"missing_diagnostics\":"+std::to_string(state->missing_diagnostics)+
             ",\"loads\":"+std::to_string(state->loads)+",\"decodes\":"+std::to_string(state->decodes)+
             ",\"image_decodes\":"+std::to_string(state->image_decodes)+
             ",\"single_pass_image_decodes\":"+std::to_string(state->single_pass_images)+
