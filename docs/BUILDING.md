@@ -385,6 +385,13 @@ ownership, generic-budget isolation and nonmutating exhaustion/adapter decline.
 These checks use recording sinks only: no original resources, game, graphics
 device or screen, and their CPU timings must not be reported as Android FPS.
 
+The same text checks count actual single-handle reads/full-table copies, change
+live texture handles (including zero), and reject protected unused table suffixes
+and wrapping table ranges without changing CPU/stack state. The independent
+`tests/sprite_texture_refs.cpp` checks 0/1/2/4/5/8/255/256-entry packet ownership,
+the four-reference small alternative, maximum-size stack storage and failure
+unwinding. It does not create a renderer or measure GPU/phone performance.
+
 Local Windows profile publication retries a closed-file rename on permission
 denial at most four times, with 2/4/8/16 ms waits. Persistent denial and other
 errors still fail without deleting the old destination. The profile checks

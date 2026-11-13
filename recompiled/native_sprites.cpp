@@ -1,6 +1,7 @@
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
 #include "glyph_budget.hpp"
+#include "glyph_resources.hpp"
 #include "host_calls.hpp"
 #include "extended80.hpp"
 #include "../engine/math_environment.hpp"
@@ -59,8 +60,9 @@ std::pair<int,int> grid_axis(int count,int size,float from,float to,float extent
     return {first,last};
 }
 int channel(unsigned sum,unsigned palette,bool additive){return additive?int(sum)+int(palette)*4-512+(palette>128?2:0):palette<=128?int(sum*palette/128):int(sum+(palette-128)*(510-sum)/127);}
+template<class HandleAt>
 bool integer_glyph_geometry(SpriteCommand& command,const std::array<std::uint8_t,256>& s,
-    bool half_image,int width,int height,int tw,int th,int nx,int ny,std::span<const std::uint32_t> handles,
+    bool half_image,int width,int height,int tw,int th,int nx,int ny,HandleAt handle_at,
     std::uint32_t half_bits,std::uint32_t colour,std::uint32_t secondary){
     using wa2::geometry::fixed_coordinate;using wa2::geometry::dyadic_bits;
     if((tw&(tw-1)) || (th&(th-1)))return false;
@@ -84,7 +86,7 @@ bool integer_glyph_geometry(SpriteCommand& command,const std::array<std::uint8_t
     const auto left=dyadic_bits(uv[0]-int(x*tw*256),u_bits),right=dyadic_bits(uv[1]-int(x*tw*256),u_bits),
                top=dyadic_bits(uv[2]-int(y*th*256),v_bits),bottom=dyadic_bits(uv[3]-int(y*th*256),v_bits);
     tile_buffer.clear();
-    if(const auto texture=handles[y*unsigned(nx)+x]){
+    if(const auto texture=handle_at(y*unsigned(nx)+x)){
         auto& tile=tile_buffer.emplace_back();tile.texture=texture;
         for(unsigned n=0;n<4;++n)tile.vertices[n]={std::bit_cast<float>(dyadic_bits(px[n],8)),std::bit_cast<float>(dyadic_bits(py[n],8)),
             std::bit_cast<float>(z),std::bit_cast<float>(rhw[n]),colour,secondary,
@@ -152,14 +154,21 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
     }
     command.alpha_argument=dim(0x68)==1?1:2; // selects which ALPHAARG slot the source changes below
     const auto half_bits=memory.load(0x4c2280,32),pointer=read<std::uint32_t>(image.data(),0x70);
-    std::array<std::uint32_t,256> handles{};
     if(command.target_kind==SpriteTarget::texture_level_zero && std::uint64_t(pointer)<0xb3400cull && std::uint64_t(pointer)+nx*ny*4>0xb34008ull)return false;
+    if(integer_glyph){
+        // Validate the same complete range as the former table copy, including
+        // inaccessible unused entries and address wrap. Only one value is
+        // needed after the exact single-tile geometry has been admitted.
+        memory.check(pointer,std::size_t(nx*ny)*4,wr::Memory::Read);
+        return integer_glyph_geometry(command,s,image[4]!=0,width,height,tw,th,nx,ny,[&](unsigned index){
+            const auto texture=memory.load(pointer+index*4,32);++glyph_resource_counts.single_texture_handle_reads;return texture;
+        },half_bits,colour,secondary);
+    }
+    std::array<std::uint32_t,256> handles{};
     memory.copy_out(pointer,{reinterpret_cast<std::uint8_t*>(handles.data()),std::size_t(nx*ny)*4});
+    if(memo_glyph){++glyph_resource_counts.full_texture_tables;glyph_resource_counts.full_texture_handle_words+=unsigned(nx*ny);}
     const bool memo=memo_glyph && !su(0x74);
     const wa2::text::GlyphGeometryMemo<SpriteTile>::Input key{s,image,palette,half_bits,std::span(handles).first(nx*ny)};
-    if(integer_glyph){
-        return integer_glyph_geometry(command,s,image[4]!=0,width,height,tw,th,nx,ny,key.handles,half_bits,colour,secondary);
-    }
     if(memo)if(const auto tiles=glyph_geometry.find(key)){command.tiles=*tiles;return true;}
     float u0=sf(0xbc),u1=sf(0xc0),v0=sf(0xc4),v1=sf(0xc8);
     std::array<std::array<float,2>,4> corners;

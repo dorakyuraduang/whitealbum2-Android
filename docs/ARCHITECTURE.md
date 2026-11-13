@@ -1538,6 +1538,16 @@ per-frame submission, so this removes one confirmed cost rather than all work
 that scales with a novel page's character count. Memory-only comparisons do
 not establish the remaining on-device CPU/GPU bottleneck or actual FPS.
 
+Single-tile integer glyphs validate the complete font-handle table range but
+load only the texture handle that their admitted geometry uses. Crossing or
+other arithmetic paths retain their full table snapshot. Current handles and
+metadata are read on every call; nothing relies on a previous page's pointers.
+The presentation preflight constructs four strong texture references for a
+small packet instead of 256. Larger packets switch to the original 256-entry
+stack storage, with no new heap allocation; both alternatives release their
+references at the end of the call, including failed preflights. Submission,
+vertex content, order, filtering, blending and renderer barriers are retained.
+
 | Directory | Responsibility |
 | --- | --- |
 | `recompiled/` | Static function dispatch, ABI and native function entries |

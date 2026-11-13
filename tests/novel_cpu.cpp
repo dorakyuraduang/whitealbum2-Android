@@ -4,7 +4,9 @@
 #include "../recompiled/native_sprites.hpp"
 #include "../recompiled/native_glyphs.hpp"
 #include "../recompiled/glyph_budget.hpp"
+#include "../recompiled/glyph_resources.hpp"
 #include "../recompiled/host_calls.hpp"
+#include "../engine/glyph_index.hpp"
 #include "../platform/render/submission_cache.hpp"
 #include <winrecomp/win32_state.hpp>
 #include <chrono>
@@ -85,7 +87,11 @@ int main(int argc,char** argv){try{
         };
         const auto static_ns=run(false);const auto expected=recorded.tiles;CHECK(expected.size()>=count);
         const auto expected_cpu=p.cpu;std::array<std::uint8_t,0x2000> expected_output;p.memory.copy_out(output,expected_output);
-        const auto before=a::native_glyph_counts();const auto native_ns=run(true);const auto after=a::native_glyph_counts();
+        const auto before=a::native_glyph_counts();const auto resources_before=a::glyph_resource_counts;
+        const auto native_ns=run(true);const auto after=a::native_glyph_counts();const auto resources_after=a::glyph_resource_counts;
+        const auto single_reads=resources_after.single_texture_handle_reads-resources_before.single_texture_handle_reads;
+        const auto copied_words=resources_after.full_texture_handle_words-resources_before.full_texture_handle_words;
+        CHECK(single_reads>0 && single_reads+copied_words<count*195);
         const auto check_result=[&]{
             CHECK(recorded.tiles==expected && recorded.calls.empty());
             CHECK(p.cpu.eip==expected_cpu.eip && p.cpu.r[wr::ESP]==expected_cpu.r[wr::ESP]);
@@ -98,7 +104,8 @@ int main(int argc,char** argv){try{
         for(unsigned repeat=0;repeat<2;++repeat){run(true);check_result();++unchanged_page_checks;}
         if(comma)report<<',';comma=true;
         report<<"{\"characters\":"<<count<<",\"two_byte\":"<<(two_byte?"true":"false")<<",\"native_glyphs\":"<<after.accepted-before.accepted
-            <<",\"native_tiles\":"<<expected.size()<<",\"legacy_draws\":0,\"legacy_state_calls\":0,\"static_chain_ns\":"<<static_ns<<",\"native_ns\":"<<native_ns<<'}';
+            <<",\"native_tiles\":"<<expected.size()<<",\"legacy_draws\":0,\"legacy_state_calls\":0,\"single_handle_reads\":"<<single_reads<<",\"copied_handle_words\":"<<copied_words
+            <<",\"previous_minimum_handle_words\":"<<count*195<<",\"static_chain_ns\":"<<static_ns<<",\"native_ns\":"<<native_ns<<'}';
         std::cout<<"Constructed page: "<<count<<" chars, exact "<<expected.size()<<" tiles, no legacy calls, static/native ns "<<static_ns<<'/'<<native_ns<<'\n';
     }
     // The new allowance is finite and independent of the generic call budget.
@@ -142,8 +149,32 @@ int main(int argc,char** argv){try{
             check_unchanged(before,stack,tiles);
         }
     }
-    report<<"],\"exact_full_text_cases\":"<<exact_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases
+    unsigned handle_guards{};
+    {a::SpriteService sink(p.memory,Recording::submit,&recorded);a::GlyphCallScope glyphs(p.memory);
+        wa2::text::GlyphIndex index;std::array<std::uint8_t,256> table;p.memory.copy_out(0x4a14b8,table);
+        const auto resolved=index.lookup(table,'A');CHECK(resolved);
+        const auto tile_index=((*resolved/80*40+4)/256)*13+(*resolved%80*40+4)/256;
+        const auto slot=data+0x4000+tile_index*4,original=p.memory.load(slot,32);
+        for(auto value:{original+16,0u,original}){
+            p.memory.store(slot,value,32);cpu.eip=0x4462e0;cpu.r[wr::ESP]=sp;recorded.reset();
+            CHECK(a::native_draw_glyph(cpu,p.memory));
+            if(value)CHECK(recorded.tiles.size()==1 && recorded.tiles[0].texture==value);else CHECK(recorded.tiles.empty());
+            ++handle_guards;
+        }
+        // The selected word is readable but an UNUSED suffix is protected.
+        // Retain the former full-table guard before admitting a lazy read.
+        const auto font=0xa93fb8u,old_pointer=p.memory.load(font+0x70,32),pointer=data+0x5000-4-tile_index*4;
+        p.memory.store(pointer+tile_index*4,original,32);p.memory.store(font+0x70,pointer,32);
+        p.memory.protect(data+0x5000,4096,0);
+        cpu.eip=0x4462e0;cpu.r[wr::ESP]=sp;auto before=cpu;std::array<std::uint8_t,0x128> stack;p.memory.copy_out(sp,stack);auto tiles=recorded.tiles.size();
+        CHECK(!a::native_draw_glyph(cpu,p.memory));check_unchanged(before,stack,tiles);++handle_guards;
+        p.memory.protect(data+0x5000,4096,wr::Memory::Read|wr::Memory::Write);
+        p.memory.store(font+0x70,0xfffffffcu,32);before=cpu;
+        CHECK(!a::native_draw_glyph(cpu,p.memory));check_unchanged(before,stack,tiles);++handle_guards;
+        p.memory.store(font+0x70,old_pointer,32);
+    }
+    report<<"],\"exact_full_text_cases\":"<<exact_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
         <<",\"maximum_glyphs_per_boundary\":256,\"generic_call_limit_unchanged\":true,\"nested_memory_scopes_checked\":true,\"exhaustion_fallback_preserves_state\":true"
-        <<",\"exact_texture_order_vertices_output_and_abi\":true,\"game_launched\":false,\"screen_access\":false,\"source_executable_opened\":false,\"passed\":true}\n";
+        <<",\"exact_texture_order_vertices_output_and_abi\":true,\"complete_handle_range_still_checked\":true,\"handle_changes_visible_immediately\":true,\"game_launched\":false,\"screen_access\":false,\"source_executable_opened\":false,\"passed\":true}\n";
     CHECK(report);std::cout<<"Finite text helper and budget checks passed.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

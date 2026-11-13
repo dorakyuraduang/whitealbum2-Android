@@ -12,6 +12,7 @@
 #include "submission_cache.hpp"
 #include "screen_vertices.hpp"
 #include "texture_batch.hpp"
+#include "sprite_texture_refs.hpp"
 #include "frame_metrics.hpp"
 #include "presentation_pacing.hpp"
 #include "../../recompiled/native_sprites.hpp"
@@ -836,7 +837,7 @@ bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command){
     const bool offscreen=command.target_kind==wa2::aot::SpriteTarget::texture_level_zero;
     const auto target_resource=get(command.target,offscreen?Kind::texture:Kind::surface);
     if(device!=device_resource)return false;
-    std::array<Res,256> textures;
+    wa2::graphics::SpriteTextureRefs<Res> textures(command.tiles.size());
     for(unsigned n=0;n<command.tiles.size();++n){textures[n]=get(command.tiles[n].texture,Kind::texture);
         if(image(textures[n])->texture==image(target_resource)->texture)return false;}
     enter(false);
