@@ -462,6 +462,14 @@ streaming and state-reuse changes in 0.2.92. A desktop driver improvement is
 not evidence of a mobile-driver improvement. Correct submitted geometry/state
 also does not establish frame pacing or FPS on a device.
 
+Android performance validation uses the authorized phone. Compare the baseline
+and candidate in the same scene and settings, recording the installed build,
+on-device FPS/frame times and relevant game counters. PC component timings are
+auxiliary evidence and cannot establish an Android performance gain. If a
+comparable device run is unavailable, record validation as pending. Game launch
+and scene selection remain user-controlled; measurement uses logs/counters,
+without screen capture or game UI automation.
+
 Keep precision-specific results separate: widening admission improves the
 previously declined PC53/PC64 integer cases, while the already-admitted PC24
 path may remain unchanged. A larger geometry-cache hit count alone also does

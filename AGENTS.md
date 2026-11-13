@@ -17,10 +17,15 @@
 - Builds run below normal priority, hidden, with one job; no concurrent heavy
   builds or tests. Keep original PAK resources external, in the user-selected
   Android folder. Its name is unrestricted (updated 2026-11-08).
-- On 2026-11-13 the user stopped phone CPU sampling and requested PC-side
-  performance checks. Do not request further phone sampling. Finite hidden
-  PC component rendering checks are authorized for this work; they must not
-  read screen pixels, operate game UI or turn into a full-game pressure test.
+- Later on 2026-11-13, after the 0.2.91 regression, the user changed performance
+  validation back to the authorized Android phone. Compare baseline/candidate
+  in the same scene and settings using on-device FPS/frame-time counters and
+  logs. PC component timings are auxiliary and cannot establish Android gains.
+  Record device validation as pending when a comparable run is unavailable;
+  do not turn that into a mobile performance claim. Game launch and UI remain
+  user-controlled; do not read/capture the screen or operate game UI. Finite
+  hidden PC component checks remain authorized as auxiliary checks, never a
+  full-game pressure test.
 - After each new APK build, install the verified package in place on the
   authorized Android device through ADB and verify its installed version and
   package hash. Preserve application data. If the device is unavailable, report
