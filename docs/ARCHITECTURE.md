@@ -1581,7 +1581,19 @@ It preserves the binary64 stack scratch, saved frame pointer, arithmetic flags,
 all serialized FP fields and x87 pop, and declines before changes for unsupported
 inputs or unsafe/aliased pages. Fractional/nonfinite values retain the cached
 body. Both hosts compile this same path; a protected temporary host diagnostic
-switch permits same-scene phone comparisons without changing rendering buffers.
+switch permitted same-scene phone comparisons. The 0.2.93 phone windows showed
+only a small aggregate difference within drift; this did not fix novel FPS.
+
+Glyph-only texture packets can retain immutable vertex/index buffers after
+two-use admission. Hits require exact bytes, including indices, rather than
+only a hash. Texture bindings, pipeline state and draw order are still applied
+normally. Cached GPU storage is never overwritten, so reuse introduces no
+append/subdata stream or offset changes. At most 512 entries and 2 MiB of
+payload per CPU/GPU copy are retained, plus one bounded 192 KiB CPU admission
+staging packet and fixed metadata. Glyph edits miss naturally; mixed/non-glyph
+packets keep ordinary uploads. Disabling the path or destroying the context
+releases its objects. The temporary phone switch now compares this path with
+ordinary uploads in the same scene, with the integer conversion enabled in both.
 
 The glyph entry hook is also derived from cached C++ in the same recipe. It
 does not raise the 256-call allowance or the generic 32-call allowance. A finite

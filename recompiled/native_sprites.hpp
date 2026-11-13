@@ -14,6 +14,7 @@ struct SpriteCommand {
     std::uint32_t blend_enabled,blend_op,source_blend,destination_blend;
     std::uint32_t minimum,magnification,mipmap,alpha_argument;
     std::span<const SpriteTile> tiles;
+    bool glyph{};
 };
 enum class SpriteState {render,stage,sampler};
 template<class Set>void sprite_state_words(const SpriteCommand& c,Set set){

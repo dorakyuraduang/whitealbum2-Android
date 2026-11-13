@@ -4,6 +4,7 @@ if(NOT TARGET wa2_fixed_pipeline)
 endif()
 add_library(wa2_shared_graphics STATIC
     "${CMAKE_CURRENT_LIST_DIR}/source_graphics.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/text_buffers.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/movie_layout.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/frame_layout.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/surface_host.cpp")

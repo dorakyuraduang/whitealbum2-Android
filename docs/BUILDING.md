@@ -475,8 +475,11 @@ page, then run `python scripts/compare_android_text.py --serial <ADB-serial>`.
 It compares reference/optimized/optimized/reference windows within one process
 using real presentation FPS and frame-time samples. The running activity's
 dynamic receiver requires the sender's Android DUMP permission; registered-only
-delivery cannot launch the game. The switch affects only the admitted integer
-conversion and resets to the normal optimized mode after 30 seconds or exit.
+delivery cannot launch the game. The current switch compares immutable glyph
+buffers with ordinary uploads; both retain the earlier integer conversion.
+Ordinary switches reset after 30 seconds. The comparison ends in a protected
+reference hold until activity exit, so a failed candidate is not left active;
+the agent can explicitly enable an accepted candidate after evaluating results.
 No launch setting or game file is changed. An inactive/unfocused page, stale
 sample, absent candidate admissions or greater than 10% window drift prevents
 a comparable performance conclusion. Counters work with the visible HUD off.

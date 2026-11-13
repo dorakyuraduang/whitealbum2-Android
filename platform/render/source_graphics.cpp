@@ -12,6 +12,8 @@
 #include "submission_cache.hpp"
 #include "screen_vertices.hpp"
 #include "texture_batch.hpp"
+#include "immutable_buffers.hpp"
+#include "text_buffers.hpp"
 #include "sprite_texture_refs.hpp"
 #include "frame_metrics.hpp"
 #include "presentation_pacing.hpp"
@@ -143,6 +145,10 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     std::vector<std::uint16_t> pending_screen_indices;
     wa2::graphics::ScreenTextureBatch<Res> texture_batch;
     bool texture_batch_available{},texture_batch_mode{};
+    bool pending_glyph{};
+    struct BufferPair {GLuint vertices{},indices{};};
+    wa2::graphics::ImmutableBuffers<BufferPair> text_buffers;
+    void release_buffers(BufferPair pair){gl.DeleteBuffers(1,&pair.vertices);gl.DeleteBuffers(1,&pair.indices);}
     std::string texture_batch_failure;
     std::uint64_t texture_batch_draws{},texture_batch_submissions{};
     std::uint64_t screen_draws{},screen_unique_vertices{},vertex_upload_bytes{},index_upload_bytes{};
@@ -299,8 +305,8 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     void set_word(U32& destination,U32 value,U32 baseline){if(destination!=value){word_differences-=destination!=baseline;word_differences+=value!=baseline;destination=value;}}
     void apply();void flush();void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
     void texture_mode(bool enabled){if(texture_batch_mode!=enabled){flush();texture_batch_mode=enabled;applied.reset();}}
-    bool batch_textures(std::span<const wa2::graphics::ScreenVertex>,U32,U32,std::span<const U32>);
-    U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {});
+    bool batch_textures(std::span<const wa2::graphics::ScreenVertex>,U32,U32,std::span<const U32>,bool);
+    U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {},bool glyph=false);
     U32 present(Args,bool force=false);D3DCAPS9 caps();
     U32 copy(const std::shared_ptr<ImageData>&,RECT,const std::uint8_t*,U32,D3DFORMAT,RECT,U32,U32);
     std::vector<DWORD> shader(U32);U32 compile(U32,U32,Kind);
@@ -318,6 +324,8 @@ public:
         out<<"},\"state_applies\":"<<state_applies<<",\"state_cache_hits\":"<<state_cache_hits<<",\"texture_only_applies\":"<<texture_only_applies
             <<",\"compact_screen_draws\":"<<screen_draws<<",\"compact_screen_unique_vertices\":"<<screen_unique_vertices<<",\"vertex_upload_bytes\":"<<vertex_upload_bytes
             <<",\"index_upload_bytes\":"<<index_upload_bytes
+            <<",\"immutable_text_buffers\":{\"entries\":"<<text_buffers.size()<<",\"payload_bytes\":"<<text_buffers.bytes()<<",\"hits\":"<<text_buffers.hits
+            <<",\"creations\":"<<text_buffers.creations<<",\"evictions\":"<<text_buffers.evictions<<",\"maximum_entries\":512,\"maximum_payload_bytes\":2097152}"
             <<",\"multi_texture_batch\":{\"available\":"<<(texture_batch_available?"true":"false")<<",\"slots\":"<<wa2::graphics::TextureBatchSlots
             <<",\"guest_draws\":"<<texture_batch_draws<<",\"driver_submissions\":"<<texture_batch_submissions<<",\"failure\":"<<quote(texture_batch_failure)<<'}'
             <<",\"context_rebinds\":"<<context_rebinds<<",\"context_reuses\":"<<context_reuses<<",\"context_free_calls\":"<<context_free_calls
@@ -562,6 +570,7 @@ void Graphics::shutdown() noexcept {
     state=State{};recording.reset();objects.clear();handles.clear();device_resource.reset();backbuffer.reset();root.reset();
     for(auto& w:images)if(auto i=w.lock())if(i->cleanup){i->cleanup();i->cleanup={};}
     for(auto& w:textures_alive)if(auto t=w.lock())if(t->cleanup){t->cleanup();t->cleanup={};}
+    text_buffers.clear([this](auto pair){release_buffers(pair);});
     if(vertex_buffer)gl.DeleteBuffers(1,&vertex_buffer);if(index_buffer)gl.DeleteBuffers(1,&index_buffer);
     if(mojo){MOJOSHADER_glDestroyContext(mojo);mojo=nullptr;}if(context){SDL_GL_DeleteContext(context);context=nullptr;}window=nullptr;
     if(initialized){SDL_QuitSubSystem(SDL_INIT_VIDEO);initialized=false;}
@@ -756,13 +765,29 @@ void Graphics::flush() {
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.flush:nullptr);
     // Pending vertices have already been transformed using the state that was
     // applied when they were queued. Later setters only change CPU state.
-    gl.BindBuffer(GL_ARRAY_BUFFER,vertex_buffer);
     const bool multiple=!texture_batch.empty(),compact=multiple || !pending_screen.empty();
     const auto count=multiple?texture_batch.indices().size():compact?pending_screen_indices.size():pending_vertices.size();
     const auto bytes=multiple?texture_batch.vertices().size_bytes():compact?pending_screen.size()*sizeof(wa2::graphics::ScreenVertex):pending_vertices.size()*sizeof(FixedVertex);
     const void* data=multiple?static_cast<const void*>(texture_batch.vertices().data()):compact?static_cast<const void*>(pending_screen.data()):pending_vertices.data();
-    gl.BufferData(GL_ARRAY_BUFFER,GLsizeiptr(bytes),data,GL_STREAM_DRAW);
-    vertex_upload_bytes+=bytes;
+    const auto indices=multiple?texture_batch.indices():std::span<const std::uint16_t>(pending_screen_indices);
+    std::optional<BufferPair> retained;
+    const auto reuse=wa2::graphics::text_buffer_reuse_enabled();
+    if(!reuse && text_buffers.size())text_buffers.clear([this](auto pair){release_buffers(pair);});
+    if(reuse && multiple && pending_glyph){
+        const auto before=text_buffers.hits;
+        retained=text_buffers.acquire({static_cast<const std::uint8_t*>(data),bytes},
+            {reinterpret_cast<const std::uint8_t*>(indices.data()),indices.size_bytes()},
+            [this](auto vertices,auto elements)->std::optional<BufferPair>{
+                BufferPair pair;gl.GenBuffers(1,&pair.vertices);gl.GenBuffers(1,&pair.indices);
+                if(!pair.vertices || !pair.indices){release_buffers(pair);stop("cannot allocate immutable text buffers");}
+                gl.BindBuffer(GL_ARRAY_BUFFER,pair.vertices);gl.BufferData(GL_ARRAY_BUFFER,GLsizeiptr(vertices.size()),vertices.data(),GL_STATIC_DRAW);
+                gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER,pair.indices);gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,GLsizeiptr(elements.size()),elements.data(),GL_STATIC_DRAW);
+                vertex_upload_bytes+=vertices.size();index_upload_bytes+=elements.size();return pair;
+            },[this](auto pair){release_buffers(pair);});
+        if(text_buffers.hits!=before)wa2::graphics::record_text_buffer_reuse();
+    }
+    gl.BindBuffer(GL_ARRAY_BUFFER,retained?retained->vertices:vertex_buffer);
+    if(!retained){gl.BufferData(GL_ARRAY_BUFFER,GLsizeiptr(bytes),data,GL_STREAM_DRAW);vertex_upload_bytes+=bytes;}
     if(compact){
         using V=wa2::graphics::ScreenVertex;const unsigned stride=multiple?sizeof(wa2::graphics::TextureBatchVertex):sizeof(V);
         MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_POSITION,0,4,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(offsetof(V,position)));
@@ -794,18 +819,17 @@ void Graphics::flush() {
     const auto& viewport=applied?applied->viewport:state.viewport;
     MOJOSHADER_glProgramViewportInfo(viewport.Width,viewport.Height,image(backbuffer)->width,image(backbuffer)->height,1);
     if(compact){
-        gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER,index_buffer);
-        const auto indices=multiple?texture_batch.indices():std::span<const std::uint16_t>(pending_screen_indices);
+        gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER,retained?retained->indices:index_buffer);
         const auto size=indices.size_bytes();
-        gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,GLsizeiptr(size),indices.data(),GL_STREAM_DRAW);
-        index_upload_bytes+=size;gl.DrawElements(GL_TRIANGLES,GLsizei(count),GL_UNSIGNED_SHORT,nullptr);
+        if(!retained){gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,GLsizeiptr(size),indices.data(),GL_STREAM_DRAW);index_upload_bytes+=size;}
+        gl.DrawElements(GL_TRIANGLES,GLsizei(count),GL_UNSIGNED_SHORT,nullptr);
     }else gl.DrawArrays(GL_TRIANGLES,0,GLsizei(count));
     ++submitted_draws;submitted_vertices+=count;
     if(pending_target)pending_target->levels[0]->gpu_dirty=true;
-    pending_vertices.clear();pending_screen.clear();pending_screen_indices.clear();pending_target.reset();
+    pending_vertices.clear();pending_screen.clear();pending_screen_indices.clear();pending_target.reset();pending_glyph=false;
     if(multiple){++texture_batch_submissions;texture_batch.clear();applied.reset();}
 }
-bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> vertices,U32 type,U32 count,std::span<const U32> indices){
+bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> vertices,U32 type,U32 count,std::span<const U32> indices,bool glyph){
     if(!texture_batch_available || state.vertex_shader || state.pixel_shader || !state.textures[0])return false;
     if(image(state.textures[0])->texture==image(state.target)->texture)return false;
     wa2::graphics::FixedPipeline pipeline{};
@@ -825,7 +849,9 @@ bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> verti
             texture_batch_failure=error.what();texture_batch_available=false;texture_batch_mode=false;applied.reset();return false;
         }
         pending_target=state.target;
+        pending_glyph=glyph;
     }
+    else pending_glyph&=glyph;
     if(!texture_batch.append(state.textures[0],vertices,type,count,indices))stop("invalid bounded texture batch packet");
     ++texture_batch_draws;return true;
 }
@@ -858,12 +884,12 @@ bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command){
     for(unsigned n=0;n<command.tiles.size();++n){const auto& tile=command.tiles[n];
         set_texture(0,textures[n],tile.texture);
         if(state.fvf!=0x1c4 || state.declaration)++config_version;state.fvf=0x1c4;state.declaration.reset();
-        const auto result=draw(D3DPT_TRIANGLESTRIP,4,{reinterpret_cast<const std::uint8_t*>(tile.vertices.data()),sizeof(tile.vertices)},sizeof(wa2::aot::SpriteVertex),{});
+        const auto result=draw(D3DPT_TRIANGLESTRIP,4,{reinterpret_cast<const std::uint8_t*>(tile.vertices.data()),sizeof(tile.vertices)},sizeof(wa2::aot::SpriteVertex),{},command.glyph);
         if(result)stop("invalid native sprite packet");state.streams[0]={};set_texture(0,{},0);
     }
     return true;
 }
-U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 stride,std::span<const U32> indices){
+U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 stride,std::span<const U32> indices,bool glyph){
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.draw:nullptr);
     if(!state.scene || !stride || stride>256 || bytes.size()%stride)return U32(D3DERR_INVALIDCALL);if(!count)return 0;const auto total=bytes.size()/stride;
     if((indices.empty() && count>total) || (!indices.empty() && indices.size()!=count))return U32(D3DERR_INVALIDCALL);
@@ -883,7 +909,7 @@ U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 st
         for(auto index:indices)if(index>=total)return U32(D3DERR_INVALIDCALL);
         screen_scratch.resize(total);
         if(wa2::graphics::pack_screen_vertices(*plan,bytes,stride,screen_scratch)){
-            if(batch_textures(screen_scratch,type,count,indices)){
+            if(batch_textures(screen_scratch,type,count,indices,glyph)){
                 ++screen_draws;screen_unique_vertices+=total;++batched_guest_draws;
                 image(state.target)->gpu_dirty=true;++draws;return 0;
             }

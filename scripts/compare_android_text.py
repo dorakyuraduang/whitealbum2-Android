@@ -1,7 +1,7 @@
 """Compare reference/optimized CPU text paths in an already running phone game.
 
 The user selects the scene and keeps it foreground. Shell-protected registered
-broadcasts switch only the integer-conversion path and read actual frame HUD
+broadcasts switch only the candidate path and read actual frame HUD
 counters. No activity launch, input event, screenshot or resource access.
 """
 import argparse
@@ -49,7 +49,8 @@ def main():
             if record.get('version')==release:records.append(record)
         if not records:raise RuntimeError('No live performance response; game must be open and foreground')
         record=records[-1]
-        if record['uptime_ms']<=last_response or (mode!='snapshot' and record.get('mode')!=mode):
+        expected='reference' if mode=='reference_hold' else mode
+        if record['uptime_ms']<=last_response or (mode!='snapshot' and record.get('mode')!=expected):
             raise RuntimeError('No fresh performance response from the foreground game')
         last_response=record['uptime_ms'];return record
     windows=[];failure=None
@@ -62,16 +63,16 @@ def main():
                     raise RuntimeError('No comparable foreground frame sample')
                 if row['uptime_ms']-row['sample_age_ms']<start+500:raise RuntimeError('Frame sample predates the mode change')
                 rows.append(row);time.sleep(.85)
-            delta=rows[-1]['native_integer_calls']-first['native_integer_calls']
-            if mode=='optimized' and delta<=0:raise RuntimeError('Candidate integer conversion was not admitted in this scene')
+            delta=rows[-1]['candidate_calls']-first['candidate_calls']
+            if mode=='optimized' and delta<=0:raise RuntimeError('Candidate path was not admitted in this scene')
             if mode=='reference' and delta>1:raise RuntimeError('Reference window unexpectedly used the candidate path')
-            window=dict(mode=mode,samples=rows,median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),native_integer_calls=delta)
+            window=dict(mode=mode,samples=rows,median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_calls=delta)
             windows.append(window);print(mode+' median FPS '+str(round(window['median_fps'],2)),flush=True)
     except Exception as error:failure=str(error)
     finally:
-        try:request('optimized')
+        try:request('reference_hold')
         except Exception as error:failure=failure or 'Restore unavailable: '+str(error)
-    report=dict(release=release,pid=int(pid),windows=windows,error=failure,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,passed=failure is None)
+    report=dict(release=release,pid=int(pid),windows=windows,error=failure,restored_mode='reference',app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,passed=failure is None)
     if not failure:
         reference=[x['median_frame_ms'] for x in windows if x['mode']=='reference'];candidate=[x['median_frame_ms'] for x in windows if x['mode']=='optimized']
         report['reference_drift_ratio']=max(reference)/min(reference)

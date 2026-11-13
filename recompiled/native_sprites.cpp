@@ -325,6 +325,7 @@ bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
         if(!build(cpu,memory,command,sprite,0,true) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++glyph_counts.declined;return false;}
         }
     }catch(const Declined&){++glyph_counts.declined;return false;}catch(const wr::GuestFault&){++glyph_counts.declined;return false;}
+    command.glyph=true;
     if(!service->submit(command)){++glyph_counts.declined;return false;}
     if(glyph_allowance)--*glyph_allowance;
     else if(current_native_calls)--current_native_calls->remaining;

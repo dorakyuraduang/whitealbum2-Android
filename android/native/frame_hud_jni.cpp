@@ -41,10 +41,10 @@ void frame_presented()noexcept{
 extern "C" JNIEXPORT void JNICALL Java_org_wa2_port_Wa2Activity_nativeResetFrameMetrics(JNIEnv*,jclass){
     reset_requested.store(true,std::memory_order_release);
 }
-extern "C" JNIEXPORT jboolean JNICALL Java_org_wa2_port_PerformanceProbe_nativeSetFastInteger(JNIEnv*,jclass,jboolean enabled){
+extern "C" JNIEXPORT jboolean JNICALL Java_org_wa2_port_PerformanceProbe_nativeSetCandidate(JNIEnv*,jclass,jboolean enabled){
     const auto callback=performance_switch.load(std::memory_order_acquire);
     if(!callback)return JNI_FALSE;callback(enabled==JNI_TRUE);return JNI_TRUE;
 }
-extern "C" JNIEXPORT jlong JNICALL Java_org_wa2_port_PerformanceProbe_nativeFastIntegerCalls(JNIEnv*,jclass){
+extern "C" JNIEXPORT jlong JNICALL Java_org_wa2_port_PerformanceProbe_nativeCandidateCalls(JNIEnv*,jclass){
     const auto counter=performance_counter.load(std::memory_order_acquire);return counter?jlong(counter()):jlong(-1);
 }
