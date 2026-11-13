@@ -15,7 +15,6 @@ assert len(targets)==22 and result==recipe.derive(source,code,base)[0]
 assert result.count('if constexpr(!Metered)goto L_text_local_dispatch;')==3
 assert result.count('local_text_jumps.take()')==22
 assert result.count('default:local_text_jumps.external();')==1
-assert result.count('fp::TextFtolAdapter::invoke(s,m,scope,floating)')==19
 original=(root/'generated/shared-aot/functions_5.cpp').read_text(encoding='utf-8')
 glyphs=(root/'generated/shared-aot/native-text/functions_5.cpp').read_text(encoding='utf-8')
 hook='if constexpr(!Metered)if(wa2::aot::native_draw_glyph(s,m))return;'
@@ -30,10 +29,6 @@ rest='#include "text_ftol.hpp"\n'+rest.replace(anchor,anchor+'if constexpr(!Mete
 assert glyphs==rest.replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
 body,_=recipe.scoped_stack(original[start:end])
 assert body in (root/'generated/shared-aot/native-text/text_helpers.cpp').read_text(encoding='utf-8')
-helpers=(root/'generated/shared-aot/native-text/text_helpers.cpp').read_text(encoding='utf-8')
-assert helpers.count('if constexpr(!Metered)if(native_text_spacing(s,m,scope))return;')==1
-reference=(root/'build/text-spacing-reference/reference.cpp').read_text(encoding='utf-8')
-assert 'namespace wa2::aot::text_spacing_reference' in reference and 'native_text_spacing' not in reference
 rejections=0
 def rejects(text,data):
     global rejections
@@ -48,8 +43,6 @@ for site in recipe.SITES:
 old='if constexpr(!Metered)(void)floating.external([&]{return integer.external([&]{return call_source_indirect(s,m,scope);});});'
 begin=source.index('template<bool Metered,bool NativeRegisters> void f_446500(')
 rejects(source[:begin]+source[begin:].replace(old,'return;',1),code)
-ftol='floating.external([&]{integer.external([&]{return f_401260<Metered>(s,m,scope,budget,92u);});});'
-rejects(source[:begin]+source[begin:].replace(ftol,'return;',1),code)
 text,count=recipe.scoped_stack('wr::push(s,m,value);wr::push(s,m,0x123u,32);auto a=wr::pop(s,m);auto b=wr::pop(s,m,32);')
 assert count==4 and text=='text_push(s,scope,value);text_push(s,scope,0x123u);auto a=text_pop(s,scope);auto b=text_pop(s,scope);'
 for bad in ('wr::push(s,m,value,16);wr::pop(s,m);','wr::push(s,m,value);wr::pop(s,m,16);','wr::push(s,m,side_effect());wr::pop(s,m);'):

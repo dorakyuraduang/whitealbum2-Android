@@ -50,10 +50,6 @@ def derive(text,code,base):
     declaration='wa2::aot::IntegerRegisters<Metered || !NativeRegisters> integer(s,m,scope);'
     if body.count(declaration)!=1:raise ValueError('Ambiguous text register scope')
     body=body.replace(declaration,declaration+newline+'TextJumpBudget<Metered> local_text_jumps;')
-    ftol='floating.external([&]{integer.external([&]{return f_401260<Metered>(s,m,scope,budget,92u);});});'
-    if body.count(ftol)!=19:raise ValueError('Changed cached text conversion call set')
-    direct='integer.external([&]{return fp::TextFtolAdapter::invoke(s,m,scope,floating);})'
-    body=body.replace(ftol,'if constexpr(!Metered && NativeRegisters){if(!'+direct+'){'+ftol+'}}else{'+ftol+'}')
     old='if constexpr(!Metered)(void)floating.external([&]{return integer.external([&]{return call_source_indirect(s,m,scope);});});'
     if body.count(old)!=len(SITES):raise ValueError('Changed cached text indirect-transfer set')
     for site in SITES:
@@ -71,7 +67,7 @@ def derive(text,code,base):
     dispatch += [f'case 0x{target:x}u: if(!local_text_jumps.take())return;goto L_{target:x};' for target in sorted(targets)]
     dispatch += ['default:local_text_jumps.external();',old,'return;','}','}']
     body=body[:finish]+newline+newline.join(dispatch)+body[finish:]
-    return '#include "text_jump_budget.hpp"'+newline+'#include "text_ftol_bridge.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
+    return '#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
 
 def prepare():
     prepare_chroma();prepare_language();prepare_progress()
@@ -83,9 +79,8 @@ def prepare():
     if len(code)!=size:raise ValueError('Incomplete cached initial text constants')
     text,targets=derive(source.read_text(encoding='utf-8'),code,base)
     output=ROOT/'generated/shared-aot/native-text/functions_hot.cpp';data=text.encode('utf-8');write(output,data)
-    inputs={p.relative_to(ROOT).as_posix():digest(p.read_bytes()) for p in (source,constants,header,Path(__file__),ROOT/'recompiled/text_jump_budget.hpp',ROOT/'recompiled/text_stack.hpp',ROOT/'recompiled/text_ftol.hpp',ROOT/'recompiled/text_ftol.cpp',ROOT/'recompiled/text_ftol_bridge.hpp',ROOT/'recompiled/fp_registers.hpp',ROOT/'recompiled/text_spacing.hpp',ROOT/'recompiled/text_spacing.cpp')}
+    inputs={p.relative_to(ROOT).as_posix():digest(p.read_bytes()) for p in (source,constants,header,Path(__file__),ROOT/'recompiled/text_jump_budget.hpp',ROOT/'recompiled/text_stack.hpp',ROOT/'recompiled/text_ftol.hpp',ROOT/'recompiled/text_ftol.cpp')}
     outputs={output.relative_to(ROOT).as_posix():digest(data)};helper_bodies=[];stack_sites=0
-    spacing_reference=None
     for name,entry in HELPERS.items():
         path=ROOT/'generated/shared-aot'/name;raw=path.read_bytes();inputs[path.relative_to(ROOT).as_posix()]=digest(raw)
         original=raw.decode('utf-8');newline='\r\n' if '\r\n' in original else '\n'
@@ -99,12 +94,7 @@ def prepare():
         # This is the same checked body, isolated for O2. Its stack is already
         # protected by the passed scope; only the redundant TLS/lock lookup is
         # removed, not range/permission checks or architectural stores.
-        if entry=='445350':spacing_reference=body
         body,count=scoped_stack(body)
-        if entry=='445350':
-            anchor=f'L_445350: {{{newline}s.eip=0x445350u;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
-            if body.count(anchor)!=1:raise ValueError('Changed cached decimal spacing entry')
-            body=body.replace(anchor,anchor+'if constexpr(!Metered)if(native_text_spacing(s,m,scope))return;'+newline)
         stack_sites+=count;helper_bodies.append(body.replace('\r\n','\n'))
         rest=original[:begin]+original[end:]
         if entry=='4462e0':
@@ -114,11 +104,8 @@ def prepare():
         if '/' not in name:
             rest=rest.replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
         target=output.parent/path.name;payload=rest.encode('utf-8');write(target,payload);outputs[target.relative_to(ROOT).as_posix()]=digest(payload)
-    helpers='#include "../bodies.hpp"\n#include "text_stack.hpp"\n#include "native_glyphs.hpp"\n#include "text_spacing.hpp"\nnamespace wa2::aot {\n'+'\n'.join(helper_bodies)+'\n}\n'
+    helpers='#include "../bodies.hpp"\n#include "text_stack.hpp"\n#include "native_glyphs.hpp"\nnamespace wa2::aot {\n'+'\n'.join(helper_bodies)+'\n}\n'
     target=output.parent/'text_helpers.cpp';payload=helpers.encode('utf-8');write(target,payload);outputs[target.relative_to(ROOT).as_posix()]=digest(payload)
-    if spacing_reference is None:raise ValueError('Missing cached spacing reference')
-    reference='#include "functions.hpp"\nnamespace wa2::aot::text_spacing_reference {\n'+spacing_reference+'\nvoid invoke(wr::Cpu& s,wr::Memory& m,Scope& scope){std::uint64_t budget{};f_445350<false>(s,m,scope,budget,0);}\n}\n'
-    reference_path=ROOT/'build/text-spacing-reference/reference.cpp';write(reference_path,reference.encode('utf-8'))
-    metadata=dict(schema='wa2.derived-text-flow.v1',inputs=inputs,outputs=outputs,local_jmp_sites=[hex(x) for x in SITES],local_targets=[hex(x) for x in targets],hot_helpers=list(HELPERS.values()),scoped_stack_sites=stack_sites,glyph_entry_defers_on_exhaustion=True,integer_conversion_entry='0x474f00',register_conversion_calls=19,native_spacing_entry='0x445350',reference_file=reference_path.relative_to(ROOT).as_posix(),reference_sha256=digest(reference.encode('utf-8')),cached_inputs_unchanged=True,source_executable_opened=False)
+    metadata=dict(schema='wa2.derived-text-flow.v1',inputs=inputs,outputs=outputs,local_jmp_sites=[hex(x) for x in SITES],local_targets=[hex(x) for x in targets],hot_helpers=list(HELPERS.values()),scoped_stack_sites=stack_sites,glyph_entry_defers_on_exhaustion=True,integer_conversion_entry='0x474f00',cached_inputs_unchanged=True,source_executable_opened=False)
     write(output.parent/'provenance.json',(json.dumps(metadata,indent=2)+'\n').encode());return metadata
 if __name__=='__main__':print(json.dumps(prepare(),indent=2))

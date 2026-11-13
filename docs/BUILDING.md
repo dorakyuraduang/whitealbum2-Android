@@ -845,16 +845,10 @@ The phone comparison tool ends in the shipped optimized/default state and
 records whether the foreground receiver acknowledged restoration. A missing
 acknowledgement is reported explicitly; it is not assumed successful.
 
-Version 0.2.97 retains that renderer/host baseline and changes common text CPU
-work: fractional coordinate truncation, live-register conversion calls and
-decimal spacing/carry arithmetic. `verify_shared_refresh.py` checks 5,376
-integer conversions, 12,800 fractional conversions and 35,328 live/inactive
-register-frame cases against the cached source, including complete FP state,
-CPU flags and stack bytes. Another 6,016 spacing cases and 12 guarded fallback
-cases compare with the unchanged helper extracted by
-`prepare_shared_text_flow.py`. That reference target exists only in the finite
-test project and is forbidden in the shipped ARM64 application's symbols.
-The text recipe rejects a changed set of conversion call sites. These checks
-establish admitted-path equivalence, not whole-game compatibility or measured
-Android performance; the latter remains pending until comparable phone data
-is available.
+Version 0.2.98 removes the 0.2.97 text CPU experiment after a reported Android
+FPS regression. Before rebuilding, compare its runtime source paths with
+commit 1ec40a0 (0.2.96) and rerun the shared correctness/package checks. Its
+higher version code permits an in-place installation without clearing data.
+This restores source identity; mobile FPS recovery and the earlier novel-page
+performance issue remain unverified. The withdrawn implementation and its
+equivalence tests remain available in commit 3db9e38.

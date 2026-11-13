@@ -1575,24 +1575,14 @@ the associated state-reuse and scalar-access changes are also withdrawn.
 The finite desktop component gains did not establish mobile performance.
 The existing eight-image packets and earlier glyph fixes remain unchanged.
 
-The cached CRT entry at 0x474f00 has a native truncation path for masked
-exceptions and the source's active SSE branch. Version 0.2.97 extends its
-earlier integer admission to normal binary64-exact x87 values, including
-fractional text positions whose truncated result fits signed 32 bits. Integer
-bit operations preserve the source binary64 scratch and fractional MXCSR
-precision flag without changing host floating-point state. Unsafe pages,
-aliases, wider values and unsupported FP states retain the cached body.
-At the 19 existing conversion calls in the main text function, admitted
-conversions consume the live x87 register frame without serializing and
-reloading that frame. Its pop and instruction/data metadata still match the
-source ABI. The decimal spacing/carry helper at 0x445350 also uses native
-signed division and wrapping arithmetic, preserving flags, stack writes,
-sentinel inputs and the original fallback. Both hosts compile these same
-changes; text is still laid out each frame, with work proportional to the
-visible characters. The earlier 0.2.93 integer-only phone comparison showed
-only a small difference within drift. Memory-only equivalence checks for
-0.2.97 do not establish an Android FPS gain or resolve the reported novel FPS
-drop without a comparable phone run.
+The cached CRT entry at 0x474f00 has a native path only for exact signed-32-bit
+integer x87 inputs, masked exceptions and the source's active SSE branch.
+It preserves the binary64 stack scratch, saved frame pointer, arithmetic flags,
+all serialized FP fields and x87 pop, and declines before changes for unsupported
+inputs or unsafe/aliased pages. Fractional/nonfinite values retain the cached
+body. Both hosts compile this same path; a protected temporary host diagnostic
+switch permitted same-scene phone comparisons. The 0.2.93 phone windows showed
+only a small aggregate difference within drift; this did not fix novel FPS.
 
 Glyph-only texture packets can retain immutable vertex/index buffers after
 two-use admission. Hits require exact bytes, including indices, rather than
@@ -1614,6 +1604,15 @@ so the restoration can be installed in place without clearing application data.
 This restores a source baseline, not evidence that novel-mode FPS is fixed;
 the same-scene phone comparison remains required. Comparison tools now restore
 the shipped enabled state and explicitly report an unacknowledged restoration.
+
+Version 0.2.98 withdraws the 0.2.97 text CPU experiment after the user reported
+that initial loaded pages also fell to roughly 100 FPS. Its fractional
+conversion, live-register bridge and native decimal-spacing changes are all
+removed; runtime sources match 0.2.96 (and its 0.2.94 runtime baseline).
+The 0.2.97 equivalence checks did not establish a mobile speedup. The exact
+cause of that regression and the earlier progressive novel-page FPS drop
+remain unresolved; restoring these sources is not a claim that either was
+measured as fixed. Save paths, configuration and application data are retained.
 
 The glyph entry hook is also derived from cached C++ in the same recipe. It
 does not raise the 256-call allowance or the generic 32-call allowance. A finite

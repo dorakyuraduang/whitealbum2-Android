@@ -17,7 +17,7 @@ add_library(wa2_initial_data STATIC "${WA2_SHARED_ROOT}/generated/static-data/im
 target_include_directories(wa2_initial_data PUBLIC "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
 target_compile_features(wa2_initial_data PUBLIC cxx_std_20)
 set_target_properties(wa2_initial_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
-add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp transcend.cpp native_gateways.cpp native_math.cpp native_string.cpp image_colours.cpp image_chroma.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp native_sprites.cpp music_flag_save.cpp text_ftol.cpp text_spacing.cpp
+add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp transcend.cpp native_gateways.cpp native_math.cpp native_string.cpp image_colours.cpp image_chroma.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp native_sprites.cpp music_flag_save.cpp text_ftol.cpp
     "${WA2_SHARED_ROOT}/port/sprite_sort.cpp"
     "${WA2_SHARED_ROOT}/port/vertex_batch.cpp" ${WA2_SHARED_AOT_SOURCES})
 target_link_libraries(wa2_shared_aot PUBLIC wa2_initial_data wa2_engine)
@@ -111,7 +111,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/vertex_grid.cpp" APPEND PROPERTY COMPILE_OPTIONS "-ffp-contract=off;-frounding-math")
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/native_weather.cpp" APPEND PROPERTY COMPILE_OPTIONS "-ffp-contract=off;-frounding-math")
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/native_sprites.cpp" APPEND PROPERTY COMPILE_OPTIONS "-O2;-ffp-contract=off;-frounding-math")
-    set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/text_ftol.cpp" "${CMAKE_CURRENT_LIST_DIR}/text_spacing.cpp" APPEND PROPERTY COMPILE_OPTIONS "-O2")
+    set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/text_ftol.cpp" APPEND PROPERTY COMPILE_OPTIONS "-O2")
     # Keep the bounded word-fill loop vectorized. Some size-oriented bundled
     # C runtimes implement large memset with a byte loop.
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/native_string.cpp" APPEND PROPERTY COMPILE_OPTIONS "-fno-builtin-memset")
