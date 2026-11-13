@@ -1538,6 +1538,17 @@ per-frame submission, so this removes one confirmed cost rather than all work
 that scales with a novel page's character count. Memory-only comparisons do
 not establish the remaining on-device CPU/GPU bottleneck or actual FPS.
 
+A later user-operated Android CPU sample identified local text JMP reentry and
+scalar register/memory helpers as CPU costs. The common text recipe replaces
+three indirect intra-function JMP sites with native branches to 22 proved
+labels from cached initial tables. It yields after 128 local transfers;
+unknown/modified destinations keep the checked dispatcher. Source CALLs and
+their return addresses are retained. Four existing text helpers are isolated
+for O2 compilation and their 32-bit stack operations reuse the caller's checked
+Memory scope. No decoder, unchecked pointer, page-layout cache or retained
+rendered page is introduced. CPU samples identify hotspots, not a measured
+frame-rate gain; actual phone improvement still needs user testing.
+
 Single-tile integer glyphs validate the complete font-handle table range but
 load only the texture handle that their admitted geometry uses. Crossing or
 other arithmetic paths retain their full table snapshot. Current handles and

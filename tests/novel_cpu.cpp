@@ -5,6 +5,7 @@
 #include "../recompiled/native_glyphs.hpp"
 #include "../recompiled/glyph_budget.hpp"
 #include "../recompiled/glyph_resources.hpp"
+#include "../recompiled/text_jump_budget.hpp"
 #include "../recompiled/host_calls.hpp"
 #include "../engine/glyph_index.hpp"
 #include "../platform/render/submission_cache.hpp"
@@ -68,15 +69,36 @@ int main(int argc,char** argv){try{
     }
     for(unsigned n=0;n<256;++n)p.memory.store(data+0x4000+n*4,data+0x8000+n*16,32);
     p.callback(p.resolve("kernel32.dll","GetProcessHeap"),{});
+    // Numeric formatting consults CRT per-thread locale state. Construct its
+    // two documented source slots directly; do not run CRT/game startup.
+    const auto tls=p.callback(p.resolve("kernel32.dll","TlsAlloc"),{});
+    const auto fls=p.callback(p.resolve("kernel32.dll","FlsAlloc"),std::array<U32,1>{0});
+    p.state().tls[tls]=p.resolve("kernel32.dll","FlsGetValue");
+    p.callback(p.resolve("kernel32.dll","FlsSetValue"),std::array<U32,2>{fls,data+0xc000});
+    p.memory.store(0x4d1cc0,fls,32);p.memory.store(0x4d1cc4,tls,32);
+    p.memory.store(data+0xc06c,p.memory.load(0x4d1cb0,32),32);
+    p.memory.store(data+0xc068,p.memory.load(0x4d1ad0,32),32);
     const auto initial_cpu=p.cpu;
     std::array<std::uint8_t,0x2000> initial_output;p.memory.copy_out(output,initial_output);
     std::array<std::uint8_t,256> sprite;p.memory.copy_out(output,sprite);
-    std::ofstream report(argv[1]);report<<"{\"pages\":[";bool comma{};unsigned exact_pages{},unchanged_page_checks{};
-    for(unsigned variant=0;variant<4;++variant){
+    std::ofstream report(argv[1]);
+    // A second executable can link the exact same fixture object against a
+    // retained AOT archive. Compare explicit CPU/output words, not padding or
+    // scratch stack bytes which are outside the source return ABI.
+    std::ofstream snapshot(std::string(argv[1])+".bin",std::ios::binary);
+    const auto word=[&](U32 v){snapshot.write(reinterpret_cast<const char*>(&v),4);};
+    report<<"{\"pages\":[";bool comma{};unsigned exact_pages{},unchanged_page_checks{},formatted_pages{};
+    const std::array<std::pair<std::string,unsigned>,6> formats{{
+        {"ABC\nDEF",6},{"A^B~C`D",7},{"A\\nBC",3},{"A\\<B\\>C",5},
+        {"<C1:ABC>",3},{"<S2:ABCDE>",5}
+    }};
+    for(unsigned variant=0;variant<4+formats.size();++variant){
         const bool two_byte=variant>=2;const unsigned count=variant&1?(two_byte?80:200):40;
+        const auto expected_count=variant<4?count:formats[variant-4].second;
         std::string text;for(unsigned n=0;n<count;++n){
             if(two_byte)text+=n&1?"\x90\xcb":"\x8d\xef";else text+=char('A'+n%26);
-        }const auto raw=p.put_string(text);
+        }if(variant>=4)text=formats[variant-4].first;
+        const auto raw=p.put_string(text);
         std::array<U32,26> args{output,0,14,28,4,0,14,0,0,0,28,raw,0xffffffffu,0,255,255,255,255,0,0,0,0,0,0,0,1};
         args[24]=data+0x3000;
         const auto run=[&](bool native){
@@ -85,13 +107,14 @@ int main(int argc,char** argv){try{
             {std::optional<a::SpriteService> sink;if(native)sink.emplace(p.memory,Recording::submit,&recorded);p.callback(0x446500,args,false);}
             return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count();
         };
-        const auto static_ns=run(false);const auto expected=recorded.tiles;CHECK(expected.size()>=count);
+        const auto static_ns=run(false);const auto expected=recorded.tiles;CHECK(expected.size()>=expected_count);
         const auto expected_cpu=p.cpu;std::array<std::uint8_t,0x2000> expected_output;p.memory.copy_out(output,expected_output);
-        const auto before=a::native_glyph_counts();const auto resources_before=a::glyph_resource_counts;
+        const auto before=a::native_glyph_counts();const auto resources_before=a::glyph_resource_counts;const auto flow_before=a::text_jump_counts;
         const auto native_ns=run(true);const auto after=a::native_glyph_counts();const auto resources_after=a::glyph_resource_counts;
         const auto single_reads=resources_after.single_texture_handle_reads-resources_before.single_texture_handle_reads;
         const auto copied_words=resources_after.full_texture_handle_words-resources_before.full_texture_handle_words;
-        CHECK(single_reads>0 && single_reads+copied_words<count*195);
+        const auto flow_after=a::text_jump_counts;
+        CHECK(single_reads>0 && single_reads+copied_words<expected_count*195);
         const auto check_result=[&]{
             CHECK(recorded.tiles==expected && recorded.calls.empty());
             CHECK(p.cpu.eip==expected_cpu.eip && p.cpu.r[wr::ESP]==expected_cpu.r[wr::ESP]);
@@ -99,14 +122,22 @@ int main(int argc,char** argv){try{
             for(auto reg:{wr::EBX,wr::EBP,wr::ESI,wr::EDI})CHECK(p.cpu.r[reg]==expected_cpu.r[reg]);
             std::array<std::uint8_t,0x2000> actual;p.memory.copy_out(output,actual);CHECK(actual==expected_output);
         };
-        check_result();CHECK(after.accepted-before.accepted==count && after.declined==before.declined);++exact_pages;
+        check_result();
+        if(variant>=4)std::cout<<"Format "<<variant<<": glyphs "<<after.accepted-before.accepted<<", declines "<<after.declined-before.declined<<", tiles "<<expected.size()<<'\n';
+        CHECK(after.accepted-before.accepted==expected_count && after.declined==before.declined);++exact_pages;if(variant>=4)++formatted_pages;
+        word(variant);word(U32(recorded.tiles.size()));
+        for(const auto& tile:recorded.tiles){word(tile.texture);for(auto value:tile.vertices)word(value);}
+        // EAX/result and callee-preserved registers are part of the public ABI.
+        for(auto reg:{wr::EAX,wr::EBX,wr::EBP,wr::ESI,wr::EDI,wr::ESP})word(p.cpu.r[reg]);
+        word(p.cpu.eip);snapshot.write(reinterpret_cast<const char*>(p.cpu.fp.bytes.data()),p.cpu.fp.bytes.size());
+        snapshot.write(reinterpret_cast<const char*>(expected_output.data()),expected_output.size());
         // Resubmit the already-visible page without input/resource changes.
         for(unsigned repeat=0;repeat<2;++repeat){run(true);check_result();++unchanged_page_checks;}
         if(comma)report<<',';comma=true;
-        report<<"{\"characters\":"<<count<<",\"two_byte\":"<<(two_byte?"true":"false")<<",\"native_glyphs\":"<<after.accepted-before.accepted
+        report<<"{\"characters\":"<<expected_count<<",\"two_byte\":"<<(variant<4&&two_byte?"true":"false")<<",\"formatted\":"<<(variant>=4?"true":"false")<<",\"native_glyphs\":"<<after.accepted-before.accepted
             <<",\"native_tiles\":"<<expected.size()<<",\"legacy_draws\":0,\"legacy_state_calls\":0,\"single_handle_reads\":"<<single_reads<<",\"copied_handle_words\":"<<copied_words
-            <<",\"previous_minimum_handle_words\":"<<count*195<<",\"static_chain_ns\":"<<static_ns<<",\"native_ns\":"<<native_ns<<'}';
-        std::cout<<"Constructed page: "<<count<<" chars, exact "<<expected.size()<<" tiles, no legacy calls, static/native ns "<<static_ns<<'/'<<native_ns<<'\n';
+            <<",\"previous_minimum_handle_words\":"<<expected_count*195<<",\"local_jumps\":"<<flow_after.local_jumps-flow_before.local_jumps<<",\"local_yields\":"<<flow_after.budget_yields-flow_before.budget_yields<<",\"static_chain_ns\":"<<static_ns<<",\"native_ns\":"<<native_ns<<'}';
+        std::cout<<"Constructed page: "<<expected_count<<" chars, exact "<<expected.size()<<" tiles, no legacy calls, static/native ns "<<static_ns<<'/'<<native_ns<<'\n';
     }
     // The new allowance is finite and independent of the generic call budget.
     unsigned guard_cases{};
@@ -173,8 +204,8 @@ int main(int argc,char** argv){try{
         CHECK(!a::native_draw_glyph(cpu,p.memory));check_unchanged(before,stack,tiles);++handle_guards;
         p.memory.store(font+0x70,old_pointer,32);
     }
-    report<<"],\"exact_full_text_cases\":"<<exact_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
+    report<<"],\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
         <<",\"maximum_glyphs_per_boundary\":256,\"generic_call_limit_unchanged\":true,\"nested_memory_scopes_checked\":true,\"exhaustion_fallback_preserves_state\":true"
         <<",\"exact_texture_order_vertices_output_and_abi\":true,\"complete_handle_range_still_checked\":true,\"handle_changes_visible_immediately\":true,\"game_launched\":false,\"screen_access\":false,\"source_executable_opened\":false,\"passed\":true}\n";
-    CHECK(report);std::cout<<"Finite text helper and budget checks passed.\n";
+    CHECK(report && snapshot);std::cout<<"Finite text helper and budget checks passed.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

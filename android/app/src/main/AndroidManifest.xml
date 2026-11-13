@@ -4,6 +4,7 @@
     <application android:label="WHITE ALBUM2" android:allowBackup="false"
         android:icon="@drawable/ic_launcher_art" android:roundIcon="@drawable/ic_launcher_art"
         android:hardwareAccelerated="true" android:supportsRtl="true" android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <profileable android:shell="true" />
         <activity android:name=".FailureActivity" android:exported="false" />
         <activity android:name=".LauncherActivity" android:exported="true"
             android:theme="@android:style/Theme.Material.NoActionBar">

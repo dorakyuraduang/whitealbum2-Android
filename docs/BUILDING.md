@@ -385,6 +385,27 @@ ownership, generic-budget isolation and nonmutating exhaustion/adapter decline.
 These checks use recording sinks only: no original resources, game, graphics
 device or screen, and their CPU timings must not be reported as Android FPS.
 
+`scripts/prepare_shared_text_flow.py` derives one common source set from cached
+C++ and initial constants, after the chroma, language and progress recipes.
+The refresh/package entry points run it automatically. Ten text cases now also
+cover newlines, escapes, colour and numeric formatting. `tests/text_control.cpp`
+compares scoped stack operations against the original accessors in 104 finite
+paged/linear cases, including faults, partial pages, wrapping and executable
+stores. It also checks bounded local JMPs and unknown-target delegation.
+`tests/text_flow_recipe.py` rejects changed tables, call shapes and stack widths.
+These are component checks; they do not establish whole-game compatibility.
+Before a direct CMake configure, run this recipe instead of the individual
+preparations above; it runs them in dependency order.
+
+For comparison with a retained passing AOT archive, run
+`scripts/compare_text_cpu.py --baseline-dir build/<retained-text-baseline>`.
+The directory must contain `libwa2_shared_aot.a` and its matching
+`before-verification.json`. The same fixture object links against both archives;
+three alternating pairs compare explicit ABI/output snapshots and record CPU
+times. Neither the archive nor its private receipt belongs in public source.
+Android release packages permit shell CPU profiling (`profileable`), while
+remaining non-debuggable. Profiling never starts or operates the game.
+
 The same text checks count actual single-handle reads/full-table copies, change
 live texture handles (including zero), and reject protected unused table suffixes
 and wrapping table ranges without changing CPU/stack state. The independent

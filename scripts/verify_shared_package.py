@@ -140,6 +140,9 @@ def verify(status,publish=False):
     if not re.search(r'android:glEsVersion.*0x30000',tree):raise ValueError('Actual renderer requires GLES 3')
     for value in ('"org.wa2.port"','".LauncherActivity"','".Wa2Activity"','".FailureActivity"','android:minSdkVersion','android:targetSdkVersion'):
         if value not in tree:raise ValueError('Missing manifest entry: '+value)
+    profile=re.search(r'E: profileable[^\n]*\n((?:\s+A:[^\n]*\n)+)',tree)
+    if not profile or not re.search(r'android:shell[^\n]*\(type 0x12\)0xffffffff',profile[1]):raise ValueError('Release shell CPU profiling is missing')
+    if not re.search(r'android:debuggable[^\n]*\(type 0x12\)0x0(?:\s|$)',tree):raise ValueError('Production app must remain non-debuggable')
     win=Path(status['artifacts']['windows']['file']);data=win.read_bytes()
     if data[:2]!=b'MZ' or struct.unpack_from('<H',data,struct.unpack_from('<I',data,0x3c)[0]+4)[0]!=0x8664:
         raise ValueError('Windows host is not a native x64 PE')
@@ -165,6 +168,7 @@ def verify(status,publish=False):
         android_resource_table=resource_table,
         application_icons=application_icons,
         android_signature_v2_verified=True,android_zip_alignment_verified=True,
+        android_shell_cpu_profileable=True,android_debuggable=False,
         android_sdl_java_native_bindings=sdl_jni,
         common_source_set_compiled=True,actual_shared_android_entry_verified=True,android_needed=needed,windows_dlls=dlls,
         runtime_instruction_decoder_linked=False,jit_linked=False,legacy_independent_scene_host_linked=False,
