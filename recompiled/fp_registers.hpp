@@ -3,6 +3,7 @@
 #include <utility>
 
 namespace wa2::aot::fp {
+struct TextFtolAdapter;
 #if WA2_AOT_DIAGNOSTICS
 inline thread_local bool register_fp_enabled=true;
 struct RegisterFpReferenceScope {
@@ -80,6 +81,7 @@ public:
 // Metered differential bodies always use that original ABI too.
 template<bool Metered>
 class RegisterFrame {
+    friend struct TextFtolAdapter;
     wr::Cpu& cpu_;wr::Memory& memory_;wr::Memory::ExecutionScope& scope_;
     detail::RegisterStack stack_;
     bool active_{};std::uint64_t instruction_{},data_{};std::uint16_t opcode_{};

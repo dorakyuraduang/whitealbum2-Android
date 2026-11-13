@@ -58,6 +58,7 @@ def main():
     language_sources=prepare_language()
     progress_sources=prepare_progress()
     text_flow_sources=prepare_text_flow()
+    if digest(ROOT/text_flow_sources['reference_file'])!=text_flow_sources['reference_sha256']:raise ValueError('Changed cached text spacing reference')
     archive=args.windows_sdl.resolve();sdl_hash=digest(archive)
     if sdl_hash not in {value for name,value in reference['source_sha256'].items() if name.endswith('/libSDL2.a')}:raise ValueError('Windows SDL archive differs from the verified reference')
     unchanged_math={name:value for name,value in reference['source_sha256'].items() if name.startswith('recompiled/') and Path(name).name in ('native_math.cpp','native_math.hpp','native_gateways.cpp','extended80.cpp','extended80.hpp','transcend.cpp')}
@@ -107,7 +108,7 @@ def main():
         tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'scripts/verify_glyph_precision.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp',ROOT/'tests/glyph_cache.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'scripts/compare_android_text.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/verify_resource_lookup.py',ROOT/'tests/resource_lookup.cpp',ROOT/'generated/wa2-win64/code_page_1112.cpp']
-        tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp',ROOT/'tests/text_ftol.cpp',ROOT/'tests/immutable_buffers.cpp']
+        tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp',ROOT/'tests/text_ftol.cpp',ROOT/'tests/text_spacing.cpp',ROOT/'tests/immutable_buffers.cpp',ROOT/text_flow_sources['reference_file']]
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
         tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
         tracked += [ROOT/('logs/media-codec-'+host+'-build.json') for host in ('windows','arm64')]
@@ -123,7 +124,7 @@ def main():
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
         tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','glyph_cache','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         tests['resource_lookup']='wa2_refresh_resource_lookup'
-        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu','text_ftol','immutable_buffers')})
+        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu','text_ftol','text_spacing','immutable_buffers')})
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -133,7 +134,7 @@ def main():
         reader_path=build/'counter_reader.json';run([sys.executable,ROOT/'tests/android_counters.py',reader_path]);reports['counter_reader']=json.loads(reader_path.read_text())
         if not reports['counter_reader']['passed'] or reports['counter_reader']['parser_cases']<12:raise ValueError('Incomplete bounded counter assembly checks')
         recipe_path=build/'text_flow_recipe.json';run([sys.executable,ROOT/'tests/text_flow_recipe.py',recipe_path]);reports['text_flow_recipe']=json.loads(recipe_path.read_text())
-        if not reports['text_flow_recipe']['passed'] or reports['text_flow_recipe']['rejections']<9:raise ValueError('Incomplete text flow preparation guards')
+        if not reports['text_flow_recipe']['passed'] or reports['text_flow_recipe']['rejections']<10:raise ValueError('Incomplete text flow preparation guards')
         lookup=reports['resource_lookup']
         if lookup['queries']!=574 or lookup['diagnostics']!=116 or lookup['guards']!=10 or lookup['mutations']!=4 or not lookup['no_open_archive_required'] or lookup['old_error_reproduced']:raise ValueError('Incomplete source directory lookup checks')
         run([sys.executable,ROOT/'scripts/verify_resource_lookup.py']);lookup_reference=fresh(ROOT/'logs/resource-lookup-reference.json')
@@ -145,7 +146,9 @@ def main():
         sprite=reports['native_sprite_cpu']
         if sprite['cases']<200 or sprite['decline_cases']!=24 or not sprite['vertex_bits_and_render_state_equal'] or sprite['performance_samples_rerun']:raise ValueError('Incomplete source/native sprite correctness checks')
         ftol=reports['text_ftol']
-        if ftol['exact_cpu_fp_stack_cases']!=5376 or ftol['declines']<16 or ftol['host_environment_cases']!=4 or not ftol['reference_is_cached_source']:raise ValueError('Incomplete integer-conversion source comparison')
+        if ftol['exact_cpu_fp_stack_cases']!=5376 or ftol['exact_fractional_cases']!=12800 or ftol['register_bridge_cases']!=35328 or ftol['declines']<16 or ftol['host_environment_cases']!=8 or not all(ftol[k] for k in ('reference_is_cached_source','inexact_binary64_inputs_keep_source','fractional_mxcsr_and_x87_state_checked','bridge_keeps_live_registers')):raise ValueError('Incomplete text-conversion source comparison')
+        spacing=reports['text_spacing']
+        if spacing['cases']!=6016 or spacing['fallback_guards']!=12 or not all(spacing[k] for k in ('full_cpu_flags_fp_stack_and_carry_equal','reference_is_cached_source','overflow_and_sentinels_checked')):raise ValueError('Incomplete text spacing source comparison')
         immutable=reports['immutable_buffers']
         if immutable['packets']!=512 or immutable['production_maximum_payload_bytes']!=2097152 or not all(immutable[k] for k in ('collisions_checked','all_retained_bytes_unchanged','two_use_admission','bounded_eviction_and_release','allocation_retry')):raise ValueError('Incomplete immutable text buffer checks')
         run([sys.executable,ROOT/'scripts/verify_glyph_precision.py']);precision=fresh(ROOT/'logs/glyph-precision-check.json')
@@ -227,7 +230,7 @@ def main():
         alignment=[int(line.split()[-1],16) for line in header.splitlines() if line.strip().startswith('LOAD ')]
         if not alignment or min(alignment)<16384:raise ValueError('Android host lacks 16 KiB alignment')
         symbols=output([llvm/'llvm-nm.exe','--defined-only','--demangle',actual])
-        if re.search(r'Zydis|shared_aot_oracle|wr_x87_|wr_sse_|wa2::game::|wa2::script::|wa2::aot::chroma_reference::|wa2::aot::f_[0-9a-f]+<true>',symbols):raise ValueError('Decoder, diagnostic or separate native game leaked into the AOT application')
+        if re.search(r'Zydis|shared_aot_oracle|wr_x87_|wr_sse_|wa2::game::|wa2::script::|wa2::aot::(?:chroma_reference|text_spacing_reference)::|wa2::aot::f_[0-9a-f]+<true>',symbols):raise ValueError('Decoder, diagnostic or separate native game leaked into the AOT application')
         data=actual.read_bytes()
         expected={'compatibleOpen':'(Ljava/lang/String;III)I','compatibleReadMetadata':'(Ljava/lang/String;IZ)[Ljava/lang/String;','compatibleReadOpen':'(Ljava/lang/String;Ljava/lang/String;I)I','compatibleReadBatch':'([Ljava/lang/String;[Ljava/lang/String;I)[I','compatibleOperation':'(Ljava/lang/String;Ljava/lang/String;III)I','compatibleReplace':'(Ljava/lang/String;ILjava/nio/ByteBuffer;)V'}
         declarations=output([ROOT/'tools/source-analysis/jdk-21.0.12.1+1/bin/javap.exe','-p','-s',Path(ui['source_sets']['shared-aot']['classes_directory'])/'org/wa2/port/ResourceDirectory.class'])
