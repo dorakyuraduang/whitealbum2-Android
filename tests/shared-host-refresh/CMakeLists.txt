@@ -14,7 +14,7 @@ foreach(name selected_save_files portable_system resource_mount test_profile por
 endforeach()
 add_executable(wa2_refresh_resource_lookup "${WA2_ROOT}/tests/resource_lookup.cpp")
 target_link_libraries(wa2_refresh_resource_lookup PRIVATE wa2_function_process)
-foreach(name stream_buffer render_submission integer_registers native_sprite_cpu)
+foreach(name render_submission integer_registers native_sprite_cpu)
     add_executable(wa2_refresh_${name} "${WA2_ROOT}/tests/${name}.cpp")
     target_link_libraries(wa2_refresh_${name} PRIVATE wa2_function_process)
 endforeach()

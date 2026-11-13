@@ -107,7 +107,7 @@ def main():
         tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'scripts/verify_glyph_precision.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp',ROOT/'tests/glyph_cache.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/verify_resource_lookup.py',ROOT/'tests/resource_lookup.cpp',ROOT/'generated/wa2-win64/code_page_1112.cpp']
-        tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/stream_buffer.cpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp']
+        tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
         tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
         tracked += [ROOT/('logs/media-codec-'+host+'-build.json') for host in ('windows','arm64')]
@@ -123,7 +123,7 @@ def main():
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
         tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','glyph_cache','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         tests['resource_lookup']='wa2_refresh_resource_lookup'
-        tests.update({name:'wa2_refresh_'+name for name in ('stream_buffer','render_submission','integer_registers','native_sprite_cpu')})
+        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu')})
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -139,8 +139,7 @@ def main():
         run([sys.executable,ROOT/'scripts/verify_resource_lookup.py']);lookup_reference=fresh(ROOT/'logs/resource-lookup-reference.json')
         if lookup_reference['native_library_sha256']!=digest(build/'shared_aot/libwa2_function_process.a') or lookup_reference['query_cases']!=574 or lookup_reference['diagnostics']!=116 or lookup_reference['checked_cached_locations']!=123:raise ValueError('Incomplete cached-source resource lookup comparison')
         reports['resource_lookup_reference']=lookup_reference
-        stream=reports['stream_buffer'];packets=reports['render_submission']['multi_texture_batch']
-        if stream['uploads']<1800 or stream['external_invalidations']<100 or not stream['all_queued_bytes_preserved'] or stream['maximum_game_stream_storage']!=655360:raise ValueError('Incomplete bounded driver stream checks')
+        packets=reports['render_submission']['multi_texture_batch']
         if packets['slots']!=8 or packets['source_draws']!=120 or packets['recorded_driver_packets']!=15 or not packets['unchanged_vertex_bits_uv_colour_and_order']:raise ValueError('Incomplete texture batch packet checks')
         if reports['integer_registers']['exact_cpu_stack_fault_cases']!=384:raise ValueError('Incomplete native register mask snapshots')
         sprite=reports['native_sprite_cpu']

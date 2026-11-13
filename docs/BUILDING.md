@@ -449,14 +449,18 @@ private renamed SDL archive. It compares submitted CPU vertex/index bytes,
 texture selection and effective render state without reading pixels; its
 timings are instrumentation timings, not performance results. Add
 `--state-barriers` to interleave alpha/viewport changes and programmable-vertex
-draws, checking restoration and mixed stream offsets. Instrumentation and the
-modified test SDL archive never enter a shipped host.
+draws, checking restoration across compact and generic layouts. Instrumentation
+and the modified test SDL archive never enter a shipped host.
 
 The ordinary memory suite includes the production texture packet snapshots
-for eight bindings, 2,048 bounded stream plans with deferred-consumption checks,
-384 register/stack/fault snapshots, and complete cached/native sprite
-comparisons with `--correctness-only`. It skips that sprite fixture's timing
+for eight bindings, 384 register/stack/fault snapshots, and complete
+cached/native sprite comparisons with `--correctness-only`. It skips that sprite fixture's timing
 loops. No ordinary refresh test creates a graphics context.
+
+The Android regression reported for 0.2.91 led to withdrawal of its render
+streaming and state-reuse changes in 0.2.92. A desktop driver improvement is
+not evidence of a mobile-driver improvement. Correct submitted geometry/state
+also does not establish frame pacing or FPS on a device.
 
 Keep precision-specific results separate: widening admission improves the
 previously declined PC53/PC64 integer cases, while the already-admitted PC24

@@ -40,7 +40,6 @@ struct GlApi {
     PFNGLDELETEBUFFERSPROC DeleteBuffers{};
     PFNGLBINDBUFFERPROC BindBuffer{};
     PFNGLBUFFERDATAPROC BufferData{};
-    PFNGLBUFFERSUBDATAPROC BufferSubData{};
     PFNGLGETUNIFORMLOCATIONPROC GetUniformLocation{};
     PFNGLUNIFORM1IPROC Uniform1i{};
     PFNGLUNIFORM1FPROC Uniform1f{};
@@ -62,7 +61,7 @@ struct GlApi {
         WA2_GL_LOAD(BindFramebuffer) WA2_GL_LOAD(FramebufferTexture2D)
         WA2_GL_LOAD(CheckFramebufferStatus) WA2_GL_LOAD(BlitFramebuffer)
         WA2_GL_LOAD(GenBuffers) WA2_GL_LOAD(DeleteBuffers) WA2_GL_LOAD(BindBuffer)
-        WA2_GL_LOAD(BufferData) WA2_GL_LOAD(BufferSubData) WA2_GL_LOAD(GetUniformLocation)
+        WA2_GL_LOAD(BufferData) WA2_GL_LOAD(GetUniformLocation)
         WA2_GL_LOAD(Uniform1i) WA2_GL_LOAD(Uniform1f)
 #undef WA2_GL_LOAD
         if(es){load(clear_depth_f,"glClearDepthf");load(depth_range_f,"glDepthRangef");}

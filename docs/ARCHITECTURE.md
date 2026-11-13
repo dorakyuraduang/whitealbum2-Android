@@ -1568,18 +1568,12 @@ systematically evicting an earlier glyph from one directly mapped slot. Full
 sprite/image/palette/half-pixel/handle keys and two-use admission are retained;
 this is tile geometry reuse, with fresh resource resolution and submission.
 
-Long-page text can use many font images. Capacity flushes reuse an unchanged
-pipeline rather than cloning and applying the entire source
-State again. Physical sampler bindings remain deferred to each packet's flush;
-ordinary draws and state/configuration changes still invalidate that reuse.
-Converted and compact draws share bounded streaming buffers (512 KiB vertices,
-128 KiB indices), append into unused aligned regions, and orphan storage on
-wrap. Oversized packets retain dedicated uploads. Vertex/index offsets and
-triangle/texture order are preserved. No glyph atlas or rendered-page cache is
-introduced. The existing eight-image shader is retained: increasing sampler
-capacity regressed the sparse-image control in finite PC checks. Scalar
-sprite/glyph reads also reuse their held checked Memory
-scope, and compile-time register widths no longer call the dynamic mask helper.
+Version 0.2.92 restores the pre-0.2.90 upload, capacity-flush and scalar-read
+paths after a reported Android frame-rate regression in 0.2.91. Both hosts
+again use dedicated BufferData uploads instead of append/BufferSubData streams;
+the associated state-reuse and scalar-access changes are also withdrawn.
+The finite desktop component gains did not establish mobile performance.
+The existing eight-image packets and earlier glyph fixes remain unchanged.
 
 The glyph entry hook is also derived from cached C++ in the same recipe. It
 does not raise the 256-call allowance or the generic 32-call allowance. A finite

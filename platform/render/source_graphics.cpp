@@ -12,7 +12,6 @@
 #include "submission_cache.hpp"
 #include "screen_vertices.hpp"
 #include "texture_batch.hpp"
-#include "stream_buffer.hpp"
 #include "sprite_texture_refs.hpp"
 #include "frame_metrics.hpp"
 #include "presentation_pacing.hpp"
@@ -144,10 +143,6 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     std::vector<std::uint16_t> pending_screen_indices;
     wa2::graphics::ScreenTextureBatch<Res> texture_batch;
     bool texture_batch_available{},texture_batch_mode{};
-    bool texture_batch_bindings_dirty{};
-    wa2::graphics::StreamBuffer<512*1024> vertex_stream;
-    wa2::graphics::StreamBuffer<128*1024> index_stream;
-    std::uint64_t stream_storage_allocations{},stream_subdata_uploads{},stream_direct_uploads{},deferred_texture_applies{};
     std::string texture_batch_failure;
     std::uint64_t texture_batch_draws{},texture_batch_submissions{};
     std::uint64_t screen_draws{},screen_unique_vertices{},vertex_upload_bytes{},index_upload_bytes{};
@@ -302,14 +297,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
         for(unsigned unit=0;unit<8;++unit)for(unsigned j=0;j<33;++j)word_differences+=state.stage[unit][j]!=baseline_words.stage[unit][j];
         for(unsigned unit=0;unit<16;++unit){for(unsigned j=0;j<14;++j)word_differences+=state.sampler[unit][j]!=baseline_words.sampler[unit][j];texture_differences+=state.textures[unit]!=baseline_textures[unit];}}
     void set_word(U32& destination,U32 value,U32 baseline){if(destination!=value){word_differences-=destination!=baseline;word_differences+=value!=baseline;destination=value;}}
-    template<std::size_t Capacity>std::size_t stream_upload(GLenum target,const void* data,std::size_t bytes,wa2::graphics::StreamBuffer<Capacity>& stream){
-        const auto plan=stream.reserve(bytes);
-        if(plan.direct){gl.BufferData(target,GLsizeiptr(bytes),data,GL_STREAM_DRAW);++stream_direct_uploads;}
-        else{if(plan.allocation){gl.BufferData(target,GLsizeiptr(plan.allocation),nullptr,GL_STREAM_DRAW);++stream_storage_allocations;}
-            gl.BufferSubData(target,GLintptr(plan.offset),GLsizeiptr(bytes),data);++stream_subdata_uploads;}
-        return plan.offset;
-    }
-    void apply(bool defer_textures=false);void flush();void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
+    void apply();void flush();void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
     void texture_mode(bool enabled){if(texture_batch_mode!=enabled){flush();texture_batch_mode=enabled;applied.reset();}}
     bool batch_textures(std::span<const wa2::graphics::ScreenVertex>,U32,U32,std::span<const U32>);
     U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {});
@@ -328,7 +316,6 @@ public:
         out<<",\"movie\":{\"frames\":"<<movie_frames<<",\"client_size\":";array(last_movie_client);out<<",\"frame_size\":";array(last_movie_size);
         out<<",\"source_crop_xywh\":";array(last_movie_source);out<<",\"requested_client_xywh\":";array(last_movie_requested);out<<",\"drawable_xywh\":";array(last_movie_destination);
         out<<"},\"state_applies\":"<<state_applies<<",\"state_cache_hits\":"<<state_cache_hits<<",\"texture_only_applies\":"<<texture_only_applies
-            <<",\"deferred_texture_applies\":"<<deferred_texture_applies<<",\"stream_storage_allocations\":"<<stream_storage_allocations<<",\"stream_subdata_uploads\":"<<stream_subdata_uploads<<",\"stream_direct_uploads\":"<<stream_direct_uploads
             <<",\"compact_screen_draws\":"<<screen_draws<<",\"compact_screen_unique_vertices\":"<<screen_unique_vertices<<",\"vertex_upload_bytes\":"<<vertex_upload_bytes
             <<",\"index_upload_bytes\":"<<index_upload_bytes
             <<",\"multi_texture_batch\":{\"available\":"<<(texture_batch_available?"true":"false")<<",\"slots\":"<<wa2::graphics::TextureBatchSlots
@@ -431,10 +418,10 @@ DecodedVertex Graphics::fixed_vertex(const DecodedVertex& source){
 }
 void Graphics::submit(GLenum primitive,std::span<const DecodedVertex> vertices,std::span<const U32> indices){
     gl.BindBuffer(GL_ARRAY_BUFFER,vertex_buffer);
-    const auto vertex_offset=stream_upload(GL_ARRAY_BUFFER,vertices.data(),vertices.size_bytes(),vertex_stream);
+    gl.BufferData(GL_ARRAY_BUFFER,GLsizeiptr(vertices.size_bytes()),vertices.data(),GL_STREAM_DRAW);
     const unsigned stride=sizeof(DecodedVertex);
     const auto attribute=[&](MOJOSHADER_usage usage,int index,unsigned count,std::size_t offset){
-        MOJOSHADER_glSetVertexAttribute(usage,index,count,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(vertex_offset+offset));};
+        MOJOSHADER_glSetVertexAttribute(usage,index,count,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(offset));};
     attribute(MOJOSHADER_USAGE_POSITION,0,4,offsetof(DecodedVertex,pos));
     attribute(MOJOSHADER_USAGE_NORMAL,0,3,offsetof(DecodedVertex,normal));
     attribute(MOJOSHADER_USAGE_COLOR,0,4,offsetof(DecodedVertex,color));
@@ -442,8 +429,8 @@ void Graphics::submit(GLenum primitive,std::span<const DecodedVertex> vertices,s
     for(unsigned n=0;n<8;++n)attribute(MOJOSHADER_USAGE_TEXCOORD,n,4,offsetof(DecodedVertex,uv)+n*sizeof(std::array<float,4>));
     MOJOSHADER_glProgramReady();MOJOSHADER_glProgramViewportInfo(state.viewport.Width,state.viewport.Height,image(backbuffer)->width,image(backbuffer)->height,1);
     if(indices.empty())gl.DrawArrays(primitive,0,GLsizei(vertices.size()));
-    else{gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER,index_buffer);const auto index_offset=stream_upload(GL_ELEMENT_ARRAY_BUFFER,indices.data(),indices.size_bytes(),index_stream);
-        gl.DrawElements(primitive,GLsizei(indices.size()),GL_UNSIGNED_INT,reinterpret_cast<const void*>(index_offset));}
+    else{gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER,index_buffer);gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,GLsizeiptr(indices.size_bytes()),indices.data(),GL_STREAM_DRAW);
+        gl.DrawElements(primitive,GLsizei(indices.size()),GL_UNSIGNED_INT,nullptr);}
     ++submitted_draws;submitted_vertices+=indices.empty()?vertices.size():indices.size();
 }
 U32 Graphics::init(U32 pp,U32 focus){
@@ -724,17 +711,10 @@ void Graphics::bind_sampler(unsigned n,const Res& texture,const std::array<U32,1
     // Recording the actual last applied state retains ordered alias behavior.
     object->parameters=requested;
 }
-void Graphics::apply(bool defer_textures){
+void Graphics::apply(){
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.apply:nullptr);
     if(has_pending() && (!applied || config_version!=applied_config_version || word_differences || texture_differences))flush();
     auto target=image(state.target);upload(target);
-    // A texture-batch flush changes physical sampler bindings, but not its
-    // pipeline, target, viewport or constants. Bind the next packet's images
-    // at flush time instead of cloning/reapplying the entire State per packet.
-    if(defer_textures && texture_batch_mode && applied && config_version==applied_config_version && !word_differences){
-        ++deferred_texture_applies;++state_cache_hits;return;
-    }
-    if(texture_batch_bindings_dirty)applied.reset();
     const auto mode=wa2::graphics::submission_apply(bool(applied),config_version==applied_config_version,
         word_differences,texture_differences,!state.pixel_shader,wa2::graphics::texture_mask(state.textures),
         applied?wa2::graphics::texture_mask(applied->textures):0);
@@ -768,7 +748,7 @@ void Graphics::apply(bool defer_textures){
     prepare_program();
     for(unsigned n=0;n<16;++n){gl.ActiveTexture(GL_TEXTURE0+n);if(state.textures[n])bind_sampler(n,state.textures[n]);else gl.BindTexture(GL_TEXTURE_2D,0);}
     gl.ActiveTexture(GL_TEXTURE0);
-    applied=state;applied_config_version=config_version;applied_texture_version=texture_version;reset_baseline();texture_batch_bindings_dirty=false;
+    applied=state;applied_config_version=config_version;applied_texture_version=texture_version;reset_baseline();
 }
 
 void Graphics::flush() {
@@ -781,24 +761,24 @@ void Graphics::flush() {
     const auto count=multiple?texture_batch.indices().size():compact?pending_screen_indices.size():pending_vertices.size();
     const auto bytes=multiple?texture_batch.vertices().size_bytes():compact?pending_screen.size()*sizeof(wa2::graphics::ScreenVertex):pending_vertices.size()*sizeof(FixedVertex);
     const void* data=multiple?static_cast<const void*>(texture_batch.vertices().data()):compact?static_cast<const void*>(pending_screen.data()):pending_vertices.data();
-    const auto vertex_offset=stream_upload(GL_ARRAY_BUFFER,data,bytes,vertex_stream);
+    gl.BufferData(GL_ARRAY_BUFFER,GLsizeiptr(bytes),data,GL_STREAM_DRAW);
     vertex_upload_bytes+=bytes;
     if(compact){
         using V=wa2::graphics::ScreenVertex;const unsigned stride=multiple?sizeof(wa2::graphics::TextureBatchVertex):sizeof(V);
-        MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_POSITION,0,4,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(vertex_offset+offsetof(V,position)));
-        MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_COLOR,0,4,MOJOSHADER_ATTRIBUTE_UBYTE,1,stride,reinterpret_cast<const void*>(vertex_offset+offsetof(V,colour)));
+        MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_POSITION,0,4,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(offsetof(V,position)));
+        MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_COLOR,0,4,MOJOSHADER_ATTRIBUTE_UBYTE,1,stride,reinterpret_cast<const void*>(offsetof(V,colour)));
         // Admission guarantees that the fixed pixel shader consumes only
         // these two texture coordinates; linked-out attributes need no array.
         for(unsigned n=0;n<2;++n)MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_TEXCOORD,n,2,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,
-            reinterpret_cast<const void*>(vertex_offset+offsetof(V,texture)+n*sizeof(std::array<float,2>)));
+            reinterpret_cast<const void*>(offsetof(V,texture)+n*sizeof(std::array<float,2>)));
         if(multiple)MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_TEXCOORD,7,1,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,
-            reinterpret_cast<const void*>(vertex_offset+offsetof(wa2::graphics::TextureBatchVertex,binding)));
+            reinterpret_cast<const void*>(offsetof(wa2::graphics::TextureBatchVertex,binding)));
     }else{
         const unsigned stride=sizeof(FixedVertex);
-        MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_POSITION,0,4,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(vertex_offset+offsetof(FixedVertex,pos)));
-        MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_COLOR,0,4,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(vertex_offset+offsetof(FixedVertex,color)));
+        MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_POSITION,0,4,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(offsetof(FixedVertex,pos)));
+        MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_COLOR,0,4,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,reinterpret_cast<const void*>(offsetof(FixedVertex,color)));
         for(unsigned n=0;n<8;++n)MOJOSHADER_glSetVertexAttribute(MOJOSHADER_USAGE_TEXCOORD,n,4,MOJOSHADER_ATTRIBUTE_FLOAT,0,stride,
-            reinterpret_cast<const void*>(vertex_offset+offsetof(FixedVertex,uv)+n*sizeof(std::array<float,4>)));
+            reinterpret_cast<const void*>(offsetof(FixedVertex,uv)+n*sizeof(std::array<float,4>)));
     }
     if(multiple){
         if(!applied)stop("missing texture batch state");
@@ -817,13 +797,13 @@ void Graphics::flush() {
         gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER,index_buffer);
         const auto indices=multiple?texture_batch.indices():std::span<const std::uint16_t>(pending_screen_indices);
         const auto size=indices.size_bytes();
-        const auto index_offset=stream_upload(GL_ELEMENT_ARRAY_BUFFER,indices.data(),size,index_stream);
-        index_upload_bytes+=size;gl.DrawElements(GL_TRIANGLES,GLsizei(count),GL_UNSIGNED_SHORT,reinterpret_cast<const void*>(index_offset));
+        gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,GLsizeiptr(size),indices.data(),GL_STREAM_DRAW);
+        index_upload_bytes+=size;gl.DrawElements(GL_TRIANGLES,GLsizei(count),GL_UNSIGNED_SHORT,nullptr);
     }else gl.DrawArrays(GL_TRIANGLES,0,GLsizei(count));
     ++submitted_draws;submitted_vertices+=count;
     if(pending_target)pending_target->levels[0]->gpu_dirty=true;
     pending_vertices.clear();pending_screen.clear();pending_screen_indices.clear();pending_target.reset();
-    if(multiple){++texture_batch_submissions;texture_batch.clear();texture_batch_bindings_dirty=true;}
+    if(multiple){++texture_batch_submissions;texture_batch.clear();applied.reset();}
 }
 bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> vertices,U32 type,U32 count,std::span<const U32> indices){
     if(!texture_batch_available || state.vertex_shader || state.pixel_shader || !state.textures[0])return false;
@@ -838,7 +818,7 @@ bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> verti
     if(!texture_batch.fits(state.textures[0],unsigned(vertices.size()),elements))return false;
     texture_mode(true);
     if(texture_batch.empty()){
-        try{apply(true);}
+        try{apply();}
         catch(const GuestFault& error){
             // This is an optional native submission optimization. Older or
             // buggy shader drivers retain the original shared draw path.
