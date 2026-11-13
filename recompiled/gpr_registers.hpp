@@ -21,7 +21,8 @@ public:
     [[gnu::always_inline]] wr::U32 get(){
         static_assert(Index<8 && (Width==8 || Width==16 || Width==32) && (Shift==0 || (Shift==8 && Width==8)));
         if(!enabled_)return wr::reg(cpu_,Index,Width,Shift);
-        load();return (values_[Index]>>Shift)&wr::mask(Width);
+        load();constexpr auto mask=~wr::U32(0)>>(32-Width);
+        return (values_[Index]>>Shift)&mask;
     }
     template<unsigned Index,unsigned Width=32,unsigned Shift=0>
     [[gnu::always_inline]] void set(wr::U32 value){

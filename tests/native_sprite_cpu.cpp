@@ -44,7 +44,8 @@ struct Recorder {
     }
 };
 int main(int argc,char** argv){try{
-    CHECK(argc==2);a::Runtime runtime;auto& p=runtime.process();Recorder recorded;
+    CHECK(argc==2 || (argc==3 && std::string_view(argv[2])=="--correctness-only"));const bool correctness_only=argc==3;
+    a::Runtime runtime;auto& p=runtime.process();Recorder recorded;
     std::vector<unsigned> methods;
     for(unsigned n=0;n<std::size(methods_device);++n){const auto method=methods_device[n];p.register_api("native-sprite-device",method.name,method.arguments,[&,name=std::string(method.name)](wr::Process& q){recorded.api(name,q.argument_snapshot(),q.memory);return 0u;});
         methods.push_back(p.resolve("native-sprite-device",method.name));if(wa2::graphics::direct_device_method(n))p.certify_leaf_api("native-sprite-device",method.name);}
@@ -110,9 +111,14 @@ int main(int argc,char** argv){try{
         run(false).same(run(true));++visible_grid_cases;
     }
     unsigned single_tile_cases{},single_tile_hits{},single_tile_fallbacks{};
-    const auto compare_tile=[&]{const auto before=wa2::geometry::single_tile_diagnostics.accepted;
+    const auto compare_tile=[&]{
+#if WA2_AOT_DIAGNOSTICS
+        const auto before=wa2::geometry::single_tile_diagnostics.accepted;
+#endif
         run(false).same(run(true));++single_tile_cases;
+#if WA2_AOT_DIAGNOSTICS
         if(wa2::geometry::single_tile_diagnostics.accepted>before)++single_tile_hits;else ++single_tile_fallbacks;
+#endif
     };
     for(unsigned size:{64u,128u,256u,512u})for(unsigned variant=0;variant<16;++variant){
         setup(variant%8);const unsigned tw=size,th=size/2;
@@ -172,12 +178,12 @@ int main(int argc,char** argv){try{
         }
         return std::array<std::uint64_t,3>{std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count()),checksum,draws};
     };
-    for(unsigned kind=0;kind<3;++kind)for(unsigned pair=0;pair<5;++pair){std::array<std::array<std::uint64_t,3>,2> result;
+    if(!correctness_only)for(unsigned kind=0;kind<3;++kind)for(unsigned pair=0;pair<5;++pair){std::array<std::array<std::uint64_t,3>,2> result;
         for(unsigned order=0;order<2;++order){const auto side=(pair+order)&1;result[side]=sample(kind,side);timing[kind][pair][side]=result[side][0];}
         CHECK(result[0][1]==result[1][1] && result[0][2]==result[1][2]);}
     std::ofstream out(argv[1]);out<<"{\"cases\":"<<cases<<",\"visible_grid_cases\":"<<visible_grid_cases<<",\"decline_cases\":"<<declines<<",\"renderer_decline_cases\":"<<rejected_sinks<<",\"host_environment_cases\":"<<environments<<",\"tiles\":"<<tiles
         <<",\"single_tile_source_cases\":"<<single_tile_cases<<",\"single_tile_candidate_hits\":"<<single_tile_hits<<",\"single_tile_fallback_cases\":"<<single_tile_fallbacks
-        <<",\"vertex_bits_and_render_state_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false,\"timings\":[";
+        <<",\"vertex_bits_and_render_state_equal\":true,\"void_cdecl_abi_preserved\":true,\"raw_callee_volatile_x87_contract\":false,\"performance_samples_rerun\":"<<(correctness_only?"false":"true")<<",\"timings\":[";
     for(unsigned kind=0;kind<3;++kind){if(kind)out<<',';out<<"{\"sprites_per_sample\":"<<(kind==2?40:400)<<",\"rotated\":"<<(kind==1?"true":"false")<<",\"font_tiles\":"<<(kind==2?"true":"false")<<",\"paired_ns\":[";
         for(unsigned pair=0;pair<5;++pair){if(pair)out<<',';out<<'['<<timing[kind][pair][0]<<','<<timing[kind][pair][1]<<']';}out<<"]}";}
     out<<"],\"whole_game_fps_measured\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";

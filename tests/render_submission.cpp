@@ -123,7 +123,7 @@ int main(int argc,char** argv){try{
         <<",\"compact_screen_cases\":"<<packed_cases<<",\"triangle_order_cases\":"<<triangle_cases<<",\"compact_vertex_bytes\":"<<sizeof(g::ScreenVertex)<<",\"previous_fixed_vertex_bytes\":160"
         <<",\"synthetic_texture_draws\":128,\"synthetic_full_state_applies\":"<<full<<",\"synthetic_texture_only_applies\":"<<textures
         <<",\"alias_sampler_precedence\":true,\"null_texture_shader_invalidation\":true,\"read_only_queries_preserve_batches\":true,\"shader_constant_bits_preserved\":true,\"menu_update_classification\":true,\"frame_metrics\":"<<metrics.report()
-        <<",\"multi_texture_batch\":{\"slots\":8,\"source_draws\":"<<texture_batch.source_draws<<",\"recorded_driver_packets\":"<<texture_batch.driver_packets
+        <<",\"multi_texture_batch\":{\"slots\":"<<g::TextureBatchSlots<<",\"source_draws\":"<<texture_batch.source_draws<<",\"recorded_driver_packets\":"<<texture_batch.driver_packets
         <<",\"triangles\":"<<texture_batch.triangles<<",\"single_image_reuse_packets\":"<<texture_batch.reused_texture_packets<<",\"lifetime_checks\":"<<texture_batch.lifetime_checks
         <<",\"unchanged_vertex_bits_uv_colour_and_order\":true,\"indexed_inputs_and_capacity_checks\":true,\"same_production_packet_builder\":true}"
         <<",\"actual_driver_calls_measured\":false,\"whole_game_fps_measured\":false,\"graphics_device_created\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";

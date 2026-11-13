@@ -439,6 +439,25 @@ and records submission/completion times and draw topology. This is an opt-in
 component check, not a whole-game/phone FPS or pressure test; the ordinary
 refresh never creates that graphics context.
 
+Use `--text-kind cjk --font-textures 195` for changing long pages that exercise
+many font images, rather than relying on the ASCII/small-texture working set.
+`--compare-renderer` additionally requires the retained renderer archive and
+its `renderer-before.json`, bound to the passing baseline receipt. After
+partial-page growth, the sequence returns to a short page and fills again.
+`--verify-commands` interposes only this owned fixture's GL calls through a
+private renamed SDL archive. It compares submitted CPU vertex/index bytes,
+texture selection and effective render state without reading pixels; its
+timings are instrumentation timings, not performance results. Add
+`--state-barriers` to interleave alpha/viewport changes and programmable-vertex
+draws, checking restoration and mixed stream offsets. Instrumentation and the
+modified test SDL archive never enter a shipped host.
+
+The ordinary memory suite includes the production texture packet snapshots
+for eight bindings, 2,048 bounded stream plans with deferred-consumption checks,
+384 register/stack/fault snapshots, and complete cached/native sprite
+comparisons with `--correctness-only`. It skips that sprite fixture's timing
+loops. No ordinary refresh test creates a graphics context.
+
 Keep precision-specific results separate: widening admission improves the
 previously declined PC53/PC64 integer cases, while the already-admitted PC24
 path may remain unchanged. A larger geometry-cache hit count alone also does
