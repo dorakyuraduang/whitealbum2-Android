@@ -8,10 +8,15 @@
 namespace {
 wa2::android::FrameMetrics metrics;
 std::atomic<bool> reset_requested{true};
+std::atomic<void(*)(bool)> performance_switch{};
+std::atomic<std::uint64_t(*)()> performance_counter{};
 jclass overlay_class{};
 jmethodID report_method{};
 }
 namespace wa2::android {
+void set_performance_switch(void(*callback)(bool),std::uint64_t(*counter)())noexcept{
+    performance_counter.store(counter,std::memory_order_release);performance_switch.store(callback,std::memory_order_release);
+}
 bool initialize_frame_hud_jni(JNIEnv* env)noexcept{
     if(overlay_class || report_method)return false;
     const auto local=env->FindClass("org/wa2/port/FrameHud");if(!local)return false;
@@ -35,4 +40,11 @@ void frame_presented()noexcept{
 }
 extern "C" JNIEXPORT void JNICALL Java_org_wa2_port_Wa2Activity_nativeResetFrameMetrics(JNIEnv*,jclass){
     reset_requested.store(true,std::memory_order_release);
+}
+extern "C" JNIEXPORT jboolean JNICALL Java_org_wa2_port_PerformanceProbe_nativeSetFastInteger(JNIEnv*,jclass,jboolean enabled){
+    const auto callback=performance_switch.load(std::memory_order_acquire);
+    if(!callback)return JNI_FALSE;callback(enabled==JNI_TRUE);return JNI_TRUE;
+}
+extern "C" JNIEXPORT jlong JNICALL Java_org_wa2_port_PerformanceProbe_nativeFastIntegerCalls(JNIEnv*,jclass){
+    const auto counter=performance_counter.load(std::memory_order_acquire);return counter?jlong(counter()):jlong(-1);
 }

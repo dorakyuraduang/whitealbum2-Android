@@ -22,7 +22,11 @@ assert original.count(hook)==1
 original=original.replace(hook,hook.replace('native_draw_glyph(','native_draw_glyph_or_yield('))
 start=original.index('template<bool Metered> void f_4462e0(')
 end=original.index('template void f_4462e0<false>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);',start)+len('template void f_4462e0<false>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);')
-assert glyphs==(original[:start]+original[end:]).replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
+rest=original[:start]+original[end:]
+anchor='L_474f00: {\ns.eip=0x474f00u;\nif constexpr(Metered)wr::tick(budget,s.eip);\n'
+assert rest.count(anchor)==1
+rest='#include "text_ftol.hpp"\n'+rest.replace(anchor,anchor+'if constexpr(!Metered)if(native_integer_ftol(s,m,scope))return;\n')
+assert glyphs==rest.replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
 body,_=recipe.scoped_stack(original[start:end])
 assert body in (root/'generated/shared-aot/native-text/text_helpers.cpp').read_text(encoding='utf-8')
 rejections=0

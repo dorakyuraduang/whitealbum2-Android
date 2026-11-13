@@ -15,6 +15,8 @@ import java.lang.ref.WeakReference;
 import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import org.json.JSONObject;
+import org.json.JSONException;
 
 /** Displays statistics supplied by successful game presents, not UI refreshes. */
 public final class FrameHud {
@@ -24,6 +26,8 @@ public final class FrameHud {
     private static WeakReference<TextView> label = new WeakReference<>(null);
     private static volatile boolean resumed;
     private static volatile boolean enabled;
+    private static volatile boolean focused;
+    private static PerformanceProbe probe;
     private static final class Sample {
         final float fps, milliseconds;
         final long updated = SystemClock.uptimeMillis();
@@ -50,6 +54,7 @@ public final class FrameHud {
 
     private FrameHud() {}
     static void install(Activity activity) {
+        probe=new PerformanceProbe();probe.attach(activity);
         enabled = LaunchSettings.showFps(activity);
         if (!enabled) return;
         FrameLayout root = activity.findViewById(android.R.id.content);
@@ -94,6 +99,7 @@ public final class FrameHud {
         if (value) MAIN.postDelayed(STALE, 1000);
     }
     static void detach() {
+        if(probe!=null){probe.detach();probe=null;}
         enabled = false;
         setResumed(false);
         MAIN.removeCallbacks(APPLY);
@@ -102,8 +108,19 @@ public final class FrameHud {
     }
     // Called from the native render thread no more than four times per second.
     public static void report(float fps, float milliseconds) {
-        if (!enabled || !resumed || !Float.isFinite(fps) || !Float.isFinite(milliseconds)) return;
+        if (!resumed || !Float.isFinite(fps) || !Float.isFinite(milliseconds)) return;
         LATEST.set(new Sample(fps, milliseconds));
-        if (QUEUED.compareAndSet(false, true)) MAIN.post(APPLY);
+        if (enabled && QUEUED.compareAndSet(false, true)) MAIN.post(APPLY);
+    }
+    static boolean foreground(){return resumed;}
+    static void focused(boolean value){focused=value;}
+    static JSONObject performanceSnapshot()throws JSONException{
+        Sample sample=LATEST.get();long now=SystemClock.uptimeMillis();
+        JSONObject result=new JSONObject();result.put("uptime_ms",now);result.put("foreground",resumed);
+        result.put("focused",focused);
+        long age=sample==null?-1:now-sample.updated;
+        result.put("sample_age_ms",age);result.put("valid",resumed && age>=0 && age<=1500);
+        if(sample!=null){result.put("fps",sample.fps);result.put("frame_ms",sample.milliseconds);}
+        result.put("screen_access",false);return result;
     }
 }

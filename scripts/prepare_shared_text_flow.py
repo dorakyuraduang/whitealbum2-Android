@@ -79,7 +79,7 @@ def prepare():
     if len(code)!=size:raise ValueError('Incomplete cached initial text constants')
     text,targets=derive(source.read_text(encoding='utf-8'),code,base)
     output=ROOT/'generated/shared-aot/native-text/functions_hot.cpp';data=text.encode('utf-8');write(output,data)
-    inputs={p.relative_to(ROOT).as_posix():digest(p.read_bytes()) for p in (source,constants,header,Path(__file__),ROOT/'recompiled/text_jump_budget.hpp',ROOT/'recompiled/text_stack.hpp')}
+    inputs={p.relative_to(ROOT).as_posix():digest(p.read_bytes()) for p in (source,constants,header,Path(__file__),ROOT/'recompiled/text_jump_budget.hpp',ROOT/'recompiled/text_stack.hpp',ROOT/'recompiled/text_ftol.hpp',ROOT/'recompiled/text_ftol.cpp')}
     outputs={output.relative_to(ROOT).as_posix():digest(data)};helper_bodies=[];stack_sites=0
     for name,entry in HELPERS.items():
         path=ROOT/'generated/shared-aot'/name;raw=path.read_bytes();inputs[path.relative_to(ROOT).as_posix()]=digest(raw)
@@ -97,11 +97,15 @@ def prepare():
         body,count=scoped_stack(body)
         stack_sites+=count;helper_bodies.append(body.replace('\r\n','\n'))
         rest=original[:begin]+original[end:]
+        if entry=='4462e0':
+            anchor=f'L_474f00: {{{newline}s.eip=0x474f00u;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
+            if rest.count(anchor)!=1:raise ValueError('Changed cached integer-conversion entry')
+            rest='#include "text_ftol.hpp"'+newline+rest.replace(anchor,anchor+'if constexpr(!Metered)if(native_integer_ftol(s,m,scope))return;'+newline)
         if '/' not in name:
             rest=rest.replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
         target=output.parent/path.name;payload=rest.encode('utf-8');write(target,payload);outputs[target.relative_to(ROOT).as_posix()]=digest(payload)
     helpers='#include "../bodies.hpp"\n#include "text_stack.hpp"\n#include "native_glyphs.hpp"\nnamespace wa2::aot {\n'+'\n'.join(helper_bodies)+'\n}\n'
     target=output.parent/'text_helpers.cpp';payload=helpers.encode('utf-8');write(target,payload);outputs[target.relative_to(ROOT).as_posix()]=digest(payload)
-    metadata=dict(schema='wa2.derived-text-flow.v1',inputs=inputs,outputs=outputs,local_jmp_sites=[hex(x) for x in SITES],local_targets=[hex(x) for x in targets],hot_helpers=list(HELPERS.values()),scoped_stack_sites=stack_sites,glyph_entry_defers_on_exhaustion=True,cached_inputs_unchanged=True,source_executable_opened=False)
+    metadata=dict(schema='wa2.derived-text-flow.v1',inputs=inputs,outputs=outputs,local_jmp_sites=[hex(x) for x in SITES],local_targets=[hex(x) for x in targets],hot_helpers=list(HELPERS.values()),scoped_stack_sites=stack_sites,glyph_entry_defers_on_exhaustion=True,integer_conversion_entry='0x474f00',cached_inputs_unchanged=True,source_executable_opened=False)
     write(output.parent/'provenance.json',(json.dumps(metadata,indent=2)+'\n').encode());return metadata
 if __name__=='__main__':print(json.dumps(prepare(),indent=2))

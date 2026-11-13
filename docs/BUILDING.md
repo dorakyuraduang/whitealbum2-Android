@@ -470,6 +470,17 @@ comparable device run is unavailable, record validation as pending. Game launch
 and scene selection remain user-controlled; measurement uses logs/counters,
 without screen capture or game UI automation.
 
+For a current shared-AOT phone build, let the user open the unchanged novel
+page, then run `python scripts/compare_android_text.py --serial <ADB-serial>`.
+It compares reference/optimized/optimized/reference windows within one process
+using real presentation FPS and frame-time samples. The running activity's
+dynamic receiver requires the sender's Android DUMP permission; registered-only
+delivery cannot launch the game. The switch affects only the admitted integer
+conversion and resets to the normal optimized mode after 30 seconds or exit.
+No launch setting or game file is changed. An inactive/unfocused page, stale
+sample, absent candidate admissions or greater than 10% window drift prevents
+a comparable performance conclusion. Counters work with the visible HUD off.
+
 Keep precision-specific results separate: widening admission improves the
 previously declined PC53/PC64 integer cases, while the already-admitted PC24
 path may remain unchanged. A larger geometry-cache hit count alone also does

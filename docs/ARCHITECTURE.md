@@ -1575,6 +1575,14 @@ the associated state-reuse and scalar-access changes are also withdrawn.
 The finite desktop component gains did not establish mobile performance.
 The existing eight-image packets and earlier glyph fixes remain unchanged.
 
+The cached CRT entry at 0x474f00 has a native path only for exact signed-32-bit
+integer x87 inputs, masked exceptions and the source's active SSE branch.
+It preserves the binary64 stack scratch, saved frame pointer, arithmetic flags,
+all serialized FP fields and x87 pop, and declines before changes for unsupported
+inputs or unsafe/aliased pages. Fractional/nonfinite values retain the cached
+body. Both hosts compile this same path; a protected temporary host diagnostic
+switch permits same-scene phone comparisons without changing rendering buffers.
+
 The glyph entry hook is also derived from cached C++ in the same recipe. It
 does not raise the 256-call allowance or the generic 32-call allowance. A finite
 768-glyph fixture checks bounded groups, exact-once resume, unchanged CPU/stack

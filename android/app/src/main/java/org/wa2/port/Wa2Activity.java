@@ -71,6 +71,7 @@ public final class Wa2Activity extends SDLActivity {
         super.onDestroy();
     }
     @Override public void onWindowFocusChanged(boolean focused) {
+        FrameHud.focused(focused);
         if(!focused && touchControls!=null)touchControls.cancel();
         super.onWindowFocusChanged(focused);
     }
