@@ -62,6 +62,14 @@ int main(int argc,char** argv){try{
     {a::TextJumpBudget<> budget;for(unsigned n=0;n<128;++n)CHECK(budget.take());CHECK(!budget.take());budget.external();}
     auto after=a::text_jump_counts;CHECK(after.entries==before.entries+1 && after.local_jumps==before.local_jumps+128 &&
         after.budget_yields==before.budget_yields+1 && after.external_targets==before.external_targets+1);
+    CHECK(after.fresh_entries==before.fresh_entries+1 && after.resumed_entries==before.resumed_entries);
+    {a::TextJumpBudget<> resumed(1);CHECK(resumed.take());}
+    CHECK(a::text_jump_counts.fresh_entries==after.fresh_entries && a::text_jump_counts.resumed_entries==after.resumed_entries+1);
+    after=a::text_jump_counts;
+    for(auto control:{0x7fu,0x27fu,0x37fu,0x17fu}){a::TextJumpBudget<> budget(1,std::uint16_t(control));}
+    CHECK(a::text_jump_counts.pc24==after.pc24+1 && a::text_jump_counts.pc53==after.pc53+1 &&
+        a::text_jump_counts.pc64==after.pc64+1 && a::text_jump_counts.pc_reserved==after.pc_reserved+1);
+    after=a::text_jump_counts;
     {a::TextJumpBudget<true> budget;CHECK(budget.take());}
     CHECK(a::text_jump_counts.entries==after.entries);
     {a::NativeCallScope generic(nullptr,nullptr);CHECK(a::current_native_calls->remaining==32);}

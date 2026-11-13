@@ -139,6 +139,42 @@ int main(int argc,char** argv){try{
             <<",\"previous_minimum_handle_words\":"<<expected_count*195<<",\"local_jumps\":"<<flow_after.local_jumps-flow_before.local_jumps<<",\"local_yields\":"<<flow_after.budget_yields-flow_before.budget_yields<<",\"static_chain_ns\":"<<static_ns<<",\"native_ns\":"<<native_ns<<'}';
         std::cout<<"Constructed page: "<<expected_count<<" chars, exact "<<expected.size()<<" tiles, no legacy calls, static/native ns "<<static_ns<<'/'<<native_ns<<'\n';
     }
+    // Hold one text object across growing prefixes instead of recreating its
+    // CPU/output state on every call. A freshly restored long page and the
+    // same page reached by progression must submit the same ordered tiles.
+    // This is a finite own-memory correctness check, not mobile performance.
+    unsigned history_pages{},history_repeated_pages{};
+    for(bool wide:{false,true}){
+        const std::array<unsigned,9> lengths{40,80,160,240,320,400,400,40,400};
+        std::vector<std::vector<Tile>> cold;
+        std::vector<std::vector<U32>> raw;
+        for(auto length:lengths){auto& runs=raw.emplace_back();
+            // One source text object has a bounded scratch string. A novel
+            // page consists of multiple objects, not one oversized call.
+            for(unsigned part=0;part<length;part+=40){std::string text;
+                for(unsigned n=part;n<std::min(part+40,length);++n){if(wide)text+=n&1?"\x90\xcb":"\x8d\xef";else text+=char('A'+n%26);}
+                runs.push_back(p.put_string(text));
+            }
+        }
+        const auto draw_page=[&](unsigned n){
+            recorded.reset();
+            const auto before=a::native_glyph_counts();
+            a::SpriteService sink(p.memory,Recording::submit,&recorded);
+            for(unsigned part=0;part<raw[n].size();++part){
+                std::array<U32,26> args{output,0,14,28+part*40,4,0,14,0,0,0,28,raw[n][part],0xffffffffu,0,255,255,255,255,0,0,0,0,0,0,data+0x3000,1};
+                p.callback(0x446500,args,false);
+            }
+            // A glyph crossing source tile boundaries submits several tiles.
+            // Count glyphs separately; exact ordered tile vectors are below.
+            CHECK(recorded.calls.empty() && a::native_glyph_counts().accepted-before.accepted==lengths[n]);
+        };
+        for(unsigned n=0;n<lengths.size();++n){p.cpu=initial_cpu;p.cpu.fp.put16(0,0x7f);p.memory.copy_in(output,initial_output);draw_page(n);cold.push_back(recorded.tiles);}
+        p.cpu=initial_cpu;p.cpu.fp.put16(0,0x7f);p.memory.copy_in(output,initial_output);
+        for(unsigned n=0;n<lengths.size();++n){
+            draw_page(n);CHECK(recorded.tiles==cold[n]);++history_pages;
+            draw_page(n);CHECK(recorded.tiles==cold[n]);++history_repeated_pages;
+        }
+    }
     // The new allowance is finite and independent of the generic call budget.
     unsigned guard_cases{};
     {wr::Memory other;CHECK(!a::GlyphCallScope::remaining(p.memory));
@@ -204,7 +240,7 @@ int main(int argc,char** argv){try{
         CHECK(!a::native_draw_glyph(cpu,p.memory));check_unchanged(before,stack,tiles);++handle_guards;
         p.memory.store(font+0x70,old_pointer,32);
     }
-    report<<"],\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
+    report<<"],\"history_pages\":"<<history_pages<<",\"history_repeated_pages\":"<<history_repeated_pages<<",\"cold_and_progressed_tiles_equal\":true,\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
         <<",\"maximum_glyphs_per_boundary\":256,\"generic_call_limit_unchanged\":true,\"nested_memory_scopes_checked\":true,\"exhaustion_fallback_preserves_state\":true"
         <<",\"exact_texture_order_vertices_output_and_abi\":true,\"complete_handle_range_still_checked\":true,\"handle_changes_visible_immediately\":true,\"game_launched\":false,\"screen_access\":false,\"source_executable_opened\":false,\"passed\":true}\n";
     CHECK(report && snapshot);std::cout<<"Finite text helper and budget checks passed.\n";

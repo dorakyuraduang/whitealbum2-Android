@@ -142,6 +142,8 @@ def main():
         packets=reports['render_submission']['multi_texture_batch']
         if packets['slots']!=8 or packets['source_draws']!=120 or packets['recorded_driver_packets']!=15 or not packets['unchanged_vertex_bits_uv_colour_and_order']:raise ValueError('Incomplete texture batch packet checks')
         if reports['integer_registers']['exact_cpu_stack_fault_cases']!=384:raise ValueError('Incomplete native register mask snapshots')
+        history=reports['novel_cpu']
+        if history['history_pages']!=18 or history['history_repeated_pages']!=18 or not history['cold_and_progressed_tiles_equal']:raise ValueError('Incomplete restored/progressed text history checks')
         sprite=reports['native_sprite_cpu']
         if sprite['cases']<200 or sprite['decline_cases']!=24 or not sprite['vertex_bits_and_render_state_equal'] or sprite['performance_samples_rerun']:raise ValueError('Incomplete source/native sprite correctness checks')
         ftol=reports['text_ftol']

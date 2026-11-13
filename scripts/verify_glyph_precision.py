@@ -17,6 +17,14 @@ def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def main():
     low_priority();build=ROOT/'build/shared-aot-refresh-x64';folder=ROOT/'build/glyph-precision';folder.mkdir(exist_ok=True)
     original=ROOT/'tests/novel_cpu.cpp';fixture=original.read_text(encoding='utf-8')
+    # The new multi-object history fixture is checked separately at PC24 by
+    # the main refresh suite. Keep these four derived fixtures scoped to the
+    # existing ten precision/crossing cases and their independent assertions.
+    history_begin='    // Hold one text object across growing prefixes'
+    history_end='    // The new allowance is finite and independent'
+    if fixture.count(history_begin)!=1 or fixture.count(history_end)!=1:raise ValueError('Changed text history fixture boundary')
+    start=fixture.index(history_begin);end=fixture.index(history_end,start)
+    fixture=fixture[:start]+'    unsigned history_pages{},history_repeated_pages{};\n'+fixture[end:]
     commands=json.loads((build/'compile_commands.json').read_text());command=next(x['command'] for x in commands if x['file'].replace('\\','/').endswith('/tests/novel_cpu.cpp'))
     if '"' in command:raise ValueError('Unquoted Windows workspace paths are required')
     block=(build/'build.ninja').read_text().split('build wa2_refresh_novel_cpu.exe:',1)[1].split('\n  LINK_LIBRARIES = ',1)[1].splitlines()[0];libraries=shlex.split(block)
