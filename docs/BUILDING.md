@@ -410,6 +410,29 @@ callback fixture. Both 200-character ASCII and 80-character two-byte runs
 unwind and resume their source frames, then match static output, vertices and
 public ABI with no legacy draws. The generated fixture stays under `build/`.
 
+The refresh additionally runs `scripts/verify_glyph_precision.py`: forty
+own-memory PC53/PC64 static/native text cases preserve the source control word
+and check exact vertices, colours, output and ABI. Mixed tile crossings still
+execute the original checked body. `tests/glyph_cache.cpp` checks full-key
+invalidation, two-use admission and six passes over 400 glyphs in a bounded
+four-way 1,024-slot memo (under 2 MiB).
+
+When PC graphics testing has been explicitly authorized, the optional command
+`python scripts/benchmark_text_renderer.py --allow-hidden-graphics --baseline-dir build/<retained-text-baseline>`
+links one fixture object against retained/current archives and runs three
+alternating pairs through the real shared renderer in a hidden owned GL
+window. `--control-word 0x7f|0x27f|0x37f`, `--scale-bits` and `--glyph-only`
+select finite synthetic cases. It reads no pixels, runs no game entry or UI,
+and records submission/completion times and draw topology. This is an opt-in
+component check, not a whole-game/phone FPS or pressure test; the ordinary
+refresh never creates that graphics context.
+
+Keep precision-specific results separate: widening admission improves the
+previously declined PC53/PC64 integer cases, while the already-admitted PC24
+path may remain unchanged. A larger geometry-cache hit count alone also does
+not establish a lower complete text submission time. Neither result proves
+that a user's remaining novel-page frame-rate drop has been resolved.
+
 For comparison with a retained passing AOT archive, run
 `scripts/compare_text_cpu.py --baseline-dir build/<retained-text-baseline>`.
 The directory must contain `libwa2_shared_aot.a` and its matching

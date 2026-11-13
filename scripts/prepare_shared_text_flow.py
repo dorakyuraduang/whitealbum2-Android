@@ -3,7 +3,7 @@
 The three existing indirect JMP sites use their initial table
 destinations come from cached initial-data constants and must name labels of
 the same function. Other destinations keep the original checked dispatcher.
-Four existing scalar helpers are isolated for optimization; their checked
+Six existing glyph/text helpers are isolated for optimization; their checked
 32-bit stack operations reuse the scope already held by the caller.
 The glyph entry yields on a spent typed allowance before using a slow body.
 """
@@ -19,7 +19,7 @@ from prepare_shared_progress import prepare as prepare_progress
 ROOT=Path(__file__).resolve().parents[1]
 TABLES=((0x44788c,10),(0x447934,4),(0x447988,10))
 SITES=(0x446723,0x446868,0x4468fd)
-HELPERS={'native/functions_2.cpp':'4452f0','functions_3.cpp':'445350','functions_6.cpp':'4775f1','native-progress/functions_7.cpp':'477604'}
+HELPERS={'native/functions_2.cpp':'4452f0','functions_3.cpp':'445350','functions_6.cpp':'4775f1','native-progress/functions_7.cpp':'477604','native-progress/functions_0.cpp':'401050','functions_5.cpp':'4462e0'}
 def digest(data):return hashlib.sha256(data).hexdigest()
 def write(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -84,6 +84,10 @@ def prepare():
     for name,entry in HELPERS.items():
         path=ROOT/'generated/shared-aot'/name;raw=path.read_bytes();inputs[path.relative_to(ROOT).as_posix()]=digest(raw)
         original=raw.decode('utf-8');newline='\r\n' if '\r\n' in original else '\n'
+        if entry=='4462e0':
+            hook='if constexpr(!Metered)if(wa2::aot::native_draw_glyph(s,m))return;'
+            if original.count(hook)!=1:raise ValueError('Changed cached glyph preheader')
+            original=original.replace(hook,hook.replace('native_draw_glyph(','native_draw_glyph_or_yield('))
         begin=original.index(f'template<bool Metered> void f_{entry}(')
         marker=f'template void f_{entry}<false>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);'
         end=original.index(marker,begin)+len(marker);body=original[begin:end]
@@ -96,17 +100,8 @@ def prepare():
         if '/' not in name:
             rest=rest.replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
         target=output.parent/path.name;payload=rest.encode('utf-8');write(target,payload);outputs[target.relative_to(ROOT).as_posix()]=digest(payload)
-    helpers='#include "../bodies.hpp"\n#include "text_stack.hpp"\nnamespace wa2::aot {\n'+'\n'.join(helper_bodies)+'\n}\n'
+    helpers='#include "../bodies.hpp"\n#include "text_stack.hpp"\n#include "native_glyphs.hpp"\nnamespace wa2::aot {\n'+'\n'.join(helper_bodies)+'\n}\n'
     target=output.parent/'text_helpers.cpp';payload=helpers.encode('utf-8');write(target,payload);outputs[target.relative_to(ROOT).as_posix()]=digest(payload)
-    # Only an exhausted typed-glyph allowance yields at the exact source
-    # entry. Other declined inputs retain the existing static function body.
-    path=ROOT/'generated/shared-aot/functions_5.cpp';raw=path.read_bytes();inputs[path.relative_to(ROOT).as_posix()]=digest(raw)
-    hook='if constexpr(!Metered)if(wa2::aot::native_draw_glyph(s,m))return;'
-    text=raw.decode('utf-8')
-    if text.count(hook)!=1:raise ValueError('Changed cached glyph preheader')
-    text=text.replace(hook,hook.replace('native_draw_glyph(','native_draw_glyph_or_yield('))
-    text=text.replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
-    target=output.parent/path.name;payload=text.encode('utf-8');write(target,payload);outputs[target.relative_to(ROOT).as_posix()]=digest(payload)
     metadata=dict(schema='wa2.derived-text-flow.v1',inputs=inputs,outputs=outputs,local_jmp_sites=[hex(x) for x in SITES],local_targets=[hex(x) for x in targets],hot_helpers=list(HELPERS.values()),scoped_stack_sites=stack_sites,glyph_entry_defers_on_exhaustion=True,cached_inputs_unchanged=True,source_executable_opened=False)
     write(output.parent/'provenance.json',(json.dumps(metadata,indent=2)+'\n').encode());return metadata
 if __name__=='__main__':print(json.dumps(prepare(),indent=2))

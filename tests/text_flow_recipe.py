@@ -19,14 +19,19 @@ original=(root/'generated/shared-aot/functions_5.cpp').read_text(encoding='utf-8
 glyphs=(root/'generated/shared-aot/native-text/functions_5.cpp').read_text(encoding='utf-8')
 hook='if constexpr(!Metered)if(wa2::aot::native_draw_glyph(s,m))return;'
 assert original.count(hook)==1
-assert glyphs==original.replace(hook,hook.replace('native_draw_glyph(','native_draw_glyph_or_yield(')).replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
+original=original.replace(hook,hook.replace('native_draw_glyph(','native_draw_glyph_or_yield('))
+start=original.index('template<bool Metered> void f_4462e0(')
+end=original.index('template void f_4462e0<false>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);',start)+len('template void f_4462e0<false>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);')
+assert glyphs==(original[:start]+original[end:]).replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
+body,_=recipe.scoped_stack(original[start:end])
+assert body in (root/'generated/shared-aot/native-text/text_helpers.cpp').read_text(encoding='utf-8')
 rejections=0
 def rejects(text,data):
     global rejections
     try:recipe.derive(text,data,base)
     except (ValueError,IndexError):rejections+=1
     else:raise AssertionError('Unproved source shape accepted')
-rejects(source,code[:0x47700-base]);bad=bytearray(code);struct.pack_into('<I',bad,0x44788c-base,0xdead1234);rejects(source,bad)
+rejects(source,code[:0x447700-base]);bad=bytearray(code);struct.pack_into('<I',bad,0x44788c-base,0xdead1234);rejects(source,bad)
 for site in recipe.SITES:
     marker=f'L_{site:x}: {{\ns.eip=0x{site:x}u;'
     assert source.count(marker)==1

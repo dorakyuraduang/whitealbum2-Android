@@ -104,7 +104,7 @@ def main():
         tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')]
         tracked += [ROOT/'scripts/prepare_shared_chroma.py',ROOT/chroma['reference_file']]
         tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
-        tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp']
+        tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'scripts/verify_glyph_precision.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp',ROOT/'tests/glyph_cache.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
         tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
@@ -119,7 +119,7 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','glyph_cache','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -130,6 +130,9 @@ def main():
         if not reports['counter_reader']['passed'] or reports['counter_reader']['parser_cases']<12:raise ValueError('Incomplete bounded counter assembly checks')
         recipe_path=build/'text_flow_recipe.json';run([sys.executable,ROOT/'tests/text_flow_recipe.py',recipe_path]);reports['text_flow_recipe']=json.loads(recipe_path.read_text())
         if not reports['text_flow_recipe']['passed'] or reports['text_flow_recipe']['rejections']<9:raise ValueError('Incomplete text flow preparation guards')
+        run([sys.executable,ROOT/'scripts/verify_glyph_precision.py']);precision=fresh(ROOT/'logs/glyph-precision-check.json')
+        if precision['shared_library_sha256']!=digest(build/'shared_aot/libwa2_shared_aot.a') or precision['exact_full_text_cases']!=40 or not precision['source_control_word_preserved'] or not precision['unsupported_crossings_use_source']:raise ValueError('Incomplete wider-precision glyph checks')
+        reports['glyph_precision']=precision
         language=reports['language_resources']
         music=reports['music_flag_saves']
         if music['baseline_repeated_opens']!=480 or music['optimized_repeated_opens']!=4 or music['guards']<48 or music['plugin_notifications']!=music['actual_static_setter_calls'] or not all(music[k] for k in ('same_final_flags_and_nonflag_save_bytes','failed_open_short_write_and_close_retry','other_callers_workers_and_namespaces_preserved')):raise ValueError('Incomplete idempotent title music unlock checks')
@@ -176,6 +179,8 @@ def main():
         if control['stack_cases']!=104 or control['fault_cases']!=52 or control['nested_cases']!=52 or control['maximum_local_jumps']!=128 or not all(control[k] for k in ('checked_unknown_target','precise_atomic_faults','code_epoch_preserved','paged_and_linear','generic_call_limit_unchanged')):raise ValueError('Incomplete local text control/stack checks')
         glyphs=reports['glyph_scheduling']
         if glyphs['glyphs']!=768 or glyphs['bounded_groups']!=3 or glyphs['deferrals']!=2 or glyphs['guards']<7 or glyphs['maximum_glyphs_per_boundary']!=256 or not all(glyphs[k] for k in ('source_entry_yields_checked','next_entry_completes_exactly_once','unchanged_cpu_stack_on_defer','unsupported_inputs_still_decline','no_legacy_draws')):raise ValueError('Incomplete bounded glyph deferral checks')
+        cache=reports['glyph_cache']
+        if cache['page_glyphs']!=400 or cache['last_pass_hits']<350 or cache['slots']!=1024 or cache['ways']!=4 or cache['maximum_heap_bytes']>2097152 or cache['guards']<6 or not cache['all_key_bytes_checked'] or not cache['two_use_admission']:raise ValueError('Incomplete bounded long-page glyph memo checks')
         refs=reports['sprite_texture_refs']
         if refs['cases']!=8 or refs['ownership_checks']<500 or refs['failure_cases']!=4 or refs['inline_reference_slots']!=4 or refs['maximum_tiles']!=256 or not all(refs[k] for k in ('call_local_lifetime','no_dynamic_reference_storage','copy_move_forbidden')):raise ValueError('Incomplete native sprite texture reference lifetime checks')
         pc_loose=reports['pc_loose_resources']

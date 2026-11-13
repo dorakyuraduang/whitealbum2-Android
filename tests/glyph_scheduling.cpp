@@ -43,7 +43,7 @@ int main(int argc,char** argv){try{
         // call exactly once, including its untouched return word/arguments.
         a::Program program(m);CHECK(program.invoke_unmetered(cpu));
         CHECK(cpu.eip==returning && cpu.r[wr::ESP]==sp+4 && submits==1 && !*a::GlyphCallScope::remaining(m));++guards;
-        cpu=incoming;cpu.fp.put16(0,0x37f);const auto invalid=cpu;
+        cpu=incoming;cpu.fp.put16(0,0x17f);const auto invalid=cpu;
         CHECK(!a::native_draw_glyph_or_yield(cpu,m) && same(cpu,invalid) && a::glyph_budget_deferrals==before+1);++guards;
     }
     cpu=incoming;
@@ -54,6 +54,11 @@ int main(int argc,char** argv){try{
     {a::GlyphCallScope one(m,1);a::SpriteService decline(m,[](const a::SpriteCommand&,void*){return false;},nullptr);
         CHECK(!a::native_draw_glyph_or_yield(cpu,m) && same(cpu,incoming) && *a::GlyphCallScope::remaining(m)==1);++guards;
     }
+    for(const auto control:{0x17fu,0x67fu,0xa7fu,0xe7fu,0x37eu}){
+        cpu=incoming;cpu.fp.put16(0,std::uint16_t(control));const auto before=cpu;
+        a::GlyphCallScope one(m,1);CHECK(!a::native_draw_glyph_or_yield(cpu,m) && same(cpu,before) && *a::GlyphCallScope::remaining(m)==1);++guards;
+    }
+    cpu=incoming;
     // 768 admitted glyph calls use three bounded groups, never the expensive
     // static chain merely because the previous group's allowance was spent.
     const auto before=a::glyph_budget_deferrals;const auto initial=submits;unsigned completed{},groups{};

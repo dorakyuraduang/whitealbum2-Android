@@ -285,7 +285,10 @@ bool prepare_integer_glyph(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& comman
 namespace {
 bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
     defer=false;
-    auto* service=SpriteService::find(memory);if(!service || cpu.eip!=0x4462e0 || cpu.fp.bytes[4] || (cpu.fp.get16(0)&0xf3f)!=0x3f)return false;
+    const auto control=cpu.fp.get16(0);
+    const auto precision=control&0x300u;
+    auto* service=SpriteService::find(memory);
+    if(!service || cpu.eip!=0x4462e0 || cpu.fp.bytes[4] || (control&0xc3f)!=0x3f || precision==0x100)return false;
     auto* glyph_allowance=GlyphCallScope::remaining(memory);
     if(glyph_allowance){
         if(!*glyph_allowance){++glyph_budget_counts.exhaustions;defer=true;return false;}
@@ -296,6 +299,11 @@ bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
         returning=memory.load(sp,32);std::array<std::uint8_t,256> sprite;memory.copy_out(sp+4,sprite);
         std::array<std::uint32_t,9> args;memory.copy_out(sp+0x104,{reinterpret_cast<std::uint8_t*>(args.data()),sizeof(args)});
         if(!prepare_integer_glyph(cpu,memory,command,sprite,args)){
+        // The admitted integer path uses dyadic endpoints on one power-of-two
+        // tile. All source intermediates are exact at PC24, PC53 and PC64.
+        // Crossings and other floating geometry retain their original body
+        // at wider precision; never change the caller's control word.
+        if(precision){++glyph_counts.declined;return false;}
         wa2::math::detail::NativeEnvironment environment;
         const auto put=[&]<class T>(unsigned at,T value){std::memcpy(sprite.data()+at,&value,sizeof(value));};
         const auto i=[&](unsigned n){return std::bit_cast<std::int32_t>(args[n]);};
@@ -320,6 +328,7 @@ bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
     if(!service->submit(command)){++glyph_counts.declined;return false;}
     if(glyph_allowance)--*glyph_allowance;
     else if(current_native_calls)--current_native_calls->remaining;
+    if(precision)++native_wide_glyph_calls;
     ++glyph_counts.accepted;glyph_counts.tiles+=command.tiles.size();cpu.r[wr::EAX]=0;cpu.r[wr::ESP]+=4;cpu.eip=returning;return true;
 }
 }

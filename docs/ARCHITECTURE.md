@@ -1547,11 +1547,26 @@ scalar register/memory helpers as CPU costs. The common text recipe replaces
 three indirect intra-function JMP sites with native branches to 22 proved
 labels from cached initial tables. It yields after 128 local transfers;
 unknown/modified destinations keep the checked dispatcher. Source CALLs and
-their return addresses are retained. Four existing text helpers are isolated
+their return addresses are retained. Selected text helpers are isolated
 for O2 compilation and their 32-bit stack operations reuse the caller's checked
 Memory scope. No decoder, unchecked pointer, page-layout cache or retained
 rendered page is introduced. CPU samples identify hotspots, not a measured
 frame-rate gain; actual phone improvement still needs user testing.
+
+The glyph range lookup and the declined glyph body are now isolated in that
+same optimized helper unit as well (six helpers total). The integer single-tile
+path also accepts masked nearest PC53/PC64, with the original control word
+preserved: its admitted coordinates, unit scales and power-of-two UV divisions
+have exact dyadic intermediates. Wider-precision crossings, reserved precision,
+other rounding, live x87 stacks and unsupported geometry retain the checked
+source body. Forty own-memory text cases compare static/native tiles, colours,
+output and public ABI at both wider precisions, including mixed crossing runs.
+
+The existing exact geometry memo now has 1,024 slots in four-way sets, bounded
+to 2 MiB of lazy heap storage. LRU replacement prevents a long page from
+systematically evicting an earlier glyph from one directly mapped slot. Full
+sprite/image/palette/half-pixel/handle keys and two-use admission are retained;
+this is tile geometry reuse, with fresh resource resolution and submission.
 
 The glyph entry hook is also derived from cached C++ in the same recipe. It
 does not raise the 256-call allowance or the generic 32-call allowance. A finite

@@ -27,7 +27,8 @@ public:
         std::uint32_t half;
         std::span<const std::uint32_t> handles;
     };
-    static constexpr unsigned Slots=128,MaximumTiles=4,MaximumHandles=256;
+    static constexpr unsigned Slots=1024,Ways=4,Sets=Slots/Ways,MaximumTiles=4,MaximumHandles=256;
+    static_assert((Sets&(Sets-1))==0);
 private:
     struct Entry {
         std::array<std::uint8_t,256> sprite;
@@ -36,9 +37,15 @@ private:
         std::array<std::uint32_t,MaximumHandles> handles;
         std::array<Tile,MaximumTiles> tiles;
         std::uint32_t half{},handle_count{},tile_count{};
+        std::uint64_t last_use{};
         bool valid{},seen{};
     };
     std::unique_ptr<Entry[]> entries_;
+    mutable std::uint64_t serial_{};
+    std::uint64_t stamp()const{
+        if(++serial_==0){serial_=1;if(entries_)for(unsigned n=0;n<Slots;++n)entries_[n].last_use=0;}
+        return serial_;
+    }
     static unsigned slot(const Input& in){
         std::uint32_t hash=2166136261u;
         for(unsigned at:{0x88u,0x98u,0xbcu,0xc4u,0x63u,0x48u}){std::uint32_t word;std::memcpy(&word,in.sprite.data()+at,4);hash=(hash^word)*16777619u;}
@@ -46,7 +53,7 @@ private:
         // complete words before selecting a slot, rather than preserving their
         // regular grid spacing as systematic cache collisions.
         hash^=hash>>16;hash*=0x7feb352du;hash^=hash>>15;hash*=0x846ca68bu;hash^=hash>>16;
-        return hash&(Slots-1);
+        return (hash&(Sets-1))*Ways;
     }
     static bool matches(const Entry& e,const Input& in){
         return e.valid && e.handle_count==in.handles.size() && e.half==in.half &&
@@ -63,7 +70,9 @@ public:
         ++stats.finds;
 #endif
         if(!entries_ || in.handles.size()>MaximumHandles)return {};
-        const auto& entry=entries_[slot(in)];if(!matches(entry,in))return {};
+        const auto first=slot(in);Entry* found{};
+        for(unsigned n=0;n<Ways;++n)if(matches(entries_[first+n],in)){found=&entries_[first+n];break;}
+        if(!found)return {};auto& entry=*found;entry.last_use=stamp();
 #if defined(WA2_AOT_DIAGNOSTICS) && WA2_AOT_DIAGNOSTICS
         ++stats.hits;
 #endif
@@ -75,7 +84,14 @@ public:
 #endif
         if(tiles.size()>MaximumTiles || in.handles.size()>MaximumHandles)return;
         if(!entries_){entries_.reset(new(std::nothrow) Entry[Slots]);if(!entries_)return;}
-        auto& entry=entries_[slot(in)];
+        const auto first=slot(in);Entry* selected{};
+        for(unsigned n=0;n<Ways;++n){auto& entry=entries_[first+n];
+            if(entry.seen && wa2::memory::equal_bytes<256>(entry.sprite.data(),in.sprite.data())){selected=&entry;break;}}
+        if(!selected){selected=&entries_[first];
+            for(unsigned n=0;n<Ways;++n){auto& candidate=entries_[first+n];
+                if(!candidate.seen){selected=&candidate;break;}
+                if(candidate.last_use<selected->last_use)selected=&candidate;}}
+        auto& entry=*selected;entry.last_use=stamp();
         // Fast-forward introduces new glyphs continuously. Only a repeated
         // sprite earns the complete metadata/tile capture; first-use keys cost
         // one bounded 256-byte copy and retain the ordinary calculation.
