@@ -1,5 +1,6 @@
 #include "profile.hpp"
 #include "save_files.hpp"
+#include "publish_file.hpp"
 #include <algorithm>
 #include <atomic>
 #include <charconv>
@@ -73,7 +74,7 @@ void Profile::save(const std::filesystem::path& path) const{
         std::ofstream output(temporary,std::ios::binary|std::ios::trunc);if(!output)throw std::runtime_error("cannot create profile temporary file");
         for(const auto& s:sections_){output<<'['<<s.name<<"]\r\n";for(const auto& e:s.entries)output<<e.key<<'='<<e.value<<"\r\n";output<<"\r\n";}
         output.flush();if(!output)throw std::runtime_error("cannot write profile");output.close();if(!output)throw std::runtime_error("cannot close profile");
-        std::filesystem::rename(temporary,path);
+        publish_closed_file(temporary,path);
     }catch(...){std::error_code ignored;std::filesystem::remove(temporary,ignored);throw;}
 }
 std::vector<std::uint8_t> Profile::bytes()const{

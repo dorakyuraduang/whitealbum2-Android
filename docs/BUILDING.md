@@ -375,6 +375,23 @@ static geometry and sprite paths; the old library stays in the test binaries.
 Saved reports bind both archives/binaries and all changed comparison inputs.
 These bounded memory checks do not establish whole-game or phone performance.
 
+The current refresh suite also runs `tests/novel_cpu.cpp` through the complete
+cached text-formatting helper, rather than invoking each glyph as a separate
+outer entry. Constructed ASCII and two-byte text runs compare the static chain
+with typed native submissions for exact tile/texture order, vertex bytes,
+output records and the public source ABI. Repeated unchanged pages are checked
+as well. Dedicated glyph-budget checks cover the 256-call cap, nested Memory
+ownership, generic-budget isolation and nonmutating exhaustion/adapter decline.
+These checks use recording sinks only: no original resources, game, graphics
+device or screen, and their CPU timings must not be reported as Android FPS.
+
+Local Windows profile publication retries a closed-file rename on permission
+denial at most four times, with 2/4/8/16 ms waits. Persistent denial and other
+errors still fail without deleting the old destination. The profile checks
+exercise immediate success, transient/persistent denial and unrelated errors
+with injected operations and no real sleeps, then run the normal owned-file
+write/readback cases. Other platforms retain a single rename attempt.
+
 `tests/single_tile_geometry.cpp` checks all 16,777,217 signed coordinates on
 the supported 1/256 grid against hardware binary32 results, plus 98,328 UV
 ratios, 16 invalid inputs and all four host rounding modes. No input is

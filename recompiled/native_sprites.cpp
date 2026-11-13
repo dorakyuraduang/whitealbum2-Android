@@ -1,5 +1,6 @@
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
+#include "glyph_budget.hpp"
 #include "host_calls.hpp"
 #include "extended80.hpp"
 #include "../engine/math_environment.hpp"
@@ -274,7 +275,11 @@ bool prepare_integer_glyph(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& comman
 }
 bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){
     auto* service=SpriteService::find(memory);if(!service || cpu.eip!=0x4462e0 || cpu.fp.bytes[4] || (cpu.fp.get16(0)&0xf3f)!=0x3f)return false;
-    if(current_native_calls && !current_native_calls->remaining)return false;
+    auto* glyph_allowance=GlyphCallScope::remaining(memory);
+    if(glyph_allowance){
+        if(!*glyph_allowance){++glyph_budget_counts.exhaustions;return false;}
+    }
+    else if(current_native_calls && !current_native_calls->remaining)return false;
     SpriteCommand command{};std::uint32_t returning{};
     try{auto scope=memory.execution_scope();const auto sp=cpu.r[wr::ESP];if(std::uint64_t(sp)+0x128>0x100000000ull)return false;
         returning=memory.load(sp,32);std::array<std::uint8_t,256> sprite;memory.copy_out(sp+4,sprite);
@@ -302,7 +307,8 @@ bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){
         }
     }catch(const Declined&){++glyph_counts.declined;return false;}catch(const wr::GuestFault&){++glyph_counts.declined;return false;}
     if(!service->submit(command)){++glyph_counts.declined;return false;}
-    if(current_native_calls)--current_native_calls->remaining;
+    if(glyph_allowance)--*glyph_allowance;
+    else if(current_native_calls)--current_native_calls->remaining;
     ++glyph_counts.accepted;glyph_counts.tiles+=command.tiles.size();cpu.r[wr::EAX]=0;cpu.r[wr::ESP]+=4;cpu.eip=returning;return true;
 }
 }

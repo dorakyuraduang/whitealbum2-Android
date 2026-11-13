@@ -1,6 +1,7 @@
 #include "functions.hpp"
 #include <algorithm>
 #include "work_samples.hpp"
+#include "glyph_budget.hpp"
 
 namespace wa2::aot {
 void Program::ensure(const Function& function){
@@ -50,6 +51,7 @@ bool Program::invoke(Context& context,std::uint64_t& budget){
 bool Program::invoke_unmetered(Context& context){
     const auto location=locate(context.eip);const auto* function=location.function;if(!function)return false;
     auto scope=memory_.execution_scope();prove(*function);
+    GlyphCallScope glyph_calls(memory_);
     struct Binding {Program* program;Context* context;} binding{this,&context};
     NativeCallScope native_calls{[](wr::Cpu& cpu,wr::Memory& memory,Scope& scope,void* owner){
         auto& binding=*static_cast<Binding*>(owner);

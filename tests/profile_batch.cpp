@@ -3,6 +3,7 @@
 #include "../platform/compat/system.hpp"
 #include "../platform/compat/profile.hpp"
 #include "../platform/compat/save_files.hpp"
+#include "../platform/compat/publish_file.hpp"
 #include <winrecomp/win32_state.hpp>
 #include <chrono>
 #include <fstream>
@@ -23,7 +24,8 @@ public:
     U32 remove(std::string_view name,bool directory)override{return files_->remove(name,directory);}
     U32 move(std::string_view from,std::string_view to)override{return files_->move(from,to);}
     U32 attributes(std::string_view name,U32 flags)override{return files_->attributes(name,flags);}
-    void replace(std::string_view name,std::span<const std::uint8_t> bytes)override{++replaces;if(fail_replace)throw std::runtime_error("Injected profile publication failure");files_->replace(name,bytes);}
+    void replace(std::string_view name,std::span<const std::uint8_t> bytes)override{++replaces;if(fail_replace)throw std::runtime_error("Injected profile publication failure");
+        try{files_->replace(name,bytes);}catch(const std::filesystem::filesystem_error& error){std::cerr<<"Fixture publication failed ("<<error.code().value()<<"): "<<error.what()<<'\n';throw;}}
 };
 void put(const std::filesystem::path& path,unsigned value){std::ofstream file(path,std::ios::binary|std::ios::trunc);file<<"[DEFAULT]\r\nvalue="<<value<<"\r\n";CHECK(file.good());}
 unsigned exercise(const std::filesystem::path& parent,bool linear,bool cached,unsigned& calls){
@@ -122,11 +124,30 @@ WriteChecks exercise_writes(const std::filesystem::path& parent,bool linear,bool
     const auto report=p.state().reports.at("profile_write_io")();CHECK(report.find("\"writes_deferred\":false")!=std::string::npos);CHECK(!p.gui() && !p.directdraw());return result;
 }
 int main(int argc,char** argv){try{
-    CHECK(argc==2);const auto root=std::filesystem::path(argv[1]).parent_path()/("profile-batch-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(std::filesystem::create_directory(root));
+    CHECK(argc==2);
+    unsigned publish_guards{};
+#ifdef _WIN32
+    constexpr unsigned maximum_attempts=5;
+#else
+    constexpr unsigned maximum_attempts=1;
+#endif
+    for(unsigned failures:{0u,1u,4u,5u}){
+        unsigned attempts{},delay{};bool failed{};
+        try{c::publish_closed_file("fixture-staged","fixture-target",[&](const auto&,const auto&,std::error_code& error){if(attempts++<failures)error=std::make_error_code(std::errc::permission_denied);},[&](auto amount){delay+=unsigned(amount.count());});}
+        catch(const std::filesystem::filesystem_error& error){CHECK(error.code()==std::errc::permission_denied);failed=true;}
+        CHECK(attempts==std::min(failures+1,maximum_attempts) && failed==(failures>=maximum_attempts));
+        CHECK(delay==2u*((1u<<(attempts-1))-1u));++publish_guards;
+    }
+    {unsigned attempts{},pauses{};bool failed{};
+        try{c::publish_closed_file("fixture-staged","fixture-target",[&](const auto&,const auto&,std::error_code& error){++attempts;error=std::make_error_code(std::errc::no_such_file_or_directory);},[&](auto){++pauses;});}
+        catch(const std::filesystem::filesystem_error&){failed=true;}
+        CHECK(failed && attempts==1 && !pauses);++publish_guards;
+    }
+    const auto root=std::filesystem::path(argv[1]).parent_path()/("profile-batch-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(std::filesystem::create_directory(root));
     unsigned calls{},guards{};for(bool linear:{false,true}){exercise(root,linear,false,calls);guards+=exercise(root,linear,true,calls);}
     WriteChecks writes;for(bool linear:{false,true})for(bool cached:{false,true}){const auto result=exercise_writes(root,linear,cached);writes.calls+=result.calls;writes.stacks+=result.stacks;writes.guards+=result.guards;}
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.profile-batch.v1\",\"static_profile_getter_calls\":"<<calls<<",\"guard_cases\":"<<guards
         <<",\"static_profile_setter_calls\":"<<writes.calls<<",\"setter_real_stack_checks\":"<<writes.stacks<<",\"setter_guard_cases\":"<<writes.guards<<",\"unchanged_exit_keys\":53,\"baseline_exit_profile_loads\":53,\"optimized_exit_profile_loads\":1,\"baseline_unchanged_exit_commits\":53,\"optimized_unchanged_exit_commits\":0,\"changed_writes_still_immediate\":true,\"ordinary_profile_writes_unchanged\":true,\"write_scope_failure_age_and_namespace_guards\":true,\"source_exit_and_ui_not_executed\":true"
-        <<",\"keys_per_batch\":100,\"baseline_descriptor_opens\":100,\"batched_descriptor_opens\":1,\"missing_profile_opens_per_100_defaults\":1,\"same_static_getter\":true,\"writes_immediate\":true,\"flush_and_revision_invalidation\":true,\"frame_and_age_bounded\":true,\"ordinary_and_worker_reads_fresh\":true,\"namespace_isolation\":true,\"failed_read_retry\":true,\"game_launched\":false,\"screen_access\":false,\"source_executable_opened\":false,\"original_files_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
+        <<",\"publish_guard_cases\":"<<publish_guards<<",\"maximum_publish_retry_wait_ms\":30,\"keys_per_batch\":100,\"baseline_descriptor_opens\":100,\"batched_descriptor_opens\":1,\"missing_profile_opens_per_100_defaults\":1,\"same_static_getter\":true,\"writes_immediate\":true,\"flush_and_revision_invalidation\":true,\"frame_and_age_bounded\":true,\"ordinary_and_worker_reads_fresh\":true,\"namespace_isolation\":true,\"failed_read_retry\":true,\"game_launched\":false,\"screen_access\":false,\"source_executable_opened\":false,\"original_files_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS unchanged static profile getter: 100 key reads use one external profile open; write, frame, namespace and retry guards.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

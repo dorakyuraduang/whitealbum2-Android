@@ -10,6 +10,7 @@
 #include "geometry_cache.hpp"
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
+#include "glyph_budget.hpp"
 #include "image_colours.hpp"
 #include "image_chroma.hpp"
 #include "scalar_math.hpp"
@@ -97,7 +98,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
             ",\"offscreen\":"+std::to_string(s.offscreen)+",\"capability_filter\":"+std::to_string(s.capability_filter)+
             ",\"fp_declined\":"+std::to_string(s.fp_declined)+",\"adapter_declined\":"+std::to_string(s.adapter_declined)+",\"retained_command_cache\":false}";};
     process_.state().reports["native_glyph_commands"]=[]{const auto s=native_glyph_counts();
-        return "{\"accepted\":"+std::to_string(s.accepted)+",\"declined\":"+std::to_string(s.declined)+",\"tiles\":"+std::to_string(s.tiles)+",\"retained_command_cache\":false}";};
+        return "{\"accepted\":"+std::to_string(s.accepted)+",\"declined\":"+std::to_string(s.declined)+",\"tiles\":"+std::to_string(s.tiles)+",\"maximum_glyphs_per_boundary\":"+std::to_string(GlyphCallScope::MaximumCalls)+",\"glyph_budget_exhaustions\":"+std::to_string(glyph_budget_counts.exhaustions)+",\"retained_command_cache\":false}";};
     process_.state().reports["native_image_chroma"]=[]{const auto s=image_chroma_counts();return "{\"attempts\":"+std::to_string(s.attempts)+",\"completed\":"+std::to_string(s.completed)+",\"pixels\":"+std::to_string(s.pixels)+",\"grey_pixels\":"+std::to_string(s.grey_pixels)+"}";};
     process_.state().reports["native_image_colours"]=[]{const auto s=image_colour_counts();
         return "{\"attempts\":"+std::to_string(s.attempts)+",\"completed\":"+std::to_string(s.completed)+",\"pixels\":"+std::to_string(s.pixels)+",\"retained_tables\":false}";};

@@ -1526,6 +1526,18 @@ sprite/glyph functions replace measured work while preserving explicit input
 contracts; unsupported inputs execute the existing checked static function or
 raise an explicit unsupported error.
 
+Typed native glyph submissions have a separate allowance of at most 256 calls
+per outer AOT entry/resume, bound to its Memory and host thread. Previously
+glyphs shared the 32-call indirect/leaf allowance: a long text run periodically
+fell back to the static glyph/sprite/D3D chain even when its geometry was fully
+supported. The generic allowance and input/wait scheduling remain unchanged.
+The glyph allowance is charged only after a successful synchronous submission;
+exhaustion or adapter rejection preserves the normal static fallback. No page
+commands or pixels are retained. Text still follows the source layout and
+per-frame submission, so this removes one confirmed cost rather than all work
+that scales with a novel page's character count. Memory-only comparisons do
+not establish the remaining on-device CPU/GPU bottleneck or actual FPS.
+
 | Directory | Responsibility |
 | --- | --- |
 | `recompiled/` | Static function dispatch, ABI and native function entries |

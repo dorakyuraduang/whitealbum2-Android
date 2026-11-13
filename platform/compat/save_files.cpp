@@ -1,5 +1,6 @@
 #include "save_files.hpp"
 #include "read_ahead_files.hpp"
+#include "publish_file.hpp"
 #include "../../engine/test_progress.hpp"
 #include <algorithm>
 #include <atomic>
@@ -258,7 +259,7 @@ public:
     U32 remove(std::string_view name,bool directory)override{const auto found=info(name);if(!found)return 2;if(bool(found->attributes&16)!=directory)return 5;std::error_code error;return std::filesystem::remove(path(name),error)?0:5;}
     U32 move(std::string_view from,std::string_view to)override{if(info(to))return 183;if(!info(from))return 2;std::error_code error;std::filesystem::rename(path(from),path(to),error);return error?5:0;}
     U32 attributes(std::string_view name,U32 flags)override{if(flags!=128 && flags!=0)return 5;return info(name)?0:2;}
-    void replace(std::string_view name,std::span<const std::uint8_t> bytes)override{static std::atomic<U32> serial{};const auto target=path(name);auto staged=target;staged+=".wa2-"+std::to_string(++serial)+".tmp";try{std::ofstream out(staged,std::ios::binary|std::ios::trunc);out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));out.close();if(!out)throw std::runtime_error("Cannot write selected-directory configuration");std::filesystem::rename(staged,target);}catch(...){std::error_code error;std::filesystem::remove(staged,error);throw;}}
+    void replace(std::string_view name,std::span<const std::uint8_t> bytes)override{static std::atomic<U32> serial{};const auto target=path(name);auto staged=target;staged+=".wa2-"+std::to_string(++serial)+".tmp";try{std::ofstream out(staged,std::ios::binary|std::ios::trunc);out.write(reinterpret_cast<const char*>(bytes.data()),std::streamsize(bytes.size()));out.close();if(!out)throw std::runtime_error("Cannot write selected-directory configuration");publish_closed_file(staged,target);}catch(...){std::error_code error;std::filesystem::remove(staged,error);throw;}}
 };
 }
 std::shared_ptr<wr::MutableFiles> local_files(const std::filesystem::path& root){return std::make_shared<Local>(root);}
