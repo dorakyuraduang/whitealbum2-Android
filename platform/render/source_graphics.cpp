@@ -150,7 +150,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     wa2::graphics::ImmutableBuffers<BufferPair> text_buffers;
     void release_buffers(BufferPair pair){gl.DeleteBuffers(1,&pair.vertices);gl.DeleteBuffers(1,&pair.indices);}
     std::string texture_batch_failure;
-    std::uint64_t texture_batch_draws{},texture_batch_submissions{},glyph_packet_submissions{};
+    std::uint64_t texture_batch_draws{},texture_batch_submissions{};
     std::uint64_t screen_draws{},screen_unique_vertices{},vertex_upload_bytes{},index_upload_bytes{};
     bool has_pending()const{return !pending_vertices.empty() || !pending_screen.empty() || !texture_batch.empty();}
     // Graphics methods stay on one owner thread and do not call guest code.
@@ -826,7 +826,6 @@ void Graphics::flush() {
     }else gl.DrawArrays(GL_TRIANGLES,0,GLsizei(count));
     ++submitted_draws;submitted_vertices+=count;
     if(pending_target)pending_target->levels[0]->gpu_dirty=true;
-    if(multiple && pending_glyph)++glyph_packet_submissions;
     pending_vertices.clear();pending_screen.clear();pending_screen_indices.clear();pending_target.reset();pending_glyph=false;
     if(multiple){++texture_batch_submissions;texture_batch.clear();applied.reset();}
 }
@@ -1077,12 +1076,7 @@ U32 Graphics::present(Args a,bool force){
     const auto after_error=FrameTrace::now();SDL_GL_SwapWindow(window);const auto after_swap=FrameTrace::now();++presents;
     presentation_pacing.submitted(after_swap);
     frame_trace.presented(presents,present_begin,before_error,after_error,after_swap,copy_total.total_ns,draws,uploads,
-        {p.native_function_entries,p.api_calls,p.direct_leaf_api_calls,p.host_work.sleep_wall_ns,p.host_work.wait_wall_ns,p.host_work.sleep_requested_ms,p.host_work.sleep_zero_calls,p.host_work.function_wall_ns,p.host_work.api_wall_ns,p.host_work.poll_wall_ns});
-    const auto& stages=frame_trace.total_stages;
-    wa2::graphics::update_text_render_probe({presents,draws,submitted_draws,texture_batch_submissions,glyph_packet_submissions,state_applies,uploads,
-        p.native_function_entries,p.api_calls,objects.size(),text_buffers.size(),text_buffers.bytes(),p.cpu.fp.get16(0),after_swap,
-        stages[0],stages[1],stages[2],stages[3],stages[6],p.host_work.function_wall_ns,p.host_work.api_wall_ns,p.host_work.sleep_wall_ns});
-    host->frame_submitted();
+        {p.native_function_entries,p.api_calls,p.direct_leaf_api_calls,p.host_work.sleep_wall_ns,p.host_work.wait_wall_ns,p.host_work.sleep_requested_ms,p.host_work.sleep_zero_calls,p.host_work.function_wall_ns,p.host_work.api_wall_ns,p.host_work.poll_wall_ns});host->frame_submitted();
     if(p.state().stop_after_presents && presents>=p.state().stop_after_presents){p.state().diagnostic_stop=true;p.exit(0);}return 0;
 }
 void Graphics::install(){

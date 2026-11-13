@@ -49,7 +49,7 @@ def derive(text,code,base):
         targets.update(values)
     declaration='wa2::aot::IntegerRegisters<Metered || !NativeRegisters> integer(s,m,scope);'
     if body.count(declaration)!=1:raise ValueError('Ambiguous text register scope')
-    body=body.replace(declaration,declaration+newline+'TextJumpBudget<Metered> local_text_jumps(resume,s.fp.get16(0));')
+    body=body.replace(declaration,declaration+newline+'TextJumpBudget<Metered> local_text_jumps;')
     old='if constexpr(!Metered)(void)floating.external([&]{return integer.external([&]{return call_source_indirect(s,m,scope);});});'
     if body.count(old)!=len(SITES):raise ValueError('Changed cached text indirect-transfer set')
     for site in SITES:

@@ -839,12 +839,8 @@ builds. Packaging does not establish whole-story, display/device compatibility
 or performance, and does not change the current released backend/completion
 flags in `config/porting_contract.json`.
 
-For the history-dependent novel slowdown, use `scripts/compare_android_text.py`
-with `--observe-only --label after-load` and then `--observe-only --label
-after-advance` after the user manually advances text. The observations must use
-the same installed APK, existing process and settings. This reads actual
-presentation/text-work counts; it does not switch candidate modes, start an
-activity or send input. Compare per-frame work and actual presentation FPS,
-including text resumes/declines and retained-object gauges. A long page just
-loaded from a save is a required baseline, not a substitute for the later
-progressed page.
+Version 0.2.96 restores the 0.2.94 runtime source baseline after a reported
+0.2.95 regression, using a higher package version code for an in-place update.
+The phone comparison tool ends in the shipped optimized/default state and
+records whether the foreground receiver acknowledged restoration. A missing
+acknowledgement is reported explicitly; it is not assumed successful.

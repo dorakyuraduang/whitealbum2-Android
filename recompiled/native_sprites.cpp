@@ -18,7 +18,6 @@
 namespace wa2::aot {namespace {
 thread_local NativeSpriteCounts counts;
 thread_local NativeGlyphCounts glyph_counts;
-thread_local GlyphEntryCounts glyph_entries;
 thread_local std::vector<SpriteTile> tile_buffer;
 thread_local wa2::text::GlyphIndex glyph_index;
 thread_local wa2::text::GlyphGeometryMemo<SpriteTile> glyph_geometry;
@@ -246,7 +245,6 @@ bool native_draw_sprite(wr::Cpu& cpu,wr::Memory& memory){
     cpu.r[wr::EAX]=0;cpu.r[wr::ESP]+=4;cpu.eip=returning;return true;
 }
 NativeGlyphCounts native_glyph_counts(){return glyph_counts;}
-GlyphEntryCounts glyph_entry_counts(){return glyph_entries;}
 bool prepare_integer_glyph(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,std::array<std::uint8_t,256> sprite,const std::array<std::uint32_t,9>& args){
 #if defined(WA2_AOT_DIAGNOSTICS) && WA2_AOT_DIAGNOSTICS
     if(wa2::geometry::single_tile_reference_enabled)return false;
@@ -287,11 +285,10 @@ bool prepare_integer_glyph(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& comman
 namespace {
 bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
     defer=false;
-    ++glyph_entries.attempts;
     const auto control=cpu.fp.get16(0);
     const auto precision=control&0x300u;
     auto* service=SpriteService::find(memory);
-    if(!service || cpu.eip!=0x4462e0 || cpu.fp.bytes[4] || (control&0xc3f)!=0x3f || precision==0x100){++glyph_entries.precondition_declines;return false;}
+    if(!service || cpu.eip!=0x4462e0 || cpu.fp.bytes[4] || (control&0xc3f)!=0x3f || precision==0x100)return false;
     auto* glyph_allowance=GlyphCallScope::remaining(memory);
     if(glyph_allowance){
         if(!*glyph_allowance){++glyph_budget_counts.exhaustions;defer=true;return false;}

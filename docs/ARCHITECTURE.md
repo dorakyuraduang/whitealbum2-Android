@@ -1594,24 +1594,16 @@ staging packet and fixed metadata. Glyph edits miss naturally; mixed/non-glyph
 packets keep ordinary uploads. Disabling the path or destroying the context
 releases its objects. The temporary phone switch now compares this path with
 ordinary uploads in the same scene, with the integer conversion enabled in both.
-The 0.2.94 phone comparison showed only about 3% aggregate difference, within
-variation. Version 0.2.95 therefore leaves this experiment disabled by default;
-it is not a novel-mode performance fix.
-
-A restored long page and a page grown by successive text advances are separate
-validation conditions. The finite text fixture now retains font/text state
-through growing pages of multiple bounded text runs, repeated pages, clearing
-and regrowth, comparing
-ordered tiles with freshly restored equivalents. This is correctness evidence
-only. Owner-thread counters at actual presentations distinguish fresh text
-entries, resumed entries, local/glyph budget yields, typed/declined glyphs, GPU
-packets and retained object/payload counts. Android publishes a bounded copy
-at the existing HUD interval; its protected receiver never reads live game
-memory from the UI thread. Snapshot-only observation changes no rendering mode.
-These counts permit a before/after-progression phone comparison without
-screenshots, text capture or automated game input. The reported history-dependent
-slowdown still requires this device comparison; it must not be attributed to
-character count or a leak from an isolated steady-page timing.
+The 0.2.94 comparison showed only a small difference within variation. After
+a broader FPS regression was reported in 0.2.95, version 0.2.96 restores the
+0.2.94 game, renderer and Android host sources, including enabled buffer reuse
+and the earlier diagnostic hooks. The additional 0.2.95 per-present/glyph/text
+instrumentation is withdrawn from the shipped targets; its source and captured
+counts remain in commit 8ca2d24 and private reports. The version code advances
+so the restoration can be installed in place without clearing application data.
+This restores a source baseline, not evidence that novel-mode FPS is fixed;
+the same-scene phone comparison remains required. Comparison tools now restore
+the shipped enabled state and explicitly report an unacknowledged restoration.
 
 The glyph entry hook is also derived from cached C++ in the same recipe. It
 does not raise the 256-call allowance or the generic 32-call allowance. A finite

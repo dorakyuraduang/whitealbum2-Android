@@ -1,4 +1,4 @@
-"""Observe text progression or compare paths in an already running phone game.
+"""Compare reference/optimized CPU text paths in an already running phone game.
 
 The user selects the scene and keeps it foreground. Shell-protected registered
 broadcasts switch only the candidate path and read actual frame HUD
@@ -19,8 +19,6 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial',required=True)
     parser.add_argument('--samples',type=int,choices=range(4,13),default=8)
-    parser.add_argument('--observe-only',action='store_true',help='Read counters without changing any execution/rendering mode')
-    parser.add_argument('--label',default='unspecified',help='User-selected phase, e.g. after-load or after-advance')
     parser.add_argument('--output',type=Path,default=ROOT/'logs/android-text-comparison.json')
     args=parser.parse_args();low_priority()
     adb=ROOT/'tools/android-sdk/platform-tools/adb.exe'
@@ -55,26 +53,7 @@ def main():
         if record['uptime_ms']<=last_response or (mode!='snapshot' and record.get('mode')!=expected):
             raise RuntimeError('No fresh performance response from the foreground game')
         last_response=record['uptime_ms'];return record
-    if args.observe_only:
-        rows=[]
-        for _ in range(args.samples):
-            row=request('snapshot');work=row.get('text_work',{})
-            if not row.get('valid') or not row.get('foreground') or not row.get('focused') or row['sample_age_ms']>1000:
-                raise RuntimeError('No fresh foreground frame sample')
-            if not work.get('presents') or not work.get('monotonic_ns'):raise RuntimeError('No owner-thread text work sample')
-            if rows and work['presents']<=rows[-1]['text_work']['presents']:raise RuntimeError('Text work sample is stale')
-            rows.append(row);print('snapshot FPS '+str(round(row['fps'],2)),flush=True);time.sleep(.85)
-        first,last=rows[0]['text_work'],rows[-1]['text_work'];frames=last['presents']-first['presents']
-        elapsed=last['monotonic_ns']-first['monotonic_ns']
-        gauges={'live_objects','retained_packets','retained_bytes','source_fp_control','monotonic_ns'}
-        rates={key:(last[key]-value)/frames for key,value in first.items() if key not in gauges and key!='presents'}
-        if elapsed<=0 or any(value<0 for value in rates.values()):raise RuntimeError('Counters reset inside one observation')
-        report=dict(release=release,pid=int(pid),label=args.label,samples=rows,frames=frames,elapsed_ns=elapsed,
-            actual_present_fps=frames*1e9/elapsed,per_frame=rates,gauges={key:last[key] for key in gauges},
-            app_launched=False,screen_access=False,game_ui_operated=False,modes_changed=False,measured_on_phone=True,passed=True)
-        args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(report,indent=2)+'\n')
-        print(json.dumps({k:v for k,v in report.items() if k!='samples'},indent=2));return
-    windows=[];failure=None
+    windows=[];failure=None;restore_error=None;restored_mode=None
     try:
         for mode in ('reference','optimized','optimized','reference'):
             first=request(mode);start=first['uptime_ms'];time.sleep(1.1);rows=[]
@@ -91,9 +70,12 @@ def main():
             windows.append(window);print(mode+' median FPS '+str(round(window['median_fps'],2)),flush=True)
     except Exception as error:failure=str(error)
     finally:
-        try:request('reference_hold')
-        except Exception as error:failure=failure or 'Restore unavailable: '+str(error)
-    report=dict(release=release,pid=int(pid),windows=windows,error=failure,restored_mode='reference',app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,passed=failure is None)
+        # Restore the shipped 0.2.94/0.2.96 default. If foreground delivery is
+        # unavailable, never report a restoration which wasn't acknowledged.
+        try:restored_mode=request('optimized')['mode']
+        except Exception as error:
+            restore_error=str(error);failure=failure or 'Restore unavailable: '+restore_error
+    report=dict(release=release,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='optimized',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,passed=failure is None)
     if not failure:
         reference=[x['median_frame_ms'] for x in windows if x['mode']=='reference'];candidate=[x['median_frame_ms'] for x in windows if x['mode']=='optimized']
         report['reference_drift_ratio']=max(reference)/min(reference)
