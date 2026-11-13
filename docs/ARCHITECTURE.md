@@ -1531,8 +1531,12 @@ per outer AOT entry/resume, bound to its Memory and host thread. Previously
 glyphs shared the 32-call indirect/leaf allowance: a long text run periodically
 fell back to the static glyph/sprite/D3D chain even when its geometry was fully
 supported. The generic allowance and input/wait scheduling remain unchanged.
-The glyph allowance is charged only after a successful synchronous submission;
-exhaustion or adapter rejection preserves the normal static fallback. No page
+The glyph allowance is charged only after a successful synchronous submission.
+At its entry, an exhausted allowance now yields with the source call/stack
+untouched; the next outer entry resumes that glyph with a fresh allowance.
+Adapter rejection and unsupported inputs preserve the normal static fallback.
+This avoids using the expensive static glyph chain merely because an earlier
+text run spent the current entry's budget. No page
 commands or pixels are retained. Text still follows the source layout and
 per-frame submission, so this removes one confirmed cost rather than all work
 that scales with a novel page's character count. Memory-only comparisons do
@@ -1548,6 +1552,18 @@ for O2 compilation and their 32-bit stack operations reuse the caller's checked
 Memory scope. No decoder, unchecked pointer, page-layout cache or retained
 rendered page is introduced. CPU samples identify hotspots, not a measured
 frame-rate gain; actual phone improvement still needs user testing.
+
+The glyph entry hook is also derived from cached C++ in the same recipe. It
+does not raise the 256-call allowance or the generic 32-call allowance. A finite
+768-glyph fixture checks bounded groups, exact-once resume, unchanged CPU/stack
+on deferral, mismatched Memory ownership and unsupported/declined inputs.
+
+I/O progress snapshots stop when resource/save activity stops, so they do not
+describe a later idle novel page. The common host now emits a bounded final
+counter set once when the game thread finishes, including glyph deferrals and
+local text transfers. Reserved sequence 65 follows the 64 progress snapshots.
+This writes no extra diagnostic file and preserves LastError/errno even when
+an optional report/sink fails. It is distinct from the existing final JSON file.
 
 Single-tile integer glyphs validate the complete font-handle table range but
 load only the texture handle that their admitted geometry uses. Crossing or

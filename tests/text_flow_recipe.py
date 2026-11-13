@@ -15,6 +15,11 @@ assert len(targets)==22 and result==recipe.derive(source,code,base)[0]
 assert result.count('if constexpr(!Metered)goto L_text_local_dispatch;')==3
 assert result.count('local_text_jumps.take()')==22
 assert result.count('default:local_text_jumps.external();')==1
+original=(root/'generated/shared-aot/functions_5.cpp').read_text(encoding='utf-8')
+glyphs=(root/'generated/shared-aot/native-text/functions_5.cpp').read_text(encoding='utf-8')
+hook='if constexpr(!Metered)if(wa2::aot::native_draw_glyph(s,m))return;'
+assert original.count(hook)==1
+assert glyphs==original.replace(hook,hook.replace('native_draw_glyph(','native_draw_glyph_or_yield(')).replace('#include "bodies.hpp"','#include "../bodies.hpp"').replace('#include "../../','#include "../../../')
 rejections=0
 def rejects(text,data):
     global rejections

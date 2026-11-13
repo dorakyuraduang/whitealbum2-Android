@@ -2,7 +2,7 @@
 
 **简体中文** · [English](README.en.md)
 
-面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.86-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
+面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.87-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
 
 **[下载与发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
 

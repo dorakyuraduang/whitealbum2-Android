@@ -7,6 +7,7 @@ namespace wa2::aot {
 // indirect/leaf calls midway through an otherwise unchanged text run.
 struct GlyphBudgetCounts {std::uint64_t exhaustions{};};
 inline thread_local GlyphBudgetCounts glyph_budget_counts;
+inline thread_local std::uint64_t glyph_budget_deferrals{};
 class GlyphCallScope {
     inline static thread_local GlyphCallScope* current_{};
     GlyphCallScope* previous_{current_};

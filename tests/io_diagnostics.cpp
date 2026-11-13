@@ -44,6 +44,19 @@ int main(int argc,char** argv){try{
     const auto late=private_root/"late";std::uint64_t retry_time=1;c::install_io_diagnostics(q,late/"wa2-runtime.json","retry",{},[&]{return retry_time;});q.state().mutable_files->info("save_01.sav");
     q.last_error=17;errno=EDOM;for(unsigned n=0;n<256;++n)q.state().poll.back()();CHECK(errno==EDOM && q.last_error==17);CHECK(q.state().reports.at("io_diagnostics")().find("\"failures\":1")!=std::string::npos);
     CHECK(std::filesystem::create_directory(late));retry_time+=500000000;for(unsigned n=0;n<256;++n)q.state().poll.back()();CHECK(std::filesystem::is_regular_file(late/"wa2-runtime-progress.json"));
-    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.io-diagnostics.v1\",\"atomic_replacement\":true,\"unchanged_io_not_rewritten\":true,\"resource_activity_sampled\":true,\"rate_and_count_bounded\":true,\"failed_write_retry\":true,\"optional_sink_failure_isolated\":true,\"guest_errors_preserved\":true,\"selected_directory_written\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out.good());
+    // Final counters still work after the progress cap, without a file write.
+    unsigned final_events{};bool labels_ok=true;std::string completion;const auto prior=read(progress);
+    p.state().reports["frame_work"]=[]{return std::string(65537,'x');};
+    p.state().reports["scheduler"]=[]{throw std::runtime_error("optional report failure");return std::string();};
+    p.last_error=79;errno=EDOM;
+    c::emit_final_io_counters(p,"fixture-release",[&](std::string_view label,std::string_view value){
+        labels_ok&=label.starts_with("fixture-release #65 ") && !label.ends_with(" frame_work") && !label.ends_with(" scheduler");
+        ++final_events;if(label.ends_with(" run_completion"))completion=value;
+        p.last_error=99;errno=ERANGE;
+    },true);
+    CHECK(labels_ok && final_events>=5 && completion.find("\"source_returned\":true")!=std::string::npos && p.last_error==79 && errno==EDOM && read(progress)==prior);
+    c::emit_final_io_counters(p,"fixture-release",[](auto,auto){throw std::runtime_error("sink");},false);
+    CHECK(p.last_error==79 && errno==EDOM && std::filesystem::is_empty(selected));
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.io-diagnostics.v1\",\"atomic_replacement\":true,\"unchanged_io_not_rewritten\":true,\"resource_activity_sampled\":true,\"rate_and_count_bounded\":true,\"failed_write_retry\":true,\"optional_sink_failure_isolated\":true,\"guest_errors_preserved\":true,\"final_counters_without_file_io\":true,\"selected_directory_written\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out.good());
     std::cout<<"PASS bounded private I/O snapshots, atomic replacement, retry, sink isolation and unchanged game files/errors.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

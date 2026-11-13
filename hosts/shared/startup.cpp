@@ -39,6 +39,8 @@ std::uint32_t run(Startup startup){
     aot::Runtime runtime(std::move(startup.options),std::move(backends),startup.window,startup.language.chinese_subtitles,std::move(startup.captions));
     auto& process=runtime.process();
     process.state().reports["host_event_pump"]=[host=startup.window]{return host->event_pump_report();};
+    const auto final_counter_sink=startup.io_diagnostic_sink;bool counters_emitted{};
+    const auto emit_final=[&](bool normal){if(!counters_emitted){counters_emitted=true;platform::compat::emit_final_io_counters(process,WA2_HOST_VERSION,final_counter_sink,normal);}};
     const auto report=[&](std::string_view error){
         if(startup.report_file.empty())return;
         if(startup.report_file.extension()!=".json")throw std::invalid_argument("Runtime reports require a .json filename");
@@ -56,7 +58,7 @@ std::uint32_t run(Startup startup){
         aot::configure_language_names(process,startup.language.language);
         aot::configure_language_prompts(process,startup.language.language);
         platform::compat::install_io_diagnostics(process,startup.report_file,WA2_HOST_VERSION,std::move(startup.io_diagnostic_sink));
-        const auto result=runtime.run();report({});return result;
-    }catch(const std::exception& error){try{report(error.what());}catch(...){}throw;}
+        const auto result=runtime.run();emit_final(true);report({});return result;
+    }catch(const std::exception& error){emit_final(false);try{report(error.what());}catch(...){}throw;}
 }
 }

@@ -49,4 +49,17 @@ void install_io_diagnostics(wr::Process& process,const std::filesystem::path& fi
     process.state().reports["io_diagnostics"]=[state]{return state->report();};
     process.state().poll.push_back([&process,state]{state->poll(process);});
 }
+void emit_final_io_counters(wr::Process& process,std::string_view release,const IoDiagnosticSink& sink,bool source_returned) noexcept{
+    if(!sink)return;
+    const auto saved_error=process.last_error;const int saved_errno=errno;
+    struct Restore{wr::Process& p;wr::U32 error;int value;~Restore(){p.last_error=error;errno=value;}} restore{process,saved_error,saved_errno};
+    const auto emit=[&](std::string_view key,std::string_view value){
+        if(value.size()>65536)return;
+        try{sink(std::string(release)+" #65 "+std::string(key),value);}catch(...){}
+    };
+    for(const auto* key:{"selected_directory_io","save_read_scope","native_resources","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves","native_glyph_commands","native_sprite_commands","text_local_control_flow"}){
+        try{const auto found=process.state().reports.find(key);if(found!=process.state().reports.end())emit(key,found->second());}catch(...){}
+    }
+    emit("run_completion",source_returned?"{\"game_thread_finished\":true,\"source_returned\":true}":"{\"game_thread_finished\":true,\"source_returned\":false}");
+}
 }

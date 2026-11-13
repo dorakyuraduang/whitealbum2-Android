@@ -282,11 +282,13 @@ bool prepare_integer_glyph(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& comman
 #endif
     return true;
 }
-bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){
+namespace {
+bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
+    defer=false;
     auto* service=SpriteService::find(memory);if(!service || cpu.eip!=0x4462e0 || cpu.fp.bytes[4] || (cpu.fp.get16(0)&0xf3f)!=0x3f)return false;
     auto* glyph_allowance=GlyphCallScope::remaining(memory);
     if(glyph_allowance){
-        if(!*glyph_allowance){++glyph_budget_counts.exhaustions;return false;}
+        if(!*glyph_allowance){++glyph_budget_counts.exhaustions;defer=true;return false;}
     }
     else if(current_native_calls && !current_native_calls->remaining)return false;
     SpriteCommand command{};std::uint32_t returning{};
@@ -319,5 +321,12 @@ bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){
     if(glyph_allowance)--*glyph_allowance;
     else if(current_native_calls)--current_native_calls->remaining;
     ++glyph_counts.accepted;glyph_counts.tiles+=command.tiles.size();cpu.r[wr::EAX]=0;cpu.r[wr::ESP]+=4;cpu.eip=returning;return true;
+}
+}
+bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){bool defer;return draw_glyph(cpu,memory,defer);}
+bool native_draw_glyph_or_yield(wr::Cpu& cpu,wr::Memory& memory){
+    bool defer;const auto accepted=draw_glyph(cpu,memory,defer);
+    if(defer)++glyph_budget_deferrals;
+    return accepted || defer;
 }
 }

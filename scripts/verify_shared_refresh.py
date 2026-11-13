@@ -104,7 +104,7 @@ def main():
         tracked += [ROOT/'tests'/f'{name}.cpp' for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')]
         tracked += [ROOT/'scripts/prepare_shared_chroma.py',ROOT/chroma['reference_file']]
         tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
-        tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp']
+        tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
         tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
@@ -119,7 +119,7 @@ def main():
         bindings={path.relative_to(ROOT).as_posix():digest(path) for path in tracked};bindings.update(ui['source_sha256']);bindings.update(shaders['source_sha256'])
         print('Building verified cached AOT sources and selected-directory checks on x64; one hidden low-priority job.',flush=True)
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
-        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
+        tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -160,6 +160,7 @@ def main():
         if not inventory.get('page_preview_slow_update_checked') or inventory.get('maximum_preview_scope_ms')!=1000:raise ValueError('Missing bounded slow preview update check')
         progress=reports['io_diagnostics']
         if progress['selected_directory_written'] or not all(progress[key] for key in ('atomic_replacement','unchanged_io_not_rewritten','resource_activity_sampled','rate_and_count_bounded','failed_write_retry','optional_sink_failure_isolated','guest_errors_preserved')):raise ValueError('Incomplete bounded I/O diagnostic checks')
+        if not progress['final_counters_without_file_io']:raise ValueError('Missing bounded end-of-run counter checks')
         reuse=reports['resource_reuse']
         if reuse['maximum_cache_bytes']!=8388608 or reuse['exact_output_dictionary_trace_cases']<18 or reuse['large_image_reuses']<2 or reuse['archive_invalidations']!=2 or reuse['caller_tail_changes']!=4 or not reuse['total_budget_unchanged']:raise ValueError('Incomplete resource cache admission checks')
         loading=reports['resource_loading']
@@ -173,6 +174,8 @@ def main():
         if novel['handle_guard_cases']<5 or not novel['complete_handle_range_still_checked'] or not novel['handle_changes_visible_immediately'] or any(page['single_handle_reads']+page['copied_handle_words']>=page['previous_minimum_handle_words'] for page in novel['pages']):raise ValueError('Incomplete lazy font texture handle checks')
         control=reports['text_control']
         if control['stack_cases']!=104 or control['fault_cases']!=52 or control['nested_cases']!=52 or control['maximum_local_jumps']!=128 or not all(control[k] for k in ('checked_unknown_target','precise_atomic_faults','code_epoch_preserved','paged_and_linear','generic_call_limit_unchanged')):raise ValueError('Incomplete local text control/stack checks')
+        glyphs=reports['glyph_scheduling']
+        if glyphs['glyphs']!=768 or glyphs['bounded_groups']!=3 or glyphs['deferrals']!=2 or glyphs['guards']<7 or glyphs['maximum_glyphs_per_boundary']!=256 or not all(glyphs[k] for k in ('source_entry_yields_checked','next_entry_completes_exactly_once','unchanged_cpu_stack_on_defer','unsupported_inputs_still_decline','no_legacy_draws')):raise ValueError('Incomplete bounded glyph deferral checks')
         refs=reports['sprite_texture_refs']
         if refs['cases']!=8 or refs['ownership_checks']<500 or refs['failure_cases']!=4 or refs['inline_reference_slots']!=4 or refs['maximum_tiles']!=256 or not all(refs[k] for k in ('call_local_lifetime','no_dynamic_reference_storage','copy_move_forbidden')):raise ValueError('Incomplete native sprite texture reference lifetime checks')
         pc_loose=reports['pc_loose_resources']

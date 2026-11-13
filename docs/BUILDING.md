@@ -397,6 +397,19 @@ These are component checks; they do not establish whole-game compatibility.
 Before a direct CMake configure, run this recipe instead of the individual
 preparations above; it runs them in dependency order.
 
+`tests/glyph_scheduling.cpp` checks 768 typed glyph calls across three bounded
+groups, including the actual generated entry's exhaustion return and a fresh
+Program entry that consumes the original call exactly once. Unsupported FP,
+adapter failure, other Memory ownership and the generic zero-call budget
+remain declines. The typed allowance stays at 256. End-of-run diagnostics emit
+sequence 65 without extra file writes; the I/O and counter-parser tests cover
+that transport even after progress sampling has reached its cap.
+After the refresh, `python scripts/verify_glyph_resume.py` additionally spends
+the allowance after glyph 64 inside the recording sink of the real text
+callback fixture. Both 200-character ASCII and 80-character two-byte runs
+unwind and resume their source frames, then match static output, vertices and
+public ABI with no legacy draws. The generated fixture stays under `build/`.
+
 For comparison with a retained passing AOT archive, run
 `scripts/compare_text_cpu.py --baseline-dir build/<retained-text-baseline>`.
 The directory must contain `libwa2_shared_aot.a` and its matching
