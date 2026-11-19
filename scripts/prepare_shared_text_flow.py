@@ -91,6 +91,12 @@ def layout_hooks(body,newline):
 def run_hooks(body,newline):
     # Capture only paths inside this finite union. Each exit (markup, wrap,
     # output copy, extra glyph or return) cancels before its first instruction.
+    # A prepared span also executes both original CALL boundaries and the
+    # outline return's EBX reload. Bind the instructions the span replaces.
+    verified_blocks(body,(
+        ('447310','447321','1a682f4e703070c80eb55c16bf72b4bf92c8b4ac21aa06b724f452d640794ac3'),
+        ('4473d3','4473d8','061276f3d9ca0e4b3223eebdc8cd1f2eee02bc08c5acbbb9d15f696b0d162442'),
+    ))
     region=verified_blocks(body,RUN_RANGES)
     labels=set(re.findall(r'^L_([0-9a-f]+):',region,re.M))
     ends={'447310','4473d3'}
@@ -98,22 +104,31 @@ def run_hooks(body,newline):
     if exits!={'44671c','4467bb','446973','44721e','447407','44779d','4477cd'}:
         raise ValueError('Changed ordinary glyph run departures')
     marker='TextAdvanceScope text_advance;'
-    body=body.replace(marker,marker+newline+'TextRunReplay text_run;')
+    body=body.replace(marker,marker+newline+'TextRunReplay text_run;'+newline+'TextPageReplay text_page(m);')
     for label in sorted(exits|ends|{'4473d8'}):
         anchor=f'L_{label}: {{{newline}s.eip=0x{label}u;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
         if body.count(anchor)!=1:raise ValueError('Ambiguous glyph run label '+label)
         if label=='4473d8':
-            hook=['if constexpr(!Metered)if(text_run.enabled){',
+            hook=['if constexpr(!Metered)if(text_page.enabled()){',
+                  '    floating.flush();integer.flush();',
+                  '    switch(text_page.begin(s,scope)){',
+                  '    case 0x4473d8:goto L_4473d8;',
+                  '    case 0x447310:goto L_447310;',
+                  '    case 0x4473d3:goto L_4473d3;',
+                  '    }','}',
+                  'if constexpr(!Metered)if(text_run.enabled){',
                   '    floating.flush();integer.flush();',
                   '    switch(text_run.begin(s,scope)){',
                   '    case 0x447310:goto L_447310;',
                   '    case 0x4473d3:goto L_4473d3;',
                   '    }','}']
         elif label in ends:
-            hook=['if constexpr(!Metered)if(text_run.recording()){',
+            hook=['if constexpr(!Metered)if(text_page.recording()){',
+                  f'    floating.flush();integer.flush();text_page.finish(s,scope,0x{label}u);','}',
+                  'if constexpr(!Metered)if(text_run.recording()){',
                   f'    floating.flush();integer.flush();text_run.finish(s,scope,0x{label}u);','}']
         else:
-            hook=['if constexpr(!Metered)text_run.cancel();']
+            hook=['if constexpr(!Metered){text_run.cancel();text_page.cancel();}']
         body=body.replace(anchor,anchor+newline.join(hook)+newline)
     return body
 
@@ -165,7 +180,7 @@ def derive(text,code,base):
     dispatch += [f'case 0x{target:x}u: if(!local_text_jumps.take())return;goto L_{target:x};' for target in sorted(targets)]
     dispatch += ['default:local_text_jumps.external();',old,'return;','}','}']
     body=body[:finish]+newline+newline.join(dispatch)+body[finish:]
-    return '#include "text_run_replay.hpp"'+newline+'#include "text_advance.hpp"'+newline+'#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
+    return '#include "text_page_replay.hpp"'+newline+'#include "text_advance.hpp"'+newline+'#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
 
 def prepare():
     prepare_chroma();prepare_language();prepare_progress()
@@ -181,7 +196,8 @@ def prepare():
     outputs={output.relative_to(ROOT).as_posix():digest(data)};helper_bodies=[];stack_sites=0
     advance=ROOT/'recompiled/text_advance.hpp'
     inputs[advance.relative_to(ROOT).as_posix()]=digest(advance.read_bytes())
-    for name in ('text_layout_replay.hpp','text_layout_replay_control.hpp','text_run_replay.hpp','text_run_replay_control.hpp'):
+    for name in ('text_layout_replay.hpp','text_layout_replay_control.hpp','text_run_replay.hpp','text_run_replay_control.hpp',
+                 'text_page_packet.hpp','text_page_replay.hpp','text_page_replay_control.hpp'):
         header=ROOT/'recompiled'/name
         inputs[header.relative_to(ROOT).as_posix()]=digest(header.read_bytes())
     reference=output.parent/'text_advance_reference.inc'

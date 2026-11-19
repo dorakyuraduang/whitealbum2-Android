@@ -1,6 +1,7 @@
 #pragma once
 #include "../platform/render/texture_batch.hpp"
 #include "../platform/render/glyph_command_replay.hpp"
+#include "../platform/render/prepared_geometry.hpp"
 #include <memory>
 namespace texture_batch_test {
 struct Result {unsigned source_draws{},driver_packets{},triangles{},reused_texture_packets{},lifetime_checks{};
@@ -186,11 +187,67 @@ inline std::vector<unsigned> replay_glyph_packets(const std::vector<unsigned>& t
     }
     flush();CHECK(source==textures.size());return occupancies;
 }
+inline void check_prepared_packet_geometry(){
+    namespace g=wa2::graphics;
+    g::ScreenTextureBatch<unsigned> source,actual;
+    std::array<g::ScreenVertex,4> quad{};
+    const auto append=[&](auto& batch,unsigned tex){CHECK(batch.append(tex,quad,g::abi::D3DPT_TRIANGLESTRIP,4));};
+    append(source,10);append(source,20);append(source,20);append(source,30);
+    const auto bytes=[](auto span){return std::span(reinterpret_cast<const std::uint8_t*>(span.data()),span.size_bytes());};
+    g::ImmutableBuffers<unsigned,1,4096,4096> buffers;
+    g::GeometryTicket ticket{};
+    const auto upload=[&]{
+        return buffers.acquire(bytes(source.vertices()),bytes(source.indices()),
+            [](auto,auto){return 17u;},[](unsigned){},&ticket);
+    };
+    CHECK(!upload());CHECK(upload()==17u && ticket.generation!=0);
+    const auto view=buffers.view(ticket);
+    g::PreparedGlyphGeometry saved;
+    auto plan=*g::screen_vertex_plan(0x1c4u,{0,0,1280,720,0,1},{0,1});
+    saved.record({83,3,4,6,0,plan,{1,1},{}});
+    saved.finish(ticket);
+    CHECK(saved.find(83,3,plan,0) && !saved.find(83,2,plan,0) && !saved.find(83,3,plan,1));
+    ++plan.viewport.Width;CHECK(!saved.find(83,3,plan,0));--plan.viewport.Width;
+    const auto span=saved.find(83,3,plan,0);
+    append(actual,42); // Reuse geometry while binding this scene's resources.
+    const std::array<unsigned,2> tex{77,77};
+    const std::array<std::uint8_t,2> wrong{1,2};
+    CHECK(!actual.borrow(ticket,view,4,6,tex,wrong) && actual.binding_count()==1);
+    CHECK(actual.borrow(ticket,view,span->vertex,span->element,tex,std::span(span->slots).first(2)));
+    CHECK(actual.geometry_ticket()==ticket && actual.vertex_count()==12 && actual.element_count()==18);
+    CHECK(actual.bindings()[0]==42 && actual.bindings()[1]==77 && buffers.reuse(ticket)==17u);
+    CHECK(actual.borrow(ticket,view,12,18,std::array<unsigned,1>{88},std::array<std::uint8_t,1>{2}));
+    CHECK(actual.element_count()==24 && actual.geometry_ticket()==ticket);
+    // Failed preflight must leave the borrowed packet ready for its actual
+    // draw. In particular, a texture rollover must not force a CPU copy.
+    CHECK(!actual.append(99,quad,g::abi::D3DPT_TRIANGLESTRIP,5));
+    CHECK(!actual.append_glyph_quad(0,plan,{}));
+    CHECK(actual.geometry_ticket()==ticket && actual.element_count()==24);
+    // An ordinary next draw keeps the complete previously admitted prefix.
+    quad[2].position[0]=.25f;append(source,44);append(actual,44);
+    CHECK(!actual.geometry_ticket().generation && std::ranges::equal(bytes(source.vertices()),bytes(actual.vertices())));
+    CHECK(std::ranges::equal(source.indices(),actual.indices()));
+    actual.clear();append(actual,42);
+    CHECK(!actual.borrow(ticket,view,4,6,tex,std::span(span->slots).first(2))); // altered first quad
+    buffers.clear([](unsigned){});
+    CHECK(buffers.view(ticket).vertices.empty() && !buffers.reuse(ticket));
+    auto old=ticket;CHECK(!upload());CHECK(upload()==17u && ticket.slot==old.slot && ticket!=old);
+    CHECK(!buffers.reuse(old));
+    source.clear();actual.clear();
+    for(unsigned tex=1;tex<=8;++tex){append(source,tex);if(tex<8)append(actual,tex);}
+    CHECK(!upload());CHECK(upload()==17u);
+    CHECK(actual.borrow(ticket,buffers.view(ticket),28,42,std::array<unsigned,1>{8},std::array<std::uint8_t,1>{7}));
+    std::array<wa2::aot::SpriteVertex,4> next{};
+    CHECK(!actual.append_glyph_quad(9,plan,bytes(std::span(next))));
+    CHECK(!actual.append(9,quad,g::abi::D3DPT_TRIANGLESTRIP,4));
+    CHECK(actual.geometry_ticket()==ticket && actual.element_count()==48);
+}
 inline Result run(){
     namespace g=wa2::graphics;
     check_glyph_continuations();
     check_glyph_sampler_units();
     check_glyph_pipeline_rollover();
+    check_prepared_packet_geometry();
     Result result;
     {
         std::array<wa2::aot::SpriteTile,4> tiles{};

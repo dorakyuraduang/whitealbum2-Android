@@ -23,7 +23,7 @@ bool initialize_frame_hud_jni(JNIEnv* env)noexcept{
     if(overlay_class || report_method)return false;
     const auto local=env->FindClass("org/wa2/port/FrameHud");if(!local)return false;
     overlay_class=static_cast<jclass>(env->NewGlobalRef(local));env->DeleteLocalRef(local);if(!overlay_class)return false;
-    report_method=env->GetStaticMethodID(overlay_class,"report","(FFJJJJJ)V");if(!report_method)return false;
+    report_method=env->GetStaticMethodID(overlay_class,"report","(FFJJJJJJJ)V");if(!report_method)return false;
     reset_requested.store(true,std::memory_order_release);return true;
 }
 void release_frame_hud_jni(JNIEnv* env)noexcept{
@@ -45,7 +45,8 @@ void frame_presented_with_text(GlyphTotals (*read_totals)()) noexcept {
     const jlong thread_cpu_ns=clock_gettime(CLOCK_THREAD_CPUTIME_ID,&cpu)==0
         ? jlong(cpu.tv_sec)*1000000000LL+jlong(cpu.tv_nsec) : -1;
     env->CallStaticVoidMethod(overlay_class,report_method,jfloat(sample->fps),jfloat(sample->average_ms),
-        jlong(sample->presented),jlong(totals.glyphs),jlong(totals.tiles),jlong(now),thread_cpu_ns);
+        jlong(sample->presented),jlong(totals.glyphs),jlong(totals.tiles),jlong(now),thread_cpu_ns,
+        jlong(totals.replayed_glyphs),jlong(totals.reused_geometry));
     // Closing an optional HUD must not terminate the game thread.
     if(env->ExceptionCheck())env->ExceptionClear();
 }
@@ -56,7 +57,7 @@ extern "C" JNIEXPORT void JNICALL Java_org_wa2_port_Wa2Activity_nativeResetFrame
 extern "C" JNIEXPORT jboolean JNICALL Java_org_wa2_port_PerformanceProbe_nativeSetCandidate(JNIEnv*,jclass,jint mode){
     using Mode=wa2::android::TextProbeMode;
     const auto callback=performance_switch.load(std::memory_order_acquire);
-    if(!callback || mode<0 || mode>int(Mode::both))return JNI_FALSE;
+    if(!callback || mode<0 || mode>int(Mode::page))return JNI_FALSE;
     callback(static_cast<Mode>(mode));
     return JNI_TRUE;
 }

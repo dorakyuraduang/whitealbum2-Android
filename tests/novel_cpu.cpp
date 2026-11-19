@@ -102,6 +102,7 @@ int main(int argc,char** argv){try{
     // preparation. The dedicated oracle and benchmark enable command reuse.
     a::glyph_command_replay_enabled.store(false,std::memory_order_relaxed);
     a::text_run_replay_enabled.store(false,std::memory_order_relaxed);
+    a::text_page_replay_enabled.store(false,std::memory_order_relaxed);
     std::array<std::uint8_t,0x2000> initial_output;p.memory.copy_out(output,initial_output);
     std::array<std::uint8_t,256> sprite;p.memory.copy_out(output,sprite);
     std::ofstream report(argv[1]);
@@ -196,7 +197,7 @@ int main(int argc,char** argv){try{
         const auto before=a::native_glyph_counts();
         const auto handle_reads=a::glyph_resource_counts.single_texture_handle_reads;
         const auto jumps=a::text_jump_counts.local_jumps;
-        a::SpriteService sink(p.memory,Recording::submit,&recorded);
+        a::SpriteService sink(p.memory,Recording::submit,&recorded,a::SurfaceGlyphAccess::read_only);
         text_result=p.callback(0x446500,reveal_args,false);
         const auto after=a::native_glyph_counts();
         CHECK(after.declined==before.declined && recorded.calls.empty());
@@ -274,7 +275,7 @@ int main(int argc,char** argv){try{
     // The finite path changes alpha on its last 15 glyphs on both passes.
     const char* timing_mode=std::getenv("WA2_NOVEL_TIMING");
     const std::string_view mode=timing_mode?timing_mode:"";
-    unsigned layout_cases{},run_transition_cases{};
+    unsigned layout_cases{},run_transition_cases{},page_cases{};
     if(mode=="layout"){
         begin_page();
         layout_cases=novel_layout_test::verify(p,initial_cpu,output,reveal_args);
@@ -282,6 +283,12 @@ int main(int argc,char** argv){try{
     if(mode=="layout" || mode=="transition"){
         begin_page();
         run_transition_cases=novel_layout_test::verify(p,initial_cpu,output,reveal_args,novel_layout_test::Feature::run_transition);
+    }
+    if(mode=="layout" || mode=="page"){
+        begin_page();
+        a::glyph_command_replay_enabled=true;
+        page_cases=novel_layout_test::verify(p,initial_cpu,output,reveal_args,novel_layout_test::Feature::page_span);
+        a::glyph_command_replay_enabled=false;
     }
     const auto advance_hits_before=a::compact_text_advance_hits;
     for(auto visible:{immediately_visible,page_length}){
@@ -313,12 +320,20 @@ int main(int argc,char** argv){try{
     const bool compare_advance=mode=="1" || mode=="advance";
     const bool compare_layout=mode=="layout-bench";
     const bool compare_glyph=mode=="glyph-bench";
-    if(compare_advance || compare_layout || compare_glyph || mode=="health" || mode=="historical"){
+    const bool light_page=mode=="page-light-bench";
+    const bool compare_page=mode=="page-bench" || light_page;
+    if(compare_advance || compare_layout || compare_glyph || compare_page || mode=="health" || mode=="historical"){
         // Keep each source segment below its text limit. Select distinct
         // ordinary Shift-JIS kanji from the fixture font's real ranges.
         // The grid predicts candidates; only the actual two source draws
         // determine whether a character crosses an atlas texture boundary.
-        constexpr unsigned lines=3,long_length=lines*page_length;
+        // Match both phone workloads with constructed glyphs. The lighter
+        // page has 25 characters and two atlas crossings per pass. The full
+        // page has 193 characters and 39 crossings per pass.
+        const auto lines=light_page?1u:3u;
+        const std::array<unsigned,3> lengths=light_page?std::array{25u,0u,0u}:
+            compare_page?std::array{64u,64u,65u}:std::array{page_length,page_length,page_length};
+        const unsigned long_length=lengths[0]+lengths[1]+lengths[2];
         const auto initial_y=reveal_args[3];
         std::array<std::uint8_t,256> ranges;p.memory.copy_out(0x4a14b8,ranges);
         wa2::text::GlyphIndex index;
@@ -354,15 +369,26 @@ int main(int argc,char** argv){try{
             if(single.size()==16 && crossing.size()==4)break;
         }
         CHECK(single.size()==16 && crossing.size()==4);
-        std::string segment="<C1:";unsigned single_count{},crossing_count{};
-        for(unsigned n=0;n<page_length;++n){
-            const unsigned code=n%5==4?crossing[(crossing_count++*3)%crossing.size()]:single[(single_count++*7)%single.size()];
-            segment+=char(code>>8);segment+=char(code);
+        std::array<U32,3> segments{};
+        std::set<unsigned> used_characters;
+        unsigned page_tiles{},page_crossings{};
+        for(unsigned line=0;line<lines;++line){
+            std::string segment="<C1:";unsigned singles{},crossings{};
+            for(unsigned n=0;n<lengths[line];++n){
+                const bool split=light_page?n%12==5:n%5==(compare_page?2u:4u);
+                const unsigned code=split?crossing[(crossings++*3)%crossing.size()]:single[(singles++*7)%single.size()];
+                used_characters.insert(code);
+                segment+=char(code>>8);segment+=char(code);
+            }
+            segment+='>';
+            segments[line]=line && !compare_page?segments[0]:p.put_string(segment);
+            page_tiles+=singles+2*crossings;
+            page_crossings+=crossings;
         }
-        segment+='>';reveal_args[11]=p.put_string(segment);
         const auto long_page=[&]{
             std::uint64_t glyphs{};
             for(unsigned line=0;line<lines;++line){
+                reveal_args[11]=segments[line];
                 reveal_args[3]=initial_y+line*40;
                 for(U32 style:{1u,0u}){
                     const auto work=frame(immediately_visible,style,line!=0 || style==0);
@@ -373,15 +399,20 @@ int main(int argc,char** argv){try{
             CHECK(glyphs==2*long_length);
         };
         const bool saved_layout=a::text_layout_replay_enabled.load(std::memory_order_relaxed);
-        if(compare_layout || compare_glyph){
-            a::text_layout_replay_enabled.store(compare_glyph,std::memory_order_relaxed);
+        if(compare_layout || compare_glyph || compare_page){
+            a::text_layout_replay_enabled.store(compare_glyph || compare_page,std::memory_order_relaxed);
             a::compact_text_advance_enabled.store(true,std::memory_order_relaxed);
         }
+        if(compare_page)a::glyph_command_replay_enabled=true;
         begin_page();
         long_page();
         const auto expected_tiles=recorded.tiles;
-        CHECK(expected_tiles.size()==2*lines*(single_count+2*crossing_count));
-        CHECK(expected_tiles.size()*10>=2*long_length*11 && expected_tiles.size()*10<=2*long_length*13);
+        CHECK(expected_tiles.size()==2*page_tiles);
+        if(light_page)CHECK(2*long_length==50 && expected_tiles.size()==54);
+        else{
+            if(compare_page)CHECK(2*long_length==386 && expected_tiles.size()==464);
+            CHECK(expected_tiles.size()*10>=2*long_length*11 && expected_tiles.size()*10<=2*long_length*13);
+        }
         std::set<U32> rendered_textures;
         for(const auto& tile:expected_tiles)rendered_textures.insert(tile.texture);
         CHECK(rendered_textures.size()>=16);
@@ -392,19 +423,21 @@ int main(int argc,char** argv){try{
         constexpr std::array<bool,8> windows{false,true,true,false,true,false,false,true};
         timing<<"{\"mode\":\""<<(mode=="1"?"compare":mode)<<"\",\"characters\":"<<long_length
             <<",\"source_segments\":"<<lines<<",\"glyphs_per_page\":"<<2*long_length
-            <<",\"tiles_per_page\":"<<expected_tiles.size()<<",\"distinct_characters\":"<<(single.size()+crossing.size())
-            <<",\"distinct_textures\":"<<rendered_textures.size()<<",\"crossing_characters_per_segment\":"<<crossing_count
+            <<",\"tiles_per_page\":"<<expected_tiles.size()<<",\"distinct_characters\":"<<used_characters.size()
+            <<",\"distinct_textures\":"<<rendered_textures.size()<<",\"crossing_characters_per_segment\":"<<page_crossings/lines
             <<",\"passes_per_segment\":2,\"pages_per_window\":"<<pages_per_window<<",\"windows\":[";
         for(unsigned i=0;i<windows.size();++i){
-            const bool compact=compare_layout || compare_glyph || (compare_advance && windows[i]);
+            const bool compact=compare_layout || compare_glyph || compare_page || (compare_advance && windows[i]);
             a::compact_text_advance_enabled.store(compact,std::memory_order_relaxed);
             if(compare_layout)a::text_layout_replay_enabled.store(windows[i],std::memory_order_relaxed);
             if(compare_glyph)a::glyph_command_replay_enabled.store(windows[i],std::memory_order_relaxed);
+            if(compare_page)a::text_page_replay_enabled=windows[i];
             begin_page();
             for(unsigned warm=0;warm<2;++warm)long_page();
             const auto hits_before=a::compact_text_advance_hits;
             const auto layout_before=a::text_layout_replay_hits;
             const auto command_before=a::glyph_command_replay_hits;
+            const auto page_before=a::text_page_replay_glyphs;
             const auto start=std::chrono::steady_clock::now();const auto cpu_start=cpu_time_ns();
             for(unsigned iteration=0;iteration<pages_per_window;++iteration)long_page();
             const auto cpu_ns=cpu_time_ns()-cpu_start;
@@ -415,6 +448,12 @@ int main(int argc,char** argv){try{
             CHECK((hits>0)==compact && recorded.tiles==expected_tiles && text_result==expected_return);
             if(compare_layout)CHECK((layout_hits>0)==windows[i]);
             if(compare_glyph)CHECK(layout_hits>0 && (command_hits>0)==windows[i]);
+            const auto skipped_glyph_preparations=a::text_page_replay_glyphs-page_before;
+            if(compare_page){
+                std::cout<<"Page window "<<i<<" enabled="<<windows[i]<<" reused glyphs="<<skipped_glyph_preparations
+                    <<" cpu_ns_per_page="<<cpu_ns/pages_per_window<<'\n';
+                CHECK((skipped_glyph_preparations>0)==windows[i]);
+            }
             std::array<std::uint8_t,16> actual_cursor;p.memory.copy_out(cursor,actual_cursor);
             std::array<std::uint8_t,0x2000> actual_output;p.memory.copy_out(output,actual_output);
             CHECK(actual_cursor==expected_cursor && actual_output==expected_output);
@@ -424,11 +463,14 @@ int main(int argc,char** argv){try{
             if(compare_layout)timing<<",\"layout_replay\":"<<(windows[i]?"true":"false")<<",\"layout_hits\":"<<layout_hits;
             if(compare_glyph)timing<<",\"glyph_command_replay\":"<<(windows[i]?"true":"false")
                 <<",\"glyph_command_hits\":"<<command_hits<<",\"layout_hits\":"<<layout_hits;
+            if(compare_page)timing<<",\"page_replay\":"<<(windows[i]?"true":"false")
+                <<",\"replayed_glyphs\":"<<skipped_glyph_preparations;
             timing<<'}';
         }
         timing<<"]}";
-        if(compare_layout || compare_glyph)a::text_layout_replay_enabled.store(saved_layout,std::memory_order_relaxed);
-        if(compare_glyph)a::glyph_command_replay_enabled.store(false,std::memory_order_relaxed);
+        if(compare_layout || compare_glyph || compare_page)a::text_layout_replay_enabled.store(saved_layout,std::memory_order_relaxed);
+        if(compare_glyph || compare_page)a::glyph_command_replay_enabled.store(false,std::memory_order_relaxed);
+        if(compare_page)a::text_page_replay_enabled=false;
         a::compact_text_advance_enabled.store(false,std::memory_order_relaxed);
         reveal_args[3]=initial_y;
         reveal_args[11]=reveal_string;
@@ -521,6 +563,7 @@ int main(int argc,char** argv){try{
     report<<",\"compact_text_advance\":{\"paired_page_hits\":"<<advance_hits<<'}';
     if(layout_cases)report<<",\"layout_state_oracle_cases\":"<<layout_cases;
     if(run_transition_cases)report<<",\"run_transition_oracle_cases\":"<<run_transition_cases;
+    if(page_cases)report<<",\"page_replay_oracle_cases\":"<<page_cases;
     if(command_cases)report<<",\"glyph_command_oracle_cases\":"<<command_cases;
     if(!timing.str().empty())report<<",\"two_pass_timing\":"<<timing.str();
     report<<",\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards

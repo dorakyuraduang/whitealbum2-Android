@@ -14,18 +14,26 @@ import time
 from build_pak_tool import low_priority
 
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE='glyph-run-and-submission'
+CANDIDATE='page-glyph-replay'
 
 def candidate_work(mode, first, last):
     work={}
-    for key, exclusive in (('run_hits','run'),('surface_hits','submission'),('rollover_hits','submission')):
+    paths={
+        'run_hits':{'run','optimized'},
+        'surface_hits':{'submission','optimized','page_reference','page'},
+        'rollover_hits':{'submission','optimized','page_reference','page'},
+        'page_glyphs':{'page'},'page_spans':{'page'},
+        'prepared_geometry_hits':{'page'},'retained_geometry_draws':{'page'}
+    }
+    for key, enabled in paths.items():
         delta=last[key]-first[key]
         if first[key]<0 or delta<0:
             raise ValueError('Missing or reset candidate counter: '+key)
-        if mode not in ('optimized',exclusive) and delta:
+        if mode not in enabled and delta:
             raise ValueError('Disabled path ran during comparison: '+key)
         work[key]=delta
-    if mode!='reference' and not any(work.values()):
+    admitted=work['page_glyphs'] if mode=='page' else sum(work.values())
+    if mode not in ('reference','page_reference') and not admitted:
         raise ValueError('No candidate work was admitted in this scene')
     return work
 
@@ -52,7 +60,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial',required=True)
     parser.add_argument('--samples',type=int,choices=range(4,13),default=8)
-    parser.add_argument('--path',choices=('optimized','run','submission'),default='submission')
+    parser.add_argument('--path',choices=('page','optimized','run','submission'),default='page')
     parser.add_argument('--output',type=Path,default=ROOT/'logs/android-text-comparison.json')
     args=parser.parse_args();low_priority()
     adb=ROOT/'tools/android-sdk/platform-tools/adb.exe'
@@ -88,7 +96,8 @@ def main():
         last_response=record['uptime_ms'];return record
     windows=[];workload_intervals=[];failure=None;restore_error=None;restored_mode=None
     try:
-        for mode in ('reference',args.path,args.path,'reference'):
+        reference_mode='page_reference' if args.path=='page' else 'reference'
+        for mode in (reference_mode,args.path,args.path,reference_mode):
             rows=[]
             window=dict(mode=mode,samples=rows,glyph_work=[],complete=False)
             windows.append(window)
@@ -109,6 +118,9 @@ def main():
             # arrived belongs to the warm-up interval.
             work=candidate_work(mode,rows[0],rows[-1])
             window.update(median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_work=work,complete=True)
+            measured=[sample.get('window') for sample in rows]
+            if all(sample and sample.get('game_thread_cpu_ns') is not None and sample['frames']>0 for sample in measured):
+                window['game_thread_ms_per_frame']=sum(sample['game_thread_cpu_ns'] for sample in measured)/sum(sample['frames'] for sample in measured)/1e6
             print(mode+' median FPS '+str(round(window['median_fps'],2)),flush=True)
     except Exception as error:failure=str(error)
     finally:
@@ -119,11 +131,14 @@ def main():
             restore_error=str(error);failure=failure or 'Restore unavailable: '+restore_error
     report=dict(release=release,candidate=CANDIDATE,path=args.path,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='default',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,comparable=False,passed=failure is None)
     if not failure:
-        reference=[x['median_frame_ms'] for x in windows if x['mode']=='reference'];candidate=[x['median_frame_ms'] for x in windows if x['mode']==args.path]
+        reference=[x['median_frame_ms'] for x in windows if x['mode']==reference_mode];candidate=[x['median_frame_ms'] for x in windows if x['mode']==args.path]
         report['reference_drift_ratio']=max(reference)/min(reference)
         report['candidate_drift_ratio']=max(candidate)/min(candidate)
         report['comparable']=max(report['reference_drift_ratio'],report['candidate_drift_ratio'])<=1.10
         report['reference_frame_ms']=statistics.median(reference);report['candidate_frame_ms']=statistics.median(candidate)
+        if all('game_thread_ms_per_frame' in window for window in windows):
+            for mode,key in ((reference_mode,'reference'),(args.path,'candidate')):
+                report[key+'_game_thread_ms']=statistics.median(window['game_thread_ms_per_frame'] for window in windows if window['mode']==mode)
         if not report['comparable']:
             failure='Mode windows drifted by more than 10%; no comparable performance conclusion'
             report['error']=failure;report['passed']=False

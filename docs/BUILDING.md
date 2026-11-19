@@ -475,14 +475,13 @@ page, then run `python scripts/compare_android_text.py --serial <ADB-serial>`.
 It compares reference/optimized/optimized/reference windows within one process
 using real presentation FPS and frame-time samples. The running activity's
 dynamic receiver requires the sender's Android DUMP permission; registered-only
-delivery cannot launch the game. The reference retains the 0.2.102 layout and
-prepared glyph command caches. All modes use eight texture slots. The default
-comparison (`--path submission`) reuses graphics state for consecutive
-surface glyphs and for a full glyph packet continuing on the same target.
-The driver still draws each packet in order. Both paths retain a compact
-snapshot of its resources, sampler and viewport. `--path run` tests an experimental shortcut
-between successive glyph calls, disabled in regular play. `--path optimized` enables both candidates.
-Each snapshot includes separate counters for actual uses of each path.
+delivery cannot launch the game. The default comparison (`--path page`) keeps
+the 0.2.103 glyph layout, command and graphics state optimizations enabled in
+both modes. It toggles reuse of consecutive stable glyphs. Counters distinguish
+replayed glyphs, reused vertex data and actual draws from retained buffers.
+Both modes submit the current scene in the original order. The independent
+`submission`, `run` and `optimized` comparisons exercise the earlier
+graphics submission path, experimental cursor shortcut or both, respectively.
 Measurement switches reset after 30 seconds. The comparison restores the shipped mode at the
 end and records whether the running activity acknowledged it.
 No launch setting or game file is changed. An inactive/unfocused page, stale
@@ -494,7 +493,8 @@ Subtract adjacent totals within the same foreground session to compare work
 per frame. Record only the game's UID and this tag and restore its prior log
 level after the measurement. On pause, the game also reports stable foreground
 text windows to its performance log when available. These contain frame counts,
-glyph and tile counts, wall time and game-thread CPU time. They contain no text.
+glyph and tile counts, reused glyphs and geometry, wall time and game-thread
+CPU time. A shared foreground interval alone does not identify a scene.
 
 The optional Android target `wa2_phone_novel_cpu` runs the shared text routine
 with a recording device. Pass a writable report filename as its only argument.
@@ -504,6 +504,11 @@ CPU time, elapsed time and the number of glyphs and texture tiles in each run.
 `WA2_NOVEL_TIMING=layout-bench` compares layout reuse with the same cursor
 routine enabled in both modes. `WA2_NOVEL_TIMING=glyph-bench` compares
 prepared glyph commands with layout reuse enabled in both modes.
+`WA2_NOVEL_TIMING=page-bench` exercises 386 glyphs and 464 texture tiles
+across three constructed text segments on a recording device. The companion
+`page-light-bench` uses 50 glyphs and 54 texture tiles. Compare time
+per page and actual replay counts. `WA2_NOVEL_TIMING=page` compares the
+live CPU, stack, submitted commands and fault boundaries for grouped replay.
 `WA2_NOVEL_TIMING=layout` compares CPU state, stack writes and drawing
 commands at each observed boundary and checks dependencies on mutable
 font and texture data.

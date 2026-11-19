@@ -1,5 +1,6 @@
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
+#include "text_page_packet.hpp"
 #include "glyph_budget.hpp"
 #include "glyph_command_replay.hpp"
 #include "glyph_resources.hpp"
@@ -353,11 +354,16 @@ bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
     }catch(const Declined&){++glyph_counts.declined;return false;}catch(const wr::GuestFault&){++glyph_counts.declined;return false;}
     command.glyph=true;
     if(!service->submit(command)){++glyph_counts.declined;return false;}
+    if(text_page_observer.packet)capture_page_command(memory,cpu.r[wr::ESP],returning,command);
     if(glyph_allowance)--*glyph_allowance;
     else if(current_native_calls)--current_native_calls->remaining;
     if(precision)++native_wide_glyph_calls;
     ++glyph_counts.accepted;glyph_counts.tiles+=command.tiles.size();cpu.r[wr::EAX]=0;cpu.r[wr::ESP]+=4;cpu.eip=returning;return true;
 }
+}
+void count_page_glyph(unsigned tiles,bool wide){
+    ++glyph_counts.accepted;glyph_counts.tiles+=tiles;
+    native_wide_glyph_calls+=unsigned(wide);
 }
 bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){bool defer;return draw_glyph(cpu,memory,defer);}
 bool native_draw_glyph_or_yield(wr::Cpu& cpu,wr::Memory& memory){

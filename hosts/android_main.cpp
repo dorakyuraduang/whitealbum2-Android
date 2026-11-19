@@ -11,6 +11,7 @@
 #include "../recompiled/text_layout_replay_control.hpp"
 #include "../recompiled/glyph_command_replay_control.hpp"
 #include "../recompiled/text_run_replay_control.hpp"
+#include "../recompiled/text_page_replay_control.hpp"
 #include "../platform/render/text_buffers.hpp"
 #include <SDL.h>
 #include <SDL_main.h>
@@ -18,12 +19,15 @@
 #include <string_view>
 namespace {
 std::atomic<std::uint64_t> measured_layout_hits{}, measured_glyph_hits{}, measured_run_hits{};
+std::atomic<std::uint64_t> measured_page_spans{}, measured_page_glyphs{};
 using Mode=wa2::android::TextProbeMode;
 using Counter=wa2::android::TextProbeCounter;
 void select_text_path(Mode mode){
     const bool run=mode==Mode::run || mode==Mode::both || (mode==Mode::shipped && wa2::aot::default_text_run_replay);
     wa2::aot::text_run_replay_enabled.store(run,std::memory_order_relaxed);
-    wa2::graphics::enable_surface_glyph_commands(mode==Mode::submission || mode==Mode::both || mode==Mode::shipped);
+    wa2::graphics::enable_surface_glyph_commands(mode!=Mode::reference && mode!=Mode::run);
+    wa2::aot::text_page_replay_enabled.store(mode==Mode::page || (mode==Mode::shipped && wa2::aot::default_text_page_replay),
+                                            std::memory_order_relaxed);
 }
 std::uint64_t read_text_counter(Counter counter){
     switch(counter){
@@ -34,6 +38,10 @@ std::uint64_t read_text_counter(Counter counter){
         case Counter::surface_continued:return wa2::graphics::surface_glyph_command_counts().continued;
         case Counter::surface_tiles:return wa2::graphics::surface_glyph_command_counts().continued_tiles;
         case Counter::rollovers:return wa2::graphics::glyph_pipeline_rollovers();
+        case Counter::page_spans:return measured_page_spans.load(std::memory_order_relaxed);
+        case Counter::page_glyphs:return measured_page_glyphs.load(std::memory_order_relaxed);
+        case Counter::prepared_geometry:return wa2::graphics::surface_glyph_command_counts().prepared_geometry_hits;
+        case Counter::retained_draws:return wa2::graphics::surface_glyph_command_counts().retained_geometry_draws;
         default:return 0;
     }
 }
@@ -55,6 +63,8 @@ extern "C" int SDL_main(int argc,char** argv){
         measured_layout_hits.store(0, std::memory_order_relaxed);
         measured_glyph_hits.store(0, std::memory_order_relaxed);
         measured_run_hits.store(0, std::memory_order_relaxed);
+        measured_page_spans.store(0, std::memory_order_relaxed);
+        measured_page_glyphs.store(0, std::memory_order_relaxed);
         select_text_path(Mode::shipped);
         wa2::android::set_performance_switch(select_text_path,read_text_counter);
         struct ReleasePerformanceSwitch {~ReleasePerformanceSwitch(){wa2::android::set_performance_switch(nullptr);}} release_performance_switch;
@@ -66,7 +76,10 @@ extern "C" int SDL_main(int argc,char** argv){
                 measured_layout_hits.store(wa2::aot::text_layout_replay_hits, std::memory_order_relaxed);
                 measured_glyph_hits.store(wa2::aot::glyph_command_replay_hits, std::memory_order_relaxed);
                 measured_run_hits.store(wa2::aot::text_run_replay_hits, std::memory_order_relaxed);
-                return wa2::android::GlyphTotals{counts.accepted,counts.tiles};
+                measured_page_spans.store(wa2::aot::text_page_replay_spans,std::memory_order_relaxed);
+                measured_page_glyphs.store(wa2::aot::text_page_replay_glyphs,std::memory_order_relaxed);
+                return wa2::android::GlyphTotals{counts.accepted,counts.tiles,wa2::aot::text_page_replay_glyphs,
+                    wa2::graphics::surface_glyph_command_counts().prepared_geometry_hits};
             });
         };
         startup.window=wa2::window::sdl_host(std::move(options));startup.mount_resources=wa2::android::mount_compiled_resources;

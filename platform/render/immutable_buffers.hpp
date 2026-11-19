@@ -8,6 +8,14 @@
 #include <algorithm>
 
 namespace wa2::graphics {
+struct GeometryTicket {
+    unsigned slot{};
+    std::uint64_t generation{};
+    bool operator==(const GeometryTicket&)const=default;
+};
+struct GeometryBytes {
+    std::span<const std::uint8_t> vertices,indices;
+};
 struct PacketHash {
     std::uint64_t operator()(std::span<const std::uint8_t> a,std::span<const std::uint8_t> b)const{
         std::uint64_t h=0x9e3779b97f4a7c15ull;
@@ -22,7 +30,7 @@ struct PacketHash {
 template<class Handle,unsigned Entries=512,std::size_t MaximumBytes=2*1024*1024,
          std::size_t MaximumPacket=192*1024,class Hash=PacketHash>
 class ImmutableBuffers {
-    struct Entry {std::optional<Handle> handle;std::uint64_t hash{},age{};std::vector<std::uint8_t> vertices,indices;};
+    struct Entry {std::optional<Handle> handle;std::uint64_t hash{},age{},generation{};std::vector<std::uint8_t> vertices,indices;};
     struct Seen {std::uint64_t hash{};std::size_t vertices{},indices{};bool valid{};};
     std::array<Entry,Entries> entries_;
     std::array<Seen,2048> seen_{};
@@ -33,6 +41,16 @@ public:
     static constexpr auto maximum_entries=Entries;
     static_assert(Entries && MaximumPacket<=MaximumBytes);
     std::size_t bytes()const{return bytes_;}unsigned size()const{return count_;}
+    GeometryBytes view(GeometryTicket ticket)const{
+        if(!ticket.generation || ticket.slot>=Entries)return {};
+        const auto& e=entries_[ticket.slot];
+        if(!e.handle || e.generation!=ticket.generation)return {};
+        return {e.vertices,e.indices};
+    }
+    std::optional<Handle> reuse(GeometryTicket ticket){
+        if(view(ticket).vertices.empty())return {};
+        auto& e=entries_[ticket.slot];e.age=++age_;++hits;return e.handle;
+    }
     template<class Release>void remove(Entry& entry,Release release){
         release(*entry.handle);bytes_-=entry.vertices.size()+entry.indices.size();--count_;entry=Entry{};
     }
@@ -40,12 +58,15 @@ public:
         for(auto& entry:entries_)if(entry.handle)remove(entry,release);
         seen_={};
     }
-    template<class Create,class Release>std::optional<Handle> acquire(std::span<const std::uint8_t> vertices,std::span<const std::uint8_t> indices,Create create,Release release){
+    template<class Create,class Release>std::optional<Handle> acquire(std::span<const std::uint8_t> vertices,std::span<const std::uint8_t> indices,Create create,Release release,GeometryTicket* ticket=nullptr){
+        if(ticket)*ticket={};
         if(vertices.empty() || indices.empty() || vertices.size()>MaximumPacket || indices.size()>MaximumPacket-vertices.size())return {};
         const auto hash=Hash{}(vertices,indices);++age_;
         for(auto& entry:entries_)if(entry.handle && entry.hash==hash && entry.vertices.size()==vertices.size() && entry.indices.size()==indices.size() &&
             std::equal(vertices.begin(),vertices.end(),entry.vertices.begin()) && std::equal(indices.begin(),indices.end(),entry.indices.begin())){
-            entry.age=age_;++hits;return entry.handle;
+            entry.age=age_;++hits;
+            if(ticket)*ticket={unsigned(&entry-entries_.data()),entry.generation};
+            return entry.handle;
         }
         ++misses;auto& seen=seen_[hash%seen_.size()];
         if(!seen.valid || seen.hash!=hash || seen.vertices!=vertices.size() || seen.indices!=indices.size()){
@@ -58,8 +79,12 @@ public:
             remove(*oldest,release);++evictions;
         }
         incoming.handle=create(vertices,indices);if(!incoming.handle)return {};
-        incoming.hash=hash;incoming.age=age_;
-        for(auto& entry:entries_)if(!entry.handle){entry=std::move(incoming);bytes_+=needed;++count_;++creations;return entry.handle;}
+        incoming.hash=hash;incoming.age=age_;incoming.generation=age_;
+        for(auto& entry:entries_)if(!entry.handle){
+            entry=std::move(incoming);bytes_+=needed;++count_;++creations;
+            if(ticket)*ticket={unsigned(&entry-entries_.data()),entry.generation};
+            return entry.handle;
+        }
         return {};
     }
 };

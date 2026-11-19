@@ -13,6 +13,7 @@
 #include "screen_vertices.hpp"
 #include "texture_batch.hpp"
 #include "glyph_command_replay.hpp"
+#include "prepared_geometry.hpp"
 #include "immutable_buffers.hpp"
 #include "text_buffers.hpp"
 #include "sprite_texture_refs.hpp"
@@ -156,13 +157,14 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     WeakRegistry<Texture> textures_alive;WeakRegistry<ImageData> images;
     Res root,device_resource,backbuffer;State state;std::optional<State> recording;std::optional<AppliedState> applied;
     std::optional<wa2::aot::SpriteService> sprite_service;
-    bool sprite_command(const wa2::aot::SpriteCommand&);
+    bool sprite_command(const wa2::aot::SpriteCommand&,std::uint64_t serial=0,unsigned index=0);
+    std::unique_ptr<wa2::graphics::PreparedGlyphGeometry> prepared_geometry;
     wa2::graphics::GlyphCommandState glyph_command_state;
     wa2::graphics::GlyphTextureLookup<Resource> glyph_texture_lookup;
     bool reuse_surface_commands{wa2::graphics::surface_glyph_commands_enabled()};
     bool queued_without_context_check{};
     wa2::graphics::SurfaceGlyphCommandCounts frame_surface_commands{};
-    bool continue_surface_glyph(const wa2::aot::SpriteCommand&);
+    bool continue_surface_glyph(const wa2::aot::SpriteCommand&,std::uint64_t,unsigned);
     std::array<U32,14> presentation{};U32 focus_window{},creation_flags{};bool stopped{},initialized{};
     std::array<int,4> last_present_source{},last_present_destination{};std::array<int,2> last_drawable_size{};
     std::uint64_t movie_frames{};std::array<int,2> last_movie_client{},last_movie_size{};
@@ -376,6 +378,7 @@ public:
             <<",\"peak_used_slots\":"<<peak_packet_bindings<<",\"wide_driver_submissions\":"<<wide_packet_submissions
             <<",\"submitted_surface_commands\":"<<surface_commands.submitted<<",\"continued_surface_commands\":"<<surface_commands.continued
             <<",\"continued_surface_tiles\":"<<surface_commands.continued_tiles
+            <<",\"prepared_geometry_hits\":"<<surface_commands.prepared_geometry_hits<<",\"retained_geometry_draws\":"<<surface_commands.retained_geometry_draws
             <<",\"guest_draws\":"<<texture_batch_draws<<",\"driver_submissions\":"<<texture_batch_submissions<<",\"failure\":"<<quote(texture_batch_failure)<<'}'
             <<",\"context_rebinds\":"<<context_rebinds<<",\"context_reuses\":"<<context_reuses<<",\"context_free_calls\":"<<context_free_calls
             <<",\"constant_updates\":"<<constant_updates<<",\"constant_reuses\":"<<constant_reuses<<",\"sampler_parameter_calls\":"<<sampler_parameter_calls<<",\"sampler_parameter_skips\":"<<sampler_parameter_skips
@@ -622,6 +625,9 @@ void Graphics::shutdown() noexcept {
     state=State{};recording.reset();objects.clear();handles.clear();device_resource.reset();backbuffer.reset();root.reset();
     for(auto& w:images)if(auto i=w.lock())if(i->cleanup){i->cleanup();i->cleanup={};}
     for(auto& w:textures_alive)if(auto t=w.lock())if(t->cleanup){t->cleanup();t->cleanup={};}
+    // A driver error may have interrupted the final flush. Drop any spans
+    // into the immutable buffers before releasing their storage.
+    texture_batch.clear();prepared_geometry.reset();
     text_buffers.clear([this](auto pair){release_buffers(pair);});
     if(vertex_buffer)gl.DeleteBuffers(1,&vertex_buffer);if(index_buffer)gl.DeleteBuffers(1,&index_buffer);
     if(mojo){MOJOSHADER_glDestroyContext(mojo);mojo=nullptr;}if(context){SDL_GL_DeleteContext(context);context=nullptr;}window=nullptr;
@@ -834,12 +840,14 @@ void Graphics::flush(bool preserve_glyph_pipeline) {
     // Pending vertices have already been transformed using the state that was
     // applied when they were queued. Later setters only change CPU state.
     const bool multiple=!texture_batch.empty(),compact=multiple || !pending_screen.empty();
-    const auto count=multiple?texture_batch.indices().size():compact?pending_screen_indices.size():pending_vertices.size();
-    const auto bytes=multiple?texture_batch.vertices().size_bytes():compact?pending_screen.size()*sizeof(wa2::graphics::ScreenVertex):pending_vertices.size()*sizeof(FixedVertex);
-    const void* data=multiple?static_cast<const void*>(texture_batch.vertices().data()):compact?static_cast<const void*>(pending_screen.data()):pending_vertices.data();
-    const auto indices=multiple?texture_batch.indices():std::span<const std::uint16_t>(pending_screen_indices);
-    std::optional<BufferPair> retained;
-    if(multiple && pending_glyph){
+    const auto count=multiple?texture_batch.element_count():compact?pending_screen_indices.size():pending_vertices.size();
+    auto ticket=texture_batch.geometry_ticket();
+    auto retained=text_buffers.reuse(ticket);
+    const bool borrowed_draw=retained.has_value();
+    const auto bytes=multiple?texture_batch.vertex_count()*sizeof(wa2::graphics::TextureBatchVertex):compact?pending_screen.size()*sizeof(wa2::graphics::ScreenVertex):pending_vertices.size()*sizeof(FixedVertex);
+    const void* data=retained?nullptr:multiple?static_cast<const void*>(texture_batch.vertices().data()):compact?static_cast<const void*>(pending_screen.data()):pending_vertices.data();
+    const auto indices=retained?std::span<const std::uint16_t>{}:multiple?texture_batch.indices():std::span<const std::uint16_t>(pending_screen_indices);
+    if(!retained && multiple && pending_glyph){
         retained=text_buffers.acquire({static_cast<const std::uint8_t*>(data),bytes},
             {reinterpret_cast<const std::uint8_t*>(indices.data()),indices.size_bytes()},
             [this](auto vertices,auto elements)->std::optional<BufferPair>{
@@ -848,8 +856,9 @@ void Graphics::flush(bool preserve_glyph_pipeline) {
                 gl.BindBuffer(GL_ARRAY_BUFFER,pair.vertices);gl.BufferData(GL_ARRAY_BUFFER,GLsizeiptr(vertices.size()),vertices.data(),GL_STATIC_DRAW);
                 gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER,pair.indices);gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,GLsizeiptr(elements.size()),elements.data(),GL_STATIC_DRAW);
                 vertex_upload_bytes+=vertices.size();index_upload_bytes+=elements.size();return pair;
-            },[this](auto pair){release_buffers(pair);});
+            },[this](auto pair){release_buffers(pair);},&ticket);
     }
+    if(prepared_geometry)prepared_geometry->finish(ticket);
     gl.BindBuffer(GL_ARRAY_BUFFER,retained?retained->vertices:vertex_buffer);
     if(!retained){gl.BufferData(GL_ARRAY_BUFFER,GLsizeiptr(bytes),data,GL_STREAM_DRAW);vertex_upload_bytes+=bytes;}
     if(compact){
@@ -888,6 +897,7 @@ void Graphics::flush(bool preserve_glyph_pipeline) {
         if(!retained){gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,GLsizeiptr(size),indices.data(),GL_STREAM_DRAW);index_upload_bytes+=size;}
         gl.DrawElements(GL_TRIANGLES,GLsizei(count),GL_UNSIGNED_SHORT,nullptr);
     }else gl.DrawArrays(GL_TRIANGLES,0,GLsizei(count));
+    if(borrowed_draw)++frame_surface_commands.retained_geometry_draws;
     ++submitted_draws;submitted_vertices+=count;
     if(pending_target)pending_target->levels[0]->gpu_dirty=true;
     pending_vertices.clear();pending_screen.clear();pending_screen_indices.clear();pending_target.reset();pending_glyph=false;
@@ -967,7 +977,7 @@ bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> verti
     if(!texture_batch.append(state.textures[0],vertices,type,count,indices))stop("invalid bounded texture batch packet");
     ++texture_batch_draws;return true;
 }
-bool Graphics::continue_surface_glyph(const wa2::aot::SpriteCommand& command){
+bool Graphics::continue_surface_glyph(const wa2::aot::SpriteCommand& command,std::uint64_t serial,unsigned index){
     if(!glyph_command_state.matches(command))return false;
     enter(false,false); // Owner thread check only; this path cannot call GL.
     // The preceding successful command left precisely this target, viewport,
@@ -981,17 +991,37 @@ bool Graphics::continue_surface_glyph(const wa2::aot::SpriteCommand& command){
         if(image(textures[n])->texture==destination->texture)return false;
     }
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.draw:nullptr);
-    if(!wa2::graphics::append_surface_glyph(texture_batch,pending_glyph_plan,command.tiles,
-            std::span<const Res>(textures).first(command.tiles.size())))return false;
     const auto tiles=command.tiles.size();
+    const auto inputs=std::span<const Res>(textures).first(tiles);
+    const unsigned vertex=texture_batch.vertex_count(),element=texture_batch.element_count();
+    const auto mode=serial?wa2::graphics::vertex_fp_mode():std::nullopt;
+    bool borrowed=false;
+    if(mode){
+        if(!prepared_geometry)prepared_geometry.reset(new(std::nothrow) wa2::graphics::PreparedGlyphGeometry);
+        if(prepared_geometry){
+            if(const auto* range=prepared_geometry->find(serial,index,pending_glyph_plan,*mode)){
+                borrowed=texture_batch.borrow(range->ticket,text_buffers.view(range->ticket),
+                    range->vertex,range->element,inputs,std::span(range->slots).first(tiles));
+            }
+        }
+    }
+    if(borrowed)++frame_surface_commands.prepared_geometry_hits;
+    else{
+        if(!wa2::graphics::append_surface_glyph(texture_batch,pending_glyph_plan,command.tiles,inputs))return false;
+        if(mode && prepared_geometry){
+            wa2::graphics::GlyphGeometryRange range{serial,index,vertex,element,*mode,pending_glyph_plan};
+            for(unsigned n=0;n<tiles;++n)range.slots[n]=std::uint8_t(texture_batch.slot(textures[n]));
+            prepared_geometry->record(range);
+        }
+    }
     texture_batch_draws+=tiles;frame_glyph_continuations+=tiles;screen_draws+=tiles;
     screen_unique_vertices+=4*tiles;batched_guest_draws+=tiles;draws+=tiles;
     texture_version+=2*tiles;destination->gpu_dirty=true;queued_without_context_check=true;
     ++frame_surface_commands.submitted;++frame_surface_commands.continued;
     frame_surface_commands.continued_tiles+=tiles;return true;
 }
-bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command){
-    if(reuse_surface_commands && continue_surface_glyph(command))return true;
+bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command,std::uint64_t serial,unsigned index){
+    if(reuse_surface_commands && continue_surface_glyph(command,serial,index))return true;
     glyph_command_state.valid=false;
     if(!context || !state.scene || state.vertex_shader || state.pixel_shader || command.tiles.size()>256)return false;
     for(unsigned n=1;n<8;++n)if(state.stage[n][D3DTSS_COLOROP]!=D3DTOP_DISABLE)return false;
@@ -1249,7 +1279,11 @@ U32 Graphics::present(Args a,bool force){
 void Graphics::install(){
     p.state().reports["main_story_subtitles"]=[this]{std::size_t cues{};if(subtitles)for(const auto& track:subtitles->tracks())cues+=track.cues.size();return std::string("{\"enabled\":")+(subtitles && subtitles->enabled()?"true":"false")+",\"external\":"+(subtitles && subtitles->font_revision()?"true":"false")+",\"tracks\":"+std::to_string(subtitles?subtitles->tracks().size():0)+",\"cues\":"+std::to_string(cues)+",\"special_contents_included\":false,\"draws\":"+
         std::to_string(subtitle_draws)+",\"layouts\":"+std::to_string(subtitle_layouts)+",\"font_uploads\":"+std::to_string(subtitle_font_uploads)+"}";};
-    sprite_service.emplace(p.memory,[](const wa2::aot::SpriteCommand& command,void* owner){return static_cast<Graphics*>(owner)->sprite_command(command);},this);
+    sprite_service.emplace(p.memory,[](const wa2::aot::SpriteCommand& command,void* owner){return static_cast<Graphics*>(owner)->sprite_command(command);},
+                           this,wa2::aot::SurfaceGlyphAccess::read_only,
+                           [](const wa2::aot::SpriteCommand& command,std::uint64_t serial,unsigned index,void* owner){
+                               return static_cast<Graphics*>(owner)->sprite_command(command,serial,index);
+                           });
     // Bind implementations before load so their leaf contracts belong to
     // these exact handlers. Guest vtables remain lazy source-memory objects.
     for(unsigned value=0;value<=unsigned(Kind::resource);++value){const auto kind=Kind(value);const auto table=methods(kind);

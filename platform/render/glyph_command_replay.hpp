@@ -41,8 +41,8 @@ template<class Texture>
 bool append_surface_glyph(ScreenTextureBatch<Texture>& batch,const ScreenVertexPlan& plan,
                           std::span<const aot::SpriteTile> tiles,std::span<const Texture> textures){
     if(tiles.empty() || tiles.size()>4 || tiles.size()!=textures.size() ||
-       tiles.size()*4>batch.MaxVertices-batch.vertices().size() ||
-       tiles.size()*6>batch.MaxIndices-batch.indices().size())return false;
+       tiles.size()*4>batch.MaxVertices-batch.vertex_count() ||
+       tiles.size()*6>batch.MaxIndices-batch.element_count())return false;
     if(tiles.size()==1){
         const auto& vertices=tiles.front().vertices;
         return batch.append_glyph_quad(textures.front(),plan,

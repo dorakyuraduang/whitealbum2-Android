@@ -90,12 +90,12 @@ inline bool inputs(wr::Cpu& cpu,Scope& scope,Key& key,View& sprite){
     key.x87=cpu.fp.get32(0);key.mxcsr=cpu.fp.get32(24);
     return true;
 }
-inline void apply(const Entry& e,wr::Cpu& cpu,Scope& scope,View sprite){
+inline void apply(const Entry& e,wr::Cpu& cpu,Scope& scope,View sprite,bool write_sprite=true){
     const auto& k=e.key;const auto& end=e.end;
     const Word frame=k.sp+packet_size;
     // Each original full packet overwrites all 292 bytes. Read the CURRENT
     // sprite, so new coordinates, animation and texture references pass through.
-    scope.write_bytes(k.sp,sprite);
+    if(write_sprite)scope.write_bytes(k.sp,sprite);
     scope.write_bytes(k.sp+256,end.args);
     scope.store<32>(frame+0x18,end.scratch);
     scope.store<32>(frame+0x24,end.x);
@@ -115,6 +115,21 @@ inline void apply(const Entry& e,wr::Cpu& cpu,Scope& scope,View sprite){
     for(unsigned i=0;i<first;++i)cpu.fp.clear_x87_padding(i);
     const unsigned offset=32+16*first;
     std::memcpy(cpu.fp.bytes.data()+offset,end.fp.data()+offset,160-offset);
+}
+inline bool capture_end(Entry& e,wr::Cpu& cpu,Scope& scope,Word pc){
+    const auto& k=e.key;const Word frame=k.sp+packet_size;
+    if(cpu.r[wr::ESP]!=k.sp || cpu.r[wr::EBP]!=k.bp+2 || cpu.fp.bytes[4] ||
+       scope.load<32>(frame+0x34)!=k.arg(0x194) ||
+       pc!=(k.arg(0x198)?outline_call:fill_call))return false;
+    auto& end=e.end;
+    end.regs=cpu.r;end.flags=cpu.flags&wr::STATUS_FLAGS;end.defined=cpu.defined_flags&wr::STATUS_FLAGS;
+    std::memcpy(end.fp.data(),cpu.fp.bytes.data(),end.fp.size());
+    text_layout::copy_out(scope,k.sp+256,end.args);
+    end.scratch=scope.load<32>(frame+0x18);end.x=scope.load<32>(frame+0x24);
+    end.opacity=scope.load<32>(frame+0x34);end.time=scope.load<32>(frame+0x58);
+    end.remainder=scope.load<32>(0xb34544);
+    for(unsigned n=0;n<3;++n)end.coordinate[n]=scope.load<32>(frame+0x3c+n*4);
+    end.pc=pc;return true;
 }
 }
 
@@ -149,19 +164,7 @@ public:
         using namespace text_run;
         if(!pending_)return;
         auto& e=*pending_;cancel();
-        const auto& k=e.key;const Word frame=k.sp+packet_size;
-        if(cpu.r[wr::ESP]!=k.sp || cpu.r[wr::EBP]!=k.bp+2 || cpu.fp.bytes[4] ||
-           scope.load<32>(frame+0x34)!=k.arg(0x194) ||
-           pc!=(k.arg(0x198)?outline_call:fill_call))return;
-        auto& end=e.end;
-        end.regs=cpu.r;end.flags=cpu.flags&wr::STATUS_FLAGS;end.defined=cpu.defined_flags&wr::STATUS_FLAGS;
-        std::memcpy(end.fp.data(),cpu.fp.bytes.data(),end.fp.size());
-        text_layout::copy_out(scope,k.sp+256,end.args);
-        end.scratch=scope.load<32>(frame+0x18);end.x=scope.load<32>(frame+0x24);
-        end.opacity=scope.load<32>(frame+0x34);end.time=scope.load<32>(frame+0x58);
-        end.remainder=scope.load<32>(0xb34544);
-        for(unsigned n=0;n<3;++n)end.coordinate[n]=scope.load<32>(frame+0x3c+n*4);
-        end.pc=pc;++text_run_replay_captures;
+        if(text_run::capture_end(e,cpu,scope,pc))++text_run_replay_captures;
     }
 };
 }

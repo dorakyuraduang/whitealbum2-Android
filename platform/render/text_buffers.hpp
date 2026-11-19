@@ -12,7 +12,7 @@ std::uint64_t wide_glyph_packet_submissions() noexcept;
 void record_glyph_pipeline_rollover() noexcept;
 std::uint64_t glyph_pipeline_rollovers() noexcept;
 struct SurfaceGlyphCommandCounts {
-    std::uint64_t submitted{},continued{},continued_tiles{};
+    std::uint64_t submitted{},continued{},continued_tiles{},prepared_geometry_hits{},retained_geometry_draws{};
 };
 void enable_surface_glyph_commands(bool enabled) noexcept;
 bool surface_glyph_commands_enabled() noexcept;

@@ -10,7 +10,7 @@ public final class TextWorkWindowsTest {
         TextWorkWindows.Window step(int glyphCount, int tileCount, boolean clockAvailable) {
             frames+=25; glyphs+=25L*glyphCount; tiles+=25L*tileCount;
             wall+=250_000_000;cpu+=100_000_000;
-            return work.observe(frames,glyphs,tiles,wall,clockAvailable ? cpu : -1);
+            return work.observe(frames,glyphs,tiles,wall,clockAvailable ? cpu : -1,glyphs/2,glyphs/4);
         }
     }
     public static void main(String[] args) throws java.io.IOException {
@@ -22,6 +22,7 @@ public final class TextWorkWindowsTest {
         TextWorkWindows.Window[] light=f.work.takeSummary();
         check(light!=null && light[1]==null && light[0].frames==75 && light[0].glyphs==3750
                 && light[0].tiles==4500 && light[0].wallNs==750_000_000 && light[0].cpuNs==300_000_000);
+        check(light[0].replayedGlyphs==1875 && Math.abs(light[0].reusedGeometry-937)<=1);
         check(f.work.takeSummary()==null);
 
         // The clicked-through transition cannot stand in for a settled page.

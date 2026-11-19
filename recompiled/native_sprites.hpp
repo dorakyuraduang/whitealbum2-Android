@@ -8,6 +8,7 @@ struct SpriteVertex {float x,y,z,rhw;std::uint32_t colour,secondary;float u,v;};
 static_assert(sizeof(SpriteVertex)==32);
 struct SpriteTile {std::uint32_t texture;std::array<SpriteVertex,4> vertices;};
 enum class SpriteTarget : std::uint32_t {surface,texture_level_zero};
+enum class SurfaceGlyphAccess {ordinary,read_only};
 struct SpriteCommand {
     std::uint32_t device,target;
     SpriteTarget target_kind{SpriteTarget::surface};
@@ -29,17 +30,30 @@ template<class Set>void sprite_state_words(const SpriteCommand& c,Set set){
 // The presentation adapter may decline before changing state. It never calls
 // guest code, pumps input, waits on guest threads or retains the packet span.
 class SpriteService {
+public:
+    using SubmitPrepared=bool(*)(const SpriteCommand&,std::uint64_t,unsigned,void*);
+private:
     inline static thread_local SpriteService* first_{};
     SpriteService* next_{};
     wr::Memory* memory_;
     bool (*submit_)(const SpriteCommand&,void*);
     void* owner_;
+    SurfaceGlyphAccess glyph_access_;
+    SubmitPrepared prepared_;
 public:
-    SpriteService(wr::Memory& memory,bool(*submit)(const SpriteCommand&,void*),void* owner):next_(first_),memory_(&memory),submit_(submit),owner_(owner){first_=this;}
+    SpriteService(wr::Memory& memory,bool(*submit)(const SpriteCommand&,void*),void* owner,
+                  SurfaceGlyphAccess access=SurfaceGlyphAccess::ordinary,SubmitPrepared prepared=nullptr)
+        :next_(first_),memory_(&memory),submit_(submit),owner_(owner),glyph_access_(access),prepared_(prepared){first_=this;}
     ~SpriteService(){auto** link=&first_;while(*link && *link!=this)link=&(*link)->next_;if(*link)*link=next_;}
     SpriteService(const SpriteService&)=delete;
     static SpriteService* find(wr::Memory& memory){for(auto* s=first_;s;s=s->next_)if(s->memory_==&memory)return s;return nullptr;}
     bool submit(const SpriteCommand& command){return submit_(command,owner_);}
+    // A read-only surface receiver may inspect the exact live call boundary.
+    // It must not change guest memory, registers, scheduling or bindings.
+    bool read_only_glyphs()const{return glyph_access_==SurfaceGlyphAccess::read_only;}
+    bool submit_prepared(const SpriteCommand& command,std::uint64_t serial,unsigned index){
+        return prepared_?prepared_(command,serial,index,owner_):submit(command);
+    }
 };
 struct NativeSpriteCounts {std::uint64_t accepted{},declined{},tiles{},offscreen{},capability_filter{},fp_declined{},adapter_declined{};};
 NativeSpriteCounts native_sprite_counts();
