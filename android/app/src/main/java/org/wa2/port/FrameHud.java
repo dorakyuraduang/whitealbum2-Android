@@ -1,6 +1,7 @@
 package org.wa2.port;
 
 import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Build;
@@ -24,6 +25,8 @@ public final class FrameHud {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final AtomicBoolean QUEUED = new AtomicBoolean();
     private static final AtomicReference<Sample> LATEST = new AtomicReference<>();
+    private static final TextWorkWindows WORK = new TextWorkWindows();
+    private static String version;
     private static WeakReference<TextView> label = new WeakReference<>(null);
     private static volatile boolean resumed;
     private static volatile boolean enabled;
@@ -32,13 +35,15 @@ public final class FrameHud {
     private static final class Sample {
         final float fps, milliseconds;
         final long frames, glyphs, tiles;
+        final TextWorkWindows.Window work;
         final long updated = SystemClock.uptimeMillis();
-        Sample(float fps, float milliseconds, long frames, long glyphs, long tiles) {
+        Sample(float fps, float milliseconds, long frames, long glyphs, long tiles, TextWorkWindows.Window work) {
             this.fps = fps;
             this.milliseconds = milliseconds;
             this.frames = frames;
             this.glyphs = glyphs;
             this.tiles = tiles;
+            this.work = work;
         }
     }
     private static final Runnable APPLY = () -> {
@@ -62,6 +67,9 @@ public final class FrameHud {
 
     private FrameHud() {}
     static void install(Activity activity) {
+        WORK.reset();
+        try { version=activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName; }
+        catch(PackageManager.NameNotFoundException missing) { version=null; }
         probe=new PerformanceProbe();probe.attach(activity);
         enabled = LaunchSettings.showFps(activity);
         if (!enabled) return;
@@ -100,6 +108,8 @@ public final class FrameHud {
     }
     static void setResumed(boolean value) {
         resumed = value;
+        WORK.foreground(value && focused);
+        if (!value) logStableTextWindows();
         LATEST.set(null);
         MAIN.removeCallbacks(STALE);
         TextView view = label.get();
@@ -115,9 +125,10 @@ public final class FrameHud {
         label.clear();
     }
     // Called from the native render thread no more than four times per second.
-    public static void report(float fps, float milliseconds, long frames, long glyphs, long tiles) {
+    public static void report(float fps, float milliseconds, long frames, long glyphs, long tiles, long wallNs, long threadCpuNs) {
         if (!resumed || !Float.isFinite(fps) || !Float.isFinite(milliseconds)) return;
-        Sample sample = new Sample(fps, milliseconds, frames, glyphs, tiles);
+        Sample sample = new Sample(fps, milliseconds, frames, glyphs, tiles,
+                WORK.observe(frames,glyphs,tiles,wallNs,threadCpuNs));
         LATEST.set(sample);
         if (focused && Log.isLoggable("WA2PAGE", Log.DEBUG)) {
             Log.d("WA2PAGE", sample.updated + " " + fps + " " + milliseconds + " " + frames + " " + glyphs + " " + tiles);
@@ -125,7 +136,29 @@ public final class FrameHud {
         if (enabled && QUEUED.compareAndSet(false, true)) MAIN.post(APPLY);
     }
     static boolean foreground(){return resumed;}
-    static void focused(boolean value){focused=value;}
+    static void focused(boolean value){
+        if(focused!=value)LATEST.set(null);
+        focused=value;
+        WORK.foreground(resumed && value);
+    }
+    static void performanceModeChanged(boolean production){WORK.modeChanged(production);}
+    private static Object workJson(TextWorkWindows.Window w) throws JSONException {
+        if(w==null)return JSONObject.NULL;
+        JSONObject row=new JSONObject();
+        row.put("segment",w.segment);row.put("frames",w.frames);row.put("glyphs",w.glyphs);row.put("tiles",w.tiles);
+        row.put("wall_ns",w.wallNs);row.put("game_thread_cpu_ns",w.cpuNs<0 ? JSONObject.NULL : w.cpuNs);
+        return row;
+    }
+    private static void logStableTextWindows(){
+        TextWorkWindows.Window[] summary=WORK.takeSummary();
+        if(summary==null)return;
+        try{
+            JSONObject row=new JSONObject();
+            row.put("event","stable_text_windows");row.put("version",version);
+            row.put("light",workJson(summary[0]));row.put("heavy",workJson(summary[1]));
+            Log.i("WA2PERF",row.toString());
+        }catch(JSONException ignored){}
+    }
     static JSONObject performanceSnapshot()throws JSONException{
         Sample sample=LATEST.get();long now=SystemClock.uptimeMillis();
         JSONObject result=new JSONObject();result.put("uptime_ms",now);result.put("foreground",resumed);
@@ -135,6 +168,7 @@ public final class FrameHud {
         if(sample!=null){
             result.put("fps",sample.fps);result.put("frame_ms",sample.milliseconds);
             result.put("frames",sample.frames);result.put("glyphs",sample.glyphs);result.put("glyph_tiles",sample.tiles);
+            result.put("window",workJson(sample.work));
         }
         result.put("screen_access",false);return result;
     }

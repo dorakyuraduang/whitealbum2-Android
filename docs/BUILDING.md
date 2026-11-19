@@ -475,13 +475,15 @@ page, then run `python scripts/compare_android_text.py --serial <ADB-serial>`.
 It compares reference/optimized/optimized/reference windows within one process
 using real presentation FPS and frame-time samples. The running activity's
 dynamic receiver requires the sender's Android DUMP permission; registered-only
-delivery cannot launch the game. The reference uses the 0.2.100 cursor
-routine. Both paths draw with eight texture slots. The candidate reuses
-matching layout results and prepared glyph commands. Use `--path layout`
-or `--path commands` to measure each change independently. The report
-records separate hit counts for both paths.
-Ordinary switches reset
-after 30 seconds. The comparison restores the shipped optimized mode at the
+delivery cannot launch the game. The reference retains the 0.2.102 layout and
+prepared glyph command caches. All modes use eight texture slots. The default
+comparison (`--path submission`) reuses graphics state for consecutive
+surface glyphs and for a full glyph packet continuing on the same target.
+The driver still draws each packet in order. Both paths retain a compact
+snapshot of its resources, sampler and viewport. `--path run` tests an experimental shortcut
+between successive glyph calls, disabled in regular play. `--path optimized` enables both candidates.
+Each snapshot includes separate counters for actual uses of each path.
+Measurement switches reset after 30 seconds. The comparison restores the shipped mode at the
 end and records whether the running activity acknowledged it.
 No launch setting or game file is changed. An inactive/unfocused page, stale
 sample, changing glyph/tile counts, absent candidate admissions or greater than 10% window drift prevents
@@ -490,7 +492,9 @@ For a continuous reveal, the optional Android debug log tag `WA2PAGE` emits
 the HUD timestamp, FPS, frame time and cumulative frame, glyph and tile counts.
 Subtract adjacent totals within the same foreground session to compare work
 per frame. Record only the game's UID and this tag and restore its prior log
-level after the measurement.
+level after the measurement. On pause, the game also reports stable foreground
+text windows to its performance log when available. These contain frame counts,
+glyph and tile counts, wall time and game-thread CPU time. They contain no text.
 
 The optional Android target `wa2_phone_novel_cpu` runs the shared text routine
 with a recording device. Pass a writable report filename as its only argument.

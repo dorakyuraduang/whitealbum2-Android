@@ -32,7 +32,8 @@ def main():
     widget_test=ROOT/'tests/android/org/wa2/port/WidgetControlsTest.java'
     icon_test=ROOT/'tests/android/org/wa2/port/WidgetIconTest.java'
     touch_test=ROOT/'tests/android/org/wa2/port/TouchGesturesTest.java'
-    inputs = {str(p.relative_to(ROOT)):digest(p) for p in [*own,Path(__file__),manifest,location_test,widget_test,icon_test,touch_test]}
+    text_work_test=ROOT/'tests/android/org/wa2/port/TextWorkWindowsTest.java'
+    inputs = {str(p.relative_to(ROOT)):digest(p) for p in [*own,Path(__file__),manifest,location_test,widget_test,icon_test,touch_test,text_work_test]}
     fixture=ROOT/'build/shared-aot-x64/widget-unicode-fixture.json'
     widget_args=[]
     if not fixture.exists():raise ValueError('Missing cached native widget fixture; run shared verification first')
@@ -62,8 +63,10 @@ def main():
     with (ROOT/'logs/android-java-compile.log').open('wb') as console:
         subprocess.run(command,cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,
                        creationflags=flags,timeout=60,check=True)
-        subprocess.run([str(javac),'-J-XX:ActiveProcessorCount=1','-J-Xmx128m','-encoding','UTF-8','-cp',str(directory),'-d',str(directory),str(location_test),str(widget_test),str(icon_test),str(touch_test)],
+        subprocess.run([str(javac),'-J-XX:ActiveProcessorCount=1','-J-Xmx128m','-encoding','UTF-8','-cp',str(directory),'-d',str(directory),str(location_test),str(widget_test),str(icon_test),str(touch_test),str(text_work_test)],
             cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,creationflags=flags,timeout=30,check=True)
+        subprocess.run([str(java_home/'bin/java.exe'),'-XX:ActiveProcessorCount=1','-Xmx128m','-cp',str(directory),'org.wa2.port.TextWorkWindowsTest'],
+            cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,creationflags=flags,timeout=15,check=True)
         location_report=directory/'resource-location.json'
         subprocess.run([str(java_home/'bin/java.exe'),'-XX:ActiveProcessorCount=1','-Xmx128m','-cp',str(directory),'org.wa2.port.ResourceLocationTest',str(location_report)],
             cwd=ROOT,stdout=console,stderr=subprocess.STDOUT,creationflags=flags,timeout=15,check=True)

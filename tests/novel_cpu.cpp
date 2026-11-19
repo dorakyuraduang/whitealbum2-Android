@@ -101,6 +101,7 @@ int main(int argc,char** argv){try{
     // Baseline assertions below count work performed by the original glyph
     // preparation. The dedicated oracle and benchmark enable command reuse.
     a::glyph_command_replay_enabled.store(false,std::memory_order_relaxed);
+    a::text_run_replay_enabled.store(false,std::memory_order_relaxed);
     std::array<std::uint8_t,0x2000> initial_output;p.memory.copy_out(output,initial_output);
     std::array<std::uint8_t,256> sprite;p.memory.copy_out(output,sprite);
     std::ofstream report(argv[1]);
@@ -273,10 +274,14 @@ int main(int argc,char** argv){try{
     // The finite path changes alpha on its last 15 glyphs on both passes.
     const char* timing_mode=std::getenv("WA2_NOVEL_TIMING");
     const std::string_view mode=timing_mode?timing_mode:"";
-    unsigned layout_cases{};
+    unsigned layout_cases{},run_transition_cases{};
     if(mode=="layout"){
         begin_page();
         layout_cases=novel_layout_test::verify(p,initial_cpu,output,reveal_args);
+    }
+    if(mode=="layout" || mode=="transition"){
+        begin_page();
+        run_transition_cases=novel_layout_test::verify(p,initial_cpu,output,reveal_args,novel_layout_test::Feature::run_transition);
     }
     const auto advance_hits_before=a::compact_text_advance_hits;
     for(auto visible:{immediately_visible,page_length}){
@@ -515,6 +520,7 @@ int main(int argc,char** argv){try{
         <<",\"same_limit_same_work_and_vertices\":true,\"models_save_loading\":false,\"models_script_progression\":false}";
     report<<",\"compact_text_advance\":{\"paired_page_hits\":"<<advance_hits<<'}';
     if(layout_cases)report<<",\"layout_state_oracle_cases\":"<<layout_cases;
+    if(run_transition_cases)report<<",\"run_transition_oracle_cases\":"<<run_transition_cases;
     if(command_cases)report<<",\"glyph_command_oracle_cases\":"<<command_cases;
     if(!timing.str().empty())report<<",\"two_pass_timing\":"<<timing.str();
     report<<",\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards

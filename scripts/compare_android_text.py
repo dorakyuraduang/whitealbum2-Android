@@ -14,11 +14,11 @@ import time
 from build_pak_tool import low_priority
 
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE='glyph-layout-and-commands'
+CANDIDATE='glyph-run-and-submission'
 
 def candidate_work(mode, first, last):
     work={}
-    for key, exclusive in (('layout_hits','layout'),('glyph_command_hits','commands')):
+    for key, exclusive in (('run_hits','run'),('surface_hits','submission'),('rollover_hits','submission')):
         delta=last[key]-first[key]
         if first[key]<0 or delta<0:
             raise ValueError('Missing or reset candidate counter: '+key)
@@ -52,7 +52,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial',required=True)
     parser.add_argument('--samples',type=int,choices=range(4,13),default=8)
-    parser.add_argument('--path',choices=('optimized','layout','commands'),default='optimized')
+    parser.add_argument('--path',choices=('optimized','run','submission'),default='submission')
     parser.add_argument('--output',type=Path,default=ROOT/'logs/android-text-comparison.json')
     args=parser.parse_args();low_priority()
     adb=ROOT/'tools/android-sdk/platform-tools/adb.exe'
@@ -74,7 +74,7 @@ def main():
         call('shell','am','broadcast','--receiver-registered-only','-p','org.wa2.port','-a','org.wa2.port.PERFORMANCE','--es','mode',mode)
         # Filter by UID/tag before trimming locally. Android's -t can select
         # the last global records before these filters and hide our response.
-        text=call('logcat','-d','--uid='+uid[1],'-v','brief','WA2PERF:I','*:S')
+        text=call('logcat','-d','--uid='+uid[1],'--pid='+pid,'-v','brief','WA2PERF:I','*:S')
         if len(text.encode('utf-8'))>1024*1024:raise RuntimeError('Own performance log exceeds the bounded reader')
         records=[]
         for line in text.splitlines()[-128:]:
@@ -83,8 +83,7 @@ def main():
             if record.get('version')==release and record.get('candidate')==CANDIDATE:records.append(record)
         if not records:raise RuntimeError('No live performance response; game must be open and foreground')
         record=records[-1]
-        expected='reference' if mode=='reference_hold' else mode
-        if record['uptime_ms']<=last_response or (mode!='snapshot' and record.get('mode')!=expected):
+        if record['uptime_ms']<=last_response or (mode!='snapshot' and record.get('mode')!=mode):
             raise RuntimeError('No fresh performance response from the foreground game')
         last_response=record['uptime_ms'];return record
     windows=[];workload_intervals=[];failure=None;restore_error=None;restored_mode=None
@@ -115,10 +114,10 @@ def main():
     finally:
         # Restore the shipped default. If foreground delivery is
         # unavailable, never report a restoration which wasn't acknowledged.
-        try:restored_mode=request('optimized')['mode']
+        try:restored_mode=request('default')['mode']
         except Exception as error:
             restore_error=str(error);failure=failure or 'Restore unavailable: '+restore_error
-    report=dict(release=release,candidate=CANDIDATE,path=args.path,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='optimized',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,comparable=False,passed=failure is None)
+    report=dict(release=release,candidate=CANDIDATE,path=args.path,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='default',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,comparable=False,passed=failure is None)
     if not failure:
         reference=[x['median_frame_ms'] for x in windows if x['mode']=='reference'];candidate=[x['median_frame_ms'] for x in windows if x['mode']==args.path]
         report['reference_drift_ratio']=max(reference)/min(reference)

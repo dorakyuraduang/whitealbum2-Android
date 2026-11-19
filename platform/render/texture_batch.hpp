@@ -10,6 +10,17 @@ inline unsigned supported_texture_batch_slots(int fragment_units,bool gradients)
     if(!gradients || fragment_units<int(TextureBatchSlots))return 0;
     return fragment_units>=int(WideTextureBatchSlots)?WideTextureBatchSlots:TextureBatchSlots;
 }
+template<class Applied,class State>
+bool same_glyph_packet_state(const Applied& previous,const State& next,bool same_config,
+                            std::uint64_t word_differences){
+    // The config tracks target/viewport, depth, transforms, declarations,
+    // shaders and constants. Render, stage and sampler words track net edits.
+    // Stream/index owners and transform insertion by a query are unversioned.
+    return same_config && !word_differences && previous.target==next.target &&
+        previous.scene==next.scene && previous.indices==next.indices && previous.streams==next.streams &&
+        previous.transform_count==next.transforms.size() && previous.textures[0] && next.textures[0] &&
+        std::equal(previous.textures.begin()+1,previous.textures.end(),next.textures.begin()+1);
+}
 template<class Textures, class Apply>
 void apply_logical_texture_units(const Textures& textures, unsigned deferred_glyph_slots, Apply apply) {
     for (unsigned unit = 0; unit < textures.size(); ++unit) {
@@ -57,6 +68,13 @@ public:
     bool fits(const Texture& texture,unsigned vertices,unsigned indices)const{
         return bool(texture) && slot(texture)<limit_ &&
             vertices<=MaxVertices-vertices_.size() && indices<=MaxIndices-indices_.size();
+    }
+    // Only called after the incoming draw failed to fit. The older packet
+    // must really draw, with the same program width as the next valid one.
+    bool can_roll_glyph_packet(bool previous_glyph,bool next_glyph,unsigned next_slots,
+                               std::size_t vertices,std::size_t indices)const{
+        return !empty() && previous_glyph && next_glyph && next_slots==limit_ &&
+            vertices>0 && vertices<=MaxVertices && indices>0 && indices<=MaxIndices;
     }
     bool append_glyph_quad(const Texture& texture, const ScreenVertexPlan& plan,
                            std::span<const std::uint8_t> bytes) {

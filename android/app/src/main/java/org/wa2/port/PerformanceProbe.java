@@ -16,10 +16,19 @@ final class PerformanceProbe extends BroadcastReceiver {
     private static final String ACTION="org.wa2.port.PERFORMANCE";
     private static final Handler MAIN=new Handler(Looper.getMainLooper());
     private Activity owner;
-    private String mode="optimized";
+    private String mode="default";
     private int generation;
-    private static native boolean nativeSetCandidate(boolean layout, boolean commands);
-    private static native long nativeCounter(boolean commands);
+    // Order matches TextProbeMode and TextProbeCounter in the common JNI interface.
+    private static final String[] MODES={"default","reference","run","submission","optimized"};
+    private static final String[] COUNTERS={"layout_hits","glyph_command_hits","run_hits",
+            "surface_commands","surface_hits","surface_tiles","rollover_hits"};
+    private static native boolean nativeSetCandidate(int mode);
+    private static native long nativeCounter(int index);
+    private void select(int index){
+        if(!nativeSetCandidate(index))throw new IllegalStateException("No shared AOT performance control");
+        if(!mode.equals(MODES[index]))FrameHud.performanceModeChanged(index==0);
+        mode=MODES[index];
+    }
     void attach(Activity activity){
         owner=activity;
         activity.registerReceiver(this,new IntentFilter(ACTION),"android.permission.DUMP",null,
@@ -27,7 +36,7 @@ final class PerformanceProbe extends BroadcastReceiver {
     }
     void detach(){
         ++generation;
-        try{nativeSetCandidate(true,true);}catch(LinkageError ignored){}
+        try{select(0);}catch(IllegalStateException|LinkageError ignored){}
         if(owner!=null){owner.unregisterReceiver(this);owner=null;}
     }
     @Override public void onReceive(Context context,Intent intent){
@@ -35,23 +44,22 @@ final class PerformanceProbe extends BroadcastReceiver {
         try{
             String command=intent.getStringExtra("mode");
             if(command==null)command="snapshot";
-            if(command.equals("reference") || command.equals("reference_hold") || command.equals("optimized")
-                    || command.equals("layout") || command.equals("commands")){
-                boolean both=command.equals("optimized");
-                if(!nativeSetCandidate(both || command.equals("layout"),both || command.equals("commands")))
-                    throw new IllegalStateException("No shared AOT performance control");
-                mode=command.equals("reference_hold")?"reference":command;
+            if(!command.equals("snapshot")){
+                int index=java.util.Arrays.asList(MODES).indexOf(command);
+                if(index<0)throw new IllegalArgumentException("Unknown performance command");
+                select(index);
                 final int token=++generation;
-                if(!command.equals("reference_hold"))MAIN.postDelayed(()->{
-                    if(token==generation){nativeSetCandidate(true,true);mode="optimized";}
+                if(index!=0)MAIN.postDelayed(()->{
+                    if(token==generation && owner!=null){
+                        try{select(0);}catch(IllegalStateException|LinkageError ignored){}
+                    }
                 },30000);
-            }else if(!command.equals("snapshot"))throw new IllegalArgumentException("Unknown performance command");
+            }
             JSONObject result=FrameHud.performanceSnapshot();
             result.put("version",context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName);
             result.put("mode",mode);
-            result.put("layout_hits",nativeCounter(false));
-            result.put("glyph_command_hits",nativeCounter(true));
-            result.put("candidate","glyph-layout-and-commands");
+            for(int i=0;i<COUNTERS.length;++i)result.put(COUNTERS[i],nativeCounter(i));
+            result.put("candidate","glyph-run-and-submission");
             Log.i("WA2PERF",result.toString());
         }catch(Exception|LinkageError error){Log.w("WA2PERF","unavailable: "+error.getClass().getSimpleName());}
     }

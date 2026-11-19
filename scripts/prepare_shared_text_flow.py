@@ -30,6 +30,15 @@ LAYOUT_RANGES=(
     ('447321','4473b3','d54bba1510835e4caefc7172ce9c964d0ccfd03295e1d654e409f1c33d2b6dca'),
 )
 LAYOUT_FTOL=('474f00','474f36','8d56b0df360d361317d9764e221cd2b57a0a7fe47c98a40f4b3fba9dac7b36ae')
+RUN_RANGES=(
+    ('4473d8','447407','ce6dcab806716746b38e2da801313e3a64a17771f2deeeb048ebb108f3799d24'),
+    ADVANCE_RANGES[0],ADVANCE_RANGES[1],ADVANCE_RANGES[2],
+    ('446614','44671c','03c76c8858017ec0b0c16fa9afa2d848481cf666fc38e2df9cc6be9b5f99891f'),
+    ('446782','4467bb','28e5303010b7895ce9c4b305adf417497c588c6160f3fda02e8428e9f7ee8044'),
+    ('447216','44721e','72d4ba6078f5ea009e3b240e87f31accb23549a89a839b546833b10e55086e90'),
+    ('44722c','447310','7de7a73b0b2f735c0ba69a74b5b3998d04ac9faea1ab8cfc399494873224cc16'),
+    ('447321','4473d3','f2923807f7bcd2cb4371a3cb158d89a7448becef12f4de76c2371dda97404e6d'),
+)
 def digest(data):return hashlib.sha256(data).hexdigest()
 def write(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -79,6 +88,35 @@ def layout_hooks(body,newline):
         body=body.replace(anchor,anchor+newline.join(hook)+newline)
     return body
 
+def run_hooks(body,newline):
+    # Capture only paths inside this finite union. Each exit (markup, wrap,
+    # output copy, extra glyph or return) cancels before its first instruction.
+    region=verified_blocks(body,RUN_RANGES)
+    labels=set(re.findall(r'^L_([0-9a-f]+):',region,re.M))
+    ends={'447310','4473d3'}
+    exits=set(re.findall(r'goto L_([0-9a-f]+)',region))-labels-ends
+    if exits!={'44671c','4467bb','446973','44721e','447407','44779d','4477cd'}:
+        raise ValueError('Changed ordinary glyph run departures')
+    marker='TextAdvanceScope text_advance;'
+    body=body.replace(marker,marker+newline+'TextRunReplay text_run;')
+    for label in sorted(exits|ends|{'4473d8'}):
+        anchor=f'L_{label}: {{{newline}s.eip=0x{label}u;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
+        if body.count(anchor)!=1:raise ValueError('Ambiguous glyph run label '+label)
+        if label=='4473d8':
+            hook=['if constexpr(!Metered)if(text_run.enabled){',
+                  '    floating.flush();integer.flush();',
+                  '    switch(text_run.begin(s,scope)){',
+                  '    case 0x447310:goto L_447310;',
+                  '    case 0x4473d3:goto L_4473d3;',
+                  '    }','}']
+        elif label in ends:
+            hook=['if constexpr(!Metered)if(text_run.recording()){',
+                  f'    floating.flush();integer.flush();text_run.finish(s,scope,0x{label}u);','}']
+        else:
+            hook=['if constexpr(!Metered)text_run.cancel();']
+        body=body.replace(anchor,anchor+newline.join(hook)+newline)
+    return body
+
 def derive(text,code,base):
     newline='\r\n' if '\r\n' in text else '\n'
     begin=text.index('template<bool Metered,bool NativeRegisters> void f_446500(')
@@ -98,6 +136,8 @@ def derive(text,code,base):
     advance_reference(body)
     body=body.replace('TextJumpBudget<Metered> local_text_jumps;',
                       'TextJumpBudget<Metered> local_text_jumps;'+newline+'TextAdvanceScope text_advance;')
+    body=run_hooks(body,newline)
+    # The run hooks fall exactly at the CALLs, outside the layout slices.
     body=layout_hooks(body,newline)
     anchor=f'L_44751b: {{{newline}s.eip=0x44751bu;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
     if body.count(anchor)!=1:raise ValueError('Ambiguous ordinary text advance entry')
@@ -125,7 +165,7 @@ def derive(text,code,base):
     dispatch += [f'case 0x{target:x}u: if(!local_text_jumps.take())return;goto L_{target:x};' for target in sorted(targets)]
     dispatch += ['default:local_text_jumps.external();',old,'return;','}','}']
     body=body[:finish]+newline+newline.join(dispatch)+body[finish:]
-    return '#include "text_layout_replay.hpp"'+newline+'#include "text_advance.hpp"'+newline+'#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
+    return '#include "text_run_replay.hpp"'+newline+'#include "text_advance.hpp"'+newline+'#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
 
 def prepare():
     prepare_chroma();prepare_language();prepare_progress()
@@ -141,7 +181,7 @@ def prepare():
     outputs={output.relative_to(ROOT).as_posix():digest(data)};helper_bodies=[];stack_sites=0
     advance=ROOT/'recompiled/text_advance.hpp'
     inputs[advance.relative_to(ROOT).as_posix()]=digest(advance.read_bytes())
-    for name in ('text_layout_replay.hpp','text_layout_replay_control.hpp'):
+    for name in ('text_layout_replay.hpp','text_layout_replay_control.hpp','text_run_replay.hpp','text_run_replay_control.hpp'):
         header=ROOT/'recompiled'/name
         inputs[header.relative_to(ROOT).as_posix()]=digest(header.read_bytes())
     reference=output.parent/'text_advance_reference.inc'
@@ -157,6 +197,10 @@ def prepare():
             original=original.replace(hook,hook.replace('native_draw_glyph(','native_draw_glyph_or_yield('))
         begin=original.index(f'template<bool Metered> void f_{entry}(')
         marker=f'template void f_{entry}<false>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);'
+        if entry=='445350':
+            end=original.index(marker,begin)
+            if digest(original[begin:end].replace('\r\n','\n').encode())!='185fba09109524b12b54797394fe432990faaae68ce1ee7712630c278fe4332e':
+                raise ValueError('Changed text speed accumulator read/write contract')
         end=original.index(marker,begin)+len(marker);body=original[begin:end]
         # This is the same checked body, isolated for O2. Its stack is already
         # protected by the passed scope; only the redundant TLS/lock lookup is

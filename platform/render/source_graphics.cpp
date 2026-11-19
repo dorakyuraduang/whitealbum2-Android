@@ -12,6 +12,7 @@
 #include "submission_cache.hpp"
 #include "screen_vertices.hpp"
 #include "texture_batch.hpp"
+#include "glyph_command_replay.hpp"
 #include "immutable_buffers.hpp"
 #include "text_buffers.hpp"
 #include "sprite_texture_refs.hpp"
@@ -58,11 +59,19 @@ struct ImageData {
     std::function<void()> cleanup;~ImageData(){if(cleanup)cleanup();}
     std::weak_ptr<Resource> surface;
 };
-struct State {
-    std::array<U32,256> render{};
-    std::array<std::array<U32,33>,8> stage{};std::array<std::array<U32,14>,16> sampler{};std::array<Res,16> textures{};
+// Both the live state and a pending GL batch hold these resources until the
+// same release/reset boundaries, including buffers and shaders no later draw reads.
+struct DrawResources {
+    std::array<Res,16> textures{};
     Res target,depth,vertex_shader,pixel_shader,declaration,indices;
-    struct Stream {Res buffer;U32 offset{},stride{},frequency{1};};std::array<Stream,16> streams{};
+    struct Stream {
+        Res buffer;U32 offset{},stride{},frequency{1};
+        bool operator==(const Stream&) const=default;
+    };std::array<Stream,16> streams{};
+};
+struct State : DrawResources {
+    std::array<U32,256> render{};
+    std::array<std::array<U32,33>,8> stage{};std::array<std::array<U32,14>,16> sampler{};
     std::map<U32,D3DMATRIX> transforms;
     std::array<std::array<float,4>,256> vertex_f{},pixel_f{};
     std::array<std::array<int,4>,16> vertex_i{},pixel_i{};std::array<int,16> vertex_b{},pixel_b{};
@@ -76,6 +85,25 @@ struct State {
         auto previous=other.transforms.begin();
         for(const auto& [key,matrix]:transforms){if(key!=previous->first || std::memcmp(&matrix,&previous->second,sizeof(matrix)))return false;++previous;}
         return true;
+    }
+};
+// A queued batch reads stage zero's sampler and the applied viewport. The
+// remaining state is checked by the existing version/word tracking in apply().
+struct AppliedState : DrawResources {
+    std::array<U32,14> sampler0;
+    D3DVIEWPORT9 viewport;
+    std::size_t transform_count;
+    bool scene;
+    explicit AppliedState(const State& source)
+        : DrawResources(source),sampler0(source.sampler[0]),viewport(source.viewport),
+          transform_count(source.transforms.size()),scene(source.scene) {}
+    AppliedState& operator=(const State& source) {
+        DrawResources::operator=(source);
+        sampler0=source.sampler[0];
+        viewport=source.viewport;
+        transform_count=source.transforms.size();
+        scene=source.scene;
+        return *this;
     }
 };
 struct Resource {
@@ -126,9 +154,15 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     DecodedVertex fixed_vertex(const DecodedVertex&);
     std::map<U32,Object> objects;std::map<Kind,U32> vtables;WeakRegistry<Resource> resources;
     WeakRegistry<Texture> textures_alive;WeakRegistry<ImageData> images;
-    Res root,device_resource,backbuffer;State state;std::optional<State> recording,applied;
+    Res root,device_resource,backbuffer;State state;std::optional<State> recording;std::optional<AppliedState> applied;
     std::optional<wa2::aot::SpriteService> sprite_service;
     bool sprite_command(const wa2::aot::SpriteCommand&);
+    wa2::graphics::GlyphCommandState glyph_command_state;
+    wa2::graphics::GlyphTextureLookup<Resource> glyph_texture_lookup;
+    bool reuse_surface_commands{wa2::graphics::surface_glyph_commands_enabled()};
+    bool queued_without_context_check{};
+    wa2::graphics::SurfaceGlyphCommandCounts frame_surface_commands{};
+    bool continue_surface_glyph(const wa2::aot::SpriteCommand&);
     std::array<U32,14> presentation{};U32 focus_window{},creation_flags{};bool stopped{},initialized{};
     std::array<int,4> last_present_source{},last_present_destination{};std::array<int,2> last_drawable_size{};
     std::uint64_t movie_frames{};std::array<int,2> last_movie_client{},last_movie_size{};
@@ -172,6 +206,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     std::vector<DecodedVertex> decoded_vertices;
     std::uint64_t submitted_draws{},batched_guest_draws{},submitted_vertices{};
     std::uint64_t config_version{1},texture_version{1},applied_config_version{},applied_texture_version{};
+    std::uint64_t applied_context_rebinds{};
     struct StateWords {std::array<U32,256> render{};std::array<std::array<U32,33>,8> stage{};std::array<std::array<U32,14>,16> sampler{};} baseline_words;
     std::array<Res,16> baseline_textures{};std::uint64_t word_differences{},texture_differences{};
     std::string driver_vendor,driver_renderer,driver_version;
@@ -199,6 +234,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
                 if(SDL_GL_MakeCurrent(window,context))stop(SDL_GetError());++context_rebinds;
             }else ++context_reuses;
             MOJOSHADER_glMakeContextCurrent(mojo);
+            queued_without_context_check=false;
         }else if(context)++context_free_calls;
         if(flush_pending){flush();applied.reset();}
     }
@@ -308,8 +344,11 @@ class Graphics final:public wa2::graphics::MoviePresenter {
         for(unsigned unit=0;unit<8;++unit)for(unsigned j=0;j<33;++j)word_differences+=state.stage[unit][j]!=baseline_words.stage[unit][j];
         for(unsigned unit=0;unit<16;++unit){for(unsigned j=0;j<14;++j)word_differences+=state.sampler[unit][j]!=baseline_words.sampler[unit][j];texture_differences+=state.textures[unit]!=baseline_textures[unit];}}
     void set_word(U32& destination,U32 value,U32 baseline){if(destination!=value){word_differences-=destination!=baseline;word_differences+=value!=baseline;destination=value;}}
-    void apply(bool opening_glyph_packet=false);void flush();void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
-    bool begin_texture_packet(unsigned slots,bool glyph);
+    void apply(bool opening_glyph_packet=false);
+    void apply_logical_samplers(bool opening_glyph_packet);
+    void flush(bool preserve_glyph_pipeline=false);
+    void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
+    bool begin_texture_packet(unsigned slots,bool glyph,bool preserved_glyph_pipeline=false);
     void texture_mode(bool enabled){if(texture_batch_mode!=enabled){flush();texture_batch_mode=enabled;applied.reset();}}
     bool batch_textures(std::span<const wa2::graphics::ScreenVertex>,U32,U32,std::span<const U32>,bool);
     U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {},bool glyph=false);
@@ -322,6 +361,7 @@ public:
     void movie_frame(const wa2::movie::VideoFrame&,const wa2::graphics::MovieView&)override;
     void restore_game()override;
     std::string report() const {
+        const auto surface_commands=wa2::graphics::surface_glyph_command_counts();
         std::ostringstream out;const auto array=[&](const auto& values){out<<'[';bool first=true;for(const auto value:values){if(!first)out<<',';first=false;out<<value;}out<<']';};
         out<<"{\"backend\":\"shared-sdl-gl\",\"presents\":"<<presents<<",\"draws\":"<<draws<<",\"submitted_draws\":"<<submitted_draws<<",\"interface_handles\":"<<handles.report()<<",\"live_objects\":"<<objects.size()<<",\"shader_programs\":"<<programs.size()<<",\"backbuffer_size\":["<<presentation[0]<<','<<presentation[1]<<"],\"drawable_size\":";array(last_drawable_size);
         out<<",\"present_source\":";array(last_present_source);out<<",\"present_destination\":";array(last_present_destination);
@@ -334,6 +374,8 @@ public:
             <<",\"creations\":"<<text_buffers.creations<<",\"evictions\":"<<text_buffers.evictions<<",\"maximum_entries\":512,\"maximum_payload_bytes\":2097152}"
             <<",\"multi_texture_batch\":{\"available\":"<<(texture_batch_available?"true":"false")<<",\"slots\":"<<supported_packet_slots
             <<",\"peak_used_slots\":"<<peak_packet_bindings<<",\"wide_driver_submissions\":"<<wide_packet_submissions
+            <<",\"submitted_surface_commands\":"<<surface_commands.submitted<<",\"continued_surface_commands\":"<<surface_commands.continued
+            <<",\"continued_surface_tiles\":"<<surface_commands.continued_tiles
             <<",\"guest_draws\":"<<texture_batch_draws<<",\"driver_submissions\":"<<texture_batch_submissions<<",\"failure\":"<<quote(texture_batch_failure)<<'}'
             <<",\"context_rebinds\":"<<context_rebinds<<",\"context_reuses\":"<<context_reuses<<",\"context_free_calls\":"<<context_free_calls
             <<",\"constant_updates\":"<<constant_updates<<",\"constant_reuses\":"<<constant_reuses<<",\"sampler_parameter_calls\":"<<sampler_parameter_calls<<",\"sampler_parameter_skips\":"<<sampler_parameter_skips
@@ -562,7 +604,9 @@ U32 Graphics::compile(U32 input,U32 output,Kind kind){
 }
 void Graphics::shutdown() noexcept {
     if(stopped)return;stopped=true;
+    glyph_command_state.valid=false;
     if(context){if(SDL_GL_MakeCurrent(window,context))return;MOJOSHADER_glMakeContextCurrent(mojo);
+        queued_without_context_check=false;
         try{flush();}catch(...){}if(mojo)MOJOSHADER_glBindProgram(nullptr);}
     applied.reset();
     for(auto& [at,o]:objects){for(const auto& [level,l]:o.locks)try{p.memory.release(l.guest);}catch(...){}
@@ -584,6 +628,7 @@ void Graphics::shutdown() noexcept {
     if(initialized){SDL_QuitSubSystem(SDL_INIT_VIDEO);initialized=false;}
 }
 U32 Graphics::method(Object& o,unsigned slot,Args a){
+    glyph_command_state.valid=false;
     const auto r=o.resource;
     // Setters below alter only the CPU state. Leave earlier geometry queued
     // until the next draw chooses a pipeline, or an observable resource/API
@@ -763,6 +808,11 @@ void Graphics::apply(bool opening_glyph_packet){
     const auto color=r[D3DRS_BLENDFACTOR];gl.BlendColor(float((color>>16)&255)/255,float((color>>8)&255)/255,float(color&255)/255,float(color>>24)/255);
     const auto src=blend(r[D3DRS_SRCBLEND]),dst=blend(r[D3DRS_DESTBLEND]);gl.BlendFuncSeparate(src,dst,r[D3DRS_SEPARATEALPHABLENDENABLE]?blend(r[D3DRS_SRCBLENDALPHA]):src,r[D3DRS_SEPARATEALPHABLENDENABLE]?blend(r[D3DRS_DESTBLENDALPHA]):dst);gl.BlendEquationSeparate(equation(r[D3DRS_BLENDOP]),equation(r[D3DRS_SEPARATEALPHABLENDENABLE]?r[D3DRS_BLENDOPALPHA]:r[D3DRS_BLENDOP]));
     prepare_program();
+    apply_logical_samplers(opening_glyph_packet);
+    applied=state;applied_config_version=config_version;applied_texture_version=texture_version;reset_baseline();
+    applied_context_rebinds=context_rebinds;
+}
+void Graphics::apply_logical_samplers(bool opening_glyph_packet){
     // A texture packet sets every unit it owns immediately before drawing.
     // Leave its empty logical slots alone until that bind. Unit zero still
     // validates and uploads the logical sampler here, including failure paths.
@@ -772,11 +822,14 @@ void Graphics::apply(bool opening_glyph_packet){
         else gl.BindTexture(GL_TEXTURE_2D,0);
     });
     gl.ActiveTexture(GL_TEXTURE0);
-    applied=state;applied_config_version=config_version;applied_texture_version=texture_version;reset_baseline();
 }
 
-void Graphics::flush() {
+void Graphics::flush(bool preserve_glyph_pipeline) {
+    glyph_command_state.valid=false;
     if(!has_pending())return;
+    // CPU-only glyphs can leave the owner's SDL/Mojo context unchecked.
+    // All ways of draining the queue pass here, including metadata barriers.
+    if(queued_without_context_check)enter(false);
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.flush:nullptr);
     // Pending vertices have already been transformed using the state that was
     // applied when they were queued. Later setters only change CPU state.
@@ -821,7 +874,7 @@ void Graphics::flush() {
         // Setters can already describe the next draw. Bind the saved sampler
         // of this pending packet, with its own retained resource references.
         for(unsigned n=0;n<texture_batch.slot_limit();++n){
-            if(n<texture_batch.binding_count())bind_sampler(n,texture_batch.bindings()[n],&applied->sampler[0]);
+            if(n<texture_batch.binding_count())bind_sampler(n,texture_batch.bindings()[n],&applied->sampler0);
             else{gl.ActiveTexture(GL_TEXTURE0+n);gl.BindTexture(GL_TEXTURE_2D,0);}
         }
         gl.ActiveTexture(GL_TEXTURE0);
@@ -845,12 +898,28 @@ void Graphics::flush() {
             ++wide_packet_submissions;
             wa2::graphics::record_wide_glyph_packet_submissions(1);
         }
-        texture_batch.clear();applied.reset();
+        texture_batch.clear();
+        if(!preserve_glyph_pipeline)applied.reset();
     }
 }
-bool Graphics::begin_texture_packet(unsigned slots,bool glyph){
+bool Graphics::begin_texture_packet(unsigned slots,bool glyph,bool preserved_glyph_pipeline){
     texture_batch.set_slot_limit(slots);
-    try{apply(glyph && continue_glyph_packets);}
+    try{
+        if(preserved_glyph_pipeline && applied && applied_context_rebinds==context_rebinds){
+            FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.apply:nullptr);
+            // The previous draw installed physical glyph textures in several
+            // units. Do not use the ordinary logical texture cache here:
+            // validate/upload/bind the incoming texture even when unchanged.
+            upload(image(state.target));
+            apply_logical_samplers(glyph && continue_glyph_packets);
+            applied->textures[0]=baseline_textures[0]=state.textures[0];
+            texture_differences=0;applied_texture_version=texture_version;
+            ++state_cache_hits;wa2::graphics::record_glyph_pipeline_rollover();
+        }else{
+            if(preserved_glyph_pipeline)applied.reset();
+            apply(glyph && continue_glyph_packets);
+        }
+    }
     catch(const GuestFault& error){
         texture_batch_failure=error.what();applied.reset();
         if(slots==wa2::graphics::WideTextureBatchSlots){
@@ -873,21 +942,57 @@ bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> verti
     const auto elements=decltype(texture_batch)::index_count(type,count);if(!elements)return false;
     if(!texture_batch.empty() && (!applied || config_version!=applied_config_version || word_differences))flush();
     unsigned next_slots=wa2::graphics::TextureBatchSlots;
+    bool preserve=false;
     if(!texture_batch.fits(state.textures[0],unsigned(vertices.size()),elements)){
         if(pending_glyph && glyph && wa2::graphics::wide_glyph_packets_enabled())
             next_slots=texture_batch.slots_after_glyph_rollover(state.textures[0],supported_packet_slots);
-        flush();
+        preserve=reuse_surface_commands &&
+            texture_batch_mode && applied &&
+            texture_batch.can_roll_glyph_packet(pending_glyph,glyph,next_slots,vertices.size(),elements) &&
+            state.target==pending_target && wa2::graphics::same_glyph_packet_state(*applied,state,
+                config_version==applied_config_version,word_differences);
+        // This synchronous handoff is the only flush that may keep the GL
+        // pipeline. Every other drain resets it before a generic draw.
+        flush(preserve);
     }
-    if(!texture_batch.fits(state.textures[0],unsigned(vertices.size()),elements))return false;
+    if(!texture_batch.fits(state.textures[0],unsigned(vertices.size()),elements)){
+        if(preserve)applied.reset();
+        return false;
+    }
     texture_mode(true);
     if(texture_batch.empty()){
-        if(!begin_texture_packet(next_slots,glyph))return false;
+        if(!begin_texture_packet(next_slots,glyph,preserve))return false;
     }
     else pending_glyph&=glyph;
     if(!texture_batch.append(state.textures[0],vertices,type,count,indices))stop("invalid bounded texture batch packet");
     ++texture_batch_draws;return true;
 }
+bool Graphics::continue_surface_glyph(const wa2::aot::SpriteCommand& command){
+    if(!glyph_command_state.matches(command))return false;
+    enter(false,false); // Owner thread check only; this path cannot call GL.
+    // The preceding successful command left precisely this target, viewport,
+    // FVF and raster state, null texture zero and an empty first stream. No
+    // intervening adapter call could have changed them without invalidation.
+    std::array<Res,4> textures;
+    const auto& destination=pending_target->levels[0];
+    for(std::size_t n=0;n<command.tiles.size();++n){
+        textures[n]=glyph_texture_lookup.resolve(command.tiles[n].texture,
+            [this](U32 token){return get(token,Kind::texture);});
+        if(image(textures[n])->texture==destination->texture)return false;
+    }
+    FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.draw:nullptr);
+    if(!wa2::graphics::append_surface_glyph(texture_batch,pending_glyph_plan,command.tiles,
+            std::span<const Res>(textures).first(command.tiles.size())))return false;
+    const auto tiles=command.tiles.size();
+    texture_batch_draws+=tiles;frame_glyph_continuations+=tiles;screen_draws+=tiles;
+    screen_unique_vertices+=4*tiles;batched_guest_draws+=tiles;draws+=tiles;
+    texture_version+=2*tiles;destination->gpu_dirty=true;queued_without_context_check=true;
+    ++frame_surface_commands.submitted;++frame_surface_commands.continued;
+    frame_surface_commands.continued_tiles+=tiles;return true;
+}
 bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command){
+    if(reuse_surface_commands && continue_surface_glyph(command))return true;
+    glyph_command_state.valid=false;
     if(!context || !state.scene || state.vertex_shader || state.pixel_shader || command.tiles.size()>256)return false;
     for(unsigned n=1;n<8;++n)if(state.stage[n][D3DTSS_COLOROP]!=D3DTOP_DISABLE)return false;
     for(unsigned n=1;n<16;++n)if(state.textures[n])return false;
@@ -918,6 +1023,11 @@ bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command){
         if(state.fvf!=0x1c4 || state.declaration)++config_version;state.fvf=0x1c4;state.declaration.reset();
         const auto result=draw(D3DPT_TRIANGLESTRIP,4,{reinterpret_cast<const std::uint8_t*>(tile.vertices.data()),sizeof(tile.vertices)},sizeof(wa2::aot::SpriteVertex),{},command.glyph);
         if(result)stop("invalid native sprite packet");state.streams[0]={};set_texture(0,{},0);
+    }
+    if(command.glyph && command.target_kind==wa2::aot::SpriteTarget::surface && !command.tiles.empty()){
+        ++frame_surface_commands.submitted;
+        if(reuse_surface_commands && continue_glyph_packets && pending_glyph && applied &&
+           config_version==applied_config_version && !word_differences)glyph_command_state.capture(command);
     }
     return true;
 }
@@ -1045,7 +1155,7 @@ void Graphics::movie_frame(const wa2::movie::VideoFrame& frame,const wa2::graphi
     last_movie_source=view.source;last_movie_requested=view.destination;last_movie_destination=destination;
     SDL_GL_SwapWindow(window);host->frame_submitted();
 }
-void Graphics::restore_game(){if(context && backbuffer && !stopped)present(std::array<U32,5>{},true);}
+void Graphics::restore_game(){if(context && backbuffer && !stopped){enter(false);present(std::array<U32,5>{},true);}}
 void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
     if(!subtitles)return;
     const auto* cue=subtitles->current(wa2::platform::Clock::counter()/1000000);
@@ -1103,6 +1213,9 @@ U32 Graphics::present(Args a,bool force){
     if(a[4])stop("Present dirty regions");if(a[3] && a[3]!=(presentation[7]?presentation[7]:focus_window))stop("Present to another window");
     flush();applied.reset();
     wa2::graphics::record_glyph_continuations(frame_glyph_continuations);
+    wa2::graphics::record_surface_glyph_commands(frame_surface_commands);
+    frame_surface_commands={};
+    reuse_surface_commands=wa2::graphics::surface_glyph_commands_enabled();
     frame_glyph_continuations = 0;
     continue_glyph_packets = wa2::graphics::glyph_packet_continuation_enabled();
     auto i=image(backbuffer);upload(i);fbo(i);

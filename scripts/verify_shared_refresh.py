@@ -144,6 +144,8 @@ def main():
         if lookup_reference['native_library_sha256']!=digest(build/'shared_aot/libwa2_function_process.a') or lookup_reference['query_cases']!=574 or lookup_reference['diagnostics']!=116 or lookup_reference['checked_cached_locations']!=123:raise ValueError('Incomplete cached-source resource lookup comparison')
         reports['resource_lookup_reference']=lookup_reference
         packets=reports['render_submission']['multi_texture_batch']
+        if reports['novel_cpu'].get('run_transition_oracle_cases',0)<17:
+            raise ValueError('Incomplete source-to-source glyph transition checks')
         if reports['novel_cpu'].get('layout_state_oracle_cases',0)<11:
             raise ValueError('Missing source/cached layout boundary comparisons')
         if reports['novel_cpu'].get('glyph_command_oracle_cases',0)<18:

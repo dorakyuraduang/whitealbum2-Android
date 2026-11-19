@@ -1,5 +1,6 @@
 #pragma once
 #include "../platform/render/texture_batch.hpp"
+#include "../platform/render/glyph_command_replay.hpp"
 #include <memory>
 namespace texture_batch_test {
 struct Result {unsigned source_draws{},driver_packets{},triangles{},reused_texture_packets{},lifetime_checks{};
@@ -78,6 +79,83 @@ inline void check_glyph_sampler_units() {
         CHECK(candidate == reference);
     }
 }
+inline void check_glyph_pipeline_rollover(){
+    namespace g=wa2::graphics;
+    struct Resources {
+        unsigned target{17},indices{};
+        bool scene{true};
+        std::array<unsigned,16> streams{},textures{};
+    };
+    struct Applied : Resources {std::size_t transform_count{1};};
+    struct State : Resources {std::vector<unsigned> transforms{19};};
+    Applied old;old.textures[0]=71;
+    State next;next.textures[0]=83;
+    const auto verify_state=[&](const State& candidate){
+        return g::same_glyph_packet_state(old,candidate,true,0);
+    };
+    CHECK(verify_state(next));
+    CHECK(!g::same_glyph_packet_state(old,next,false,0));
+    CHECK(!g::same_glyph_packet_state(old,next,true,1));
+    for(unsigned change=0;change<7;++change){
+        auto changed=next;
+        switch(change){
+        case 0:++changed.target;break;
+        case 1:changed.scene=false;break;
+        case 2:++changed.indices;break;
+        case 3:++changed.streams.back();break;
+        case 4:changed.transforms.push_back(0);break;
+        case 5:changed.textures[0]=0;break;
+        case 6:++changed.textures.back();break;
+        }
+        CHECK(!verify_state(changed));
+    }
+    std::array<g::ScreenVertex,4> quad{};
+    for(unsigned limit:{g::TextureBatchSlots,g::WideTextureBatchSlots}){
+        g::ScreenTextureBatch<unsigned> batch;batch.set_slot_limit(limit);
+        CHECK(!batch.can_roll_glyph_packet(true,true,limit,4,6));
+        for(unsigned slot=0;slot<limit;++slot)
+            CHECK(batch.append(1+slot,quad,g::abi::D3DPT_TRIANGLESTRIP,4));
+        CHECK(!batch.fits(83,4,6));
+        CHECK(batch.can_roll_glyph_packet(true,true,limit,4,6));
+        CHECK(!batch.can_roll_glyph_packet(false,true,limit,4,6));
+        CHECK(!batch.can_roll_glyph_packet(true,false,limit,4,6));
+        CHECK(!batch.can_roll_glyph_packet(true,true,limit==8?16:8,4,6));
+        CHECK(!batch.can_roll_glyph_packet(true,true,limit,batch.MaxVertices+1,6));
+        CHECK(!batch.can_roll_glyph_packet(true,true,limit,4,batch.MaxIndices+1));
+
+        // Draw the first packet, then validate the real bindings at the
+        // following packet draw and on return to a general multitexture draw.
+        std::array<unsigned,16> physical{};
+        std::vector<unsigned> actual;
+        const auto draw=[&]{
+            for(unsigned slot=0;slot<limit;++slot)
+                physical[slot]=slot<batch.binding_count()?batch.bindings()[slot]:0;
+            for(std::size_t i=0;i<batch.indices().size();i+=6)
+                actual.push_back(physical[unsigned(batch.vertices()[batch.indices()[i]].binding)]);
+            batch.clear();
+        };
+        draw();
+        unsigned checked_samplers=0;
+        g::apply_logical_texture_units(next.textures,limit,[&](unsigned slot,unsigned resource){
+            physical[slot]=resource;
+            if(resource){CHECK(slot==0 && resource==83);++checked_samplers;}
+        });
+        CHECK(checked_samplers==1 && physical[0]==83 && physical[1]==2);
+        CHECK(batch.append(83,quad,g::abi::D3DPT_TRIANGLESTRIP,4));
+        CHECK(batch.append(42,quad,g::abi::D3DPT_TRIANGLESTRIP,4));
+        draw();
+        CHECK(actual.size()==limit+2);
+        for(unsigned slot=0;slot<limit;++slot)CHECK(actual[slot]==slot+1);
+        CHECK(actual[limit]==83 && actual.back()==42);
+        std::array<unsigned,16> ordinary{};
+        ordinary[2]=63;ordinary[limit-1]=83;
+        g::apply_logical_texture_units(ordinary,0,[&](unsigned slot,unsigned resource){physical[slot]=resource;});
+        CHECK(physical==ordinary);
+        for(unsigned i=0;i<batch.MaxVertices/4;++i)
+            CHECK(batch.append(11,quad,g::abi::D3DPT_TRIANGLESTRIP,4));
+        CHECK(!batch.fits(11,4,6) && batch.can_roll_glyph_packet(true,true,limit,4,6));
+    }
+}
 inline std::vector<unsigned> replay_glyph_packets(const std::vector<unsigned>& textures,unsigned supported){
     namespace g=wa2::graphics;
     g::ScreenTextureBatch<unsigned> batch;
@@ -112,7 +190,70 @@ inline Result run(){
     namespace g=wa2::graphics;
     check_glyph_continuations();
     check_glyph_sampler_units();
+    check_glyph_pipeline_rollover();
     Result result;
+    {
+        std::array<wa2::aot::SpriteTile,4> tiles{};
+        for(unsigned n=0;n<tiles.size();++n){
+            tiles[n].texture=1+n/2;
+            for(unsigned v=0;v<4;++v)tiles[n].vertices[v]={float(n+v),float(v),.25f,1,0x99ad0137,0,0.f,1.f};
+        }
+        wa2::aot::SpriteCommand command{};
+        command.device=100;command.target=77;command.tiles=tiles;command.glyph=true;
+        g::GlyphCommandState proof;
+        proof.capture(command);CHECK(proof.matches(command));
+        using Command=wa2::aot::SpriteCommand;
+        for(auto member:{&Command::device,&Command::target,&Command::blend_enabled,&Command::blend_op,
+                         &Command::source_blend,&Command::destination_blend,&Command::minimum,
+                         &Command::magnification,&Command::mipmap,&Command::alpha_argument}){
+            auto changed=command;++(changed.*member);CHECK(!proof.matches(changed));
+        }
+        auto empty=command;empty.tiles={};CHECK(!proof.matches(empty));
+        auto other=command;other.glyph=false;CHECK(!proof.matches(other));
+        std::array<wa2::aot::SpriteTile,5> oversized{};
+        auto large=command;large.tiles=oversized;CHECK(!proof.matches(large));
+        command.target_kind=wa2::aot::SpriteTarget::texture_level_zero;CHECK(!proof.matches(command));
+        command.target_kind=wa2::aot::SpriteTarget::surface;
+        proof.valid=false;CHECK(!proof.matches(command));
+        const auto plan=g::screen_vertex_plan(0x1c4u,{0,0,1280,720,0,1},{0,1});CHECK(plan);
+        g::ScreenTextureBatch<unsigned> candidate,reference;
+        const std::array<unsigned,4> textures{1,1,2,2};
+        CHECK(g::append_surface_glyph(candidate,*plan,tiles,std::span<const unsigned>(textures)));
+        for(const auto& tile:tiles)CHECK(reference.append_glyph_quad(tile.texture,*plan,
+            {reinterpret_cast<const std::uint8_t*>(tile.vertices.data()),sizeof(tile.vertices)}));
+        CHECK(reference.bindings()==candidate.bindings() && std::ranges::equal(reference.indices(),candidate.indices()));
+        CHECK(reference.vertices().size_bytes()==candidate.vertices().size_bytes());
+        CHECK(!std::memcmp(reference.vertices().data(),candidate.vertices().data(),reference.vertices().size_bytes()));
+        tiles.back().vertices.back().secondary=1;
+        CHECK(!g::append_surface_glyph(candidate,*plan,tiles,std::span<const unsigned>(textures)));
+        CHECK(candidate.indices().size()==24 && candidate.binding_count()==2);
+        tiles.back().vertices.back().secondary=0;
+        std::array<g::ScreenVertex,4> quad{};
+        for(unsigned texture=3;texture<=7;++texture)CHECK(candidate.append(texture,quad,5,4));
+        const auto previous=candidate.indices().size();
+        const std::array<unsigned,4> overflow{1,2,8,9};
+        CHECK(!g::append_surface_glyph(candidate,*plan,tiles,std::span<const unsigned>(overflow)));
+        CHECK(candidate.indices().size()==previous && candidate.binding_count()==7);
+        candidate.clear();reference.clear();
+        for(unsigned alpha=0;alpha<256;++alpha){
+            // During reveal the same font texture and state receive new source
+            // positions and alpha on every call. Neither may be held over.
+            for(auto& v:tiles[0].vertices){v.colour=alpha<<24;v.x+=.5f;}
+            CHECK(g::append_surface_glyph(candidate,*plan,std::span(tiles).first(1),std::span<const unsigned>(textures).first(1)));
+            const auto& vertices=tiles[0].vertices;
+            CHECK(reference.append_glyph_quad(textures[0],*plan,{reinterpret_cast<const std::uint8_t*>(vertices.data()),sizeof(vertices)}));
+        }
+        CHECK(reference.vertices().size_bytes()==candidate.vertices().size_bytes());
+        CHECK(!std::memcmp(reference.vertices().data(),candidate.vertices().data(),reference.vertices().size_bytes()));
+        CHECK(std::ranges::equal(reference.indices(),candidate.indices()));
+        struct Resource{unsigned interface_handle;};
+        auto live=std::make_shared<Resource>(Resource{100});auto retained=live;unsigned lookups=0;
+        g::GlyphTextureLookup<Resource> cache;
+        const auto lookup=[&](unsigned token){CHECK(token==100);++lookups;return live;};
+        for(unsigned n=0;n<500;++n)CHECK(cache.resolve(100,lookup)==live);
+        CHECK(lookups==1);retained->interface_handle=0;live=std::make_shared<Resource>(Resource{100});
+        CHECK(cache.resolve(100,lookup)==live && lookups==2 && live!=retained);
+    }
     CHECK(g::supported_texture_batch_slots(32,false)==0 && g::supported_texture_batch_slots(7,true)==0);
     CHECK(g::supported_texture_batch_slots(8,true)==8 && g::supported_texture_batch_slots(15,true)==8);
     CHECK(g::supported_texture_batch_slots(16,true)==16 && g::supported_texture_batch_slots(32,true)==16);

@@ -1,5 +1,6 @@
 #pragma once
 #include "../recompiled/text_layout_replay_control.hpp"
+#include "../recompiled/text_run_replay_control.hpp"
 
 namespace novel_layout_test {
 
@@ -35,6 +36,7 @@ using Stack = std::array<std::uint8_t,4096>;
 struct Boundary {
     CpuImage cpu;
     Stack stack;
+    std::optional<unsigned> glyph_allowance;
     bool operator==(const Boundary&) const = default;
 };
 struct Trace {
@@ -43,6 +45,7 @@ struct Trace {
     std::optional<std::pair<wr::FaultKind,U32>> fault;
     std::array<std::uint8_t,0x3000> output_and_cursor;
     std::array<std::uint8_t,0x100> globals;
+    std::array<std::uint64_t,3> scheduling;
     bool operator==(const Trace&) const = default;
 };
 inline void compare(const Trace& expected,const Trace& actual,const char* name) {
@@ -58,10 +61,15 @@ inline void compare(const Trace& expected,const Trace& actual,const char* name) 
         if(diff.first != a.stack.end()) message << " stack offset " << diff.first-a.stack.begin();
         if(a.cpu.value.r != b.cpu.value.r) message << " integer registers";
         if(a.cpu.value.fp.bytes != b.cpu.value.fp.bytes) message << " FP registers";
+        if(a.glyph_allowance != b.glyph_allowance) message << " glyph allowance";
         throw std::runtime_error(message.str());
     }
     message << " boundaries " << expected.boundaries.size() << '/' << actual.boundaries.size()
             << ", commands " << expected.commands.size() << '/' << actual.commands.size();
+    if(expected.fault!=actual.fault)message<<" fault kind/address";
+    if(expected.scheduling!=actual.scheduling)message<<" yield/transfer counts";
+    if(expected.output_and_cursor!=actual.output_and_cursor)message<<" output/cursor bytes";
+    if(expected.globals!=actual.globals)message<<" text globals";
     throw std::runtime_error(message.str());
 }
 struct Observer {
@@ -69,10 +77,13 @@ struct Observer {
     U32 stack_base;
     Trace& trace;
     bool force_yield;
+    bool fault_after_draw{};
+    U32 move_sprite{};
     void checkpoint() {
         auto& point = trace.boundaries.emplace_back();
         point.cpu.value = p.cpu;
         p.memory.copy_out(stack_base,point.stack);
+        if(auto* left=a::GlyphCallScope::remaining(p.memory))point.glyph_allowance=*left;
     }
     static bool submit(const a::SpriteCommand& value,void* owner) {
         auto& self = *static_cast<Observer*>(owner);
@@ -83,6 +94,10 @@ struct Observer {
             CHECK(remaining && *remaining);
             *remaining = 1;
         }
+        if(self.fault_after_draw && self.trace.commands.size()==12)
+            self.p.memory.protect(0xa82000,4096,0);
+        if(self.move_sprite && self.trace.commands.size()==12)
+            self.p.memory.store(self.move_sprite+0x88,0x41000000,32);
         return true;
     }
 };
@@ -91,9 +106,13 @@ struct Observer {
 // Drive its actual dispatch boundaries so the callback wrapper cannot restore
 // the source registers before comparison. Snapshot the complete scratch stack
 // at each yield and each typed draw, including the by-value sprite arguments.
-inline unsigned verify(wr::Process& p,const wr::Cpu& initial,U32 output,std::array<U32,26> args) {
+enum class Feature {layout,run_transition};
+inline unsigned verify(wr::Process& p,const wr::Cpu& initial,U32 output,std::array<U32,26> args,
+                       Feature feature=Feature::layout) {
     const auto saved_cpu = p.cpu;
-    const bool saved_enabled = a::text_layout_replay_enabled;
+    const bool transition = feature==Feature::run_transition;
+    auto& enabled = transition ? a::text_run_replay_enabled : a::text_layout_replay_enabled;
+    const bool saved_enabled = enabled;
     const U32 stack_base = initial.r[wr::ESP] - 8192;
     std::array<std::uint8_t,8192> stack;
     p.memory.copy_out(stack_base,stack);
@@ -103,6 +122,27 @@ inline unsigned verify(wr::Process& p,const wr::Cpu& initial,U32 output,std::arr
     p.memory.copy_out(0xb34500,initial_globals);
     const U32 text = args[11];
     const U32 text_word = p.memory.load(text + 4,16);
+    const auto changed_word = text+4+2*20;
+    const U32 old_word = p.memory.load(changed_word,16);
+    // Split a two-byte character at the boundary, leaving both pages valid.
+    const U32 pages=transition ? p.allocate_bytes(8192) : 0;
+    const U32 crossing=pages+4096-27;
+    const U32 unformatted=pages+128;
+    const U32 ascii=pages+768;
+    if(transition){
+        std::vector<std::uint8_t> source;
+        for(unsigned i=0;i<512;++i){
+            source.push_back(static_cast<std::uint8_t>(p.memory.load(text+i,8)));
+            if(!source.back())break;
+        }
+        CHECK(source.size()>27 && !source.back());
+        p.memory.copy_in(crossing,source);
+        CHECK(source.size()+128<4096-27 && source[source.size()-2]=='>');
+        source[source.size()-2]=0;
+        p.memory.copy_in(unformatted,std::span(source).subspan(4));
+        constexpr std::array<std::uint8_t,5> latin{'W','A','2','!',0};
+        p.memory.copy_in(ascii,latin);
+    }
     const U32 font_width = p.memory.load(0xa823b1,8);
     std::array<std::uint8_t,52> original_font,alternate_font;
     p.memory.copy_out(0xa823b0,original_font);
@@ -114,19 +154,20 @@ inline unsigned verify(wr::Process& p,const wr::Cpu& initial,U32 output,std::arr
         p.memory.store(0xa823b1,font_width,8);
         p.memory.copy_in(0xa823b0+52,alternate_font);
         p.memory.store(text + 4,text_word,16);
+        p.memory.store(changed_word,old_word,16);
         p.memory.copy_in(stack_base,stack);
         p.memory.copy_in(output,initial_output);
         p.memory.copy_in(0xb34500,initial_globals);
     };
     enum class Case {plain,outline,finite_reveal,changed_inputs,changed_font,same_metrics,shifted_stack,dirty_fill,dirty_outline,
-                     force_yield,font_fault};
+                     force_yield,font_fault,changed_page,plain_color,same_page_color,crossing_text,delayed_font_fault,changed_sprite,latin};
     a::Program program(p.memory);
     const auto run = [&](Case which,bool optimized,unsigned salt=0) {
         restore();
         p.cpu = initial;
         p.cpu.fp.put16(0,0x007f);
         p.cpu.eip = 0x446500;
-        a::text_layout_replay_enabled = optimized;
+        enabled = optimized;
         auto call_args = args;
         call_args[12] = which == Case::finite_reveal ? 51 : 0xffffffffu;
         call_args[18] = which == Case::outline || which == Case::dirty_outline ? 1 : 0;
@@ -136,6 +177,13 @@ inline unsigned verify(wr::Process& p,const wr::Cpu& initial,U32 output,std::arr
             call_args[3] += 7;
             call_args[14] = 129;
         }
+        if(which == Case::changed_page) p.memory.store(changed_word,old_word==0xcb90?0xef8d:0xcb90,16);
+        if(which == Case::same_page_color || which==Case::plain_color)call_args[11]=unformatted;
+        if(which == Case::same_page_color){
+            call_args[14]=83;call_args[15]=117;call_args[16]=29;
+        }
+        if(which == Case::crossing_text) call_args[11]=crossing;
+        if(which == Case::latin)call_args[11]=ascii;
         if(which == Case::changed_font) p.memory.store(0xa823b1,font_width-1,8);
         if(which == Case::same_metrics) {
             p.memory.copy_in(0xa823b0+52,original_font);
@@ -159,12 +207,14 @@ inline unsigned verify(wr::Process& p,const wr::Cpu& initial,U32 output,std::arr
         for(auto it=call_args.rbegin();it!=call_args.rend();++it) wr::push(p.cpu,p.memory,*it);
         wr::push(p.cpu,p.memory,return_address);
         Trace result{};
-        Observer capture{p,capture_base,result,which == Case::force_yield};
+        Observer capture{p,capture_base,result,which == Case::force_yield,which == Case::delayed_font_fault,
+                         which==Case::changed_sprite?output:0};
         a::SpriteService sink(p.memory,Observer::submit,&capture);
         a::LeafServiceScope leaves{[](wr::Cpu&,wr::Memory&,void* process) {
             return static_cast<wr::Process*>(process)->dispatch_leaf_api();
         },&p};
         const auto deferrals = a::glyph_budget_deferrals;
+        const auto jumps = a::text_jump_counts;
         try {
             unsigned entries{};
             while(p.cpu.eip != return_address) {
@@ -177,32 +227,65 @@ inline unsigned verify(wr::Process& p,const wr::Cpu& initial,U32 output,std::arr
             capture.checkpoint();
         }
         if(which == Case::force_yield) CHECK(a::glyph_budget_deferrals > deferrals);
+        result.scheduling={a::glyph_budget_deferrals-deferrals,a::text_jump_counts.local_jumps-jumps.local_jumps,
+                           a::text_jump_counts.budget_yields-jumps.budget_yields};
         p.memory.copy_out(output,result.output_and_cursor);
         p.memory.copy_out(0xb34500,result.globals);
         return result;
     };
     unsigned checked{};
-    for(const auto& [which,name] : std::array{
+    std::vector<std::pair<Case,const char*>> cases{
             std::pair{Case::plain,"plain"}, std::pair{Case::outline,"outline"},
             std::pair{Case::finite_reveal,"fading tail"}, std::pair{Case::changed_inputs,"same address, new inputs"},
             std::pair{Case::changed_font,"font mutation"}, std::pair{Case::same_metrics,"same metrics, different font"},
             std::pair{Case::shifted_stack,"cross-page stack"},
             std::pair{Case::dirty_fill,"fill with dirty FP slots"}, std::pair{Case::dirty_outline,"outline with dirty FP slots"},
-            std::pair{Case::force_yield,"glyph yield"}, std::pair{Case::font_fault,"font read fault"}}) {
+            std::pair{Case::force_yield,"glyph yield"}, std::pair{Case::font_fault,"font read fault"}};
+    if(transition)cases.insert(cases.end(),{{Case::changed_page,"changed character at same address"},
+        {Case::plain_color,"unformatted text"},{Case::same_page_color,"new foreground colour"},
+        {Case::crossing_text,"two-byte character across pages"},{Case::delayed_font_fault,"font permission lost after twelfth draw"},
+        {Case::changed_sprite,"live sprite position after twelfth draw"},{Case::latin,"unsupported one-byte text"}});
+    const auto captures_before=a::text_run_replay_captures;
+    std::vector<Command> plain,plain_color;
+    const auto hits=[&]{return transition?a::text_run_replay_hits:a::text_layout_replay_hits;};
+    for(const auto& [which,name] : cases) {
+        const auto before=hits();
         const auto reference = run(which,false);
-        CHECK(bool(reference.fault) == (which == Case::font_fault));
+        CHECK(hits()==before);
+        CHECK(bool(reference.fault) == (which == Case::font_fault || which==Case::delayed_font_fault));
         if(!reference.fault) CHECK(!reference.commands.empty());
+        if(which==Case::plain)plain=reference.commands;
+        if(which==Case::finite_reveal){
+            CHECK(reference.commands.size()<plain.size() && !reference.commands.empty());
+            const auto tail=reference.commands.size()-1;
+            CHECK((reference.commands[tail].tiles.at(0).vertices[4]>>24)!=(plain[tail].tiles.at(0).vertices[4]>>24));
+        }
+        if(which==Case::changed_page)CHECK(reference.commands.size()==plain.size() && reference.commands!=plain);
+        if(which==Case::plain_color)plain_color=reference.commands;
+        if(which==Case::same_page_color){
+            CHECK(reference.commands.size()==plain_color.size());
+            CHECK((reference.commands.front().tiles.at(0).vertices[4]&0xffffffu)!=
+                  (plain_color.front().tiles.at(0).vertices[4]&0xffffffu));
+        }
+        if(which==Case::changed_sprite){
+            CHECK(reference.commands.size()==plain.size() && reference.commands.size()>12 && reference.commands!=plain);
+            CHECK(std::equal(plain.begin(),plain.begin()+12,reference.commands.begin()));
+        }
+        if(which==Case::delayed_font_fault)CHECK(reference.commands.size()==12);
         compare(reference,run(which,true),name);
+        if(transition && which==Case::plain)CHECK(a::text_run_replay_captures>captures_before);
         const bool dirty = which == Case::dirty_fill || which == Case::dirty_outline;
         const auto second_reference = dirty ? run(which,false,109) : reference;
-        const auto hits = a::text_layout_replay_hits;
+        const auto old_hits = hits();
         compare(second_reference,run(which,true,109),name);
-        if(which == Case::plain || which == Case::outline || dirty) CHECK(a::text_layout_replay_hits > hits);
+        if(which == Case::plain || which == Case::outline || (!transition && dirty)) CHECK(hits() > old_hits);
+        if(which==Case::latin)CHECK(hits()==before);
         ++checked;
     }
     restore();
+    if(transition){p.memory.release(pages);CHECK(a::text_run_replay_captures>captures_before);}
     p.cpu = saved_cpu;
-    a::text_layout_replay_enabled = saved_enabled;
+    enabled = saved_enabled;
     return checked;
 }
 }
