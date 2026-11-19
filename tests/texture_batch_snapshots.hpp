@@ -3,8 +3,83 @@
 #include <memory>
 namespace texture_batch_test {
 struct Result {unsigned source_draws{},driver_packets{},triangles{},reused_texture_packets{},lifetime_checks{};};
+inline void check_glyph_continuations() {
+    namespace g = wa2::graphics;
+    const auto plan = g::screen_vertex_plan(0x1c4u, {0, 0, 1280, 720, 0, 1}, {0, 1});
+    CHECK(plan);
+    g::ScreenTextureBatch<unsigned> expected, actual;
+    unsigned full_packets = 0;
+    const auto compare = [&] {
+        CHECK(expected.binding_count() == actual.binding_count());
+        CHECK(expected.bindings() == actual.bindings());
+        CHECK(std::ranges::equal(expected.indices(), actual.indices()));
+        const auto vertices = expected.vertices();
+        CHECK(vertices.size() == actual.vertices().size());
+        if (!vertices.empty())
+            CHECK(std::memcmp(vertices.data(), actual.vertices().data(), vertices.size_bytes()) == 0);
+    };
+    std::array<std::uint8_t, 128> bytes{};
+    std::array<g::ScreenVertex, 4> quad;
+    // Repeated tiles, atlas changes and full packets over a complete page.
+    for (unsigned n = 0; n < 676; ++n) {
+        for (unsigned corner = 0; corner < 4; ++corner) {
+            auto* v = bytes.data() + corner * 32;
+            const std::array<float, 4> pos{float(n + corner), float(corner), .25f, 1.f};
+            const std::array<float, 2> uv{float(corner) / 4, .75f};
+            std::memcpy(v, pos.data(), 16);
+            std::memcpy(v + 16, &n, 4);
+            std::memcpy(v + 24, uv.data(), 8);
+        }
+        CHECK(g::pack_screen_vertices(*plan, bytes, 32, quad));
+        const unsigned texture = 1 + n / 2 % 11;
+        if (!expected.fits(texture, 4, 6)) {
+            CHECK(!actual.append_glyph_quad(texture, *plan, bytes));
+            compare();
+            expected.clear();
+            actual.clear();
+            ++full_packets;
+        }
+        CHECK(expected.append(texture, quad, g::abi::D3DPT_TRIANGLESTRIP, 4));
+        CHECK(actual.append_glyph_quad(texture, *plan, bytes));
+    }
+    CHECK(full_packets != 0);
+    compare();
+    CHECK(!actual.append_glyph_quad(0, *plan, bytes));
+    CHECK(!actual.append_glyph_quad(1, *plan, std::span(bytes).first(96)));
+    bytes[3 * 32 + 20] = 1;
+    CHECK(!actual.append_glyph_quad(actual.bindings()[0], *plan, bytes));
+    compare();
+}
+inline void check_glyph_sampler_units() {
+    namespace g = wa2::graphics;
+    std::array<unsigned, 16> logical{};
+    logical[0] = 100;
+    for (unsigned used = 1; used <= g::TextureBatchSlots; ++used) {
+        std::array<unsigned, 16> reference, candidate;
+        reference.fill(42);
+        candidate = reference;
+        unsigned immediate = 0, deferred = 0;
+        g::apply_logical_texture_units(logical, false, [&](unsigned n, unsigned value) {
+            reference[n] = value;
+            ++immediate;
+        });
+        g::apply_logical_texture_units(logical, true, [&](unsigned n, unsigned value) {
+            candidate[n] = value;
+            ++deferred;
+        });
+        CHECK(immediate == logical.size() && immediate - deferred == g::TextureBatchSlots - 1);
+        CHECK(candidate[0] == logical[0] && candidate[8] == 0);
+        for (unsigned n = 0; n < g::TextureBatchSlots; ++n) {
+            const auto packet_texture = n < used ? 90u + n : 0u;
+            candidate[n] = reference[n] = packet_texture;
+        }
+        CHECK(candidate == reference);
+    }
+}
 inline Result run(){
     namespace g=wa2::graphics;
+    check_glyph_continuations();
+    check_glyph_sampler_units();
     Result result;
     struct Expected {unsigned texture;g::ScreenVertex vertex;};
     std::vector<Expected> original,submitted;

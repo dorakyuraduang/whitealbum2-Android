@@ -146,6 +146,9 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     wa2::graphics::ScreenTextureBatch<Res> texture_batch;
     bool texture_batch_available{},texture_batch_mode{};
     bool pending_glyph{};
+    wa2::graphics::ScreenVertexPlan pending_glyph_plan{};
+    bool continue_glyph_packets{wa2::graphics::glyph_packet_continuation_enabled()};
+    std::uint64_t frame_glyph_continuations{};
     struct BufferPair {GLuint vertices{},indices{};};
     wa2::graphics::ImmutableBuffers<BufferPair> text_buffers;
     void release_buffers(BufferPair pair){gl.DeleteBuffers(1,&pair.vertices);gl.DeleteBuffers(1,&pair.indices);}
@@ -303,7 +306,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
         for(unsigned unit=0;unit<8;++unit)for(unsigned j=0;j<33;++j)word_differences+=state.stage[unit][j]!=baseline_words.stage[unit][j];
         for(unsigned unit=0;unit<16;++unit){for(unsigned j=0;j<14;++j)word_differences+=state.sampler[unit][j]!=baseline_words.sampler[unit][j];texture_differences+=state.textures[unit]!=baseline_textures[unit];}}
     void set_word(U32& destination,U32 value,U32 baseline){if(destination!=value){word_differences-=destination!=baseline;word_differences+=value!=baseline;destination=value;}}
-    void apply();void flush();void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
+    void apply(bool opening_glyph_packet=false);void flush();void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
     void texture_mode(bool enabled){if(texture_batch_mode!=enabled){flush();texture_batch_mode=enabled;applied.reset();}}
     bool batch_textures(std::span<const wa2::graphics::ScreenVertex>,U32,U32,std::span<const U32>,bool);
     U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {},bool glyph=false);
@@ -720,7 +723,7 @@ void Graphics::bind_sampler(unsigned n,const Res& texture,const std::array<U32,1
     // Recording the actual last applied state retains ordered alias behavior.
     object->parameters=requested;
 }
-void Graphics::apply(){
+void Graphics::apply(bool opening_glyph_packet){
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.apply:nullptr);
     if(has_pending() && (!applied || config_version!=applied_config_version || word_differences || texture_differences))flush();
     auto target=image(state.target);upload(target);
@@ -755,7 +758,14 @@ void Graphics::apply(){
     const auto color=r[D3DRS_BLENDFACTOR];gl.BlendColor(float((color>>16)&255)/255,float((color>>8)&255)/255,float(color&255)/255,float(color>>24)/255);
     const auto src=blend(r[D3DRS_SRCBLEND]),dst=blend(r[D3DRS_DESTBLEND]);gl.BlendFuncSeparate(src,dst,r[D3DRS_SEPARATEALPHABLENDENABLE]?blend(r[D3DRS_SRCBLENDALPHA]):src,r[D3DRS_SEPARATEALPHABLENDENABLE]?blend(r[D3DRS_DESTBLENDALPHA]):dst);gl.BlendEquationSeparate(equation(r[D3DRS_BLENDOP]),equation(r[D3DRS_SEPARATEALPHABLENDENABLE]?r[D3DRS_BLENDOPALPHA]:r[D3DRS_BLENDOP]));
     prepare_program();
-    for(unsigned n=0;n<16;++n){gl.ActiveTexture(GL_TEXTURE0+n);if(state.textures[n])bind_sampler(n,state.textures[n]);else gl.BindTexture(GL_TEXTURE_2D,0);}
+    // A texture packet sets every unit it owns immediately before drawing.
+    // Leave its empty logical slots alone until that bind. Unit zero still
+    // validates and uploads the logical sampler here, including failure paths.
+    wa2::graphics::apply_logical_texture_units(state.textures, opening_glyph_packet, [&](unsigned n, const Res& texture){
+        gl.ActiveTexture(GL_TEXTURE0+n);
+        if(texture)bind_sampler(n,texture);
+        else gl.BindTexture(GL_TEXTURE_2D,0);
+    });
     gl.ActiveTexture(GL_TEXTURE0);
     applied=state;applied_config_version=config_version;applied_texture_version=texture_version;reset_baseline();
 }
@@ -771,10 +781,7 @@ void Graphics::flush() {
     const void* data=multiple?static_cast<const void*>(texture_batch.vertices().data()):compact?static_cast<const void*>(pending_screen.data()):pending_vertices.data();
     const auto indices=multiple?texture_batch.indices():std::span<const std::uint16_t>(pending_screen_indices);
     std::optional<BufferPair> retained;
-    const auto reuse=wa2::graphics::text_buffer_reuse_enabled();
-    if(!reuse && text_buffers.size())text_buffers.clear([this](auto pair){release_buffers(pair);});
-    if(reuse && multiple && pending_glyph){
-        const auto before=text_buffers.hits;
+    if(multiple && pending_glyph){
         retained=text_buffers.acquire({static_cast<const std::uint8_t*>(data),bytes},
             {reinterpret_cast<const std::uint8_t*>(indices.data()),indices.size_bytes()},
             [this](auto vertices,auto elements)->std::optional<BufferPair>{
@@ -784,7 +791,6 @@ void Graphics::flush() {
                 gl.BindBuffer(GL_ELEMENT_ARRAY_BUFFER,pair.indices);gl.BufferData(GL_ELEMENT_ARRAY_BUFFER,GLsizeiptr(elements.size()),elements.data(),GL_STATIC_DRAW);
                 vertex_upload_bytes+=vertices.size();index_upload_bytes+=elements.size();return pair;
             },[this](auto pair){release_buffers(pair);});
-        if(text_buffers.hits!=before)wa2::graphics::record_text_buffer_reuse();
     }
     gl.BindBuffer(GL_ARRAY_BUFFER,retained?retained->vertices:vertex_buffer);
     if(!retained){gl.BufferData(GL_ARRAY_BUFFER,GLsizeiptr(bytes),data,GL_STREAM_DRAW);vertex_upload_bytes+=bytes;}
@@ -842,7 +848,7 @@ bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> verti
     if(!texture_batch.fits(state.textures[0],unsigned(vertices.size()),elements))return false;
     texture_mode(true);
     if(texture_batch.empty()){
-        try{apply();}
+        try{apply(glyph && continue_glyph_packets);}
         catch(const GuestFault& error){
             // This is an optional native submission optimization. Older or
             // buggy shader drivers retain the original shared draw path.
@@ -893,6 +899,23 @@ U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 st
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.draw:nullptr);
     if(!state.scene || !stride || stride>256 || bytes.size()%stride)return U32(D3DERR_INVALIDCALL);if(!count)return 0;const auto total=bytes.size()/stride;
     if((indices.empty() && count>total) || (!indices.empty() && indices.size()!=count))return U32(D3DERR_INVALIDCALL);
+    // Only sprite_command marks a draw as a glyph. It has already checked
+    // the device, target alias and all other texture units for this tile.
+    // While the packet's applied state matches, its original layout and
+    // fixed-pipeline admission still describe this quad.
+    if (glyph && continue_glyph_packets && pending_glyph && applied && config_version == applied_config_version &&
+        !word_differences && type == D3DPT_TRIANGLESTRIP && count == 4 &&
+        stride == sizeof(wa2::aot::SpriteVertex) && indices.empty() &&
+        texture_batch.append_glyph_quad(state.textures[0], pending_glyph_plan, bytes)) {
+        ++texture_batch_draws;
+        ++frame_glyph_continuations;
+        ++screen_draws;
+        screen_unique_vertices += 4;
+        ++batched_guest_draws;
+        image(state.target)->gpu_dirty = true;
+        ++draws;
+        return 0;
+    }
     // The fixed vertex stage consumes the same complete position/colour/UV
     // stream with a programmable pixel shader too. Pipeline/constant/resource
     // barriers still flush in order; only programmable vertex stages require
@@ -910,6 +933,7 @@ U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 st
         screen_scratch.resize(total);
         if(wa2::graphics::pack_screen_vertices(*plan,bytes,stride,screen_scratch)){
             if(batch_textures(screen_scratch,type,count,indices,glyph)){
+                if (glyph && continue_glyph_packets && pending_glyph) pending_glyph_plan = *plan;
                 ++screen_draws;screen_unique_vertices+=total;++batched_guest_draws;
                 image(state.target)->gpu_dirty=true;++draws;return 0;
             }
@@ -1051,7 +1075,11 @@ U32 Graphics::present(Args a,bool force){
     const auto present_begin=FrameTrace::now();
     frame_trace.source_fp_control=p.cpu.fp.get16(0);
     if(a[4])stop("Present dirty regions");if(a[3] && a[3]!=(presentation[7]?presentation[7]:focus_window))stop("Present to another window");
-    flush();applied.reset();auto i=image(backbuffer);upload(i);fbo(i);
+    flush();applied.reset();
+    wa2::graphics::record_glyph_continuations(frame_glyph_continuations);
+    frame_glyph_continuations = 0;
+    continue_glyph_packets = wa2::graphics::glyph_packet_continuation_enabled();
+    auto i=image(backbuffer);upload(i);fbo(i);
     int w=0,h=0;SDL_GL_GetDrawableSize(window,&w,&h);if(w<=0 || h<=0)return 0;
     auto sr=rectangle(a[1],i);if(!valid(sr,i->width,i->height))return U32(D3DERR_INVALIDCALL);
     const auto viewport=host->client_viewport(presentation[7]?presentation[7]:focus_window,w,h);

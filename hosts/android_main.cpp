@@ -8,6 +8,7 @@
 #include "../android/native/subtitles_android.hpp"
 #include "../platform/compat/diagnostic_chunks.hpp"
 #include "../platform/render/text_buffers.hpp"
+#include "../recompiled/native_glyphs.hpp"
 #include <SDL.h>
 #include <SDL_main.h>
 #include <android/log.h>
@@ -26,11 +27,18 @@ extern "C" int SDL_main(int argc,char** argv){
             else throw std::runtime_error("Unknown Android launch argument: "+std::string(argument));}
         startup.report_file=startup.options.data_root/"wa2-runtime.json";
         startup.captions=wa2::android::selected_subtitles();
-        wa2::graphics::enable_text_buffer_reuse(true);
-        wa2::android::set_performance_switch([](bool enabled){wa2::graphics::enable_text_buffer_reuse(enabled);},wa2::graphics::text_buffer_reuses);
+        wa2::graphics::enable_glyph_packet_continuation(true);
+        wa2::android::set_performance_switch(wa2::graphics::enable_glyph_packet_continuation,
+                                             wa2::graphics::glyph_continuations);
         struct ReleasePerformanceSwitch {~ReleasePerformanceSwitch(){wa2::android::set_performance_switch(nullptr);}} release_performance_switch;
         startup.io_diagnostic_sink=[](std::string_view label,std::string_view json){wa2::platform::compat::emit_counter_record(label,json,[](std::string_view part,std::string_view body){__android_log_print(ANDROID_LOG_INFO,"WA2IO","%.*s %.*s",int(part.size()),part.data(),int(body.size()),body.data());});};
-        wa2::window::SdlHostOptions options;options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();options.frame_submitted=wa2::android::frame_presented;
+        wa2::window::SdlHostOptions options;options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();
+        options.frame_submitted=[]{
+            wa2::android::frame_presented_with_text([]{
+                const auto counts=wa2::aot::native_glyph_counts();
+                return wa2::android::GlyphTotals{counts.accepted,counts.tiles};
+            });
+        };
         startup.window=wa2::window::sdl_host(std::move(options));startup.mount_resources=wa2::android::mount_compiled_resources;
         return int(wa2::host::run(std::move(startup)));
     }catch(const std::exception& error){__android_log_print(ANDROID_LOG_ERROR,"WA2","%s",error.what());wa2::android::report_game_failure(error.what());return 1;}

@@ -139,6 +139,114 @@ int main(int argc,char** argv){try{
             <<",\"previous_minimum_handle_words\":"<<expected_count*195<<",\"local_jumps\":"<<flow_after.local_jumps-flow_before.local_jumps<<",\"local_yields\":"<<flow_after.budget_yields-flow_before.budget_yields<<",\"static_chain_ns\":"<<static_ns<<",\"native_ns\":"<<native_ns<<'}';
         std::cout<<"Constructed page: "<<expected_count<<" chars, exact "<<expected.size()<<" tiles, no legacy calls, static/native ns "<<static_ns<<'/'<<native_ns<<'\n';
     }
+    // The same fixed CJK page, entered fully visible or revealed in stages.
+    // Preserve guest state between reveals, including the page output and
+    // glyph caches. The recording sink observes the real shared text routine;
+    // this fixture does not invoke save loading, script progression or GL.
+    constexpr U32 page_length=96;
+    std::string reveal_text="<C1:";
+    for(U32 i=0;i<page_length;++i)reveal_text+=i%2?"\x90\xcb":"\x8d\xef";
+    reveal_text+='>';
+    const U32 reveal_string=p.put_string(reveal_text);
+    std::array<U32,26> reveal_args{output,0,14,28,4,0,14,0,0,0,28,reveal_string,
+        0,0,255,255,255,255,0,0,0,0,0,0,data+0x3000,1};
+    const U32 cursor=reveal_args[24];
+    std::array<std::uint8_t,16> original_cursor;
+    p.memory.copy_out(cursor,original_cursor);
+    const auto begin_page=[&]{
+        p.cpu=initial_cpu;
+        p.cpu.fp.put16(0,0x007fu);
+        p.memory.copy_in(output,initial_output);
+        p.memory.copy_in(cursor,original_cursor);
+        p.memory.store(0xb34544,0,32);
+    };
+    struct RevealWork {
+        std::uint64_t glyphs,tiles,single_handle_reads,jumps;
+        bool operator==(const RevealWork&)const=default;
+    };
+    U32 text_result{};
+    const auto frame=[&](U32 visible,U32 style=0,bool append=false){
+        reveal_args[12]=visible;
+        reveal_args[18]=style;
+        if(!append)recorded.reset();
+        const auto previous_tiles=recorded.tiles.size();
+        const auto before=a::native_glyph_counts();
+        const auto handle_reads=a::glyph_resource_counts.single_texture_handle_reads;
+        const auto jumps=a::text_jump_counts.local_jumps;
+        a::SpriteService sink(p.memory,Recording::submit,&recorded);
+        text_result=p.callback(0x446500,reveal_args,false);
+        const auto after=a::native_glyph_counts();
+        CHECK(after.declined==before.declined && recorded.calls.empty());
+        return RevealWork{after.accepted-before.accepted,recorded.tiles.size()-previous_tiles,
+            a::glyph_resource_counts.single_texture_handle_reads-handle_reads,a::text_jump_counts.local_jumps-jumps};
+    };
+    constexpr U32 immediately_visible=0xffffffffu;
+    begin_page();
+    const auto direct=frame(immediately_visible);
+    const auto opaque_tiles=recorded.tiles;
+    CHECK(direct.glyphs==page_length && direct.tiles==page_length);
+    begin_page();
+    const auto direct_finite=frame(page_length);
+    const auto finite_tiles=recorded.tiles;
+    CHECK(direct_finite.glyphs==direct.glyphs && direct_finite.tiles==direct.tiles);
+    unsigned partially_faded{};
+    for(std::size_t i=0;i<finite_tiles.size();++i){
+        auto faded=finite_tiles[i];
+        const auto& opaque=opaque_tiles[i];
+        if(faded!=opaque)++partially_faded;
+        for(unsigned vertex=0;vertex<4;++vertex){
+            const unsigned colour=vertex*8+4;
+            faded.vertices[colour]=(faded.vertices[colour]&0x00ffffffu)|(opaque.vertices[colour]&0xff000000u);
+        }
+        CHECK(faded==opaque);
+    }
+    CHECK(partially_faded==15);
+    begin_page();
+    constexpr std::array<U32,4> limits{8,24,56,page_length};
+    std::array<RevealWork,limits.size()> stages{};
+    for(std::size_t i=0;i<limits.size();++i){
+        stages[i]=frame(limits[i]);
+        CHECK(stages[i].glyphs==limits[i]);
+    }
+    CHECK(stages.back()==direct_finite && recorded.tiles==finite_tiles);
+    CHECK(frame(page_length)==direct_finite && recorded.tiles==finite_tiles);
+    const auto saturated=frame(page_length+16);
+    CHECK(saturated.glyphs==direct.glyphs && recorded.tiles==opaque_tiles);
+    CHECK(frame(immediately_visible)==direct && recorded.tiles==opaque_tiles);
+    // Mirror the adjacent styled/plain text calls at 0x442ec6 and 0x442f40,
+    // including their shared cursor outputs and intervening result store.
+    reveal_args[7]=cursor+8;
+    reveal_args[8]=cursor+12;
+    const auto both_passes=[&](U32 visible){
+        const auto styled=frame(visible,1);
+        p.memory.store(cursor+4,text_result,32);
+        const auto plain=frame(visible,0,true);
+        p.memory.store(cursor+4,text_result,32);
+        return std::array<RevealWork,2>{styled,plain};
+    };
+    begin_page();
+    const auto direct_pair=both_passes(immediately_visible);
+    const auto direct_pair_tiles=recorded.tiles;
+    CHECK(direct_pair[0].glyphs==page_length && direct_pair[1].glyphs==page_length);
+    begin_page();
+    const auto finite_pair=both_passes(page_length);
+    const auto finite_pair_tiles=recorded.tiles;
+    begin_page();
+    std::array<std::array<RevealWork,2>,limits.size()> paired_stages{};
+    for(std::size_t i=0;i<limits.size();++i){
+        paired_stages[i]=both_passes(limits[i]);
+        CHECK(paired_stages[i][0].glyphs==limits[i] && paired_stages[i][1].glyphs==limits[i]);
+    }
+    CHECK(paired_stages.back()==finite_pair && recorded.tiles==finite_pair_tiles);
+    CHECK(both_passes(immediately_visible)==direct_pair && recorded.tiles==direct_pair_tiles);
+    begin_page();
+    recorded.reset();
+    for(U32 style:{1u,0u}){
+        reveal_args[12]=immediately_visible;
+        reveal_args[18]=style;
+        p.memory.store(cursor+4,p.callback(0x446500,reveal_args,false),32);
+    }
+    CHECK(!recorded.calls.empty() && recorded.tiles==direct_pair_tiles);
     // The new allowance is finite and independent of the generic call budget.
     unsigned guard_cases{};
     {wr::Memory other;CHECK(!a::GlyphCallScope::remaining(p.memory));
@@ -204,7 +312,25 @@ int main(int argc,char** argv){try{
         CHECK(!a::native_draw_glyph(cpu,p.memory));check_unchanged(before,stack,tiles);++handle_guards;
         p.memory.store(font+0x70,old_pointer,32);
     }
-    report<<"],\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
+    const auto write_work=[&](const RevealWork& work){
+        report<<"{\"glyphs\":"<<work.glyphs<<",\"tiles\":"<<work.tiles
+            <<",\"single_handle_reads\":"<<work.single_handle_reads<<",\"local_jumps\":"<<work.jumps<<'}';
+    };
+    report<<"],\"reveal_paths\":{\"immediate\":";write_work(direct);
+    report<<",\"finite_full\":";write_work(direct_finite);
+    report<<",\"finite_saturated\":";write_work(saturated);
+    report<<",\"progression\":[";
+    for(std::size_t i=0;i<stages.size();++i){if(i)report<<',';write_work(stages[i]);}
+    report<<"],\"styled_then_plain\":[";
+    write_work(direct_pair[0]);report<<',';write_work(direct_pair[1]);
+    report<<"],\"styled_and_plain_progression_glyphs\":[";
+    for(std::size_t i=0;i<paired_stages.size();++i){
+        if(i)report<<',';
+        report<<paired_stages[i][0].glyphs+paired_stages[i][1].glyphs;
+    }
+    report<<"],\"two_pass_order_matches_static_reference\":true,\"alpha_only_tile_differences\":"<<partially_faded
+        <<",\"same_limit_same_work_and_vertices\":true,\"models_save_loading\":false,\"models_script_progression\":false}";
+    report<<",\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
         <<",\"maximum_glyphs_per_boundary\":256,\"generic_call_limit_unchanged\":true,\"nested_memory_scopes_checked\":true,\"exhaustion_fallback_preserves_state\":true"
         <<",\"exact_texture_order_vertices_output_and_abi\":true,\"complete_handle_range_still_checked\":true,\"handle_changes_visible_immediately\":true,\"game_launched\":false,\"screen_access\":false,\"source_executable_opened\":false,\"passed\":true}\n";
     CHECK(report && snapshot);std::cout<<"Finite text helper and budget checks passed.\n";

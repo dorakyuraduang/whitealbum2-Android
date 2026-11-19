@@ -4,6 +4,13 @@
 #include <vector>
 namespace wa2::graphics {
 inline constexpr unsigned TextureBatchSlots=8;
+template<class Textures, class Apply>
+void apply_logical_texture_units(const Textures& textures, bool opening_glyph_packet, Apply apply) {
+    for (unsigned unit = 0; unit < textures.size(); ++unit) {
+        if (opening_glyph_packet && unit > 0 && unit < TextureBatchSlots && !textures[unit]) continue;
+        apply(unit, textures[unit]);
+    }
+}
 struct TextureBatchVertex {ScreenVertex screen;float binding;};
 static_assert(sizeof(TextureBatchVertex)==40);
 // The adapter uses this same bounded packet builder on every host. Textures
@@ -31,6 +38,23 @@ public:
     bool fits(const Texture& texture,unsigned vertices,unsigned indices)const{
         return bool(texture) && slot(texture)<TextureBatchSlots &&
             vertices<=MaxVertices-vertices_.size() && indices<=MaxIndices-indices_.size();
+    }
+    bool append_glyph_quad(const Texture& texture, const ScreenVertexPlan& plan,
+                           std::span<const std::uint8_t> bytes) {
+        if (!texture || vertices_.size() + 4 > MaxVertices || indices_.size() + 6 > MaxIndices)
+            return false;
+        const auto binding = slot(texture);
+        if (binding == TextureBatchSlots) return false;
+        std::array<ScreenVertex, 4> quad;
+        if (!pack_screen_vertices(plan, bytes, 32, quad)) return false;
+
+        if (binding == used_) bindings_[used_++] = texture;
+        const auto base = static_cast<std::uint16_t>(vertices_.size());
+        for (const auto& vertex : quad) vertices_.push_back({vertex, float(binding)});
+        const auto next = static_cast<std::uint16_t>(base + 1);
+        const auto third = static_cast<std::uint16_t>(base + 2);
+        indices_.insert(indices_.end(), {base, next, third, third, next, static_cast<std::uint16_t>(base + 3)});
+        return true;
     }
     bool append(const Texture& texture,std::span<const ScreenVertex> vertices,unsigned type,
                 unsigned count,std::span<const std::uint32_t> indices={}){

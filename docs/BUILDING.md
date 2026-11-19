@@ -475,14 +475,19 @@ page, then run `python scripts/compare_android_text.py --serial <ADB-serial>`.
 It compares reference/optimized/optimized/reference windows within one process
 using real presentation FPS and frame-time samples. The running activity's
 dynamic receiver requires the sender's Android DUMP permission; registered-only
-delivery cannot launch the game. The current switch compares immutable glyph
-buffers with ordinary uploads; both retain the earlier integer conversion.
-Ordinary switches reset after 30 seconds. The comparison ends in a protected
-reference hold until activity exit, so a failed candidate is not left active;
-the agent can explicitly enable an accepted candidate after evaluating results.
+delivery cannot launch the game. In 0.2.99 the switch compares the ordinary
+renderer with the glyph packet continuation and deferred texture bindings.
+Both modes use the same immutable buffer policy. Ordinary switches reset
+after 30 seconds. The comparison restores the shipped optimized mode at the
+end and records whether the running activity acknowledged it.
 No launch setting or game file is changed. An inactive/unfocused page, stale
-sample, absent candidate admissions or greater than 10% window drift prevents
+sample, changing glyph/tile counts, absent candidate admissions or greater than 10% window drift prevents
 a comparable performance conclusion. Counters work with the visible HUD off.
+For a continuous reveal, the optional Android debug log tag `WA2PAGE` emits
+the HUD timestamp, FPS, frame time and cumulative frame, glyph and tile counts.
+Subtract adjacent totals within the same foreground session to compare work
+per frame. Record only the game's UID and this tag and restore its prior log
+level after the measurement.
 
 Keep precision-specific results separate: widening admission improves the
 previously declined PC53/PC64 integer cases, while the already-admitted PC24

@@ -189,6 +189,12 @@ def main():
         profiles=reports['profile_batch']
         if profiles['publish_guard_cases']!=5 or profiles['maximum_publish_retry_wait_ms']!=30:raise ValueError('Incomplete bounded local profile publication retry checks')
         novel=reports['novel_cpu']
+        reveal=novel['reveal_paths']
+        if (reveal['styled_and_plain_progression_glyphs'] != [16, 48, 112, 192]
+                or reveal['alpha_only_tile_differences'] != 15
+                or not reveal['same_limit_same_work_and_vertices']
+                or not reveal['two_pass_order_matches_static_reference']):
+            raise ValueError('Incomplete progressive outlined text comparison')
         if novel['exact_full_text_cases']!=10 or novel['formatted_pages']!=6 or novel['unchanged_page_checks']!=20 or novel['guard_cases']<11 or novel['maximum_glyphs_per_boundary']!=256 or not all(novel[k] for k in ('generic_call_limit_unchanged','nested_memory_scopes_checked','exhaustion_fallback_preserves_state','exact_texture_order_vertices_output_and_abi')):raise ValueError('Incomplete full text-run native glyph allowance checks')
         if len(novel['pages'])!=10 or any(page['native_glyphs']!=page['characters'] or page['legacy_draws'] or page['legacy_state_calls'] for page in novel['pages']):raise ValueError('Unexpected typed glyph fallback in constructed text runs')
         if novel['pages'][1]['local_jumps']!=200 or novel['pages'][1]['local_yields']!=1:raise ValueError('Missing bounded source-local text dispatch checks')

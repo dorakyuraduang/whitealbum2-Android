@@ -21,7 +21,7 @@ bool initialize_frame_hud_jni(JNIEnv* env)noexcept{
     if(overlay_class || report_method)return false;
     const auto local=env->FindClass("org/wa2/port/FrameHud");if(!local)return false;
     overlay_class=static_cast<jclass>(env->NewGlobalRef(local));env->DeleteLocalRef(local);if(!overlay_class)return false;
-    report_method=env->GetStaticMethodID(overlay_class,"report","(FF)V");if(!report_method)return false;
+    report_method=env->GetStaticMethodID(overlay_class,"report","(FFJJJ)V");if(!report_method)return false;
     reset_requested.store(true,std::memory_order_release);return true;
 }
 void release_frame_hud_jni(JNIEnv* env)noexcept{
@@ -29,11 +29,18 @@ void release_frame_hud_jni(JNIEnv* env)noexcept{
     reset_requested.store(true,std::memory_order_release);
 }
 void frame_presented()noexcept{
+    frame_presented_with_text(nullptr);
+}
+void frame_presented_with_text(GlyphTotals (*read_totals)()) noexcept {
     if(reset_requested.exchange(false,std::memory_order_acq_rel))metrics.reset();
     const auto now=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     const auto sample=metrics.presented(now);if(!sample || !overlay_class || !report_method)return;
     auto* env=static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());if(!env)return;
-    env->CallStaticVoidMethod(overlay_class,report_method,jfloat(sample->fps),jfloat(sample->average_ms));
+    // Sample existing game-thread counters at the HUD cadence. A snapshot
+    // labels a frame window by its workload without logging player text.
+    const auto totals = read_totals ? read_totals() : GlyphTotals{};
+    env->CallStaticVoidMethod(overlay_class,report_method,jfloat(sample->fps),jfloat(sample->average_ms),
+        jlong(sample->presented),jlong(totals.glyphs),jlong(totals.tiles));
     // Closing an optional HUD must not terminate the game thread.
     if(env->ExceptionCheck())env->ExceptionClear();
 }

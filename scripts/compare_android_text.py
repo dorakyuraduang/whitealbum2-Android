@@ -14,6 +14,26 @@ import time
 from build_pak_tool import low_priority
 
 ROOT=Path(__file__).resolve().parents[1]
+CANDIDATE='glyph-packet-continuation'
+
+def glyph_work(previous, current):
+    frames=current['frames']-previous['frames']
+    if frames<=0:
+        raise ValueError('Frame counters stopped or reset during the comparison')
+    work={}
+    for key in ('glyphs','glyph_tiles'):
+        delta=current[key]-previous[key]
+        if delta<=0:
+            raise ValueError('Missing or reset text workload during the comparison: '+key)
+        work[key+'_per_frame']=delta/frames
+    return work
+
+def validate_workload(intervals):
+    for key in ('glyphs_per_frame','glyph_tiles_per_frame'):
+        smallest=min(row[key] for row in intervals)
+        largest=max(row[key] for row in intervals)
+        if largest-smallest>max(1.0,smallest*.02):
+            raise ValueError(f'Text workload changed: {key} ranged from {smallest:.2f} to {largest:.2f}')
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -46,46 +66,58 @@ def main():
         for line in text.splitlines()[-128:]:
             try:record=json.loads(line[line.index('{'):])
             except (ValueError,IndexError):continue
-            if record.get('version')==release:records.append(record)
+            if record.get('version')==release and record.get('candidate')==CANDIDATE:records.append(record)
         if not records:raise RuntimeError('No live performance response; game must be open and foreground')
         record=records[-1]
         expected='reference' if mode=='reference_hold' else mode
         if record['uptime_ms']<=last_response or (mode!='snapshot' and record.get('mode')!=expected):
             raise RuntimeError('No fresh performance response from the foreground game')
         last_response=record['uptime_ms'];return record
-    windows=[];failure=None;restore_error=None;restored_mode=None
+    windows=[];workload_intervals=[];failure=None;restore_error=None;restored_mode=None
     try:
         for mode in ('reference','optimized','optimized','reference'):
-            first=request(mode);start=first['uptime_ms'];time.sleep(1.1);rows=[]
+            rows=[]
+            window=dict(mode=mode,samples=rows,glyph_work=[],complete=False)
+            windows.append(window)
+            first=request(mode);start=first['uptime_ms'];time.sleep(1.1)
             for _ in range(args.samples):
                 row=request('snapshot')
                 if not row.get('valid') or not row.get('foreground') or not row.get('focused') or row.get('mode')!=mode:
                     raise RuntimeError('No comparable foreground frame sample')
                 if row['uptime_ms']-row['sample_age_ms']<start+500:raise RuntimeError('Frame sample predates the mode change')
-                rows.append(row);time.sleep(.85)
-            delta=rows[-1]['candidate_calls']-first['candidate_calls']
+                rows.append(row)
+                if len(rows)>=2:
+                    interval=glyph_work(rows[-2],row)
+                    window['glyph_work'].append(interval)
+                    workload_intervals.append(interval)
+                    validate_workload(workload_intervals)
+                time.sleep(.85)
+            # The render thread latches a requested mode on Present. A frame
+            # already in flight at the switch belongs to the warm-up interval.
+            delta=rows[-1]['candidate_calls']-rows[0]['candidate_calls']
             if mode=='optimized' and delta<=0:raise RuntimeError('Candidate path was not admitted in this scene')
-            if mode=='reference' and delta>1:raise RuntimeError('Reference window unexpectedly used the candidate path')
-            window=dict(mode=mode,samples=rows,median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_calls=delta)
-            windows.append(window);print(mode+' median FPS '+str(round(window['median_fps'],2)),flush=True)
+            if mode=='reference' and delta!=0:raise RuntimeError('Reference window unexpectedly used the candidate path')
+            window.update(median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_calls=delta,complete=True)
+            print(mode+' median FPS '+str(round(window['median_fps'],2)),flush=True)
     except Exception as error:failure=str(error)
     finally:
-        # Restore the shipped 0.2.94/0.2.96 default. If foreground delivery is
+        # Restore the shipped default. If foreground delivery is
         # unavailable, never report a restoration which wasn't acknowledged.
         try:restored_mode=request('optimized')['mode']
         except Exception as error:
             restore_error=str(error);failure=failure or 'Restore unavailable: '+restore_error
-    report=dict(release=release,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='optimized',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,passed=failure is None)
+    report=dict(release=release,candidate=CANDIDATE,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='optimized',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,comparable=False,passed=failure is None)
     if not failure:
         reference=[x['median_frame_ms'] for x in windows if x['mode']=='reference'];candidate=[x['median_frame_ms'] for x in windows if x['mode']=='optimized']
         report['reference_drift_ratio']=max(reference)/min(reference)
         report['candidate_drift_ratio']=max(candidate)/min(candidate)
         report['comparable']=max(report['reference_drift_ratio'],report['candidate_drift_ratio'])<=1.10
         report['reference_frame_ms']=statistics.median(reference);report['candidate_frame_ms']=statistics.median(candidate)
-        report['speedup']=report['reference_frame_ms']/report['candidate_frame_ms']
         if not report['comparable']:
             failure='Mode windows drifted by more than 10%; no comparable performance conclusion'
             report['error']=failure;report['passed']=False
+        else:
+            report['speedup']=report['reference_frame_ms']/report['candidate_frame_ms']
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(report,indent=2)+'\n')
     if failure:raise RuntimeError(failure)
     print(json.dumps({k:v for k,v in report.items() if k!='windows'},indent=2))

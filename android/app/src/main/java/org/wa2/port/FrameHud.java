@@ -7,6 +7,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -30,8 +31,15 @@ public final class FrameHud {
     private static PerformanceProbe probe;
     private static final class Sample {
         final float fps, milliseconds;
+        final long frames, glyphs, tiles;
         final long updated = SystemClock.uptimeMillis();
-        Sample(float fps, float milliseconds) { this.fps = fps; this.milliseconds = milliseconds; }
+        Sample(float fps, float milliseconds, long frames, long glyphs, long tiles) {
+            this.fps = fps;
+            this.milliseconds = milliseconds;
+            this.frames = frames;
+            this.glyphs = glyphs;
+            this.tiles = tiles;
+        }
     }
     private static final Runnable APPLY = () -> {
         QUEUED.set(false);
@@ -107,9 +115,13 @@ public final class FrameHud {
         label.clear();
     }
     // Called from the native render thread no more than four times per second.
-    public static void report(float fps, float milliseconds) {
+    public static void report(float fps, float milliseconds, long frames, long glyphs, long tiles) {
         if (!resumed || !Float.isFinite(fps) || !Float.isFinite(milliseconds)) return;
-        LATEST.set(new Sample(fps, milliseconds));
+        Sample sample = new Sample(fps, milliseconds, frames, glyphs, tiles);
+        LATEST.set(sample);
+        if (focused && Log.isLoggable("WA2PAGE", Log.DEBUG)) {
+            Log.d("WA2PAGE", sample.updated + " " + fps + " " + milliseconds + " " + frames + " " + glyphs + " " + tiles);
+        }
         if (enabled && QUEUED.compareAndSet(false, true)) MAIN.post(APPLY);
     }
     static boolean foreground(){return resumed;}
@@ -120,7 +132,10 @@ public final class FrameHud {
         result.put("focused",focused);
         long age=sample==null?-1:now-sample.updated;
         result.put("sample_age_ms",age);result.put("valid",resumed && age>=0 && age<=1500);
-        if(sample!=null){result.put("fps",sample.fps);result.put("frame_ms",sample.milliseconds);}
+        if(sample!=null){
+            result.put("fps",sample.fps);result.put("frame_ms",sample.milliseconds);
+            result.put("frames",sample.frames);result.put("glyphs",sample.glyphs);result.put("glyph_tiles",sample.tiles);
+        }
         result.put("screen_access",false);return result;
     }
 }
