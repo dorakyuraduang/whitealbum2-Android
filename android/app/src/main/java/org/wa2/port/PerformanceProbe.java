@@ -20,7 +20,7 @@ final class PerformanceProbe extends BroadcastReceiver {
     private int generation;
     // Order matches TextProbeMode and TextProbeCounter in the common JNI interface.
     private static final String[] MODES={"default","reference","run","submission","optimized","page_reference","page",
-            "dense","bindings","novel","particle_reference","particles"};
+            "dense","bindings","novel","particle_reference","particles","weather_reference","weather"};
     private static final String[] COUNTERS={"layout_hits","glyph_command_hits","run_hits",
             "surface_commands","surface_hits","surface_tiles","rollover_hits","page_spans","page_glyphs",
             "prepared_geometry_hits","retained_geometry_draws","binding_calls_avoided"};

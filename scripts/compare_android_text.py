@@ -85,17 +85,55 @@ def validate_particles(intervals):
         if largest-smallest>max(.25,smallest*.10):
             raise ValueError(f'Particle workload changed: {key} ranged from {smallest:.2f} to {largest:.2f}')
 
+def weather_work(first,last,reference):
+    elapsed_ms=(last['uptime_ms']-last['sample_age_ms'])-(first['uptime_ms']-first['sample_age_ms'])
+    frames=last['frames']-first['frames']
+    updates=last['small_weather_updates']-first['small_weather_updates']
+    particles=last['small_weather_particles']-first['small_weather_particles']
+    batched=last['small_weather_batched_updates']-first['small_weather_batched_updates']
+    if elapsed_ms<=0 or frames<=0 or updates<3 or not updates<=particles<=63*updates or not 0<=batched<=updates:
+        raise ValueError('Insufficient active small-weather simulation during the window')
+    if reference and batched:
+        raise ValueError('The new weather threshold ran during the reference window')
+    if not reference and not batched:
+        raise ValueError('The new weather threshold did not complete any eligible update')
+    seconds=elapsed_ms/1000
+    return dict(updates=updates,simulated_particles=particles,batched_updates=batched,
+                seconds=seconds,frames=frames,updates_per_frame=updates/frames,particles_per_frame=particles/frames,
+                updates_per_second=updates/seconds,particles_per_second=particles/seconds,
+                particles_per_update=particles/updates)
+
+def validate_weather(windows):
+    # One animation tick can fall either side of a sample boundary.
+    max_population=max(w['particles_per_update'] for w in windows)
+    def consistent(key,tick):
+        smallest=min(w[key] for w in windows)
+        largest=max(w[key] for w in windows)
+        return largest-smallest<=max(tick,smallest*.10)
+    if not consistent('particles_per_update',1):
+        raise ValueError('Weather particle population changed between windows')
+    matching=[]
+    for unit,denominator in [('second','seconds'),('frame','frames')]:
+        shortest=min(w[denominator] for w in windows)
+        if consistent('updates_per_'+unit,1/shortest) and consistent('particles_per_'+unit,max_population/shortest):
+            matching.append('per_'+unit)
+    if not matching:
+        raise ValueError('Weather work matched neither per second nor per rendered frame across all windows')
+    return matching
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial',required=True)
     parser.add_argument('--samples',type=int,choices=range(4,13),default=8)
-    parser.add_argument('--path',choices=('novel','dense','bindings','page','optimized','run','submission','particles'),default='novel')
+    parser.add_argument('--path',choices=('novel','dense','bindings','page','optimized','run','submission','particles','weather'),default='novel')
     parser.add_argument('--output',type=Path)
     args=parser.parse_args();low_priority()
-    particles=args.path=='particles'
+    weather=args.path=='weather'
+    particles=weather or args.path=='particles'
     work_key='particle_work' if particles else 'glyph_work'
     if args.output is None:
-        args.output=ROOT/'logs'/('android-particle-comparison.json' if particles else 'android-text-comparison.json')
+        name='weather' if weather else 'particle' if particles else 'text'
+        args.output=ROOT/'logs'/f'android-{name}-comparison.json'
     adb=ROOT/'tools/android-sdk/platform-tools/adb.exe'
     flags=getattr(subprocess,'CREATE_NO_WINDOW',0)|getattr(subprocess,'BELOW_NORMAL_PRIORITY_CLASS',0)
     release=json.loads((ROOT/'config/release.json').read_text())['name']
@@ -129,7 +167,8 @@ def main():
         last_response=record['uptime_ms'];return record
     windows=[];workload_intervals=[];failure=None;restore_error=None;restored_mode=None
     try:
-        if particles:reference_mode='particle_reference'
+        if weather:reference_mode='weather_reference'
+        elif particles:reference_mode='particle_reference'
         elif args.path in ('novel','dense','bindings'):reference_mode='page'
         else:reference_mode='page_reference' if args.path=='page' else 'reference'
         for mode in (reference_mode,args.path,args.path,reference_mode):
@@ -145,7 +184,7 @@ def main():
                 if row['uptime_ms']-row['sample_age_ms']<start+500:raise RuntimeError('Frame sample predates the mode change')
                 rows.append(row)
                 if len(rows)>=2:
-                    interval=particle_work(rows[-2],row,mode==reference_mode) if particles else glyph_work(rows[-2],row)
+                    interval=particle_work(rows[-2],row,mode=='particle_reference') if particles else glyph_work(rows[-2],row)
                     window[work_key].append(interval)
                     workload_intervals.append(interval)
                     if particles:validate_particles(workload_intervals)
@@ -154,8 +193,11 @@ def main():
             # A text layout call that was already in flight when the switch
             # arrived belongs to the warm-up interval.
             if particles:
-                work=particle_work(rows[0],rows[-1],mode==reference_mode)
-                if mode!=reference_mode and not work['continued']:
+                work=particle_work(rows[0],rows[-1],mode=='particle_reference')
+                if weather:
+                    simulation=weather_work(rows[0],rows[-1],mode==reference_mode)
+                    window['weather_work']=simulation
+                elif mode!=reference_mode and not work['continued']:
                     raise ValueError('No particle continuation was used in this scene')
             else:work=candidate_work(mode,rows[0],rows[-1],mode==reference_mode)
             window.update(median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_work=work,complete=True)
@@ -163,6 +205,7 @@ def main():
             if all(sample and sample.get('game_thread_cpu_ns') is not None and sample['frames']>0 for sample in measured):
                 window['game_thread_ms_per_frame']=sum(sample['game_thread_cpu_ns'] for sample in measured)/sum(sample['frames'] for sample in measured)/1e6
             print(mode+' median FPS '+str(round(window['median_fps'],2)),flush=True)
+        if weather:weather_cadence=validate_weather([w['weather_work'] for w in windows])
     except Exception as error:failure=str(error)
     finally:
         # Restore the shipped default. If foreground delivery is
@@ -172,6 +215,7 @@ def main():
             restore_error=str(error);failure=failure or 'Restore unavailable: '+restore_error
     report=dict(release=release,candidate=CANDIDATE,path=args.path,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='default',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,comparable=False,passed=failure is None)
     if not failure:
+        if weather:report['weather_workload_matches']=weather_cadence
         reference=[x['median_frame_ms'] for x in windows if x['mode']==reference_mode];candidate=[x['median_frame_ms'] for x in windows if x['mode']==args.path]
         report['reference_drift_ratio']=max(reference)/min(reference)
         report['candidate_drift_ratio']=max(candidate)/min(candidate)

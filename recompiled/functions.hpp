@@ -39,6 +39,7 @@ struct NativeIndirectReferenceScope {
 // Proofs belong to a particular Memory lifetime, and are invalidated whenever
 // executable bytes/protection change. They are never keyed by a recycled ptr.
 class Program {
+    friend struct ProgramBinding;
     wr::Memory& memory_;
     std::uint64_t epoch_{~std::uint64_t(0)};
     // 0 = unseen, 1 = visiting, 2 = proven. Recursive call graphs are legal.
@@ -52,5 +53,6 @@ public:
     // silent skip, or interpreter fallback inside this shared implementation.
     bool invoke(Context&,std::uint64_t& budget);
     bool invoke_unmetered(Context&);
+    static const Context* current_context(const wr::Memory&) noexcept;
 };
 }

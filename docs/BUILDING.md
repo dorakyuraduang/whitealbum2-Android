@@ -506,6 +506,13 @@ the preceding draw state. It rejects windows with no weather draws, unmatched
 particle load, unused optimization or excessive frame-time drift. On pause,
 the performance log also includes a stable weather interval when available.
 
+Use `--path weather` to compare the previous weather-update threshold with the
+current one. Both modes keep the same sprite submission path. Each window must
+include at least three eligible simulation updates. The report checks animated
+particles per update, updates per second and simulated particles per second
+across windows, and counts the updates completed on the new path. A scene
+that only redraws static particles cannot establish a simulation speedup.
+
 The optional Android target `wa2_phone_novel_cpu` runs the shared text routine
 with a recording device. Pass a writable report filename as its only argument.
 `WA2_NOVEL_TIMING=advance` compares both paths with 288 mixed CJK characters,

@@ -2,6 +2,7 @@
 // Only owned RAM and recording COM endpoints. No window, game or GL context.
 #include "process.hpp"
 #include "native_sprites.hpp"
+#include "weather_threshold.hpp"
 #include "../platform/render/submission_cache.hpp"
 #include <winrecomp/win32_state.hpp>
 #include <bit>
@@ -79,6 +80,48 @@ int main(int argc,char** argv){try{
             p.memory.store(base.r[wr::ESP]+4,sprite,32);p.memory.store(base.r[wr::ESP]+8,0,32);call(0x43b7a0);}
         const auto elapsed=std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count());return std::pair{recorded,elapsed};
     };
+    // Replay the two policies from identical inputs twice, covering live
+    // sprite reuse on the second update as well as the cold first update.
+    const std::array<std::pair<unsigned,unsigned>,4> regions{{{0x522000,0x5000},{0xab3fb8,0x80000},
+        {0xb4fd58,2048*92},{base.r[wr::ESP]-0x100,0x200}}};
+    const auto snapshot=[&]{
+        std::array<std::vector<std::uint8_t>,4> bytes;
+        for(unsigned i=0;i<regions.size();++i){
+            bytes[i].resize(regions[i].second);p.memory.copy_out(regions[i].first,bytes[i]);
+        }
+        return bytes;
+    };
+    const auto initial=snapshot();
+    unsigned threshold_cases=0,checked_updates=0;
+    for(unsigned count:{a::small_weather_minimum-1,a::small_weather_minimum,62u,63u,64u})
+    for(bool dual:{false,true}){
+        std::array<wr::Cpu,2> reference_cpu{};
+        std::array<decltype(snapshot()),2> reference_ram{};
+        std::array<Recording,2> reference_draws{};
+        const bool small=count>=a::small_weather_minimum && count<a::original_weather_minimum;
+        for(bool candidate:{false,true}){
+            for(unsigned i=0;i<regions.size();++i)p.memory.copy_in(regions[i].first,initial[i]);
+            a::small_weather_batches.store(candidate);a::small_weather_counts={};
+            for(unsigned update=0;update<2;++update){
+                if(!update)prepare(count,dual,dual?0x800:0);
+                else call(0x4078b0);
+                const auto cpu=p.cpu;auto ram=snapshot();
+                auto [record,unused]=run(true,true);
+                if(!candidate){reference_cpu[update]=cpu;reference_ram[update]=std::move(ram);
+                    reference_draws[update]=std::move(record);continue;}
+                const auto& old=reference_cpu[update];
+                CHECK(old.r==cpu.r && old.fp.bytes==cpu.fp.bytes && old.eip==cpu.eip);
+                CHECK(old.flags==cpu.flags && old.defined_flags==cpu.defined_flags);
+                CHECK(reference_ram[update]==ram);
+                CHECK(reference_draws[update].output==record.output && reference_draws[update].offscreen==record.offscreen);
+                ++checked_updates;
+            }
+            CHECK(a::small_weather_counts.updates==(small?2u:0u));
+            CHECK(a::small_weather_counts.particles==(small?2u*count:0u));
+            CHECK(a::small_weather_counts.batched_updates==(candidate && small?2u:0u));
+        }
+        ++threshold_cases;
+    }
     unsigned cases{},draws{},admitted{},offscreen{};for(unsigned count:{16,128,400})for(bool dual:{false,true})for(unsigned flags:{0,0x800}){
         prepare(count,dual,flags);const auto before=run(false,true);const auto after=run(true,true);
         CHECK(before.first.output==after.first.output && before.first.checksum==after.first.checksum && before.first.draws==after.first.draws);
@@ -90,7 +133,8 @@ int main(int argc,char** argv){try{
         for(unsigned order=0;order<2;++order){const auto side=(pair+order)&1;auto [record,ns]=run(side,true);result[side]=std::move(record);paired[pair][side]=ns;}
         CHECK(result[0].output==result[1].output && result[0].checksum==result[1].checksum);}
     std::ofstream out(argv[1]);out<<"{\"cached_weather_entry\":4225200,\"cases\":"<<cases<<",\"source_draws\":"<<draws<<",\"native_admitted\":"<<admitted<<",\"native_offscreen_draws\":"<<offscreen
-        <<",\"source_vertices_and_state_equal\":true,\"source_filter_mode_2\":true,\"linear_sampling_enabled\":true,\"paired_ns\":[";
+        <<",\"threshold_cases\":"<<threshold_cases<<",\"threshold_updates\":"<<checked_updates
+        <<",\"threshold_cpu_ram_and_draws_equal\":true,\"source_vertices_and_state_equal\":true,\"source_filter_mode_2\":true,\"linear_sampling_enabled\":true,\"paired_ns\":[";
     for(unsigned n=0;n<5;++n){if(n)out<<',';out<<'['<<paired[n][0]<<','<<paired[n][1]<<']';}
     out<<"],\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";
     std::cout<<"PASS cached weather draw pipeline: "<<admitted<<'/'<<draws<<" native draws, "<<offscreen<<" offscreen.\n";return 0;

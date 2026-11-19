@@ -164,7 +164,8 @@ def main():
         if sprite['cases']<200 or sprite['decline_cases']!=24 or not sprite['vertex_bits_and_render_state_equal'] or sprite['performance_samples_rerun']:raise ValueError('Incomplete source/native sprite correctness checks')
         particles=reports['particle_pipeline']
         if ((particles['cases'],particles['source_draws'],particles['native_admitted'],particles['native_offscreen_draws'])!=(12,3264,3264,2176) or
-                not particles['source_vertices_and_state_equal']):
+                (particles['threshold_cases'],particles['threshold_updates'])!=(10,20) or
+                not particles['threshold_cpu_ram_and_draws_equal'] or not particles['source_vertices_and_state_equal']):
             raise ValueError('Incomplete cached weather particle draw comparison')
         ftol=reports['text_ftol']
         if ftol['exact_cpu_fp_stack_cases']!=5376 or ftol['declines']<16 or ftol['host_environment_cases']!=4 or not ftol['reference_is_cached_source']:raise ValueError('Incomplete integer-conversion source comparison')

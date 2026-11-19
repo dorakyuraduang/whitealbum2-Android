@@ -4,6 +4,24 @@
 #include "glyph_budget.hpp"
 
 namespace wa2::aot {
+struct ProgramBinding {
+    Program* program;
+    Context* context;
+    static bool invoke(wr::Cpu& cpu,wr::Memory& memory,Scope& scope,void* owner){
+        auto& binding=*static_cast<ProgramBinding*>(owner);
+        if(&cpu!=binding.context || &memory!=&binding.program->memory_)return false;
+#if WA2_AOT_DIAGNOSTICS
+        if(!native_indirect_calls_enabled)return false;
+#endif
+        return binding.program->invoke_indirect(cpu,scope);
+    }
+};
+const Context* Program::current_context(const wr::Memory& memory) noexcept{
+    const auto* calls=current_native_calls;
+    if(!calls || calls->invoke!=ProgramBinding::invoke)return nullptr;
+    const auto& binding=*static_cast<const ProgramBinding*>(calls->owner);
+    return &binding.program->memory_==&memory?binding.context:nullptr;
+}
 void Program::ensure(const Function& function){
     // Called only inside invoke's ExecutionScope. The full direct-call closure
     // is proven once here, so generated direct calls need no guards/dispatch.
@@ -52,15 +70,8 @@ bool Program::invoke_unmetered(Context& context){
     const auto location=locate(context.eip);const auto* function=location.function;if(!function)return false;
     auto scope=memory_.execution_scope();prove(*function);
     GlyphCallScope glyph_calls(memory_);
-    struct Binding {Program* program;Context* context;} binding{this,&context};
-    NativeCallScope native_calls{[](wr::Cpu& cpu,wr::Memory& memory,Scope& scope,void* owner){
-        auto& binding=*static_cast<Binding*>(owner);
-        if(&cpu!=binding.context || &memory!=&binding.program->memory_)return false;
-#if WA2_AOT_DIAGNOSTICS
-        if(!native_indirect_calls_enabled)return false;
-#endif
-        return binding.program->invoke_indirect(cpu,scope);
-    },&binding};
+    ProgramBinding binding{this,&context};
+    NativeCallScope native_calls{ProgramBinding::invoke,&binding};
     std::uint64_t unused{};
     FunctionWorkTimer timing{std::size_t(function-functions().data()),function->entry,context.eip,context.fp.get16(0)};
     function->body(context,memory_,scope,unused,false,location.resume);return true;

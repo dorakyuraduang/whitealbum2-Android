@@ -1,4 +1,6 @@
 #include "native_weather.hpp"
+#include "weather_threshold.hpp"
+#include "functions.hpp"
 #include "fp_registers.hpp"
 #include "sse_kernel.hpp"
 #include "integer_value.hpp"
@@ -230,7 +232,17 @@ bool native_weather_population(wr::Memory& memory){
     // Evaluate before serializing register caches. A failed speculative read
     // must leave the original static body's memory-fault prefix unchanged.
     const int error=errno;
-    try{const auto count=memory.load(0x5267d4,32);return count>=64 && count<=400;}
+    try{
+        const auto count=memory.load(0x5267d4,32);
+        if(count<small_weather_minimum || count>400)return false;
+        if(count>=original_weather_minimum)return true;
+        // The cached body calls this guard at both the first iteration and
+        // internal resumes. Count the real entry on either diagnostic path.
+        if(const auto* cpu=Program::current_context(memory);cpu && cpu->eip==0x4088cf){
+            ++small_weather_counts.updates;small_weather_counts.particles+=count;
+        }
+        return small_weather_batches.load(std::memory_order_relaxed);
+    }
     catch(const wr::GuestFault&){errno=error;return false;}
 }
 bool native_weather_batch(wr::Cpu& cpu,wr::Memory& memory){
@@ -248,10 +260,12 @@ bool native_weather_batch(wr::Cpu& cpu,wr::Memory& memory){
        (cpu.fp.get32(24)&0xffff1f80u)!=0x1f80u || cpu.r[wr::EBP]!=1)return false;
     auto lock=memory.execution_scope();
     try{
-        // Small populations are faster in the ordinary register-cached static
-        // body. Decide once per update so its continuation checks stay cheap.
         const auto count=memory.load(0x5267d4,32);
-        if(count<64 || count>400){bound.remaining=0;return false;}
+        const bool small=count<original_weather_minimum;
+        if(count<small_weather_minimum || count>400 || (small && !small_weather_batches.load(std::memory_order_relaxed))){
+            bound.remaining=0;return false;
+        }
+        const bool first_small=small && cpu.eip==0x4088cf;
         const auto overlap=[](std::uint64_t a,unsigned n,std::uint64_t b,unsigned k){return a<b+k && b<a+n;};
         if(overlap(cpu.r[wr::ESP]-256,WeatherFrame::StackBytes,WeatherFrame::SpriteBase,WeatherFrame::SpriteBytes) ||
            overlap(cpu.r[wr::ESP]-256,WeatherFrame::StackBytes,WeatherFrame::WeatherBase,WeatherFrame::WeatherBytes))return false;
@@ -270,6 +284,7 @@ bool native_weather_batch(wr::Cpu& cpu,wr::Memory& memory){
         floating.commit();const auto write_start=work?now():std::chrono::steady_clock::time_point{};
         memory.copy_in(frame.base,frame.stack);memory.copy_in(frame.SpriteBase,frame.sprites);
         memory.copy_in(frame.WeatherBase,frame.weather);cpu=result;
+        if(first_small)++small_weather_counts.batched_updates;
         --bound.remaining;if(work){++work->weather_batch_completed;if(yielded)++work->weather_batch_yields;
             work->weather_read_ns+=ns(calculate_start-read_start);work->weather_calculate_ns+=ns(write_start-calculate_start);work->weather_write_ns+=ns(now()-write_start);}return true;
     }catch(const WeatherDeclined&){bound.remaining=0;return false;}catch(const wr::GuestFault&){bound.remaining=0;return false;}

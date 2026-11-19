@@ -37,10 +37,12 @@ public final class FrameHud {
         final float fps, milliseconds;
         final long frames, glyphs, tiles;
         final long particleCommands, particleTiles, particleContinuations;
+        final long smallWeatherUpdates, smallWeatherParticles, smallWeatherBatchedUpdates;
         final TextWorkWindows.Window work;
         final long updated = SystemClock.uptimeMillis();
         Sample(float fps, float milliseconds, long frames, long glyphs, long tiles, TextWorkWindows.Window work,
-               long particleCommands,long particleTiles,long particleContinuations) {
+               long particleCommands,long particleTiles,long particleContinuations,
+               long smallWeatherUpdates,long smallWeatherParticles,long smallWeatherBatchedUpdates) {
             this.fps = fps;
             this.milliseconds = milliseconds;
             this.frames = frames;
@@ -50,6 +52,9 @@ public final class FrameHud {
             this.particleCommands=particleCommands;
             this.particleTiles=particleTiles;
             this.particleContinuations=particleContinuations;
+            this.smallWeatherUpdates=smallWeatherUpdates;
+            this.smallWeatherParticles=smallWeatherParticles;
+            this.smallWeatherBatchedUpdates=smallWeatherBatchedUpdates;
         }
     }
     private static final Runnable APPLY = () -> {
@@ -134,11 +139,13 @@ public final class FrameHud {
     // Called from the native render thread no more than four times per second.
     public static void report(float fps, float milliseconds, long frames, long glyphs, long tiles, long wallNs, long threadCpuNs,
                               long replayedGlyphs, long reusedGeometry, long rollovers, long avoidedDriverCalls,
-                              long particleCommands,long particleTiles,long particleContinuations) {
+                              long particleCommands,long particleTiles,long particleContinuations,
+                              long smallWeatherUpdates,long smallWeatherParticles,long smallWeatherBatchedUpdates) {
         if (!resumed || !Float.isFinite(fps) || !Float.isFinite(milliseconds)) return;
         Sample sample = new Sample(fps, milliseconds, frames, glyphs, tiles,
                 WORK.observe(frames,glyphs,tiles,wallNs,threadCpuNs,replayedGlyphs,reusedGeometry,rollovers,avoidedDriverCalls,
-                             particleCommands,particleTiles,particleContinuations),particleCommands,particleTiles,particleContinuations);
+                             particleCommands,particleTiles,particleContinuations),particleCommands,particleTiles,particleContinuations,
+                             smallWeatherUpdates,smallWeatherParticles,smallWeatherBatchedUpdates);
         LATEST.set(sample);
         if (focused && Log.isLoggable("WA2PAGE", Log.DEBUG)) {
             Log.d("WA2PAGE", sample.updated + " " + fps + " " + milliseconds + " " + frames + " " + glyphs + " " + tiles);
@@ -185,6 +192,9 @@ public final class FrameHud {
             result.put("frames",sample.frames);result.put("glyphs",sample.glyphs);result.put("glyph_tiles",sample.tiles);
             result.put("particle_commands",sample.particleCommands);result.put("particle_tiles",sample.particleTiles);
             result.put("particle_continuations",sample.particleContinuations);
+            result.put("small_weather_updates",sample.smallWeatherUpdates);
+            result.put("small_weather_particles",sample.smallWeatherParticles);
+            result.put("small_weather_batched_updates",sample.smallWeatherBatchedUpdates);
             result.put("window",workJson(sample.work));
         }
         result.put("screen_access",false);return result;
