@@ -13,6 +13,8 @@
 #include "glyph_budget.hpp"
 #include "glyph_resources.hpp"
 #include "text_jump_budget.hpp"
+#include "text_layout_replay_control.hpp"
+#include "glyph_command_replay_control.hpp"
 #include "image_colours.hpp"
 #include "image_chroma.hpp"
 #include "scalar_math.hpp"
@@ -99,10 +101,10 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
         return "{\"accepted\":"+std::to_string(s.accepted)+",\"declined\":"+std::to_string(s.declined)+",\"tiles\":"+std::to_string(s.tiles)+
             ",\"offscreen\":"+std::to_string(s.offscreen)+",\"capability_filter\":"+std::to_string(s.capability_filter)+
             ",\"fp_declined\":"+std::to_string(s.fp_declined)+",\"adapter_declined\":"+std::to_string(s.adapter_declined)+",\"retained_command_cache\":false}";};
-    process_.state().reports["text_local_control_flow"]=[]{const auto c=text_jump_counts;return "{\"entries\":"+std::to_string(c.entries)+",\"local_jumps\":"+std::to_string(c.local_jumps)+",\"budget_yields\":"+std::to_string(c.budget_yields)+",\"external_targets\":"+std::to_string(c.external_targets)+",\"maximum_local_jumps\":"+std::to_string(TextJumpBudget<>::MaximumJumps)+",\"retained_layout_cache\":false}";};
+    process_.state().reports["text_local_control_flow"]=[]{const auto c=text_jump_counts;return "{\"entries\":"+std::to_string(c.entries)+",\"local_jumps\":"+std::to_string(c.local_jumps)+",\"budget_yields\":"+std::to_string(c.budget_yields)+",\"external_targets\":"+std::to_string(c.external_targets)+",\"maximum_local_jumps\":"+std::to_string(TextJumpBudget<>::MaximumJumps)+",\"layout_replay_hits\":"+std::to_string(text_layout_replay_hits)+",\"layout_replay_captures\":"+std::to_string(text_layout_replay_captures)+"}";};
     process_.state().reports["native_glyph_commands"]=[]{const auto s=native_glyph_counts();const auto r=glyph_resource_counts;
         return "{\"accepted\":"+std::to_string(s.accepted)+",\"declined\":"+std::to_string(s.declined)+",\"tiles\":"+std::to_string(s.tiles)+",\"wider_precision_integer_glyphs\":"+std::to_string(native_wide_glyph_calls)+",\"maximum_glyphs_per_boundary\":"+std::to_string(GlyphCallScope::MaximumCalls)+",\"glyph_budget_exhaustions\":"+std::to_string(glyph_budget_counts.exhaustions)+",\"glyph_budget_deferrals\":"+std::to_string(glyph_budget_deferrals)+
-            ",\"single_texture_handle_reads\":"+std::to_string(r.single_texture_handle_reads)+",\"full_texture_tables\":"+std::to_string(r.full_texture_tables)+",\"full_texture_handle_words\":"+std::to_string(r.full_texture_handle_words)+",\"retained_command_cache\":false}";};
+            ",\"single_texture_handle_reads\":"+std::to_string(r.single_texture_handle_reads)+",\"full_texture_tables\":"+std::to_string(r.full_texture_tables)+",\"full_texture_handle_words\":"+std::to_string(r.full_texture_handle_words)+",\"command_replay_hits\":"+std::to_string(glyph_command_replay_hits)+",\"command_replay_captures\":"+std::to_string(glyph_command_replay_captures)+"}";};
     process_.state().reports["native_image_chroma"]=[]{const auto s=image_chroma_counts();return "{\"attempts\":"+std::to_string(s.attempts)+",\"completed\":"+std::to_string(s.completed)+",\"pixels\":"+std::to_string(s.pixels)+",\"grey_pixels\":"+std::to_string(s.grey_pixels)+"}";};
     process_.state().reports["native_image_colours"]=[]{const auto s=image_colour_counts();
         return "{\"attempts\":"+std::to_string(s.attempts)+",\"completed\":"+std::to_string(s.completed)+",\"pixels\":"+std::to_string(s.pixels)+",\"retained_tables\":false}";};

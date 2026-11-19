@@ -9,13 +9,13 @@
 #include "../platform/compat/diagnostic_chunks.hpp"
 #include "../recompiled/native_glyphs.hpp"
 #include "../recompiled/text_layout_replay_control.hpp"
-#include "../platform/render/text_buffers.hpp"
+#include "../recompiled/glyph_command_replay_control.hpp"
 #include <SDL.h>
 #include <SDL_main.h>
 #include <android/log.h>
 #include <string_view>
 namespace {
-std::atomic<std::uint64_t> measured_layout_hits{};
+std::atomic<std::uint64_t> measured_layout_hits{}, measured_glyph_hits{};
 }
 extern "C" int SDL_main(int argc,char** argv){
     try{SDL_SetMainReady();SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON,"1");
@@ -32,11 +32,12 @@ extern "C" int SDL_main(int argc,char** argv){
         startup.report_file=startup.options.data_root/"wa2-runtime.json";
         startup.captions=wa2::android::selected_subtitles();
         measured_layout_hits.store(0, std::memory_order_relaxed);
-        wa2::android::set_performance_switch([](bool layout, bool packets){
+        measured_glyph_hits.store(0, std::memory_order_relaxed);
+        wa2::android::set_performance_switch([](bool layout, bool commands){
             wa2::aot::text_layout_replay_enabled.store(layout, std::memory_order_relaxed);
-            wa2::graphics::enable_wide_glyph_packets(packets);
+            wa2::aot::glyph_command_replay_enabled.store(commands, std::memory_order_relaxed);
         }, []{return measured_layout_hits.load(std::memory_order_relaxed);},
-           wa2::graphics::wide_glyph_packet_submissions);
+           []{return measured_glyph_hits.load(std::memory_order_relaxed);});
         struct ReleasePerformanceSwitch {~ReleasePerformanceSwitch(){wa2::android::set_performance_switch(nullptr);}} release_performance_switch;
         startup.io_diagnostic_sink=[](std::string_view label,std::string_view json){wa2::platform::compat::emit_counter_record(label,json,[](std::string_view part,std::string_view body){__android_log_print(ANDROID_LOG_INFO,"WA2IO","%.*s %.*s",int(part.size()),part.data(),int(body.size()),body.data());});};
         wa2::window::SdlHostOptions options;options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();
@@ -44,6 +45,7 @@ extern "C" int SDL_main(int argc,char** argv){
             wa2::android::frame_presented_with_text([]{
                 const auto counts=wa2::aot::native_glyph_counts();
                 measured_layout_hits.store(wa2::aot::text_layout_replay_hits, std::memory_order_relaxed);
+                measured_glyph_hits.store(wa2::aot::glyph_command_replay_hits, std::memory_order_relaxed);
                 return wa2::android::GlyphTotals{counts.accepted,counts.tiles};
             });
         };

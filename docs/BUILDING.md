@@ -475,11 +475,11 @@ page, then run `python scripts/compare_android_text.py --serial <ADB-serial>`.
 It compares reference/optimized/optimized/reference windows within one process
 using real presentation FPS and frame-time samples. The running activity's
 dynamic receiver requires the sender's Android DUMP permission; registered-only
-delivery cannot launch the game. In 0.2.101 the reference uses the 0.2.100
-cursor and eight-texture batches. The candidate reuses matching glyph layout
-results and can issue wider batches after a text run fills eight texture slots.
-Use `--path layout` or `--path packets` to measure the changes individually.
-The report records layout hits and wide draw submissions for each window.
+delivery cannot launch the game. The reference uses the 0.2.100 cursor
+routine. Both paths draw with eight texture slots. The candidate reuses
+matching layout results and prepared glyph commands. Use `--path layout`
+or `--path commands` to measure each change independently. The report
+records separate hit counts for both paths.
 Ordinary switches reset
 after 30 seconds. The comparison restores the shipped optimized mode at the
 end and records whether the running activity acknowledged it.
@@ -498,8 +498,11 @@ with a recording device. Pass a writable report filename as its only argument.
 including glyphs that span texture boundaries. The report records the thread
 CPU time, elapsed time and the number of glyphs and texture tiles in each run.
 `WA2_NOVEL_TIMING=layout-bench` compares layout reuse with the same cursor
-routine enabled in both modes. `WA2_NOVEL_TIMING=layout` compares CPU state,
-stack writes and drawing commands at each observed boundary.
+routine enabled in both modes. `WA2_NOVEL_TIMING=glyph-bench` compares
+prepared glyph commands with layout reuse enabled in both modes.
+`WA2_NOVEL_TIMING=layout` compares CPU state, stack writes and drawing
+commands at each observed boundary and checks dependencies on mutable
+font and texture data.
 `WA2_NOVEL_TIMING=historical` runs the same input against an older library.
 
 Keep precision-specific results separate: widening admission improves the

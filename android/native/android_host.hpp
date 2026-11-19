@@ -8,9 +8,9 @@ struct GlyphTotals { std::uint64_t glyphs, tiles; };
 void frame_presented_with_text(GlyphTotals (*read_totals)()) noexcept;
 // Optional shared-core diagnostic switch. The independent native target does
 // not register an AOT callback or link any recompiled code.
-void set_performance_switch(void(*)(bool layout, bool packets),
+void set_performance_switch(void(*)(bool layout, bool commands),
                             std::uint64_t(*layout_hits)()=nullptr,
-                            std::uint64_t(*wide_packets)()=nullptr) noexcept;
+                            std::uint64_t(*glyph_command_hits)()=nullptr) noexcept;
 
 // Supplied by the actual ARM64 game core. There is deliberately no stub which
 // could turn a launcher-only APK into an apparently successful game build.

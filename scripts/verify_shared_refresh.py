@@ -106,7 +106,7 @@ def main():
         tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
         tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'scripts/verify_glyph_precision.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp',ROOT/'tests/glyph_cache.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'scripts/compare_android_text.py',ROOT/'tests/android_counters.py']
-        tracked.append(ROOT/'tests/novel_layout_oracle.hpp')
+        tracked += [ROOT/'tests/novel_layout_oracle.hpp',ROOT/'tests/glyph_command_oracle.hpp']
         tracked += [ROOT/'scripts/verify_resource_lookup.py',ROOT/'tests/resource_lookup.cpp',ROOT/'generated/wa2-win64/code_page_1112.cpp']
         tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp',ROOT/'tests/text_ftol.cpp',ROOT/'tests/text_advance.cpp',ROOT/'tests/immutable_buffers.cpp']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
@@ -146,6 +146,8 @@ def main():
         packets=reports['render_submission']['multi_texture_batch']
         if reports['novel_cpu'].get('layout_state_oracle_cases',0)<11:
             raise ValueError('Missing source/cached layout boundary comparisons')
+        if reports['novel_cpu'].get('glyph_command_oracle_cases',0)<18:
+            raise ValueError('Missing prepared glyph resource and fallback comparisons')
         if (packets['eight_slot_page_packets'],packets['adaptive_page_packets'])!=(43,2):
             raise ValueError('Missing long-page texture rollover comparison')
         if packets['slots']!=8 or packets['source_draws']!=120 or packets['recorded_driver_packets']!=15 or not packets['unchanged_vertex_bits_uv_colour_and_order']:raise ValueError('Incomplete texture batch packet checks')

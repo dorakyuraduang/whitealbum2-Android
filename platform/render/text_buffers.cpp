@@ -4,7 +4,7 @@ namespace wa2::graphics {
 namespace {
 std::atomic<bool> enabled{true};
 std::atomic<std::uint64_t> continuations{};
-std::atomic<bool> wide_packets{true};
+std::atomic<bool> wide_packets{false};
 std::atomic<std::uint64_t> wide_submissions{};
 }
 

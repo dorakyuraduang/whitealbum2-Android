@@ -29,7 +29,11 @@ struct Entry {
     std::array<std::uint8_t,160> fp{};
     bool valid{};
 };
-using Table = std::array<Entry,1024>;
+struct Bucket {
+    std::array<Entry,4> entries{};
+    unsigned next{};
+};
+using Table = std::array<Bucket,256>;
 inline thread_local std::unique_ptr<Table> table;
 
 // Each call to the SSE ftol body pushes a return address and EBP and writes
@@ -133,12 +137,15 @@ public:
         if (!inputs(cpu,scope,key)) return 0;
         if (!table) table.reset(new(std::nothrow) Table{});
         if (!table) return 0;
-        auto& entry = (*table)[bucket(key)];
-        if (entry.valid && entry.key==key) {
+        auto& group = (*table)[bucket(key)];
+        for (const auto& entry : group.entries) {
+            if (!entry.valid || entry.key!=key) continue;
             restore(entry,cpu,scope);
             ++text_layout_replay_hits;
             return key.outline ? outline_end : fill_end;
         }
+        auto& entry = group.entries[group.next];
+        group.next = (group.next+1)%group.entries.size();
         entry.valid = false;
         entry.key = key;
         pending_ = &entry;

@@ -18,6 +18,17 @@ struct Command {
     std::array<U32,12> fields;
     std::vector<Tile> tiles;
     bool operator==(const Command&) const = default;
+    static Command copy(const a::SpriteCommand& value) {
+        Command command{{value.device,value.target,U32(value.target_kind),value.blend_enabled,value.blend_op,
+            value.source_blend,value.destination_blend,value.minimum,value.magnification,value.mipmap,
+            value.alpha_argument,U32(value.glyph)},{}};
+        for(const auto& tile : value.tiles) {
+            auto& copy = command.tiles.emplace_back();
+            copy.texture = tile.texture;
+            std::memcpy(copy.vertices.data(),tile.vertices.data(),sizeof(copy.vertices));
+        }
+        return command;
+    }
 };
 
 using Stack = std::array<std::uint8_t,4096>;
@@ -66,15 +77,7 @@ struct Observer {
     static bool submit(const a::SpriteCommand& value,void* owner) {
         auto& self = *static_cast<Observer*>(owner);
         self.checkpoint();
-        Command command{{value.device,value.target,U32(value.target_kind),value.blend_enabled,value.blend_op,
-            value.source_blend,value.destination_blend,value.minimum,value.magnification,value.mipmap,
-            value.alpha_argument,U32(value.glyph)},{}};
-        for(const auto& tile : value.tiles) {
-            auto& copy = command.tiles.emplace_back();
-            copy.texture = tile.texture;
-            std::memcpy(copy.vertices.data(),tile.vertices.data(),sizeof(copy.vertices));
-        }
-        self.trace.commands.push_back(std::move(command));
+        self.trace.commands.push_back(Command::copy(value));
         if(self.force_yield && self.trace.commands.size() == 12) {
             auto* remaining = a::GlyphCallScope::remaining(self.p.memory);
             CHECK(remaining && *remaining);

@@ -1,6 +1,7 @@
 #include "native_sprites.hpp"
 #include "native_glyphs.hpp"
 #include "glyph_budget.hpp"
+#include "glyph_command_replay.hpp"
 #include "glyph_resources.hpp"
 #include "host_calls.hpp"
 #include "extended80.hpp"
@@ -21,6 +22,7 @@ thread_local NativeGlyphCounts glyph_counts;
 thread_local std::vector<SpriteTile> tile_buffer;
 thread_local wa2::text::GlyphIndex glyph_index;
 thread_local wa2::text::GlyphGeometryMemo<SpriteTile> glyph_geometry;
+thread_local GlyphCommandReplay glyph_commands;
 struct Declined {};
 template<class T> T read(const std::uint8_t* bytes,unsigned at){T value;std::memcpy(&value,bytes+at,sizeof(value));return value;}
 float ordinary(float value){
@@ -295,10 +297,30 @@ bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
     }
     else if(current_native_calls && !current_native_calls->remaining)return false;
     SpriteCommand command{};std::uint32_t returning{};
+    std::array<SpriteTile,4> replay_tiles;
     try{auto scope=memory.execution_scope();const auto sp=cpu.r[wr::ESP];if(std::uint64_t(sp)+0x128>0x100000000ull)return false;
-        returning=memory.load(sp,32);std::array<std::uint8_t,256> sprite;memory.copy_out(sp+4,sprite);
-        std::array<std::uint32_t,9> args;memory.copy_out(sp+0x104,{reinterpret_cast<std::uint8_t*>(args.data()),sizeof(args)});
-        if(!prepare_integer_glyph(cpu,memory,command,sprite,args)){
+        std::array<std::uint8_t,256> sprite;
+        std::array<std::uint32_t,9> args;
+        const auto call=scope.readable(sp,0x128);
+        if(call.size()==0x128){
+            returning=read<std::uint32_t>(call.data(),0);
+            std::memcpy(sprite.data(),call.data()+4,sprite.size());
+            std::memcpy(args.data(),call.data()+0x104,sizeof(args));
+        }else{
+            returning=memory.load(sp,32);memory.copy_out(sp+4,sprite);
+            memory.copy_out(sp+0x104,{reinterpret_cast<std::uint8_t*>(args.data()),sizeof(args)});
+        }
+        GlyphCommandReplay::Entry* ticket=nullptr;
+        bool replay=false;
+        bool enabled=glyph_command_replay_enabled.load(std::memory_order_relaxed);
+#if defined(WA2_AOT_DIAGNOSTICS) && WA2_AOT_DIAGNOSTICS
+        enabled=enabled && !wa2::geometry::single_tile_reference_enabled;
+#endif
+        if(enabled){
+            try{replay=glyph_commands.find(memory,scope,glyph_index,sprite,args,control,command,replay_tiles,ticket);}
+            catch(const wr::GuestFault&){ticket=nullptr;}
+        }
+        if(!replay && !prepare_integer_glyph(cpu,memory,command,sprite,args)){
         // The admitted integer path uses dyadic endpoints on one power-of-two
         // tile. All source intermediates are exact at PC24, PC53 and PC64.
         // Crossings and other floating geometry retain their original body
@@ -323,6 +345,10 @@ bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
         const auto u=add(f(5),mul(float(index%80),cell_size)),v=add(mul(float(index/80),cell_size),f(5));
         put(0xbc,u);put(0xc0,add(f(6),u));put(0xc4,v);put(0xc8,add(v,f(6)));put(0x3c,1u);
         if(!build(cpu,memory,command,sprite,0,true) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++glyph_counts.declined;return false;}
+        }
+        if(ticket){
+            try{glyph_commands.capture(memory,scope,glyph_index,*ticket,command);}
+            catch(const wr::GuestFault&){ticket->ready=false;}
         }
     }catch(const Declined&){++glyph_counts.declined;return false;}catch(const wr::GuestFault&){++glyph_counts.declined;return false;}
     command.glyph=true;

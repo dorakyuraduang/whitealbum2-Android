@@ -14,11 +14,11 @@ import time
 from build_pak_tool import low_priority
 
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE='glyph-layout-and-packets'
+CANDIDATE='glyph-layout-and-commands'
 
 def candidate_work(mode, first, last):
     work={}
-    for key, exclusive in (('layout_hits','layout'),('wide_packets','packets')):
+    for key, exclusive in (('layout_hits','layout'),('glyph_command_hits','commands')):
         delta=last[key]-first[key]
         if first[key]<0 or delta<0:
             raise ValueError('Missing or reset candidate counter: '+key)
@@ -52,7 +52,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial',required=True)
     parser.add_argument('--samples',type=int,choices=range(4,13),default=8)
-    parser.add_argument('--path',choices=('optimized','layout','packets'),default='optimized')
+    parser.add_argument('--path',choices=('optimized','layout','commands'),default='optimized')
     parser.add_argument('--output',type=Path,default=ROOT/'logs/android-text-comparison.json')
     args=parser.parse_args();low_priority()
     adb=ROOT/'tools/android-sdk/platform-tools/adb.exe'

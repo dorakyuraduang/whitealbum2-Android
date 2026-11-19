@@ -18,8 +18,8 @@ final class PerformanceProbe extends BroadcastReceiver {
     private Activity owner;
     private String mode="optimized";
     private int generation;
-    private static native boolean nativeSetCandidate(boolean layout, boolean packets);
-    private static native long nativeCounter(boolean packets);
+    private static native boolean nativeSetCandidate(boolean layout, boolean commands);
+    private static native long nativeCounter(boolean commands);
     void attach(Activity activity){
         owner=activity;
         activity.registerReceiver(this,new IntentFilter(ACTION),"android.permission.DUMP",null,
@@ -36,9 +36,9 @@ final class PerformanceProbe extends BroadcastReceiver {
             String command=intent.getStringExtra("mode");
             if(command==null)command="snapshot";
             if(command.equals("reference") || command.equals("reference_hold") || command.equals("optimized")
-                    || command.equals("layout") || command.equals("packets")){
+                    || command.equals("layout") || command.equals("commands")){
                 boolean both=command.equals("optimized");
-                if(!nativeSetCandidate(both || command.equals("layout"),both || command.equals("packets")))
+                if(!nativeSetCandidate(both || command.equals("layout"),both || command.equals("commands")))
                     throw new IllegalStateException("No shared AOT performance control");
                 mode=command.equals("reference_hold")?"reference":command;
                 final int token=++generation;
@@ -50,8 +50,8 @@ final class PerformanceProbe extends BroadcastReceiver {
             result.put("version",context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName);
             result.put("mode",mode);
             result.put("layout_hits",nativeCounter(false));
-            result.put("wide_packets",nativeCounter(true));
-            result.put("candidate","glyph-layout-and-packets");
+            result.put("glyph_command_hits",nativeCounter(true));
+            result.put("candidate","glyph-layout-and-commands");
             Log.i("WA2PERF",result.toString());
         }catch(Exception|LinkageError error){Log.w("WA2PERF","unavailable: "+error.getClass().getSimpleName());}
     }
