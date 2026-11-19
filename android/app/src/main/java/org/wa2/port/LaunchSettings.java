@@ -42,6 +42,7 @@ final class LaunchSettings {
     }
     private static LaunchProfile profile(Context context) { LaunchProfile session=session(context);if(session!=null)return session;LaunchProfileStore store=store(context);return store==null?previous(context):store.current(); }
     static boolean showFps(Context context) { return profile(context).enabled(LaunchProfile.FPS); }
+    static boolean limit60Fps(Context context) { return profile(context).enabled(LaunchProfile.LIMIT_60_FPS); }
     static boolean longPressFastForward(Context context) { return profile(context).enabled(LaunchProfile.LONG_PRESS); }
     static boolean testMode(Context context) { return profile(context).enabled(LaunchProfile.TEST_MODE); }
     static boolean chineseSubtitles(Context context) { return profile(context).enabled(LaunchProfile.CHINESE_SUBTITLES); }
@@ -84,6 +85,7 @@ final class LaunchSettings {
         IO.execute(() -> {String problem=null;try{store.flush();}catch(IOException | RuntimeException error){problem=error.getMessage();if(problem==null)problem="无法保存启动配置";}completed.accept(problem);});
     }
     static void setShowFps(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.FPS,value,completed); }
+    static void setLimit60Fps(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.LIMIT_60_FPS,value,completed); }
     static void setLongPressFastForward(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.LONG_PRESS,value,completed); }
     static void setTestMode(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.TEST_MODE,value,completed); }
     static void setChineseSubtitles(Context context,boolean value,Consumer<String> completed) { set(context,LaunchProfile.CHINESE_SUBTITLES,value,completed); }

@@ -109,6 +109,7 @@ def main():
         tracked += [ROOT/'tests/novel_layout_oracle.hpp',ROOT/'tests/glyph_command_oracle.hpp']
         tracked += [ROOT/'scripts/verify_resource_lookup.py',ROOT/'tests/resource_lookup.cpp',ROOT/'generated/wa2-win64/code_page_1112.cpp']
         tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp',ROOT/'tests/text_ftol.cpp',ROOT/'tests/text_advance.cpp',ROOT/'tests/immutable_buffers.cpp']
+        tracked += [ROOT/'tests/particle_pipeline.cpp']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
         tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
         tracked += [ROOT/('logs/media-codec-'+host+'-build.json') for host in ('windows','arm64')]
@@ -124,12 +125,13 @@ def main():
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
         tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','glyph_cache','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         tests['resource_lookup']='wa2_refresh_resource_lookup'
-        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu','text_ftol','text_advance','immutable_buffers')})
+        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu','particle_pipeline','text_ftol','text_advance','immutable_buffers')})
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
+        test_flags={'native_sprite_cpu':['--correctness-only'],'particle_pipeline':['--require-native']}
         for name,target in tests.items():
             path=build/(name+'.json')
-            run([build/(target+'.exe'),path,*(['--correctness-only'] if name=='native_sprite_cpu' else [])],120,
+            run([build/(target+'.exe'),path,*test_flags.get(name,[])],120,
                 {'WA2_NOVEL_TIMING':'layout'} if name=='novel_cpu' else None)
             report=json.loads(path.read_text())
             if not report.get('passed') or report.get('game_launched') or report.get('screen_access') or report.get('source_executable_opened'):raise ValueError('Finite memory/file test failed: '+name)
@@ -160,6 +162,10 @@ def main():
         if reports['integer_registers']['exact_cpu_stack_fault_cases']!=384:raise ValueError('Incomplete native register mask snapshots')
         sprite=reports['native_sprite_cpu']
         if sprite['cases']<200 or sprite['decline_cases']!=24 or not sprite['vertex_bits_and_render_state_equal'] or sprite['performance_samples_rerun']:raise ValueError('Incomplete source/native sprite correctness checks')
+        particles=reports['particle_pipeline']
+        if ((particles['cases'],particles['source_draws'],particles['native_admitted'],particles['native_offscreen_draws'])!=(12,3264,3264,2176) or
+                not particles['source_vertices_and_state_equal']):
+            raise ValueError('Incomplete cached weather particle draw comparison')
         ftol=reports['text_ftol']
         if ftol['exact_cpu_fp_stack_cases']!=5376 or ftol['declines']<16 or ftol['host_environment_cases']!=4 or not ftol['reference_is_cached_source']:raise ValueError('Incomplete integer-conversion source comparison')
         immutable=reports['immutable_buffers']

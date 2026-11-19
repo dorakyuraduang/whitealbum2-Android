@@ -498,6 +498,14 @@ glyph and tile counts, reused glyphs and geometry, packet rollovers, skipped
 driver calls, wall time and game-thread
 CPU time. A shared foreground interval alone does not identify a scene.
 
+For weather animation, leave the 60 FPS limit off and have the user stay in
+one scene with continuously falling particles. Use the same comparison command
+with `--path particles`. Both modes use the shipped text settings. The report
+includes weather sprite submissions, texture tiles and commands that reused
+the preceding draw state. It rejects windows with no weather draws, unmatched
+particle load, unused optimization or excessive frame-time drift. On pause,
+the performance log also includes a stable weather interval when available.
+
 The optional Android target `wa2_phone_novel_cpu` runs the shared text routine
 with a recording device. Pass a writable report filename as its only argument.
 `WA2_NOVEL_TIMING=advance` compares both paths with 288 mixed CJK characters,

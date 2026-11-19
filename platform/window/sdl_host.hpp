@@ -5,6 +5,7 @@ struct SdlHostOptions {
     bool embedded_gl{},mobile{};
     std::shared_ptr<Widgets> widgets;
     std::function<void()> frame_submitted;
+    bool limit_60_fps{};
 };
 // The SDL main window, input mapping and frame submission hook are shared on
 // desktop and mobile. Only native widget/device details differ.

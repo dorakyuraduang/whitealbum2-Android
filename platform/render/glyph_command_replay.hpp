@@ -23,6 +23,22 @@ struct GlyphCommandState {
     }
 };
 
+// Particle vertices change every frame. Only the last accepted packet's
+// device, target, raster words and vertex layout are reusable.
+struct ParticleCommandState {
+    decltype(GlyphCommandState::words) words{};
+    aot::SpriteTarget target_kind{};
+    ScreenVertexPlan plan{};
+    bool valid{};
+    void capture(const aot::SpriteCommand& command,const ScreenVertexPlan& layout){
+        words=GlyphCommandState::inputs(command);target_kind=command.target_kind;plan=layout;valid=true;
+    }
+    bool matches(const aot::SpriteCommand& command)const{
+        return valid && command.particle && !command.glyph && command.tiles.size()==1 &&
+            command.target_kind==target_kind && GlyphCommandState::inputs(command)==words;
+    }
+};
+
 // Final guest Release clears interface_handle even if an older GPU packet
 // keeps the Resource alive. A recycled token must resolve through the map.
 template<class Resource>class GlyphTextureLookup {

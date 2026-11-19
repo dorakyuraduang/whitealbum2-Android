@@ -53,6 +53,53 @@ inline void check_glyph_continuations() {
     CHECK(!actual.append_glyph_quad(actual.bindings()[0], *plan, bytes));
     compare();
 }
+inline void check_particle_continuations(){
+    namespace g=wa2::graphics;
+    namespace a=wa2::aot;
+    const auto plan=g::screen_vertex_plan(0x1c4u,{0,0,1280,720,0,1},{0,1});CHECK(plan);
+    a::SpriteTile tile{};tile.texture=41;
+    a::SpriteCommand particle{};particle.device=11;particle.target=17;particle.particle=true;
+    particle.tiles=std::span(&tile,1);
+    for(auto target:{a::SpriteTarget::surface,a::SpriteTarget::texture_level_zero}){
+        particle.target_kind=target;
+        g::ParticleCommandState proof;
+        CHECK(!proof.matches(particle));proof.capture(particle,*plan);CHECK(proof.matches(particle));
+        auto changed=particle;changed.target_kind=target==a::SpriteTarget::surface?
+            a::SpriteTarget::texture_level_zero:a::SpriteTarget::surface;
+        CHECK(!proof.matches(changed));changed=particle;changed.particle=false;CHECK(!proof.matches(changed));
+        changed=particle;changed.glyph=true;CHECK(!proof.matches(changed));
+        changed=particle;changed.tiles={};CHECK(!proof.matches(changed));
+        for(auto word:{&a::SpriteCommand::device,&a::SpriteCommand::target,&a::SpriteCommand::source_blend,
+            &a::SpriteCommand::blend_op,&a::SpriteCommand::minimum,&a::SpriteCommand::alpha_argument}){
+            changed=particle;++(changed.*word);CHECK(!proof.matches(changed));
+        }
+        g::ScreenTextureBatch<unsigned> expected,actual;
+        const auto bytes=std::span(reinterpret_cast<const std::uint8_t*>(tile.vertices.data()),sizeof(tile.vertices));
+        unsigned interfaces=0;
+        const auto write_target=[&]{
+            CHECK(actual.vertex_count()==expected.vertex_count());
+            if(target==a::SpriteTarget::texture_level_zero)++interfaces;
+        };
+        for(unsigned i=0;i<400;++i){
+            tile.texture=1+(i%3);
+            for(unsigned n=0;n<4;++n)tile.vertices[n]={float(i+n)-.5f,float(i)-float(n%2)+.25f,.5f,1,
+                0x00ffffddu+((i%256)<<24),0xff000000u,float(n&1),float(n>>1)};
+            CHECK(proof.matches(particle));
+            CHECK(actual.append_sprite_quad(tile.texture,proof.plan,bytes,write_target));
+            std::array<g::ScreenVertex,4> packed;
+            CHECK(g::pack_screen_vertices(*plan,bytes,32,packed));
+            CHECK(expected.append(tile.texture,packed,g::abi::D3DPT_TRIANGLESTRIP,4));
+        }
+        CHECK(std::ranges::equal(actual.indices(),expected.indices()) && actual.bindings()==expected.bindings());
+        CHECK(actual.vertices().size_bytes()==expected.vertices().size_bytes());
+        CHECK(!std::memcmp(actual.vertices().data(),expected.vertices().data(),expected.vertices().size_bytes()));
+        tile.vertices.back().secondary|=1;
+        CHECK(!actual.append_sprite_quad(tile.texture,proof.plan,bytes,write_target));
+        CHECK(!actual.append_sprite_quad(0,proof.plan,bytes,write_target));
+        CHECK(interfaces==(target==a::SpriteTarget::texture_level_zero?400u:0u));
+        proof.valid=false;CHECK(!proof.matches(particle));
+    }
+}
 inline void check_glyph_sampler_units() {
     namespace g = wa2::graphics;
     std::array<unsigned, 16> logical{};
@@ -289,6 +336,7 @@ inline void check_prepared_packet_geometry(){
 inline Result run(){
     namespace g=wa2::graphics;
     check_glyph_continuations();
+    check_particle_continuations();
     check_glyph_sampler_units();
     check_glyph_pipeline_rollover();
     check_prepared_packet_geometry();

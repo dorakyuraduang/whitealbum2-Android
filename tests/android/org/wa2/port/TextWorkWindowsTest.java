@@ -7,11 +7,13 @@ public final class TextWorkWindowsTest {
     private static final class Feed {
         final TextWorkWindows work = new TextWorkWindows();
         long frames, glyphs, tiles, wall, cpu, rollovers, avoided;
+        long particleCommands, particleTiles, particleContinuations;
         TextWorkWindows.Window step(int glyphCount, int tileCount, boolean clockAvailable) {
             frames+=25; glyphs+=25L*glyphCount; tiles+=25L*tileCount;
             wall+=250_000_000;cpu+=100_000_000;
             rollovers+=tileCount/10;avoided+=glyphCount/5;
-            return work.observe(frames,glyphs,tiles,wall,clockAvailable ? cpu : -1,glyphs/2,glyphs/4,rollovers,avoided);
+            return work.observe(frames,glyphs,tiles,wall,clockAvailable ? cpu : -1,glyphs/2,glyphs/4,rollovers,avoided,
+                                particleCommands,particleTiles,particleContinuations);
         }
     }
     public static void main(String[] args) throws java.io.IOException {
@@ -72,6 +74,19 @@ public final class TextWorkWindowsTest {
         for(int i=0;i<2;++i) f.step(500,600,true);
         f.avoided=0;
         check(f.step(500,600,true)==null && f.work.takeSummary()==null);
+        Feed snow=new Feed();
+        snow.work.foreground(true);
+        snow.step(0,0,true);
+        for(int glyphCount : new int[]{0,37,220}) {
+            snow.particleCommands+=1000; snow.particleTiles+=1250; snow.particleContinuations+=900;
+            snow.step(glyphCount,glyphCount,true);
+        }
+        TextWorkWindows.Window[] settled=snow.work.takeSummary();
+        check(settled!=null && settled[0]==null && settled[1]==null && settled[2].frames==75);
+        check(settled[2].particleCommands==3000 && settled[2].particleTiles==3750 && settled[2].particleContinuations==2700);
+        snow.particleCommands+=200; snow.particleTiles+=200;
+        snow.step(0,0,true);
+        check(snow.work.takeSummary()==null);
         if(args.length==1)java.nio.file.Files.write(java.nio.file.Paths.get(args[0]),
                 "{\"passed\":true,\"game_launched\":false,\"screen_access\":false}\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }

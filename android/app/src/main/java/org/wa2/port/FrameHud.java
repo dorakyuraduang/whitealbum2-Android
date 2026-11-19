@@ -27,6 +27,7 @@ public final class FrameHud {
     private static final AtomicReference<Sample> LATEST = new AtomicReference<>();
     private static final TextWorkWindows WORK = new TextWorkWindows();
     private static String version;
+    private static boolean limit60Fps;
     private static WeakReference<TextView> label = new WeakReference<>(null);
     private static volatile boolean resumed;
     private static volatile boolean enabled;
@@ -35,15 +36,20 @@ public final class FrameHud {
     private static final class Sample {
         final float fps, milliseconds;
         final long frames, glyphs, tiles;
+        final long particleCommands, particleTiles, particleContinuations;
         final TextWorkWindows.Window work;
         final long updated = SystemClock.uptimeMillis();
-        Sample(float fps, float milliseconds, long frames, long glyphs, long tiles, TextWorkWindows.Window work) {
+        Sample(float fps, float milliseconds, long frames, long glyphs, long tiles, TextWorkWindows.Window work,
+               long particleCommands,long particleTiles,long particleContinuations) {
             this.fps = fps;
             this.milliseconds = milliseconds;
             this.frames = frames;
             this.glyphs = glyphs;
             this.tiles = tiles;
             this.work = work;
+            this.particleCommands=particleCommands;
+            this.particleTiles=particleTiles;
+            this.particleContinuations=particleContinuations;
         }
     }
     private static final Runnable APPLY = () -> {
@@ -68,6 +74,7 @@ public final class FrameHud {
     private FrameHud() {}
     static void install(Activity activity) {
         WORK.reset();
+        limit60Fps=LaunchSettings.limit60Fps(activity);
         try { version=activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName; }
         catch(PackageManager.NameNotFoundException missing) { version=null; }
         probe=new PerformanceProbe();probe.attach(activity);
@@ -126,10 +133,12 @@ public final class FrameHud {
     }
     // Called from the native render thread no more than four times per second.
     public static void report(float fps, float milliseconds, long frames, long glyphs, long tiles, long wallNs, long threadCpuNs,
-                              long replayedGlyphs, long reusedGeometry, long rollovers, long avoidedDriverCalls) {
+                              long replayedGlyphs, long reusedGeometry, long rollovers, long avoidedDriverCalls,
+                              long particleCommands,long particleTiles,long particleContinuations) {
         if (!resumed || !Float.isFinite(fps) || !Float.isFinite(milliseconds)) return;
         Sample sample = new Sample(fps, milliseconds, frames, glyphs, tiles,
-                WORK.observe(frames,glyphs,tiles,wallNs,threadCpuNs,replayedGlyphs,reusedGeometry,rollovers,avoidedDriverCalls));
+                WORK.observe(frames,glyphs,tiles,wallNs,threadCpuNs,replayedGlyphs,reusedGeometry,rollovers,avoidedDriverCalls,
+                             particleCommands,particleTiles,particleContinuations),particleCommands,particleTiles,particleContinuations);
         LATEST.set(sample);
         if (focused && Log.isLoggable("WA2PAGE", Log.DEBUG)) {
             Log.d("WA2PAGE", sample.updated + " " + fps + " " + milliseconds + " " + frames + " " + glyphs + " " + tiles);
@@ -150,6 +159,8 @@ public final class FrameHud {
         row.put("wall_ns",w.wallNs);row.put("game_thread_cpu_ns",w.cpuNs<0 ? JSONObject.NULL : w.cpuNs);
         row.put("replayed_glyphs",w.replayedGlyphs);row.put("reused_glyph_geometry",w.reusedGeometry);
         row.put("rollovers",w.rollovers);row.put("avoided_driver_calls",w.avoidedDriverCalls);
+        row.put("particle_commands",w.particleCommands);row.put("particle_tiles",w.particleTiles);
+        row.put("particle_continuations",w.particleContinuations);
         return row;
     }
     private static void logStableTextWindows(){
@@ -159,18 +170,21 @@ public final class FrameHud {
             JSONObject row=new JSONObject();
             row.put("event","stable_text_windows");row.put("version",version);
             row.put("light",workJson(summary[0]));row.put("heavy",workJson(summary[1]));
+            row.put("particles",workJson(summary[2]));row.put("limit_60_fps",limit60Fps);
             Log.i("WA2PERF",row.toString());
         }catch(JSONException ignored){}
     }
     static JSONObject performanceSnapshot()throws JSONException{
         Sample sample=LATEST.get();long now=SystemClock.uptimeMillis();
         JSONObject result=new JSONObject();result.put("uptime_ms",now);result.put("foreground",resumed);
-        result.put("focused",focused);
+        result.put("focused",focused);result.put("limit_60_fps",limit60Fps);
         long age=sample==null?-1:now-sample.updated;
         result.put("sample_age_ms",age);result.put("valid",resumed && age>=0 && age<=1500);
         if(sample!=null){
             result.put("fps",sample.fps);result.put("frame_ms",sample.milliseconds);
             result.put("frames",sample.frames);result.put("glyphs",sample.glyphs);result.put("glyph_tiles",sample.tiles);
+            result.put("particle_commands",sample.particleCommands);result.put("particle_tiles",sample.particleTiles);
+            result.put("particle_continuations",sample.particleContinuations);
             result.put("window",workJson(sample.work));
         }
         result.put("screen_access",false);return result;

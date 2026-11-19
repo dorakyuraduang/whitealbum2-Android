@@ -21,6 +21,7 @@ public:
     virtual SDL_Window* acquire(std::uint32_t source_window,std::uint32_t width,
                                 std::uint32_t height,bool windowed)=0;
     virtual bool embedded_gl() const noexcept=0;
+    virtual bool limit_60_fps() const noexcept{return false;}
     virtual void source_cursor(std::int32_t x,std::int32_t y)=0;
     virtual int cursor_visible(bool)=0;
     virtual std::array<int,2> client_size(std::uint32_t source_window) const=0;

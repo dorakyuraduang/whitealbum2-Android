@@ -12,6 +12,10 @@ struct NativeStartup {
     game::TitleStartup title;
     std::optional<game::TitleContent> content;
     std::chrono::milliseconds image_timeout{30000};
+    bool limit_60_fps{};
+    unsigned presentation_rate(unsigned requested)const noexcept{
+        return limit_60_fps && requested>60 ? 60 : requested;
+    }
 };
 // Arguments exclude argv[0]. This policy is common to desktop and Android.
 NativeStartup native_startup(std::span<const std::string_view> arguments);

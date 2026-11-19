@@ -13,6 +13,7 @@
 #include "../recompiled/text_run_replay_control.hpp"
 #include "../recompiled/text_page_replay_control.hpp"
 #include "../platform/render/text_buffers.hpp"
+#include "../platform/render/particle_commands.hpp"
 #include <SDL.h>
 #include <SDL_main.h>
 #include <android/log.h>
@@ -23,6 +24,8 @@ std::atomic<std::uint64_t> measured_page_spans{}, measured_page_glyphs{};
 using Mode=wa2::android::TextProbeMode;
 using Counter=wa2::android::TextProbeCounter;
 void select_text_path(Mode mode){
+    wa2::graphics::enable_particle_continuation(mode!=Mode::particle_reference);
+    if(mode==Mode::particle_reference || mode==Mode::particles)mode=Mode::shipped;
     const bool run=mode==Mode::run || mode==Mode::both || (mode==Mode::shipped && wa2::aot::default_text_run_replay);
     wa2::aot::text_run_replay_enabled.store(run,std::memory_order_relaxed);
     wa2::graphics::enable_surface_glyph_commands(mode!=Mode::reference && mode!=Mode::run);
@@ -59,9 +62,11 @@ extern "C" int SDL_main(int argc,char** argv){
         try{startup.options.data_root=value;SDL_free(value);}catch(...){SDL_free(value);throw;}
         startup.options.allow_file_write=true;
         startup.files=wa2::android::compiled_save_files();
+        wa2::window::SdlHostOptions options;
         std::vector<std::string_view> arguments;for(int n=1;n<argc;++n)arguments.emplace_back(argv[n]);
         for(std::size_t n=0;n<arguments.size();++n){const auto argument=arguments[n];
             if(argument=="--test-mode")startup.test_mode=true;
+            else if(argument=="--limit-60-fps")options.limit_60_fps=true;
             else if(wa2::resource::language_launch_option(arguments,n,startup.language))continue;
             else throw std::runtime_error("Unknown Android launch argument: "+std::string(argument));}
         startup.report_file=startup.options.data_root/"wa2-runtime.json";
@@ -75,10 +80,11 @@ extern "C" int SDL_main(int argc,char** argv){
         wa2::android::set_performance_switch(select_text_path,read_text_counter);
         struct ReleasePerformanceSwitch {~ReleasePerformanceSwitch(){wa2::android::set_performance_switch(nullptr);}} release_performance_switch;
         startup.io_diagnostic_sink=[](std::string_view label,std::string_view json){wa2::platform::compat::emit_counter_record(label,json,[](std::string_view part,std::string_view body){__android_log_print(ANDROID_LOG_INFO,"WA2IO","%.*s %.*s",int(part.size()),part.data(),int(body.size()),body.data());});};
-        wa2::window::SdlHostOptions options;options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();
+        options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();
         options.frame_submitted=[]{
             wa2::android::frame_presented_with_text([]{
                 const auto counts=wa2::aot::native_glyph_counts();
+                const auto particles=wa2::graphics::particle_command_counts();
                 measured_layout_hits.store(wa2::aot::text_layout_replay_hits, std::memory_order_relaxed);
                 measured_glyph_hits.store(wa2::aot::glyph_command_replay_hits, std::memory_order_relaxed);
                 measured_run_hits.store(wa2::aot::text_run_replay_hits, std::memory_order_relaxed);
@@ -86,7 +92,8 @@ extern "C" int SDL_main(int argc,char** argv){
                 measured_page_glyphs.store(wa2::aot::text_page_replay_glyphs,std::memory_order_relaxed);
                 return wa2::android::GlyphTotals{counts.accepted,counts.tiles,wa2::aot::text_page_replay_glyphs,
                     wa2::graphics::surface_glyph_command_counts().prepared_geometry_hits,
-                    wa2::graphics::glyph_pipeline_rollovers(),wa2::graphics::glyph_rollover_bindings_avoided()};
+                    wa2::graphics::glyph_pipeline_rollovers(),wa2::graphics::glyph_rollover_bindings_avoided(),
+                    particles.submitted,particles.tiles,particles.continued};
             });
         };
         startup.window=wa2::window::sdl_host(std::move(options));startup.mount_resources=wa2::android::mount_compiled_resources;

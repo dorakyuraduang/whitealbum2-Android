@@ -28,6 +28,24 @@ music={'duplicate_writes_avoided':119,'committed':1}
 assert parse([line(1,'music_flag_saves',json.dumps(music))])['latest']['music_flag_saves']==music;cases+=1
 final=[line(65,'native_glyph_commands','{"glyph_budget_deferrals":3}'),line(65,'text_local_control_flow','{"local_jumps":1024}'),line(65,'run_completion','{"game_thread_finished":true,"source_returned":true}')]
 snapshot=parse([old,*final]);assert snapshot['latest']['native_glyph_commands']['glyph_budget_deferrals']==3 and snapshot['latest']['text_local_control_flow']['local_jumps']==1024 and snapshot['latest']['run_completion']['source_returned'];cases+=1
-report=dict(schema='wa2.counter-reader.v1',parser_cases=cases,game_launched=False,screen_access=False,passed=True)
+sys.path.insert(0,str(root/'scripts'))
+from compare_android_text import particle_work,validate_particles
+base=dict(frames=10,particle_commands=50,particle_tiles=55,particle_continuations=10,limit_60_fps=False)
+last=dict(frames=20,particle_commands=1050,particle_tiles=1105,particle_continuations=710,limit_60_fps=False)
+work=particle_work(base,last,False)
+assert work['commands_per_frame']==100 and work['tiles_per_frame']==105 and work['continued']==700
+assert particle_work(base,dict(last,particle_continuations=10),True)['continued']==0
+assert particle_work(base,dict(last,particle_tiles=955),False)['tiles']==900
+validate_particles([work,dict(work,commands_per_frame=108)])
+def rejected(function,*args):
+    try:function(*args)
+    except ValueError:return True
+    return False
+assert rejected(particle_work,base,last,True)
+assert rejected(particle_work,base,dict(last,particle_commands=50),False)
+assert rejected(particle_work,base,dict(last,limit_60_fps=True),False)
+assert rejected(particle_work,base,dict(last,particle_continuations=1011),False)
+assert rejected(validate_particles,[work,dict(work,tiles_per_frame=125)])
+report=dict(schema='wa2.counter-reader.v1',parser_cases=cases,particle_work_checked=True,game_launched=False,screen_access=False,passed=True)
 if len(sys.argv)>1:Path(sys.argv[1]).write_text(json.dumps(report)+'\n',encoding='utf-8')
 print(json.dumps(report),flush=True)

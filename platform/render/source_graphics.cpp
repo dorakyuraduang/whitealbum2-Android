@@ -13,6 +13,7 @@
 #include "screen_vertices.hpp"
 #include "texture_batch.hpp"
 #include "glyph_command_replay.hpp"
+#include "particle_commands.hpp"
 #include "prepared_geometry.hpp"
 #include "immutable_buffers.hpp"
 #include "text_buffers.hpp"
@@ -126,7 +127,16 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     std::shared_ptr<wa2::graphics::SurfaceHost> host;
     wa2::graphics::PresentationAcceleration accelerated;
     wa2::graphics::PresentationPacing presentation_pacing;
-    std::uint64_t coalesced_presents{},swap_interval_changes{};
+    std::uint64_t coalesced_presents{},swap_interval_changes{},frame_limit_wait_ns{};
+    void finish_presentation(std::uint64_t after_swap){
+        auto completed=after_swap;
+        if(const auto delay=presentation_pacing.wait_after_swap(after_swap)){
+            std::this_thread::sleep_for(std::chrono::nanoseconds(delay));
+            completed=FrameTrace::now();
+            frame_limit_wait_ns+=completed-after_swap;
+        }
+        presentation_pacing.submitted(completed);
+    }
     int effective_swap_interval{};
     void change_swap_interval(const std::optional<int>& interval){
         if(!interval)return;
@@ -160,6 +170,11 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     bool sprite_command(const wa2::aot::SpriteCommand&,std::uint64_t serial=0,unsigned index=0);
     std::unique_ptr<wa2::graphics::PreparedGlyphGeometry> prepared_geometry;
     wa2::graphics::GlyphCommandState glyph_command_state;
+    wa2::graphics::ParticleCommandState particle_command_state;
+    wa2::graphics::ParticleCommandCounts frame_particle_commands{};
+    bool reuse_particle_commands{wa2::graphics::particle_continuation_enabled()};
+    void invalidate_sprite_commands(){glyph_command_state.valid=false;particle_command_state.valid=false;}
+    bool continue_particle(const wa2::aot::SpriteCommand&);
     wa2::graphics::GlyphTextureLookup<Resource> glyph_texture_lookup;
     bool reuse_surface_commands{wa2::graphics::surface_glyph_commands_enabled()};
     bool queued_without_context_check{};
@@ -354,7 +369,8 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     bool begin_texture_packet(unsigned slots,bool glyph,bool preserved_glyph_pipeline=false);
     void texture_mode(bool enabled){if(texture_batch_mode!=enabled){flush();texture_batch_mode=enabled;applied.reset();}}
     bool batch_textures(std::span<const wa2::graphics::ScreenVertex>,U32,U32,std::span<const U32>,bool);
-    U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {},bool glyph=false);
+    U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {},bool glyph=false,
+             wa2::graphics::ScreenVertexPlan* packed_plan=nullptr);
     U32 present(Args,bool force=false);D3DCAPS9 caps();
     U32 copy(const std::shared_ptr<ImageData>&,RECT,const std::uint8_t*,U32,D3DFORMAT,RECT,U32,U32);
     std::vector<DWORD> shader(U32);U32 compile(U32,U32,Kind);
@@ -526,7 +542,7 @@ U32 Graphics::init(U32 pp,U32 focus){
     gl.GenBuffers(1,&vertex_buffer);gl.GenBuffers(1,&index_buffer);
     default_vertex=assemble_shader(wa2::graphics::fixed_vertex_assembly());
     requested_swap_interval=presentation[13]==D3DPRESENT_INTERVAL_IMMEDIATE?0:1;
-    effective_swap_interval=requested_swap_interval;presentation_pacing.reset(requested_swap_interval);
+    effective_swap_interval=requested_swap_interval;presentation_pacing.reset(requested_swap_interval,host->limit_60_fps());
     swap_interval_result=SDL_GL_SetSwapInterval(requested_swap_interval);actual_swap_interval=SDL_GL_GetSwapInterval();
     if(!presentation[2])presentation[2]=D3DFMT_X8R8G8B8;
     device_resource=make(Kind::device);backbuffer=surface(new_image(presentation[0],presentation[1],D3DFORMAT(presentation[2]),D3DUSAGE_RENDERTARGET,D3DPOOL_DEFAULT));defaults();
@@ -609,7 +625,7 @@ U32 Graphics::compile(U32 input,U32 output,Kind kind){
 }
 void Graphics::shutdown() noexcept {
     if(stopped)return;stopped=true;
-    glyph_command_state.valid=false;
+    invalidate_sprite_commands();
     if(context){if(SDL_GL_MakeCurrent(window,context))return;MOJOSHADER_glMakeContextCurrent(mojo);
         queued_without_context_check=false;
         try{flush();}catch(...){}if(mojo)MOJOSHADER_glBindProgram(nullptr);}
@@ -636,7 +652,7 @@ void Graphics::shutdown() noexcept {
     if(initialized){SDL_QuitSubSystem(SDL_INIT_VIDEO);initialized=false;}
 }
 U32 Graphics::method(Object& o,unsigned slot,Args a){
-    glyph_command_state.valid=false;
+    invalidate_sprite_commands();
     const auto r=o.resource;
     // Setters below alter only the CPU state. Leave earlier geometry queued
     // until the next draw chooses a pipeline, or an observable resource/API
@@ -832,9 +848,9 @@ void Graphics::apply_logical_samplers(bool opening_glyph_packet,bool preserved){
 }
 
 void Graphics::flush(bool preserve_glyph_pipeline) {
-    glyph_command_state.valid=false;
+    invalidate_sprite_commands();
     if(!has_pending())return;
-    // CPU-only glyphs can leave the owner's SDL/Mojo context unchecked.
+    // CPU-only sprite submissions can leave the owner's context unchecked.
     // All ways of draining the queue pass here, including metadata barriers.
     if(queued_without_context_check)enter(false);
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.flush:nullptr);
@@ -1021,9 +1037,38 @@ bool Graphics::continue_surface_glyph(const wa2::aot::SpriteCommand& command,std
     ++frame_surface_commands.submitted;++frame_surface_commands.continued;
     frame_surface_commands.continued_tiles+=tiles;return true;
 }
+bool Graphics::continue_particle(const wa2::aot::SpriteCommand& command){
+    if(!particle_command_state.matches(command))return false;
+    enter(false,false);
+    const auto& tile=command.tiles.front();
+    const auto texture=glyph_texture_lookup.resolve(tile.texture,[this](U32 token){return get(token,Kind::texture);});
+    const auto& destination=pending_target->levels[0];
+    if(image(texture)->texture==destination->texture)return false;
+    const bool offscreen=command.target_kind==wa2::aot::SpriteTarget::texture_level_zero;
+    if(offscreen && pending_target->data)return false;
+    FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.draw:nullptr);
+    const auto& vertices=tile.vertices;
+    if(!texture_batch.append_sprite_quad(texture,particle_command_state.plan,
+        {reinterpret_cast<const std::uint8_t*>(vertices.data()),sizeof(vertices)},[&]{
+            if(!offscreen)return;
+            // The state and packet own the same backing surface. A new
+            // handle has no locks; an existing handle gains a reference.
+            // Its matching Release is therefore deferred in either case.
+            const auto handle=wrap(pending_target);
+            p.memory.store(0xb34008,handle,32);
+            const std::array<U32,1> args{handle};
+            method(object(handle),2,args);
+        }))return false;
+    particle_command_state.valid=true;
+    ++texture_batch_draws;++screen_draws;screen_unique_vertices+=4;++batched_guest_draws;++draws;
+    texture_version+=2;destination->gpu_dirty=true;queued_without_context_check=true;
+    ++frame_particle_commands.submitted;++frame_particle_commands.tiles;++frame_particle_commands.continued;
+    return true;
+}
 bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command,std::uint64_t serial,unsigned index){
     if(reuse_surface_commands && continue_surface_glyph(command,serial,index))return true;
-    glyph_command_state.valid=false;
+    if(reuse_particle_commands && command.particle && continue_particle(command))return true;
+    invalidate_sprite_commands();
     if(!context || !state.scene || state.vertex_shader || state.pixel_shader || command.tiles.size()>256)return false;
     for(unsigned n=1;n<8;++n)if(state.stage[n][D3DTSS_COLOROP]!=D3DTOP_DISABLE)return false;
     for(unsigned n=1;n<16;++n)if(state.textures[n])return false;
@@ -1049,11 +1094,18 @@ bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command,std::uint64
         else if(group==Group::stage)set_word(state.stage[0][key],value,baseline_words.stage[0][key]);
         else set_word(state.sampler[0][key],value,baseline_words.sampler[0][key]);
     });
+    wa2::graphics::ScreenVertexPlan particle_plan{};
+    const bool capture_particle=reuse_particle_commands && command.particle && !command.glyph && command.tiles.size()==1;
     for(unsigned n=0;n<command.tiles.size();++n){const auto& tile=command.tiles[n];
         set_texture(0,textures[n],tile.texture);
         if(state.fvf!=0x1c4 || state.declaration)++config_version;state.fvf=0x1c4;state.declaration.reset();
-        const auto result=draw(D3DPT_TRIANGLESTRIP,4,{reinterpret_cast<const std::uint8_t*>(tile.vertices.data()),sizeof(tile.vertices)},sizeof(wa2::aot::SpriteVertex),{},command.glyph);
+        const auto result=draw(D3DPT_TRIANGLESTRIP,4,{reinterpret_cast<const std::uint8_t*>(tile.vertices.data()),sizeof(tile.vertices)},sizeof(wa2::aot::SpriteVertex),{},command.glyph,capture_particle?&particle_plan:nullptr);
         if(result)stop("invalid native sprite packet");state.streams[0]={};set_texture(0,{},0);
+    }
+    if(command.particle){
+        ++frame_particle_commands.submitted;frame_particle_commands.tiles+=command.tiles.size();
+        if(particle_plan.source_prefix && applied && config_version==applied_config_version && !word_differences)
+            particle_command_state.capture(command,particle_plan);
     }
     if(command.glyph && command.target_kind==wa2::aot::SpriteTarget::surface && !command.tiles.empty()){
         ++frame_surface_commands.submitted;
@@ -1062,7 +1114,7 @@ bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command,std::uint64
     }
     return true;
 }
-U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 stride,std::span<const U32> indices,bool glyph){
+U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 stride,std::span<const U32> indices,bool glyph,wa2::graphics::ScreenVertexPlan* packed_plan){
     FrameTrace::Timer timing(frame_trace.enabled?&frame_trace.draw:nullptr);
     if(!state.scene || !stride || stride>256 || bytes.size()%stride)return U32(D3DERR_INVALIDCALL);if(!count)return 0;const auto total=bytes.size()/stride;
     if((indices.empty() && count>total) || (!indices.empty() && indices.size()!=count))return U32(D3DERR_INVALIDCALL);
@@ -1100,6 +1152,7 @@ U32 Graphics::draw(U32 type,U32 count,std::span<const std::uint8_t> bytes,U32 st
         screen_scratch.resize(total);
         if(wa2::graphics::pack_screen_vertices(*plan,bytes,stride,screen_scratch)){
             if(batch_textures(screen_scratch,type,count,indices,glyph)){
+                if(packed_plan)*packed_plan=*plan;
                 if (glyph && continue_glyph_packets && pending_glyph) pending_glyph_plan = *plan;
                 ++screen_draws;screen_unique_vertices+=total;++batched_guest_draws;
                 image(state.target)->gpu_dirty=true;++draws;return 0;
@@ -1184,7 +1237,7 @@ void Graphics::movie_frame(const wa2::movie::VideoFrame& frame,const wa2::graphi
     submit(GL_TRIANGLES,vertices,{});applied.reset();const auto error=gl.GetError();if(error)stop("GL movie frame error "+std::to_string(error));
     ++movie_frames;last_drawable_size={w,h};last_movie_client=viewport.size;last_movie_size={frame.width,frame.height};
     last_movie_source=view.source;last_movie_requested=view.destination;last_movie_destination=destination;
-    SDL_GL_SwapWindow(window);host->frame_submitted();
+    SDL_GL_SwapWindow(window);finish_presentation(FrameTrace::now());host->frame_submitted();
 }
 void Graphics::restore_game(){if(context && backbuffer && !stopped){enter(false);present(std::array<U32,5>{},true);}}
 void Graphics::draw_subtitles(int w,int h,const std::array<int,4>& destination){
@@ -1245,6 +1298,9 @@ U32 Graphics::present(Args a,bool force){
     flush();applied.reset();
     wa2::graphics::record_glyph_continuations(frame_glyph_continuations);
     wa2::graphics::record_surface_glyph_commands(frame_surface_commands);
+    wa2::graphics::publish_particle_commands(frame_particle_commands);
+    frame_particle_commands={};
+    reuse_particle_commands=wa2::graphics::particle_continuation_enabled();
     frame_surface_commands={};
     reuse_surface_commands=wa2::graphics::surface_glyph_commands_enabled();
     frame_glyph_continuations = 0;
@@ -1273,7 +1329,7 @@ U32 Graphics::present(Args a,bool force){
     draw_subtitles(w,h,last_present_destination);
     const auto before_error=FrameTrace::now();++frame_error_checks;const auto error=gl.GetError();if(error)stop("GL frame error "+std::to_string(error));
     const auto after_error=FrameTrace::now();SDL_GL_SwapWindow(window);const auto after_swap=FrameTrace::now();++presents;
-    presentation_pacing.submitted(after_swap);
+    finish_presentation(after_swap);
     frame_trace.presented(presents,present_begin,before_error,after_error,after_swap,copy_total.total_ns,draws,uploads,
         {p.native_function_entries,p.api_calls,p.direct_leaf_api_calls,p.host_work.sleep_wall_ns,p.host_work.wait_wall_ns,p.host_work.sleep_requested_ms,p.host_work.sleep_zero_calls,p.host_work.function_wall_ns,p.host_work.api_wall_ns,p.host_work.poll_wall_ns});host->frame_submitted();
     if(p.state().stop_after_presents && presents>=p.state().stop_after_presents){p.state().diagnostic_stop=true;p.exit(0);}return 0;
@@ -1300,7 +1356,7 @@ void Graphics::install(){
         }
     }
     p.state().reports["frame_timing"]=[this]{return frame_trace.report();};
-    p.state().reports["frame_work"]=[this]{auto text=frame_trace.summary();text.pop_back();return text+",\"coalesced_fast_forward_presents\":"+std::to_string(coalesced_presents)+",\"swap_interval_requested\":"+std::to_string(effective_swap_interval)+",\"swap_interval_actual\":"+std::to_string(actual_swap_interval)+",\"swap_interval_result\":"+std::to_string(swap_interval_result)+"}";};
+    p.state().reports["frame_work"]=[this]{auto text=frame_trace.summary();text.pop_back();return text+",\"coalesced_fast_forward_presents\":"+std::to_string(coalesced_presents)+",\"limit_60_fps\":"+(host->limit_60_fps()?"true":"false")+",\"frame_limit_wait_ns\":"+std::to_string(frame_limit_wait_ns)+",\"swap_interval_requested\":"+std::to_string(effective_swap_interval)+",\"swap_interval_actual\":"+std::to_string(actual_swap_interval)+",\"swap_interval_result\":"+std::to_string(swap_interval_result)+"}";};
     p.state().reports["resource_graphics"]=[this]{return "{\"surface_load_calls\":"+std::to_string(copy_total.calls)+
         ",\"pixels_processed\":"+std::to_string(copy_total.pixels)+",\"surface_load_ns\":"+std::to_string(copy_total.total_ns)+
         ",\"readback_ns\":"+std::to_string(copy_total.readback_ns)+",\"direct_source_copies\":"+std::to_string(direct_source_copies)+

@@ -68,6 +68,7 @@ int main(int argc,char** argv){try{
     const auto run=[&](bool native,bool capture){recorded=Recording{};recorded.capture=capture;
         using Sink=std::tuple<Recording*,wr::Memory*,std::map<unsigned,unsigned>*>;Sink sink{&recorded,&p.memory,&surfaces};
         std::optional<a::SpriteService> service;if(native)service.emplace(p.memory,[](const a::SpriteCommand& c,void* owner){auto [output,memory,targets]=*static_cast<Sink*>(owner);auto& r=*output;++r.native;
+            CHECK(c.particle && !c.glyph);
             CHECK((c.target_kind==a::SpriteTarget::texture_level_zero)==targets->contains(c.target));
             r.target=targets->contains(c.target)?targets->at(c.target):c.target;if(targets->contains(c.target)){memory->store(0xb34008,r.target,32);++r.offscreen;}
             if(r.capture)a::sprite_state_words(c,[&](auto group,unsigned key,unsigned value){r.words[{unsigned(group),key}]=value;});

@@ -106,6 +106,7 @@ public:
     explicit SdlHost(SdlHostOptions value):options(std::move(value)){if(!options.widgets)throw std::invalid_argument("native widgets adapter required");}
     ~SdlHost()override{for(const auto& [id,dialog]:dialogs)try{options.widgets->destroy(id);}catch(...){}if(window)SDL_DestroyWindow(window);for(auto* retired:retired_windows)SDL_DestroyWindow(retired);if(initialized)SDL_QuitSubSystem(SDL_INIT_VIDEO);}
     bool embedded_gl()const noexcept override{return options.embedded_gl;}
+    bool limit_60_fps()const noexcept override{return options.limit_60_fps;}
     SDL_Window* acquire(std::uint32_t source,std::uint32_t width,std::uint32_t height,bool windowed)override{enter();if(!window || source!=id)throw std::runtime_error("unknown source render window");
         const auto extent=backbuffer_size(source,width,height,windowed);if(!extent)throw std::runtime_error("invalid source backbuffer dimensions");render_extent=*extent;
         if(!options.mobile && !windowed && SDL_SetWindowFullscreen(window,SDL_WINDOW_FULLSCREEN_DESKTOP))throw std::runtime_error(SDL_GetError());return window;}

@@ -134,6 +134,34 @@ void presentation(Counts& counts){
         pacing.reset(source);unsigned attempts{};std::uint64_t now{};
         for(unsigned n=0;n<100;++n){const auto d=pacing.plan(true,now);if(d.swap_interval)++attempts;if(d.submit){now+=16666667;pacing.submitted(now);}now+=1000;}
         CHECK(attempts==unsigned(source!=0));CHECK(pacing.plan(false,now).submit);++counts.pacing;
+
+        // Use the same completed-swap timestamps as the Android HUD. Work
+        // and time blocked in the driver both count towards the cap.
+        const auto period=PresentationPacing::interval_60_ns;
+        pacing.reset(source,true);
+        now=50000000;
+        CHECK(!pacing.wait_after_swap(now));
+        pacing.submitted(now);
+        const auto start=now;
+        for(unsigned frame=0;frame<120;++frame){
+            CHECK(pacing.plan(false,now).submit);
+            const auto swapped=now+2000000+unsigned(frame%3)*4000000;
+            const auto wait=pacing.wait_after_swap(swapped);
+            CHECK(wait>0 && swapped+wait-now==period);
+            now=swapped+wait;
+            pacing.submitted(now);
+        }
+        CHECK(now-start==120*period);
+        CHECK(!pacing.wait_after_swap(now+period) && !pacing.wait_after_swap(now+3*period));
+        CHECK(!pacing.wait_after_swap(0)); // clock reset or new device
+        // Skip keeps advancing between permitted presentations.
+        CHECK(pacing.plan(true,now).submit);
+        pacing.submitted(now);
+        CHECK(!pacing.plan(true,now+period-1).submit && pacing.plan(true,now+period).submit);
+        CHECK(pacing.plan(true,now+1,true).submit && pacing.wait_after_swap(now+1)==period-1);
+        pacing.reset(source);
+        pacing.submitted(now);
+        CHECK(!pacing.wait_after_swap(now+1));
     }
     wr::Memory unmapped;CHECK(!wa2::aot::source_fast_forward(unmapped));++counts.guards;
 }

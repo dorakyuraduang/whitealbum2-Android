@@ -12,7 +12,9 @@ struct SdlLifetime {
 };
 }
 int run_native_host(NativeHost host){
-    if(!host.resources || !host.storage)throw std::invalid_argument("Missing native host resource or game-directory storage adapter");host.driver.validate();
+    if(!host.resources || !host.storage)throw std::invalid_argument("Missing native host resource or game-directory storage adapter");
+    host.driver.validate();
+    host.driver.presentation_hz=host.startup.presentation_rate(host.driver.presentation_hz);
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY,"linear");SdlLifetime sdl;
     const auto directory=host.storage();if(!directory)throw std::invalid_argument("Native host game directory is unavailable");
     std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)> window(SDL_CreateWindow("WHITE ALBUM2",SDL_WINDOWPOS_UNDEFINED,SDL_WINDOWPOS_UNDEFINED,

@@ -139,8 +139,9 @@ public:
         return !empty() && previous_glyph && next_glyph && next_slots==limit_ &&
             vertices>0 && vertices<=MaxVertices && indices>0 && indices<=MaxIndices;
     }
-    bool append_glyph_quad(const Texture& texture, const ScreenVertexPlan& plan,
-                           std::span<const std::uint8_t> bytes) {
+    template<class BeforeAppend>
+    bool append_sprite_quad(const Texture& texture, const ScreenVertexPlan& plan,
+                            std::span<const std::uint8_t> bytes,BeforeAppend before_append) {
         if (!texture || vertex_count() + 4 > MaxVertices || element_count() + 6 > MaxIndices)
             return false;
         const auto binding = slot(texture);
@@ -148,6 +149,9 @@ public:
         std::array<ScreenVertex, 4> quad;
         if (!pack_screen_vertices(plan, bytes, 32, quad)) return false;
 
+        // Offscreen sprite commands perform an observable source interface
+        // write here, once rejection is impossible and before the draw.
+        before_append();
         materialize();
         if (binding == used_) bindings_[used_++] = texture;
         const auto base = static_cast<std::uint16_t>(vertices_.size());
@@ -156,6 +160,10 @@ public:
         const auto third = static_cast<std::uint16_t>(base + 2);
         indices_.insert(indices_.end(), {base, next, third, third, next, static_cast<std::uint16_t>(base + 3)});
         return true;
+    }
+    bool append_glyph_quad(const Texture& texture,const ScreenVertexPlan& plan,
+                           std::span<const std::uint8_t> bytes){
+        return append_sprite_quad(texture,plan,bytes,[]{});
     }
     bool append(const Texture& texture,std::span<const ScreenVertex> vertices,unsigned type,
                 unsigned count,std::span<const std::uint32_t> indices={}){

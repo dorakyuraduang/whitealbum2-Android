@@ -6,9 +6,24 @@
 
 namespace wa2::platform {
 NativeStartup native_startup(std::span<const std::string_view> arguments){
-    if(arguments.size()>32)throw std::invalid_argument("Too many native startup arguments");NativeStartup result;
-    for(const auto argument:arguments){if(argument=="--test-mode"){if(result.test_mode)throw std::invalid_argument("Duplicate native test-mode argument");result.test_mode=true;}
-        else throw std::invalid_argument("Unsupported native startup argument: "+std::string(argument.substr(0,128)));}
+    if(arguments.size()>32)throw std::invalid_argument("Too many native startup arguments");
+    NativeStartup result;
+    bool has_language=false;
+    for(std::size_t i=0;i<arguments.size();++i){
+        const auto argument=arguments[i];
+        if(argument=="--test-mode"){
+            if(result.test_mode)throw std::invalid_argument("Duplicate native test-mode argument");
+            result.test_mode=true;
+        }else if(argument=="--limit-60-fps"){
+            if(result.limit_60_fps)throw std::invalid_argument("Duplicate native frame limit argument");
+            result.limit_60_fps=true;
+        }else if(argument=="--language"){
+            if(has_language || i+1==arguments.size())throw std::invalid_argument("Duplicate or missing native language argument");
+            const auto language=arguments[++i];
+            if(language!="zh-CN")throw std::invalid_argument("Unsupported native game language: "+std::string(language.substr(0,128)));
+            has_language=true;
+        }else throw std::invalid_argument("Unsupported native startup argument: "+std::string(argument.substr(0,128)));
+    }
     return result;
 }
 std::unique_ptr<game::Application> native_application(resource::BankOpener opener,std::shared_ptr<GameDirectory> directory,NativeStartup startup,game::SceneServices scene,game::TitleServices title,LegacySettingsOpener legacy,game::LegacySaveSources legacy_saves){

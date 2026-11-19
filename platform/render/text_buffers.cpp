@@ -1,4 +1,5 @@
 #include "text_buffers.hpp"
+#include "particle_commands.hpp"
 #include <atomic>
 namespace wa2::graphics {
 namespace {
@@ -12,6 +13,25 @@ std::atomic<std::uint64_t> rollover_gl_calls_avoided{};
 std::atomic<bool> surface_commands{true};
 std::atomic<std::uint64_t> surface_submitted{},surface_continued{},surface_tiles{};
 std::atomic<std::uint64_t> geometry_hits{},geometry_draws{};
+std::atomic<bool> particle_continuation{true};
+std::atomic<std::uint64_t> particles_submitted{},particle_tiles{},particles_continued{};
+}
+
+void enable_particle_continuation(bool value) noexcept {
+    particle_continuation.store(value,std::memory_order_relaxed);
+}
+bool particle_continuation_enabled() noexcept {
+    return particle_continuation.load(std::memory_order_relaxed);
+}
+void publish_particle_commands(ParticleCommandCounts frame) noexcept {
+    if(!frame.submitted)return;
+    particles_submitted.fetch_add(frame.submitted,std::memory_order_relaxed);
+    particle_tiles.fetch_add(frame.tiles,std::memory_order_relaxed);
+    particles_continued.fetch_add(frame.continued,std::memory_order_relaxed);
+}
+ParticleCommandCounts particle_command_counts() noexcept {
+    return {particles_submitted.load(std::memory_order_relaxed),particle_tiles.load(std::memory_order_relaxed),
+            particles_continued.load(std::memory_order_relaxed)};
 }
 
 void enable_glyph_packet_continuation(bool value) noexcept {

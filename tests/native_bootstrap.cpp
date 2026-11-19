@@ -13,6 +13,20 @@ struct Movie:wa2::movie::Playback {
 };
 int main(int argc,char** argv){try{
     CHECK(argc==3);unsigned cases{},guards{};CHECK(!platform::native_startup({}).test_mode);const std::array<std::string_view,1> test_mode{"--test-mode"};CHECK(platform::native_startup(test_mode).test_mode);++cases;
+    const std::array<std::string_view,2> default_language{"--language","zh-CN"};
+    auto presentation=platform::native_startup(default_language);
+    CHECK(!presentation.limit_60_fps && presentation.presentation_rate(120)==120);++cases;
+    const std::array<std::string_view,4> capped{"--test-mode","--limit-60-fps","--language","zh-CN"};
+    presentation=platform::native_startup(capped);
+    CHECK(presentation.test_mode && presentation.limit_60_fps && presentation.presentation_rate(120)==60 && presentation.presentation_rate(60)==60 && presentation.presentation_rate(30)==30);++cases;
+    const auto invalid_startup=[&](std::initializer_list<std::string_view> args){
+        rejects([&]{platform::native_startup(std::span(args.begin(),args.size()));});++guards;
+    };
+    invalid_startup({"--limit-60-fps","--limit-60-fps"});
+    invalid_startup({"--language"});
+    invalid_startup({"--language","zh-CN","--language","zh-CN"});
+    invalid_startup({"--language","en-US"});
+    invalid_startup({"--no-chinese-subtitles"});
     const std::array<std::string_view,2> duplicate{"--test-mode","--test-mode"};rejects([&]{platform::native_startup(duplicate);});const std::array<std::string_view,1> unknown{"--unknown"};rejects([&]{platform::native_startup(unknown);});std::array<std::string_view,33> excessive;rejects([&]{platform::native_startup(excessive);});guards+=3;++cases;
     rejects([]{g::installed_title_content({});});++guards;std::vector<std::string> probes;auto content=g::installed_title_content([&](auto name)->std::shared_ptr<r::Source>{probes.emplace_back(name);return {};});CHECK(!content.local_introductory && !content.external_introductory && content.perspective_snow && probes==std::vector<std::string>{"IC/bak.pak"});++cases;
     content=g::installed_title_content([](auto)->std::shared_ptr<r::Source>{return bank({});});CHECK(content.local_introductory && !content.external_introductory);++cases;

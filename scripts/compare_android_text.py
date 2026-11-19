@@ -1,4 +1,4 @@
-"""Compare reference/optimized CPU text paths in an already running phone game.
+"""Compare rendering paths in an already running phone game.
 
 The user selects the scene and keeps it foreground. Shell-protected registered
 broadcasts switch only the candidate path and read actual frame HUD
@@ -14,7 +14,7 @@ import time
 from build_pak_tool import low_priority
 
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE='novel-text-and-texture-bindings'
+CANDIDATE='shared-render-paths'
 
 def candidate_work(mode, first, last, reference=False):
     work={}
@@ -61,13 +61,41 @@ def validate_workload(intervals):
         if largest-smallest>max(1.0,smallest*.02):
             raise ValueError(f'Text workload changed: {key} ranged from {smallest:.2f} to {largest:.2f}')
 
+def particle_work(previous,current,reference):
+    frames=current['frames']-previous['frames']
+    if frames<=0:
+        raise ValueError('Particle frame counters stopped or reset')
+    if previous.get('limit_60_fps') is not False or current.get('limit_60_fps') is not False:
+        raise ValueError('Turn off the 60 FPS limit before measuring particle throughput')
+    commands=current['particle_commands']-previous['particle_commands']
+    tiles=current['particle_tiles']-previous['particle_tiles']
+    hits=current['particle_continuations']-previous['particle_continuations']
+    # Accepted sprites with empty texture slots can legitimately contribute no tiles.
+    if commands<=0 or tiles<=0 or not 0<=hits<=min(commands,tiles):
+        raise ValueError('Missing, reset or inconsistent particle submissions')
+    if reference and hits:
+        raise ValueError('Particle continuation ran in the reference window')
+    return dict(commands_per_frame=commands/frames,tiles_per_frame=tiles/frames,
+                submitted=commands,tiles=tiles,continued=hits)
+
+def validate_particles(intervals):
+    for key in ('commands_per_frame','tiles_per_frame'):
+        smallest=min(row[key] for row in intervals)
+        largest=max(row[key] for row in intervals)
+        if largest-smallest>max(.25,smallest*.10):
+            raise ValueError(f'Particle workload changed: {key} ranged from {smallest:.2f} to {largest:.2f}')
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial',required=True)
     parser.add_argument('--samples',type=int,choices=range(4,13),default=8)
-    parser.add_argument('--path',choices=('novel','dense','bindings','page','optimized','run','submission'),default='novel')
-    parser.add_argument('--output',type=Path,default=ROOT/'logs/android-text-comparison.json')
+    parser.add_argument('--path',choices=('novel','dense','bindings','page','optimized','run','submission','particles'),default='novel')
+    parser.add_argument('--output',type=Path)
     args=parser.parse_args();low_priority()
+    particles=args.path=='particles'
+    work_key='particle_work' if particles else 'glyph_work'
+    if args.output is None:
+        args.output=ROOT/'logs'/('android-particle-comparison.json' if particles else 'android-text-comparison.json')
     adb=ROOT/'tools/android-sdk/platform-tools/adb.exe'
     flags=getattr(subprocess,'CREATE_NO_WINDOW',0)|getattr(subprocess,'BELOW_NORMAL_PRIORITY_CLASS',0)
     release=json.loads((ROOT/'config/release.json').read_text())['name']
@@ -101,11 +129,13 @@ def main():
         last_response=record['uptime_ms'];return record
     windows=[];workload_intervals=[];failure=None;restore_error=None;restored_mode=None
     try:
-        if args.path in ('novel','dense','bindings'):reference_mode='page'
+        if particles:reference_mode='particle_reference'
+        elif args.path in ('novel','dense','bindings'):reference_mode='page'
         else:reference_mode='page_reference' if args.path=='page' else 'reference'
         for mode in (reference_mode,args.path,args.path,reference_mode):
             rows=[]
-            window=dict(mode=mode,samples=rows,glyph_work=[],complete=False)
+            window=dict(mode=mode,samples=rows,complete=False)
+            window[work_key]=[]
             windows.append(window)
             first=request(mode);start=first['uptime_ms'];time.sleep(1.1)
             for _ in range(args.samples):
@@ -115,14 +145,19 @@ def main():
                 if row['uptime_ms']-row['sample_age_ms']<start+500:raise RuntimeError('Frame sample predates the mode change')
                 rows.append(row)
                 if len(rows)>=2:
-                    interval=glyph_work(rows[-2],row)
-                    window['glyph_work'].append(interval)
+                    interval=particle_work(rows[-2],row,mode==reference_mode) if particles else glyph_work(rows[-2],row)
+                    window[work_key].append(interval)
                     workload_intervals.append(interval)
-                    validate_workload(workload_intervals)
+                    if particles:validate_particles(workload_intervals)
+                    else:validate_workload(workload_intervals)
                 time.sleep(.85)
             # A text layout call that was already in flight when the switch
             # arrived belongs to the warm-up interval.
-            work=candidate_work(mode,rows[0],rows[-1],mode==reference_mode)
+            if particles:
+                work=particle_work(rows[0],rows[-1],mode==reference_mode)
+                if mode!=reference_mode and not work['continued']:
+                    raise ValueError('No particle continuation was used in this scene')
+            else:work=candidate_work(mode,rows[0],rows[-1],mode==reference_mode)
             window.update(median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_work=work,complete=True)
             measured=[sample.get('window') for sample in rows]
             if all(sample and sample.get('game_thread_cpu_ns') is not None and sample['frames']>0 for sample in measured):

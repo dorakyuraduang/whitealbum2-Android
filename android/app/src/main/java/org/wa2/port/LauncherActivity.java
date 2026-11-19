@@ -31,7 +31,7 @@ public final class LauncherActivity extends Activity {
     private Button choose, start, language, subtitle, uiLanguage, diagnostics;
     private ScrollView root;
     private LauncherText ui;
-    private Switch fps, longPress, testMode, chineseSubtitles, showMenu;
+    private Switch fps, limit60Fps, longPress, testMode, chineseSubtitles, showMenu;
     private boolean busy, launching, refreshing, profileReady;
     private int generation;
 
@@ -131,6 +131,11 @@ public final class LauncherActivity extends Activity {
         fps = toggle(t(FPS));
         fps.setChecked(LaunchSettings.showFps(this)); fps.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText(t(SAVING));LaunchSettings.setShowFps(this, checked,this::saved);}});
         content.addView(fps,row(0));
+        limit60Fps=toggle(t(LIMIT_60_FPS));
+        limit60Fps.setOnCheckedChangeListener((button,checked) -> {
+            if(!refreshing){status.setText(t(SAVING));LaunchSettings.setLimit60Fps(this,checked,this::saved);}
+        });
+        content.addView(limit60Fps,row(0));
         longPress = toggle(t(LONG_PRESS));
         longPress.setChecked(LaunchSettings.longPressFastForward(this)); longPress.setOnCheckedChangeListener((button, checked) -> {if(!refreshing){status.setText(t(SAVING));LaunchSettings.setLongPressFastForward(this, checked,this::saved);}});
         content.addView(longPress,row(0));
@@ -161,10 +166,10 @@ public final class LauncherActivity extends Activity {
         uiLanguage.setText(t(UI_LANGUAGE)+" · "+ui.name());uiLanguage.setContentDescription(t(UI_LANGUAGE));uiLanguage.setTooltipText(t(UI_LANGUAGE)+" · "+ui.name());uiLanguage.setEnabled(!busy);
         diagnostics.setText(t(COPY_LOG));diagnostics.setContentDescription(t(COPY_LOG));diagnostics.setEnabled(!busy);
         choose.setText(t(PICK_FOLDER));start.setText(t(START));
-        fps.setText(t(FPS));fps.setContentDescription(t(FPS_DETAIL));longPress.setText(t(LONG_PRESS));testMode.setText(t(TEST_MODE));chineseSubtitles.setText(t(CAPTIONS));showMenu.setText(t(SHOW_MENU));
+        fps.setText(t(FPS));fps.setContentDescription(t(FPS_DETAIL));limit60Fps.setText(t(LIMIT_60_FPS));longPress.setText(t(LONG_PRESS));testMode.setText(t(TEST_MODE));chineseSubtitles.setText(t(CAPTIONS));showMenu.setText(t(SHOW_MENU));
         choose.setEnabled(!busy); start.setEnabled(!busy && tree != null && profileReady);
-        refreshing=true;fps.setChecked(LaunchSettings.showFps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));showMenu.setChecked(LaunchSettings.showMenu(this));refreshing=false;
-        for(Switch control:new Switch[]{fps,longPress,testMode,chineseSubtitles,showMenu})control.setEnabled(!busy && profileReady);
+        refreshing=true;fps.setChecked(LaunchSettings.showFps(this));limit60Fps.setChecked(LaunchSettings.limit60Fps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));showMenu.setChecked(LaunchSettings.showMenu(this));refreshing=false;
+        for(Switch control:new Switch[]{fps,limit60Fps,longPress,testMode,chineseSubtitles,showMenu})control.setEnabled(!busy && profileReady);
         language.setText(t(PICK_GAME)+" · "+LaunchSettings.languageLabel(this));language.setEnabled(!busy && profileReady);
         languagePaths.setText(t(SCRIPT_PATH,"./"+LaunchSettings.script(this))+"\n"+t(FONT_PATH,"./"+LaunchSettings.font(this)));
         String source=LaunchSettings.subtitle(this);subtitle.setText(t(SUBTITLE_FMT,t(source.isEmpty()?BUILT_IN:EXTERNAL)));

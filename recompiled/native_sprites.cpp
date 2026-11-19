@@ -241,6 +241,10 @@ bool native_draw_sprite(wr::Cpu& cpu,wr::Memory& memory){
         if(read<std::int16_t>(snapshot.data(),0x48)>=0 && std::uint64_t(sprite)<0xb3400cull && std::uint64_t(sprite)+256>0xb34008ull)return false;
         capability_filter=read<std::uint32_t>(snapshot.data(),0x40)==2 && memory.load(0xb3442c,32);
         if(!build(cpu,memory,command,snapshot,memory.load(sp+8,32)) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++counts.declined;return false;}
+        // Weather populates two banks of 400 records, starting at sprite slot 81.
+        constexpr std::uint32_t stride=256, first_weather=0xab3fb8+81*stride;
+        const auto offset=sprite-first_weather;
+        command.particle=offset<800*stride && offset%stride==0;
     }catch(const Declined&){++counts.declined;return false;}catch(const wr::GuestFault&){++counts.declined;return false;}
     if(!service->submit(command)){++counts.declined;++counts.adapter_declined;return false;}
     if(current_native_calls)--current_native_calls->remaining;
