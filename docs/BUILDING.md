@@ -475,10 +475,11 @@ page, then run `python scripts/compare_android_text.py --serial <ADB-serial>`.
 It compares reference/optimized/optimized/reference windows within one process
 using real presentation FPS and frame-time samples. The running activity's
 dynamic receiver requires the sender's Android DUMP permission; registered-only
-delivery cannot launch the game. The default comparison (`--path page`) keeps
-the 0.2.103 glyph layout, command and graphics state optimizations enabled in
-both modes. It toggles reuse of consecutive stable glyphs. Counters distinguish
-replayed glyphs, reused vertex data and actual draws from retained buffers.
+delivery cannot launch the game. The default comparison (`--path novel`) uses
+the 0.2.104 page and graphics paths as its reference. Use `--path dense` or
+`--path bindings` to isolate the page cache or the texture binding change.
+`--path page` compares the older per-glyph and grouped paths. Counters report
+replayed glyphs, reused vertex data, retained draws and skipped driver calls.
 Both modes submit the current scene in the original order. The independent
 `submission`, `run` and `optimized` comparisons exercise the earlier
 graphics submission path, experimental cursor shortcut or both, respectively.
@@ -493,7 +494,8 @@ Subtract adjacent totals within the same foreground session to compare work
 per frame. Record only the game's UID and this tag and restore its prior log
 level after the measurement. On pause, the game also reports stable foreground
 text windows to its performance log when available. These contain frame counts,
-glyph and tile counts, reused glyphs and geometry, wall time and game-thread
+glyph and tile counts, reused glyphs and geometry, packet rollovers, skipped
+driver calls, wall time and game-thread
 CPU time. A shared foreground interval alone does not identify a scene.
 
 The optional Android target `wa2_phone_novel_cpu` runs the shared text routine
@@ -506,8 +508,10 @@ routine enabled in both modes. `WA2_NOVEL_TIMING=glyph-bench` compares
 prepared glyph commands with layout reuse enabled in both modes.
 `WA2_NOVEL_TIMING=page-bench` exercises 386 glyphs and 464 texture tiles
 across three constructed text segments on a recording device. The companion
-`page-light-bench` uses 50 glyphs and 54 texture tiles. Compare time
-per page and actual replay counts. `WA2_NOVEL_TIMING=page` compares the
+`page-light-bench` uses 50 glyphs and 54 texture tiles. `page-dense-bench`
+uses six constructed segments for 614 glyphs and 752 tiles. `page-cache-policy`
+and `page-light-policy` compare the two cache policies with page replay active
+in both modes. Compare time per page and actual replay counts. `WA2_NOVEL_TIMING=page` compares the
 live CPU, stack, submitted commands and fault boundaries for grouped replay.
 `WA2_NOVEL_TIMING=layout` compares CPU state, stack writes and drawing
 commands at each observed boundary and checks dependencies on mutable

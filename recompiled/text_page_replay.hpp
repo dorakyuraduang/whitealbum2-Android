@@ -8,6 +8,7 @@
 namespace wa2::aot::text_page {
 using namespace text_run;
 constexpr unsigned Width=8;
+constexpr unsigned ChunkSlots=128;
 struct Step {Entry transition;TextPagePacket draw;};
 
 // These are the resource reads made by the admitted unrotated surface glyph
@@ -24,16 +25,74 @@ struct Resources {
 struct Chunk {
     std::array<Step,Width> steps;
     Resources inputs;
-    unsigned count{};
+    unsigned count{},geometry_slot{ChunkSlots};
     std::uint64_t serial{};
 };
-struct Slot {std::array<std::unique_ptr<Chunk>,2> ways;unsigned next{};};
-inline thread_local std::array<Slot,64> chunks;
-inline std::atomic<std::uint64_t> next_serial{1};
-inline std::uint64_t serial(){
-    auto n=next_serial.load(std::memory_order_relaxed);
-    while(n && !next_serial.compare_exchange_weak(n,n+1,std::memory_order_relaxed)){}
-    return n;
+class ChunkCache {
+    // The old index allows two entries for each of 64 sets. Text segments
+    // with the same set compete even when most of the other sets are empty.
+    // The longer search retains that total capacity. Its odd stride gives
+    // different keys sharing a starting slot independent probe sequences.
+    static constexpr unsigned Mask=ChunkSlots-1, Probes=8;
+    struct Slot {
+        std::unique_ptr<Chunk> chunk;
+        Word tag{};
+        std::uint64_t used{};
+    };
+    std::array<Slot,ChunkSlots> slots_;
+    std::array<unsigned,64> next_{};
+    std::uint64_t clock_{};
+public:
+    struct Result {Chunk* chunk;bool hit;};
+    template<class Matches>
+    Result select(Word prior_hash,Word tag,bool dense,Matches matches){
+        const unsigned set=prior_hash&63;
+        unsigned index=dense?(tag&Mask):set*2;
+        const unsigned stride=dense?((tag>>8)|1u):1u;
+        const unsigned limit=dense?Probes:2;
+        Slot* victim=nullptr;
+        std::uint64_t oldest{};
+        ++clock_;
+        for(unsigned n=0;n<limit;++n,index=(index+stride)&Mask){
+            auto& slot=slots_[index];
+            if(slot.chunk && slot.chunk->serial && (slot.chunk->geometry_slot<ChunkSlots)==dense &&
+               (!dense || slot.tag==tag) && matches(*slot.chunk)){
+                slot.used=clock_;
+                return {slot.chunk.get(),true};
+            }
+            if(dense){
+                const auto age=!slot.chunk || !slot.chunk->serial?
+                    ~std::uint64_t{}:clock_-slot.used;
+                if(!victim || age>oldest){victim=&slot;oldest=age;}
+            }
+        }
+        if(!dense)victim=&slots_[set*2+(next_[set]++&1)];
+        if(!victim->chunk){
+            const int saved=errno;
+            victim->chunk.reset(new(std::nothrow) Chunk);
+            errno=saved;
+            if(!victim->chunk)return {nullptr,false};
+        }
+        victim->chunk->serial=0;
+        victim->chunk->count=0;
+        victim->chunk->geometry_slot=dense?static_cast<unsigned>(victim-slots_.data()):ChunkSlots;
+        victim->tag=tag;
+        victim->used=clock_;
+        return {victim->chunk.get(),false};
+    }
+};
+inline thread_local ChunkCache chunks;
+inline std::atomic<std::uint64_t> next_generation{1};
+inline std::uint64_t serial(unsigned slot,std::atomic<std::uint64_t>& generations=next_generation){
+    // The renderer indexes completed geometry by the low seven bits. Live
+    // dense-cache entries have different slots; reusing a slot must also
+    // change the full token, including when switching back to the old path.
+    auto n=generations.load(std::memory_order_relaxed);
+    while(n && n<=~std::uint64_t{}/ChunkSlots){
+        if(generations.compare_exchange_weak(n,n+1,std::memory_order_relaxed))
+            return n*ChunkSlots+(slot<ChunkSlots?slot:n%ChunkSlots);
+    }
+    return 0;
 }
 
 struct Footprint {
@@ -90,6 +149,7 @@ class TextPageReplay {
     bool pending_{};
     SpriteService* service_{};
     wr::Memory& memory_;
+    const bool dense_{text_page_dense_enabled.load(std::memory_order_relaxed)};
 
     void finish_draw(){
         if(!recording_ || !pending_)return;
@@ -161,7 +221,8 @@ public:
     bool recording()const{return recording_ && pending_;}
     void cancel(){
         if(recording_ && pending_)text_page_observer={};
-        if(recording_ && recording_->count>=2 && !recording_->serial)recording_->serial=text_page::serial();
+        if(recording_ && recording_->count>=2 && !recording_->serial)
+            recording_->serial=text_page::serial(recording_->geometry_slot);
         pending_=false;recording_=nullptr;
     }
     Word begin(wr::Cpu& cpu,Scope& scope){
@@ -182,20 +243,16 @@ public:
             Word hash=(k.bp>>4)*0x9e3779b9u ^ k.local(0x20)*0x85ebca77u ^
                 k.arg(0x158)*0xc2b2ae3du ^ k.sp*0x27d4eb2fu ^ k.arg(0x198);
             hash^=hash>>16;hash*=0x7feb352du;hash^=hash>>15;
-            auto& slot=chunks[hash&(chunks.size()-1)];
-            for(auto& old:slot.ways){
-                if(!old || !old->serial || !old->steps[0].transition.key.matches(k))continue;
-                const unsigned n=matching_text(scope,guard,*old,k);
-                if(n>=2 && resources(scope,guard,k,old->inputs,false)){
-                    return replay(cpu,scope,*old,sprite,n);
-                }
-            }
-            auto& dest=slot.ways[slot.next++%slot.ways.size()];
-            if(!dest){
-                const int saved=errno;dest.reset(new(std::nothrow) Chunk);errno=saved;
-                if(!dest)return 0;
-            }
-            recording_=dest.get();recording_->count=0;recording_->serial=0;
+            const Word tag=hash ^ std::rotl(k.arg(0x15c)*0x85ebca77u,13);
+            unsigned count{};
+            const auto entry=chunks.select(hash,tag,dense_,[&](Chunk& old){
+                if(!old.steps[0].transition.key.matches(k))return false;
+                count=matching_text(scope,guard,old,k);
+                return count>=2 && resources(scope,guard,k,old.inputs,false);
+            });
+            if(entry.hit)return replay(cpu,scope,*entry.chunk,sprite,count);
+            if(!entry.chunk)return 0;
+            recording_=entry.chunk;
         }
         auto& step=recording_->steps[recording_->count];
         step.transition.key=k;step.transition.end.pc=0;step.draw.captured=false;pending_=true;

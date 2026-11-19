@@ -26,7 +26,12 @@ void select_text_path(Mode mode){
     const bool run=mode==Mode::run || mode==Mode::both || (mode==Mode::shipped && wa2::aot::default_text_run_replay);
     wa2::aot::text_run_replay_enabled.store(run,std::memory_order_relaxed);
     wa2::graphics::enable_surface_glyph_commands(mode!=Mode::reference && mode!=Mode::run);
-    wa2::aot::text_page_replay_enabled.store(mode==Mode::page || (mode==Mode::shipped && wa2::aot::default_text_page_replay),
+    const bool dense=mode==Mode::dense || mode==Mode::novel || mode==Mode::shipped;
+    const bool bindings=mode==Mode::bindings || mode==Mode::novel || mode==Mode::shipped;
+    wa2::graphics::enable_glyph_rollover_bind_reuse(bindings);
+    wa2::aot::text_page_dense_enabled.store(dense,std::memory_order_relaxed);
+    wa2::aot::text_page_replay_enabled.store(mode==Mode::page || mode==Mode::dense || mode==Mode::bindings || mode==Mode::novel ||
+                                            (mode==Mode::shipped && wa2::aot::default_text_page_replay),
                                             std::memory_order_relaxed);
 }
 std::uint64_t read_text_counter(Counter counter){
@@ -42,6 +47,7 @@ std::uint64_t read_text_counter(Counter counter){
         case Counter::page_glyphs:return measured_page_glyphs.load(std::memory_order_relaxed);
         case Counter::prepared_geometry:return wa2::graphics::surface_glyph_command_counts().prepared_geometry_hits;
         case Counter::retained_draws:return wa2::graphics::surface_glyph_command_counts().retained_geometry_draws;
+        case Counter::binding_calls_avoided:return wa2::graphics::glyph_rollover_bindings_avoided();
         default:return 0;
     }
 }
@@ -79,7 +85,8 @@ extern "C" int SDL_main(int argc,char** argv){
                 measured_page_spans.store(wa2::aot::text_page_replay_spans,std::memory_order_relaxed);
                 measured_page_glyphs.store(wa2::aot::text_page_replay_glyphs,std::memory_order_relaxed);
                 return wa2::android::GlyphTotals{counts.accepted,counts.tiles,wa2::aot::text_page_replay_glyphs,
-                    wa2::graphics::surface_glyph_command_counts().prepared_geometry_hits};
+                    wa2::graphics::surface_glyph_command_counts().prepared_geometry_hits,
+                    wa2::graphics::glyph_pipeline_rollovers(),wa2::graphics::glyph_rollover_bindings_avoided()};
             });
         };
         startup.window=wa2::window::sdl_host(std::move(options));startup.mount_resources=wa2::android::mount_compiled_resources;

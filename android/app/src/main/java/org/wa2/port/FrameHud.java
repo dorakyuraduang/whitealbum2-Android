@@ -126,10 +126,10 @@ public final class FrameHud {
     }
     // Called from the native render thread no more than four times per second.
     public static void report(float fps, float milliseconds, long frames, long glyphs, long tiles, long wallNs, long threadCpuNs,
-                              long replayedGlyphs, long reusedGeometry) {
+                              long replayedGlyphs, long reusedGeometry, long rollovers, long avoidedDriverCalls) {
         if (!resumed || !Float.isFinite(fps) || !Float.isFinite(milliseconds)) return;
         Sample sample = new Sample(fps, milliseconds, frames, glyphs, tiles,
-                WORK.observe(frames,glyphs,tiles,wallNs,threadCpuNs,replayedGlyphs,reusedGeometry));
+                WORK.observe(frames,glyphs,tiles,wallNs,threadCpuNs,replayedGlyphs,reusedGeometry,rollovers,avoidedDriverCalls));
         LATEST.set(sample);
         if (focused && Log.isLoggable("WA2PAGE", Log.DEBUG)) {
             Log.d("WA2PAGE", sample.updated + " " + fps + " " + milliseconds + " " + frames + " " + glyphs + " " + tiles);
@@ -149,6 +149,7 @@ public final class FrameHud {
         row.put("segment",w.segment);row.put("frames",w.frames);row.put("glyphs",w.glyphs);row.put("tiles",w.tiles);
         row.put("wall_ns",w.wallNs);row.put("game_thread_cpu_ns",w.cpuNs<0 ? JSONObject.NULL : w.cpuNs);
         row.put("replayed_glyphs",w.replayedGlyphs);row.put("reused_glyph_geometry",w.reusedGeometry);
+        row.put("rollovers",w.rollovers);row.put("avoided_driver_calls",w.avoidedDriverCalls);
         return row;
     }
     private static void logStableTextWindows(){

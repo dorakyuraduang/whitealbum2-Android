@@ -79,6 +79,50 @@ inline void check_glyph_sampler_units() {
         }
         CHECK(candidate == reference);
     }
+    // Replay the actual order of sampler selection, validation and binding.
+    // A real bind_sampler selects its unit again after uploading dirty levels.
+    struct Units {
+        std::array<unsigned,16> physical{};
+        unsigned active{},selects{},binds{},uploads{};
+        auto calls()const{return selects+binds;}
+        void select(unsigned unit){active=unit;++selects;}
+        void bind(unsigned texture){physical[active]=texture;++binds;}
+        unsigned logical(const std::array<unsigned,16>& input,unsigned width,bool preserved){
+            return g::bind_logical_texture_units(input,width,preserved,
+                [&](unsigned unit){select(unit);},
+                [&](unsigned unit,unsigned texture){++uploads;select(unit);bind(texture);},
+                [&]{bind(0);});
+        }
+        void draw(unsigned width,unsigned used,unsigned first){
+            for(unsigned unit=0;unit<width;++unit){select(unit);bind(unit<used?first+unit:0);}
+            select(0);
+        }
+    };
+    for(unsigned width:{g::TextureBatchSlots,g::WideTextureBatchSlots}){
+        Units old,updated;
+        old.physical.fill(71);updated.physical=old.physical;
+        CHECK(!old.logical(logical,width,false) && !updated.logical(logical,width,false));
+        unsigned saved=0;
+        for(unsigned i=0;i<3;++i){
+            old.draw(width,width,100*i+1);
+            updated.draw(width,width,100*i+1);
+            logical[0]=100*i+55;
+            CHECK(!old.logical(logical,width,false));
+            saved+=updated.logical(logical,width,true);
+            CHECK(old.physical==updated.physical && updated.active==0 && old.uploads==updated.uploads);
+        }
+        CHECK(saved==(width==8?54u:6u) && old.calls()-updated.calls()==saved);
+        old.draw(width,2,101);updated.draw(width,2,101);
+        // A changed context or ordinary draw reinstates every logical unit.
+        old.physical.fill(67);updated.physical.fill(67);
+        CHECK(!old.logical(logical,0,false) && !updated.logical(logical,0,false));
+        CHECK(old.physical==logical && updated.physical==logical);
+        // A second live logical texture cannot use the single-unit handoff.
+        logical[12]=73;
+        CHECK(!old.logical(logical,width,false) && !updated.logical(logical,width,true));
+        CHECK(old.physical==updated.physical && old.uploads==updated.uploads);
+        logical[12]=0;
+    }
 }
 inline void check_glyph_pipeline_rollover(){
     namespace g=wa2::graphics;

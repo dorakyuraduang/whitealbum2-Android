@@ -186,6 +186,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     bool pending_glyph{};
     wa2::graphics::ScreenVertexPlan pending_glyph_plan{};
     bool continue_glyph_packets{wa2::graphics::glyph_packet_continuation_enabled()};
+    bool reuse_rollover_binds{wa2::graphics::glyph_rollover_bind_reuse_enabled()};
     std::uint64_t frame_glyph_continuations{};
     struct BufferPair {GLuint vertices{},indices{};};
     wa2::graphics::ImmutableBuffers<BufferPair> text_buffers;
@@ -347,7 +348,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
         for(unsigned unit=0;unit<16;++unit){for(unsigned j=0;j<14;++j)word_differences+=state.sampler[unit][j]!=baseline_words.sampler[unit][j];texture_differences+=state.textures[unit]!=baseline_textures[unit];}}
     void set_word(U32& destination,U32 value,U32 baseline){if(destination!=value){word_differences-=destination!=baseline;word_differences+=value!=baseline;destination=value;}}
     void apply(bool opening_glyph_packet=false);
-    void apply_logical_samplers(bool opening_glyph_packet);
+    void apply_logical_samplers(bool opening_glyph_packet,bool preserved=false);
     void flush(bool preserve_glyph_pipeline=false);
     void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
     bool begin_texture_packet(unsigned slots,bool glyph,bool preserved_glyph_pipeline=false);
@@ -379,6 +380,7 @@ public:
             <<",\"submitted_surface_commands\":"<<surface_commands.submitted<<",\"continued_surface_commands\":"<<surface_commands.continued
             <<",\"continued_surface_tiles\":"<<surface_commands.continued_tiles
             <<",\"prepared_geometry_hits\":"<<surface_commands.prepared_geometry_hits<<",\"retained_geometry_draws\":"<<surface_commands.retained_geometry_draws
+            <<",\"rollover_gl_calls_avoided\":"<<surface_commands.rollover_gl_calls_avoided
             <<",\"guest_draws\":"<<texture_batch_draws<<",\"driver_submissions\":"<<texture_batch_submissions<<",\"failure\":"<<quote(texture_batch_failure)<<'}'
             <<",\"context_rebinds\":"<<context_rebinds<<",\"context_reuses\":"<<context_reuses<<",\"context_free_calls\":"<<context_free_calls
             <<",\"constant_updates\":"<<constant_updates<<",\"constant_reuses\":"<<constant_reuses<<",\"sampler_parameter_calls\":"<<sampler_parameter_calls<<",\"sampler_parameter_skips\":"<<sampler_parameter_skips
@@ -818,16 +820,15 @@ void Graphics::apply(bool opening_glyph_packet){
     applied=state;applied_config_version=config_version;applied_texture_version=texture_version;reset_baseline();
     applied_context_rebinds=context_rebinds;
 }
-void Graphics::apply_logical_samplers(bool opening_glyph_packet){
+void Graphics::apply_logical_samplers(bool opening_glyph_packet,bool preserved){
     // A texture packet sets every unit it owns immediately before drawing.
     // Leave its empty logical slots alone until that bind. Unit zero still
     // validates and uploads the logical sampler here, including failure paths.
-    wa2::graphics::apply_logical_texture_units(state.textures, opening_glyph_packet?texture_batch.slot_limit():0, [&](unsigned n, const Res& texture){
-        gl.ActiveTexture(GL_TEXTURE0+n);
-        if(texture)bind_sampler(n,texture);
-        else gl.BindTexture(GL_TEXTURE_2D,0);
-    });
-    gl.ActiveTexture(GL_TEXTURE0);
+    frame_surface_commands.rollover_gl_calls_avoided+=wa2::graphics::bind_logical_texture_units(
+        state.textures, opening_glyph_packet?texture_batch.slot_limit():0, preserved,
+        [&](unsigned unit){gl.ActiveTexture(GL_TEXTURE0+unit);},
+        [&](unsigned unit,const Res& texture){bind_sampler(unit,texture);},
+        [&]{gl.BindTexture(GL_TEXTURE_2D,0);});
 }
 
 void Graphics::flush(bool preserve_glyph_pipeline) {
@@ -921,7 +922,7 @@ bool Graphics::begin_texture_packet(unsigned slots,bool glyph,bool preserved_gly
             // units. Do not use the ordinary logical texture cache here:
             // validate/upload/bind the incoming texture even when unchanged.
             upload(image(state.target));
-            apply_logical_samplers(glyph && continue_glyph_packets);
+            apply_logical_samplers(glyph && continue_glyph_packets,reuse_rollover_binds);
             applied->textures[0]=baseline_textures[0]=state.textures[0];
             texture_differences=0;applied_texture_version=texture_version;
             ++state_cache_hits;wa2::graphics::record_glyph_pipeline_rollover();
@@ -1248,6 +1249,7 @@ U32 Graphics::present(Args a,bool force){
     reuse_surface_commands=wa2::graphics::surface_glyph_commands_enabled();
     frame_glyph_continuations = 0;
     continue_glyph_packets = wa2::graphics::glyph_packet_continuation_enabled();
+    reuse_rollover_binds = wa2::graphics::glyph_rollover_bind_reuse_enabled();
     auto i=image(backbuffer);upload(i);fbo(i);
     int w=0,h=0;SDL_GL_GetDrawableSize(window,&w,&h);if(w<=0 || h<=0)return 0;
     auto sr=rectangle(a[1],i);if(!valid(sr,i->width,i->height))return U32(D3DERR_INVALIDCALL);

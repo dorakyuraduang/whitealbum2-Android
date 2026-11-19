@@ -19,10 +19,11 @@ final class PerformanceProbe extends BroadcastReceiver {
     private String mode="default";
     private int generation;
     // Order matches TextProbeMode and TextProbeCounter in the common JNI interface.
-    private static final String[] MODES={"default","reference","run","submission","optimized","page_reference","page"};
+    private static final String[] MODES={"default","reference","run","submission","optimized","page_reference","page",
+            "dense","bindings","novel"};
     private static final String[] COUNTERS={"layout_hits","glyph_command_hits","run_hits",
             "surface_commands","surface_hits","surface_tiles","rollover_hits","page_spans","page_glyphs",
-            "prepared_geometry_hits","retained_geometry_draws"};
+            "prepared_geometry_hits","retained_geometry_draws","binding_calls_avoided"};
     private static native boolean nativeSetCandidate(int mode);
     private static native long nativeCounter(int index);
     private void select(int index){
@@ -60,7 +61,7 @@ final class PerformanceProbe extends BroadcastReceiver {
             result.put("version",context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName);
             result.put("mode",mode);
             for(int i=0;i<COUNTERS.length;++i)result.put(COUNTERS[i],nativeCounter(i));
-            result.put("candidate","page-glyph-replay");
+            result.put("candidate","novel-text-and-texture-bindings");
             Log.i("WA2PERF",result.toString());
         }catch(Exception|LinkageError error){Log.w("WA2PERF","unavailable: "+error.getClass().getSimpleName());}
     }

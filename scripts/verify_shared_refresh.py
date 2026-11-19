@@ -146,6 +146,8 @@ def main():
         packets=reports['render_submission']['multi_texture_batch']
         if reports['novel_cpu'].get('page_replay_oracle_cases',0)<23:
             raise ValueError('Missing whole glyph group fault, mutation and rendering boundary comparisons')
+        if reports['novel_cpu'].get('page_cache_capacity_checked') is not True:
+            raise ValueError('Missing text cache collision and eviction checks')
         if reports['novel_cpu'].get('run_transition_oracle_cases',0)<17:
             raise ValueError('Incomplete source-to-source glyph transition checks')
         if reports['novel_cpu'].get('layout_state_oracle_cases',0)<11:

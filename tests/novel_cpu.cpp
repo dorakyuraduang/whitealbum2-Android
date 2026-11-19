@@ -7,9 +7,11 @@
 #include "../recompiled/glyph_resources.hpp"
 #include "../recompiled/text_advance.hpp"
 #include "../recompiled/text_jump_budget.hpp"
+#include "../recompiled/text_page_replay.hpp"
 #include "../recompiled/host_calls.hpp"
 #include "../engine/glyph_index.hpp"
 #include "../platform/render/submission_cache.hpp"
+#include "../platform/render/prepared_geometry.hpp"
 #include <winrecomp/win32_state.hpp>
 #include <chrono>
 #include <cstdlib>
@@ -54,6 +56,68 @@ static std::uint64_t cpu_time_ns(){
 #else
     return static_cast<std::uint64_t>(double(std::clock())*1000000000.0/CLOCKS_PER_SEC);
 #endif
+}
+
+static void check_page_cache_capacity(){
+    a::text_page::ChunkCache cache;
+    std::array<std::uint64_t,300> saved{};
+    std::atomic<std::uint64_t> generations{1};
+    auto geometry=std::make_unique<wa2::graphics::PreparedGlyphGeometry>();
+    const wa2::graphics::ScreenVertexPlan plan{};
+    std::array<std::uint64_t,a::text_page::ChunkSlots> geometry_slots{};
+    const auto access=[&](unsigned key,U32 tag,bool dense){
+        // Keep the old set index constant. A hash/tag alone is never enough
+        // to replay a chunk, even with a valid serial.
+        const auto entry=cache.select(0,tag,dense,[&](const a::text_page::Chunk& chunk){
+            return chunk.steps[0].transition.key.code==key;
+        });
+        CHECK(entry.chunk);
+        auto& chunk=*entry.chunk;
+        if(entry.hit){
+            CHECK(chunk.serial==saved[key] && chunk.count==2);
+        }else{
+            CHECK(chunk.serial==0 && chunk.count==0);
+            chunk.steps[0].transition.key.code=key;
+            chunk.steps[1].draw.tiles[0].texture=0x1000+key;
+            chunk.count=2;
+            chunk.serial=saved[key]=a::text_page::serial(chunk.geometry_slot,generations);
+            CHECK(chunk.serial!=0);
+            const auto slot=chunk.serial%geometry_slots.size();
+            if(dense)CHECK(slot==chunk.geometry_slot);
+            else CHECK(slot==(chunk.serial/geometry_slots.size())%geometry_slots.size());
+            CHECK(!geometry->find(chunk.serial,0,plan,0));
+            geometry->record({chunk.serial,0,key,0,0,plan});
+            geometry->finish({0,1});
+            if(geometry_slots[slot])CHECK(!geometry->find(geometry_slots[slot],0,plan,0));
+            geometry_slots[slot]=chunk.serial;
+        }
+        CHECK(chunk.steps[1].draw.tiles[0].texture==0x1000+key);
+        if(dense){
+            const auto* match=geometry->find(chunk.serial,0,plan,0);
+            CHECK(match && match->vertex==key);
+        }
+        return entry.hit;
+    };
+    for(unsigned key=0;key<3;++key)CHECK(!access(key,0,false));
+    for(unsigned key=0;key<3;++key)CHECK(!access(key,0,false));
+    for(unsigned key=0;key<3;++key)(void)access(key,0,true);
+    for(unsigned key=0;key<3;++key)CHECK(access(key,0,true));
+    const auto slots=geometry_slots.size();
+    CHECK(saved[0]%slots!=saved[1]%slots && saved[1]%slots!=saved[2]%slots && saved[2]%slots!=saved[0]%slots);
+    // Exceed the complete 128-chunk capacity, then revisit the old text.
+    // Check both retained and freshly assigned serials and tile commands.
+    for(unsigned key=3;key<saved.size();++key)CHECK(!access(key,key*0x85ebca77u,true));
+    const auto earlier=saved;
+    unsigned rebuilt{};
+    for(unsigned key=0;key<saved.size();++key){
+        const bool hit=access(key,key<3?0:key*0x85ebca77u,true);
+        CHECK(hit==(saved[key]==earlier[key]));
+        rebuilt+=!hit;
+    }
+    CHECK(rebuilt>=saved.size()-128);
+    generations=~std::uint64_t{}/slots;
+    CHECK(a::text_page::serial(127,generations)==~std::uint64_t{});
+    CHECK(a::text_page::serial(0,generations)==0 && a::text_page::serial(128,generations)==0);
 }
 
 int main(int argc,char** argv){try{
@@ -320,8 +384,10 @@ int main(int argc,char** argv){try{
     const bool compare_advance=mode=="1" || mode=="advance";
     const bool compare_layout=mode=="layout-bench";
     const bool compare_glyph=mode=="glyph-bench";
-    const bool light_page=mode=="page-light-bench";
-    const bool compare_page=mode=="page-bench" || light_page;
+    const bool compare_policy=mode=="page-cache-policy" || mode=="page-light-policy";
+    const bool light_page=mode=="page-light-bench" || mode=="page-light-policy";
+    const bool dense_page=mode=="page-dense-bench" || mode=="page-cache-policy";
+    const bool compare_page=mode=="page-bench" || light_page || dense_page;
     if(compare_advance || compare_layout || compare_glyph || compare_page || mode=="health" || mode=="historical"){
         // Keep each source segment below its text limit. Select distinct
         // ordinary Shift-JIS kanji from the fixture font's real ranges.
@@ -330,10 +396,14 @@ int main(int argc,char** argv){try{
         // Match both phone workloads with constructed glyphs. The lighter
         // page has 25 characters and two atlas crossings per pass. The full
         // page has 193 characters and 39 crossings per pass.
-        const auto lines=light_page?1u:3u;
-        const std::array<unsigned,3> lengths=light_page?std::array{25u,0u,0u}:
-            compare_page?std::array{64u,64u,65u}:std::array{page_length,page_length,page_length};
-        const unsigned long_length=lengths[0]+lengths[1]+lengths[2];
+        // A later phone sample contained 614 glyphs and 752 tiles. Only
+        // those totals are known; the six segments here are constructed.
+        const std::vector<unsigned> lengths=dense_page?std::vector<unsigned>{45,56,49,60,48,49}:
+            light_page?std::vector<unsigned>{25}:compare_page?std::vector<unsigned>{64,64,65}:
+            std::vector<unsigned>{page_length,page_length,page_length};
+        const auto lines=lengths.size();
+        unsigned long_length{};
+        for(auto length:lengths)long_length+=length;
         const auto initial_y=reveal_args[3];
         std::array<std::uint8_t,256> ranges;p.memory.copy_out(0x4a14b8,ranges);
         wa2::text::GlyphIndex index;
@@ -369,13 +439,14 @@ int main(int argc,char** argv){try{
             if(single.size()==16 && crossing.size()==4)break;
         }
         CHECK(single.size()==16 && crossing.size()==4);
-        std::array<U32,3> segments{};
+        std::vector<U32> segments(lines);
         std::set<unsigned> used_characters;
-        unsigned page_tiles{},page_crossings{};
+        unsigned page_tiles{},page_crossings{},character{};
         for(unsigned line=0;line<lines;++line){
             std::string segment="<C1:";unsigned singles{},crossings{};
-            for(unsigned n=0;n<lengths[line];++n){
-                const bool split=light_page?n%12==5:n%5==(compare_page?2u:4u);
+            for(unsigned n=0;n<lengths[line];++n,++character){
+                const bool split=dense_page?(character+1)*69/307!=character*69/307:
+                    light_page?n%12==5:n%5==(compare_page?2u:4u);
                 const unsigned code=split?crossing[(crossings++*3)%crossing.size()]:single[(singles++*7)%single.size()];
                 used_characters.insert(code);
                 segment+=char(code>>8);segment+=char(code);
@@ -410,7 +481,8 @@ int main(int argc,char** argv){try{
         CHECK(expected_tiles.size()==2*page_tiles);
         if(light_page)CHECK(2*long_length==50 && expected_tiles.size()==54);
         else{
-            if(compare_page)CHECK(2*long_length==386 && expected_tiles.size()==464);
+            if(dense_page)CHECK(2*long_length==614 && expected_tiles.size()==752);
+            else if(compare_page)CHECK(2*long_length==386 && expected_tiles.size()==464);
             CHECK(expected_tiles.size()*10>=2*long_length*11 && expected_tiles.size()*10<=2*long_length*13);
         }
         std::set<U32> rendered_textures;
@@ -431,7 +503,8 @@ int main(int argc,char** argv){try{
             a::compact_text_advance_enabled.store(compact,std::memory_order_relaxed);
             if(compare_layout)a::text_layout_replay_enabled.store(windows[i],std::memory_order_relaxed);
             if(compare_glyph)a::glyph_command_replay_enabled.store(windows[i],std::memory_order_relaxed);
-            if(compare_page)a::text_page_replay_enabled=windows[i];
+            if(compare_page)a::text_page_replay_enabled=compare_policy || windows[i];
+            if(compare_policy)a::text_page_dense_enabled=windows[i];
             begin_page();
             for(unsigned warm=0;warm<2;++warm)long_page();
             const auto hits_before=a::compact_text_advance_hits;
@@ -450,9 +523,9 @@ int main(int argc,char** argv){try{
             if(compare_glyph)CHECK(layout_hits>0 && (command_hits>0)==windows[i]);
             const auto skipped_glyph_preparations=a::text_page_replay_glyphs-page_before;
             if(compare_page){
-                std::cout<<"Page window "<<i<<" enabled="<<windows[i]<<" reused glyphs="<<skipped_glyph_preparations
+                std::cout<<"Page window "<<i<<" candidate="<<windows[i]<<" reused glyphs="<<skipped_glyph_preparations
                     <<" cpu_ns_per_page="<<cpu_ns/pages_per_window<<'\n';
-                CHECK((skipped_glyph_preparations>0)==windows[i]);
+                CHECK((skipped_glyph_preparations>0)==(compare_policy || windows[i]));
             }
             std::array<std::uint8_t,16> actual_cursor;p.memory.copy_out(cursor,actual_cursor);
             std::array<std::uint8_t,0x2000> actual_output;p.memory.copy_out(output,actual_output);
@@ -463,7 +536,8 @@ int main(int argc,char** argv){try{
             if(compare_layout)timing<<",\"layout_replay\":"<<(windows[i]?"true":"false")<<",\"layout_hits\":"<<layout_hits;
             if(compare_glyph)timing<<",\"glyph_command_replay\":"<<(windows[i]?"true":"false")
                 <<",\"glyph_command_hits\":"<<command_hits<<",\"layout_hits\":"<<layout_hits;
-            if(compare_page)timing<<",\"page_replay\":"<<(windows[i]?"true":"false")
+            if(compare_policy)timing<<",\"dense_cache\":"<<(windows[i]?"true":"false");
+            if(compare_page)timing<<",\"page_replay\":"<<(compare_policy || windows[i]?"true":"false")
                 <<",\"replayed_glyphs\":"<<skipped_glyph_preparations;
             timing<<'}';
         }
@@ -471,6 +545,7 @@ int main(int argc,char** argv){try{
         if(compare_layout || compare_glyph || compare_page)a::text_layout_replay_enabled.store(saved_layout,std::memory_order_relaxed);
         if(compare_glyph || compare_page)a::glyph_command_replay_enabled.store(false,std::memory_order_relaxed);
         if(compare_page)a::text_page_replay_enabled=false;
+        if(compare_policy)a::text_page_dense_enabled=true;
         a::compact_text_advance_enabled.store(false,std::memory_order_relaxed);
         reveal_args[3]=initial_y;
         reveal_args[11]=reveal_string;
@@ -563,7 +638,10 @@ int main(int argc,char** argv){try{
     report<<",\"compact_text_advance\":{\"paired_page_hits\":"<<advance_hits<<'}';
     if(layout_cases)report<<",\"layout_state_oracle_cases\":"<<layout_cases;
     if(run_transition_cases)report<<",\"run_transition_oracle_cases\":"<<run_transition_cases;
-    if(page_cases)report<<",\"page_replay_oracle_cases\":"<<page_cases;
+    if(page_cases){
+        check_page_cache_capacity();
+        report<<",\"page_replay_oracle_cases\":"<<page_cases<<",\"page_cache_capacity_checked\":true";
+    }
     if(command_cases)report<<",\"glyph_command_oracle_cases\":"<<command_cases;
     if(!timing.str().empty())report<<",\"two_pass_timing\":"<<timing.str();
     report<<",\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards

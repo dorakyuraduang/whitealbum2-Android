@@ -7,6 +7,8 @@ std::atomic<std::uint64_t> continuations{};
 std::atomic<bool> wide_packets{false};
 std::atomic<std::uint64_t> wide_submissions{};
 std::atomic<std::uint64_t> rollovers{};
+std::atomic<bool> reuse_rollover_binds{true};
+std::atomic<std::uint64_t> rollover_gl_calls_avoided{};
 std::atomic<bool> surface_commands{true};
 std::atomic<std::uint64_t> surface_submitted{},surface_continued{},surface_tiles{};
 std::atomic<std::uint64_t> geometry_hits{},geometry_draws{};
@@ -42,6 +44,15 @@ void record_glyph_pipeline_rollover() noexcept {
 std::uint64_t glyph_pipeline_rollovers() noexcept {
     return rollovers.load(std::memory_order_relaxed);
 }
+void enable_glyph_rollover_bind_reuse(bool value) noexcept {
+    reuse_rollover_binds.store(value,std::memory_order_relaxed);
+}
+bool glyph_rollover_bind_reuse_enabled() noexcept {
+    return reuse_rollover_binds.load(std::memory_order_relaxed);
+}
+std::uint64_t glyph_rollover_bindings_avoided() noexcept {
+    return rollover_gl_calls_avoided.load(std::memory_order_relaxed);
+}
 void enable_surface_glyph_commands(bool value) noexcept {
     surface_commands.store(value,std::memory_order_relaxed);
 }
@@ -49,6 +60,7 @@ bool surface_glyph_commands_enabled() noexcept {
     return surface_commands.load(std::memory_order_relaxed);
 }
 void record_surface_glyph_commands(SurfaceGlyphCommandCounts frame) noexcept {
+    if(frame.rollover_gl_calls_avoided)rollover_gl_calls_avoided.fetch_add(frame.rollover_gl_calls_avoided,std::memory_order_relaxed);
     if(!frame.submitted && !frame.retained_geometry_draws)return;
     surface_submitted.fetch_add(frame.submitted,std::memory_order_relaxed);
     surface_continued.fetch_add(frame.continued,std::memory_order_relaxed);
@@ -59,6 +71,6 @@ void record_surface_glyph_commands(SurfaceGlyphCommandCounts frame) noexcept {
 SurfaceGlyphCommandCounts surface_glyph_command_counts() noexcept {
     return {surface_submitted.load(std::memory_order_relaxed),surface_continued.load(std::memory_order_relaxed),
             surface_tiles.load(std::memory_order_relaxed),geometry_hits.load(std::memory_order_relaxed),
-            geometry_draws.load(std::memory_order_relaxed)};
+            geometry_draws.load(std::memory_order_relaxed),glyph_rollover_bindings_avoided()};
 }
 }

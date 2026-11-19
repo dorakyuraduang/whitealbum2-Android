@@ -29,6 +29,28 @@ void apply_logical_texture_units(const Textures& textures, unsigned deferred_gly
         apply(unit, textures[unit]);
     }
 }
+
+// A preserved rollover immediately follows a real draw with the same fixed
+// shader, packet width, target and GL context. The draw only touched its
+// packet units. Its higher logical units were already empty. Unit zero must
+// still upload and bind the incoming texture and validate its sampler.
+template<class Textures,class Select,class BindSampler,class Clear>
+unsigned bind_logical_texture_units(const Textures& textures,unsigned slots,bool preserved,
+                                    Select select,BindSampler bind_sampler,Clear clear){
+    if(preserved && slots && slots<=textures.size() && textures[0] &&
+       std::none_of(textures.begin()+1,textures.end(),[](const auto& texture){return bool(texture);})){
+        bind_sampler(0,textures[0]); // also selects unit zero, leaving it active
+        // Two selections around the logical sampler loop, plus a selection
+        // and an unbind for each untouched unit above this packet's width.
+        return 2u+2u*(unsigned(textures.size())-slots);
+    }
+    apply_logical_texture_units(textures,slots,[&](unsigned n,const auto& texture){
+        select(n);
+        if(texture)bind_sampler(n,texture);else clear();
+    });
+    select(0);
+    return 0;
+}
 struct TextureBatchVertex {ScreenVertex screen;float binding;};
 static_assert(sizeof(TextureBatchVertex)==40);
 // The adapter uses this same bounded packet builder on every host. Textures

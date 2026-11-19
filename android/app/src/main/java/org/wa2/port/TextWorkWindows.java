@@ -4,9 +4,12 @@ package org.wa2.port;
 final class TextWorkWindows {
     static final class Window {
         final long segment, frames, glyphs, tiles, wallNs, cpuNs, replayedGlyphs, reusedGeometry;
-        Window(long segment, long frames, long glyphs, long tiles, long wallNs, long cpuNs, long replayedGlyphs, long reusedGeometry) {
+        final long rollovers, avoidedDriverCalls;
+        Window(long segment, long frames, long glyphs, long tiles, long wallNs, long cpuNs,
+               long replayedGlyphs, long reusedGeometry, long rollovers, long avoidedDriverCalls) {
             this.segment=segment; this.frames=frames; this.glyphs=glyphs; this.tiles=tiles;
             this.wallNs=wallNs; this.cpuNs=cpuNs; this.replayedGlyphs=replayedGlyphs; this.reusedGeometry=reusedGeometry;
+            this.rollovers=rollovers; this.avoidedDriverCalls=avoidedDriverCalls;
         }
         int group() {
             double load=(double)glyphs/frames;
@@ -23,11 +26,13 @@ final class TextWorkWindows {
         Window plus(Window other) {
             return new Window(segment,frames+other.frames,glyphs+other.glyphs,tiles+other.tiles,
                     wallNs+other.wallNs,cpuNs<0 || other.cpuNs<0 ? -1 : cpuNs+other.cpuNs,
-                    replayedGlyphs+other.replayedGlyphs,reusedGeometry+other.reusedGeometry);
+                    replayedGlyphs+other.replayedGlyphs,reusedGeometry+other.reusedGeometry,
+                    rollovers+other.rollovers,avoidedDriverCalls+other.avoidedDriverCalls);
         }
     }
     private boolean active, baseline, changed, production=true;
     private long segment, frames, glyphs, tiles, wallNs, cpuNs, replayedGlyphs, reusedGeometry;
+    private long rollovers, avoidedDriverCalls;
     private Window older, previous, light, heavy;
 
     synchronized void reset() {
@@ -46,19 +51,22 @@ final class TextWorkWindows {
         baseline=false; older=null; previous=null;
     }
     synchronized Window observe(long endFrames,long endGlyphs,long endTiles,long endWall,long endCpu,
-                                long endReplayedGlyphs,long endReusedGeometry) {
+                                long endReplayedGlyphs,long endReusedGeometry,long endRollovers,long endAvoidedDriverCalls) {
         if (!active) return null;
         Window now=null;
         long elapsed=endWall-wallNs;
         if (baseline && endFrames>frames && endGlyphs>=glyphs && endTiles>=tiles && endReplayedGlyphs>=replayedGlyphs && endReusedGeometry>=reusedGeometry
+                && endRollovers>=rollovers && endAvoidedDriverCalls>=avoidedDriverCalls
                 && elapsed>=200_000_000L && elapsed<=750_000_000L) {
             long cpu=cpuNs>=0 && endCpu>=cpuNs ? endCpu-cpuNs : -1;
             now=new Window(segment,endFrames-frames,endGlyphs-glyphs,endTiles-tiles,elapsed,cpu,
-                    endReplayedGlyphs-replayedGlyphs,endReusedGeometry-reusedGeometry);
+                    endReplayedGlyphs-replayedGlyphs,endReusedGeometry-reusedGeometry,
+                    endRollovers-rollovers,endAvoidedDriverCalls-avoidedDriverCalls);
         }
         if (baseline && now==null) ++segment;
         baseline=true; frames=endFrames; glyphs=endGlyphs; tiles=endTiles; wallNs=endWall; cpuNs=endCpu;
         replayedGlyphs=endReplayedGlyphs; reusedGeometry=endReusedGeometry;
+        rollovers=endRollovers; avoidedDriverCalls=endAvoidedDriverCalls;
         if (now==null) { older=null; previous=null; return null; }
         if (production && now.group()!=0 && now.resembles(older) && now.resembles(previous) && older.resembles(previous)) {
             Window stable=older.plus(previous).plus(now);

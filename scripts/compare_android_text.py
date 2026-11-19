@@ -14,16 +14,18 @@ import time
 from build_pak_tool import low_priority
 
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE='page-glyph-replay'
+CANDIDATE='novel-text-and-texture-bindings'
 
-def candidate_work(mode, first, last):
+def candidate_work(mode, first, last, reference=False):
     work={}
+    pages={'page','bindings','dense','novel'}
     paths={
         'run_hits':{'run','optimized'},
-        'surface_hits':{'submission','optimized','page_reference','page'},
-        'rollover_hits':{'submission','optimized','page_reference','page'},
-        'page_glyphs':{'page'},'page_spans':{'page'},
-        'prepared_geometry_hits':{'page'},'retained_geometry_draws':{'page'}
+        'surface_hits':pages | {'submission','optimized','page_reference'},
+        'rollover_hits':pages | {'submission','optimized','page_reference'},
+        'page_glyphs':pages,'page_spans':pages,
+        'prepared_geometry_hits':pages,'retained_geometry_draws':pages,
+        'binding_calls_avoided':{'bindings','novel'}
     }
     for key, enabled in paths.items():
         delta=last[key]-first[key]
@@ -32,8 +34,11 @@ def candidate_work(mode, first, last):
         if mode not in enabled and delta:
             raise ValueError('Disabled path ran during comparison: '+key)
         work[key]=delta
-    admitted=work['page_glyphs'] if mode=='page' else sum(work.values())
-    if mode not in ('reference','page_reference') and not admitted:
+    if mode=='bindings':admitted=work['binding_calls_avoided']
+    elif mode=='novel':admitted=work['page_glyphs']+work['binding_calls_avoided']
+    elif mode in pages:admitted=work['page_glyphs']
+    else:admitted=sum(work.values())
+    if not reference and not admitted:
         raise ValueError('No candidate work was admitted in this scene')
     return work
 
@@ -60,7 +65,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial',required=True)
     parser.add_argument('--samples',type=int,choices=range(4,13),default=8)
-    parser.add_argument('--path',choices=('page','optimized','run','submission'),default='page')
+    parser.add_argument('--path',choices=('novel','dense','bindings','page','optimized','run','submission'),default='novel')
     parser.add_argument('--output',type=Path,default=ROOT/'logs/android-text-comparison.json')
     args=parser.parse_args();low_priority()
     adb=ROOT/'tools/android-sdk/platform-tools/adb.exe'
@@ -96,7 +101,8 @@ def main():
         last_response=record['uptime_ms'];return record
     windows=[];workload_intervals=[];failure=None;restore_error=None;restored_mode=None
     try:
-        reference_mode='page_reference' if args.path=='page' else 'reference'
+        if args.path in ('novel','dense','bindings'):reference_mode='page'
+        else:reference_mode='page_reference' if args.path=='page' else 'reference'
         for mode in (reference_mode,args.path,args.path,reference_mode):
             rows=[]
             window=dict(mode=mode,samples=rows,glyph_work=[],complete=False)
@@ -116,7 +122,7 @@ def main():
                 time.sleep(.85)
             # A text layout call that was already in flight when the switch
             # arrived belongs to the warm-up interval.
-            work=candidate_work(mode,rows[0],rows[-1])
+            work=candidate_work(mode,rows[0],rows[-1],mode==reference_mode)
             window.update(median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_work=work,complete=True)
             measured=[sample.get('window') for sample in rows]
             if all(sample and sample.get('game_thread_cpu_ns') is not None and sample['frames']>0 for sample in measured):
