@@ -107,7 +107,7 @@ def main():
         tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'scripts/verify_glyph_precision.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp',ROOT/'tests/glyph_cache.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'scripts/compare_android_text.py',ROOT/'tests/android_counters.py']
         tracked += [ROOT/'scripts/verify_resource_lookup.py',ROOT/'tests/resource_lookup.cpp',ROOT/'generated/wa2-win64/code_page_1112.cpp']
-        tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp',ROOT/'tests/text_ftol.cpp',ROOT/'tests/immutable_buffers.cpp']
+        tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp',ROOT/'tests/text_ftol.cpp',ROOT/'tests/text_advance.cpp',ROOT/'tests/immutable_buffers.cpp']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
         tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
         tracked += [ROOT/('logs/media-codec-'+host+'-build.json') for host in ('windows','arm64')]
@@ -123,7 +123,7 @@ def main():
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
         tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','glyph_cache','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         tests['resource_lookup']='wa2_refresh_resource_lookup'
-        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu','text_ftol','immutable_buffers')})
+        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu','text_ftol','text_advance','immutable_buffers')})
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
@@ -189,6 +189,11 @@ def main():
         profiles=reports['profile_batch']
         if profiles['publish_guard_cases']!=5 or profiles['maximum_publish_retry_wait_ms']!=30:raise ValueError('Incomplete bounded local profile publication retry checks')
         novel=reports['novel_cpu']
+        advance=reports['text_advance']
+        if (advance['exact_advances']!=2048 or advance['declines']!=8 or
+                any(advance[name]<=0 for name in ('normal','wrap','page')) or
+                novel['compact_text_advance']['paired_page_hits']<=0):
+            raise ValueError('Incomplete CJK advance and source-state comparisons')
         reveal=novel['reveal_paths']
         if (reveal['styled_and_plain_progression_glyphs'] != [16, 48, 112, 192]
                 or reveal['alpha_only_tile_differences'] != 15

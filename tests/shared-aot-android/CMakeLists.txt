@@ -18,6 +18,12 @@ target_link_libraries(wa2_shared_aot_link_check PRIVATE
     "-Wl,--whole-archive" wa2_function_process wa2_shared_aot wa2_initial_data wa2_aot_memory wa2_platform wa2_engine wa2_shared_audio wa2_android_resource_bridge wa2_native_widgets "-Wl,--no-whole-archive" wa2_sdl_host)
 target_link_options(wa2_shared_aot_link_check PRIVATE "-Wl,--no-undefined" "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
 add_subdirectory("${WA2_ROOT}/hosts" actual_host)
+# Activity-free text workload for measurements on the target CPU. The normal
+# Android build and APK do not include this executable.
+add_executable(wa2_phone_novel_cpu EXCLUDE_FROM_ALL "${WA2_ROOT}/tests/novel_cpu.cpp")
+target_link_libraries(wa2_phone_novel_cpu PRIVATE wa2_function_process)
+add_executable(wa2_phone_text_advance EXCLUDE_FROM_ALL "${WA2_ROOT}/tests/text_advance.cpp")
+target_link_libraries(wa2_phone_text_advance PRIVATE wa2_aot_memory)
 option(WA2_DEVICE_STORAGE_PROBE "Build the Activity-free device file test" OFF)
 if(WA2_DEVICE_STORAGE_PROBE)
     add_library(wa2_storage_probe SHARED "${WA2_ROOT}/tests/android-device/native_storage_probe.cpp")

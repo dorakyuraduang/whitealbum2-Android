@@ -43,6 +43,9 @@ for site in recipe.SITES:
 old='if constexpr(!Metered)(void)floating.external([&]{return integer.external([&]{return call_source_indirect(s,m,scope);});});'
 begin=source.index('template<bool Metered,bool NativeRegisters> void f_446500(')
 rejects(source[:begin]+source[begin:].replace(old,'return;',1),code)
+for start,end,_ in recipe.ADVANCE_RANGES:
+    marker=f'L_{start}: {{\ns.eip=0x{start}u;'
+    rejects(source[:begin]+source[begin:].replace(marker,marker+'\nreturn;',1),code)
 text,count=recipe.scoped_stack('wr::push(s,m,value);wr::push(s,m,0x123u,32);auto a=wr::pop(s,m);auto b=wr::pop(s,m,32);')
 assert count==4 and text=='text_push(s,scope,value);text_push(s,scope,0x123u);auto a=text_pop(s,scope);auto b=text_pop(s,scope);'
 for bad in ('wr::push(s,m,value,16);wr::pop(s,m);','wr::push(s,m,value);wr::pop(s,m,16);','wr::push(s,m,side_effect());wr::pop(s,m);'):

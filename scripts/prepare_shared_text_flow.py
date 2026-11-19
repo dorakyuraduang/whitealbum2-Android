@@ -20,6 +20,11 @@ ROOT=Path(__file__).resolve().parents[1]
 TABLES=((0x44788c,10),(0x447934,4),(0x447988,10))
 SITES=(0x446723,0x446868,0x4468fd)
 HELPERS={'native/functions_2.cpp':'4452f0','functions_3.cpp':'445350','functions_6.cpp':'4775f1','native-progress/functions_7.cpp':'477604','native-progress/functions_0.cpp':'401050','functions_5.cpp':'4462e0'}
+ADVANCE_RANGES=(
+    ('44751b','447539','f036c5e04efe00d6554885d674cc3ea877107c631f4e635c78b42af063c58825'),
+    ('446939','446973','b734bf92f8a613fe1c1ea165b35d76a5ca357ac5270120f5ffe6e007c584e6d8'),
+    ('44771c','447754','e4f983cf468da117c3efce9b27c7123d71c531c15bd205e848b3b58e63e079c3'),
+)
 def digest(data):return hashlib.sha256(data).hexdigest()
 def write(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -33,6 +38,18 @@ def scoped_stack(body):
     if not pushes or not pops or 'wr::push(' in body or 'wr::pop(' in body:
         raise ValueError('Changed selected text stack contract')
     return body,pushes+pops
+
+def advance_reference(body):
+    """The complete original blocks; only the three terminal labels are supplied by the test."""
+    body=body.replace('\r\n','\n')
+    parts=[]
+    for start,end,expected in ADVANCE_RANGES:
+        first=body.index('L_'+start+': {')
+        last=body.index('L_'+end+': {',first)
+        original=body[first:last]
+        if digest(original.encode())!=expected:raise ValueError('Changed text advance block '+start)
+        parts.append(original)
+    return ''.join(parts)
 
 def derive(text,code,base):
     newline='\r\n' if '\r\n' in text else '\n'
@@ -50,6 +67,18 @@ def derive(text,code,base):
     declaration='wa2::aot::IntegerRegisters<Metered || !NativeRegisters> integer(s,m,scope);'
     if body.count(declaration)!=1:raise ValueError('Ambiguous text register scope')
     body=body.replace(declaration,declaration+newline+'TextJumpBudget<Metered> local_text_jumps;')
+    advance_reference(body)
+    body=body.replace('TextJumpBudget<Metered> local_text_jumps;',
+                      'TextJumpBudget<Metered> local_text_jumps;'+newline+'TextAdvanceScope text_advance;')
+    anchor=f'L_44751b: {{{newline}s.eip=0x44751bu;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
+    if body.count(anchor)!=1:raise ValueError('Ambiguous ordinary text advance entry')
+    hook=['if constexpr(!Metered)if(text_advance.enabled){',
+          '    switch(compact_text_advance(s,scope,integer)){',
+          '    case 0x446973: ++text_advance.hits;goto L_446973;',
+          '    case 0x44779d: ++text_advance.hits;goto L_44779d;',
+          '    case 0x446614: ++text_advance.hits;goto L_446614;',
+          '    }','}']
+    body=body.replace(anchor,anchor+newline.join(hook)+newline)
     old='if constexpr(!Metered)(void)floating.external([&]{return integer.external([&]{return call_source_indirect(s,m,scope);});});'
     if body.count(old)!=len(SITES):raise ValueError('Changed cached text indirect-transfer set')
     for site in SITES:
@@ -67,7 +96,7 @@ def derive(text,code,base):
     dispatch += [f'case 0x{target:x}u: if(!local_text_jumps.take())return;goto L_{target:x};' for target in sorted(targets)]
     dispatch += ['default:local_text_jumps.external();',old,'return;','}','}']
     body=body[:finish]+newline+newline.join(dispatch)+body[finish:]
-    return '#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
+    return '#include "text_advance.hpp"'+newline+'#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
 
 def prepare():
     prepare_chroma();prepare_language();prepare_progress()
@@ -81,6 +110,11 @@ def prepare():
     output=ROOT/'generated/shared-aot/native-text/functions_hot.cpp';data=text.encode('utf-8');write(output,data)
     inputs={p.relative_to(ROOT).as_posix():digest(p.read_bytes()) for p in (source,constants,header,Path(__file__),ROOT/'recompiled/text_jump_budget.hpp',ROOT/'recompiled/text_stack.hpp',ROOT/'recompiled/text_ftol.hpp',ROOT/'recompiled/text_ftol.cpp')}
     outputs={output.relative_to(ROOT).as_posix():digest(data)};helper_bodies=[];stack_sites=0
+    advance=ROOT/'recompiled/text_advance.hpp'
+    inputs[advance.relative_to(ROOT).as_posix()]=digest(advance.read_bytes())
+    reference=output.parent/'text_advance_reference.inc'
+    payload=advance_reference(source.read_text(encoding='utf-8')).encode()
+    write(reference,payload);outputs[reference.relative_to(ROOT).as_posix()]=digest(payload)
     for name,entry in HELPERS.items():
         path=ROOT/'generated/shared-aot'/name;raw=path.read_bytes();inputs[path.relative_to(ROOT).as_posix()]=digest(raw)
         original=raw.decode('utf-8');newline='\r\n' if '\r\n' in original else '\n'

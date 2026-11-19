@@ -3,6 +3,7 @@
 #include "../../recompiled/save_read_scope.hpp"
 #include "../../recompiled/language_names.hpp"
 #include "../../recompiled/language_prompts.hpp"
+#include "../../recompiled/text_advance.hpp"
 #include "../../platform/window/gui.hpp"
 #include "../../platform/compat/legacy_display.hpp"
 #include "../../platform/compat/test_profile.hpp"
@@ -20,6 +21,7 @@ void require_imports(wr::Process& process,const wr::Image& image){
     if(count)throw std::runtime_error("Shared platform services are incomplete: "+missing.str());
 }
 std::uint32_t run(Startup startup){
+    wa2::aot::compact_text_advance_enabled.store(true, std::memory_order_relaxed);
     if(!startup.window)throw std::invalid_argument("missing window/device adapter");
     if(startup.files && !startup.mount_resources){const auto root=startup.options.data_root;startup.mount_resources=[root](wr::Process& p){platform::compat::install_resource_mount(p,platform::compat::local_resource_mount(root));};}
     if(startup.test_mode && !startup.files){

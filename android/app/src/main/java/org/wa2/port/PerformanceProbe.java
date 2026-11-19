@@ -46,7 +46,7 @@ final class PerformanceProbe extends BroadcastReceiver {
             result.put("version",context.getPackageManager().getPackageInfo(context.getPackageName(),0).versionName);
             result.put("mode",mode);
             result.put("candidate_calls",nativeCandidateCalls());
-            result.put("candidate","glyph-packet-continuation");
+            result.put("candidate","cjk-text-advance");
             Log.i("WA2PERF",result.toString());
         }catch(Exception|LinkageError error){Log.w("WA2PERF","unavailable: "+error.getClass().getSimpleName());}
     }

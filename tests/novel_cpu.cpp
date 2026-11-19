@@ -5,16 +5,21 @@
 #include "../recompiled/native_glyphs.hpp"
 #include "../recompiled/glyph_budget.hpp"
 #include "../recompiled/glyph_resources.hpp"
+#include "../recompiled/text_advance.hpp"
 #include "../recompiled/text_jump_budget.hpp"
 #include "../recompiled/host_calls.hpp"
 #include "../engine/glyph_index.hpp"
 #include "../platform/render/submission_cache.hpp"
 #include <winrecomp/win32_state.hpp>
 #include <chrono>
+#include <cstdlib>
+#include <ctime>
 #include <cstring>
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <set>
+#include <sstream>
 #define CHECK(x) do{if(!(x))throw std::runtime_error(std::string("novel check at ")+std::to_string(__LINE__)+": "+#x);}while(false)
 using wr::U32;
 namespace a=wa2::aot;
@@ -38,6 +43,16 @@ struct Recording {
     }
     void reset(){calls.clear();tiles.clear();texture=0;}
 };
+static std::uint64_t cpu_time_ns(){
+#ifdef __ANDROID__
+    timespec time{};
+    CHECK(clock_gettime(CLOCK_THREAD_CPUTIME_ID,&time)==0);
+    return std::uint64_t(time.tv_sec)*1000000000u+time.tv_nsec;
+#else
+    return static_cast<std::uint64_t>(double(std::clock())*1000000000.0/CLOCKS_PER_SEC);
+#endif
+}
+
 int main(int argc,char** argv){try{
     CHECK(argc==2);a::Runtime runtime;auto& p=runtime.process();Recording recorded;
     p.replace_api("user32.dll","MessageBoxA",4,[](wr::Process&)->U32{throw std::runtime_error("Constructed text exceeds source text-helper contract");});
@@ -79,6 +94,7 @@ int main(int argc,char** argv){try{
     p.memory.store(data+0xc06c,p.memory.load(0x4d1cb0,32),32);
     p.memory.store(data+0xc068,p.memory.load(0x4d1ad0,32),32);
     const auto initial_cpu=p.cpu;
+    a::compact_text_advance_enabled.store(false,std::memory_order_relaxed);
     std::array<std::uint8_t,0x2000> initial_output;p.memory.copy_out(output,initial_output);
     std::array<std::uint8_t,256> sprite;p.memory.copy_out(output,sprite);
     std::ofstream report(argv[1]);
@@ -247,6 +263,139 @@ int main(int argc,char** argv){try{
         p.memory.store(cursor+4,p.callback(0x446500,reveal_args,false),32);
     }
     CHECK(!recorded.calls.empty() && recorded.tiles==direct_pair_tiles);
+    // Exercise the same two source calls after independent reveal/cursor state resets.
+    // The finite path changes alpha on its last 15 glyphs on both passes.
+    const char* timing_mode=std::getenv("WA2_NOVEL_TIMING");
+    const std::string_view mode=timing_mode?timing_mode:"";
+    const auto advance_hits_before=a::compact_text_advance_hits;
+    for(auto visible:{immediately_visible,page_length}){
+        // A retained pre-optimization library has no candidate admissions.
+        if(mode=="historical")break;
+        a::compact_text_advance_enabled.store(false,std::memory_order_relaxed);
+        begin_page();
+        const auto reference_work=both_passes(visible);
+        const auto reference_cpu=p.cpu;
+        const auto reference_return=text_result;
+        std::array<std::uint8_t,16> reference_cursor;p.memory.copy_out(cursor,reference_cursor);
+        std::array<std::uint8_t,0x2000> reference_output;p.memory.copy_out(output,reference_output);
+        a::compact_text_advance_enabled.store(true,std::memory_order_relaxed);
+        begin_page();
+        const auto previous_hits=a::compact_text_advance_hits;
+        CHECK(both_passes(visible)==reference_work && text_result==reference_return);
+        CHECK(a::compact_text_advance_hits>previous_hits);
+        CHECK(recorded.tiles==(visible==immediately_visible?direct_pair_tiles:finite_pair_tiles));
+        CHECK(p.cpu.r==reference_cpu.r && p.cpu.eip==reference_cpu.eip && p.cpu.fp.bytes==reference_cpu.fp.bytes &&
+              p.cpu.flags==reference_cpu.flags && p.cpu.defined_flags==reference_cpu.defined_flags);
+        std::array<std::uint8_t,16> actual_cursor;p.memory.copy_out(cursor,actual_cursor);
+        std::array<std::uint8_t,0x2000> actual_output;p.memory.copy_out(output,actual_output);
+        CHECK(actual_cursor==reference_cursor && actual_output==reference_output);
+    }
+    const auto advance_hits=a::compact_text_advance_hits-advance_hits_before;
+    a::compact_text_advance_enabled.store(false,std::memory_order_relaxed);
+
+    std::ostringstream timing;
+    const bool compare_advance=mode=="1" || mode=="advance";
+    if(compare_advance || mode=="health" || mode=="historical"){
+        // Keep each source segment below its text limit. Select distinct
+        // ordinary Shift-JIS kanji from the fixture font's real ranges.
+        // The grid predicts candidates; only the actual two source draws
+        // determine whether a character crosses an atlas texture boundary.
+        constexpr unsigned lines=3,long_length=lines*page_length;
+        const auto initial_y=reveal_args[3];
+        std::array<std::uint8_t,256> ranges;p.memory.copy_out(0x4a14b8,ranges);
+        wa2::text::GlyphIndex index;
+        std::map<std::pair<unsigned,unsigned>,unsigned> candidates;
+        for(unsigned row=0;row<64;++row){
+            std::uint16_t first,last;
+            std::memcpy(&first,ranges.data()+row*4,2);std::memcpy(&last,ranges.data()+row*4+2,2);
+            if(last==0xffff || (row && first==0xffff) || first>last)break;
+            for(unsigned code=std::max<unsigned>(first,0x8980);code<=std::min<unsigned>(last,0xeafc);++code){
+                const unsigned lead=code>>8,trail=code&255;
+                if((lead>0x9f && lead<0xe0) || trail<0x80 || trail>0xfc)continue;
+                const auto cell=index.lookup(ranges,std::uint16_t(code));CHECK(cell);
+                const auto u=*cell%80*40+4,v=*cell/80*40+4;
+                if(u+28>3200 || v+28>3840)continue;
+                const unsigned parts=(1+unsigned(u%256+28>256))*(1+unsigned(v%256+28>256));
+                if(parts<=2)candidates.try_emplace(std::pair{v/256*13+u/256,parts},code);
+            }
+        }
+        const auto single_character=p.put_string("<C1:XX>");
+        reveal_args[11]=single_character;
+        std::vector<unsigned> single,crossing;
+        std::set<U32> chosen_textures;
+        for(const auto& [where,code]:candidates){
+            const auto parts=where.second;
+            auto& codes=parts==1?single:crossing;
+            if(codes.size()==(parts==1?16u:4u))continue;
+            p.memory.store(single_character+4,((code&255)<<8)|(code>>8),16);
+            begin_page();
+            const auto draws=both_passes(immediately_visible);
+            if(draws[0].glyphs!=1 || draws[1].glyphs!=1 || draws[0].tiles!=parts || draws[1].tiles!=parts)continue;
+            if(!chosen_textures.insert(recorded.tiles.front().texture).second)continue;
+            codes.push_back(code);
+            if(single.size()==16 && crossing.size()==4)break;
+        }
+        CHECK(single.size()==16 && crossing.size()==4);
+        std::string segment="<C1:";unsigned single_count{},crossing_count{};
+        for(unsigned n=0;n<page_length;++n){
+            const unsigned code=n%5==4?crossing[(crossing_count++*3)%crossing.size()]:single[(single_count++*7)%single.size()];
+            segment+=char(code>>8);segment+=char(code);
+        }
+        segment+='>';reveal_args[11]=p.put_string(segment);
+        const auto long_page=[&]{
+            std::uint64_t glyphs{};
+            for(unsigned line=0;line<lines;++line){
+                reveal_args[3]=initial_y+line*40;
+                for(U32 style:{1u,0u}){
+                    const auto work=frame(immediately_visible,style,line!=0 || style==0);
+                    glyphs+=work.glyphs;
+                    p.memory.store(cursor+4,text_result,32);
+                }
+            }
+            CHECK(glyphs==2*long_length);
+        };
+        begin_page();
+        long_page();
+        const auto expected_tiles=recorded.tiles;
+        CHECK(expected_tiles.size()==2*lines*(single_count+2*crossing_count));
+        CHECK(expected_tiles.size()*10>=2*long_length*11 && expected_tiles.size()*10<=2*long_length*13);
+        std::set<U32> rendered_textures;
+        for(const auto& tile:expected_tiles)rendered_textures.insert(tile.texture);
+        CHECK(rendered_textures.size()>=16);
+        const auto expected_return=text_result;
+        std::array<std::uint8_t,16> expected_cursor;p.memory.copy_out(cursor,expected_cursor);
+        std::array<std::uint8_t,0x2000> expected_output;p.memory.copy_out(output,expected_output);
+        constexpr unsigned pages_per_window=12;
+        constexpr std::array<bool,8> windows{false,true,true,false,true,false,false,true};
+        timing<<"{\"mode\":\""<<(mode=="1"?"compare":mode)<<"\",\"characters\":"<<long_length
+            <<",\"source_segments\":"<<lines<<",\"glyphs_per_page\":"<<2*long_length
+            <<",\"tiles_per_page\":"<<expected_tiles.size()<<",\"distinct_characters\":"<<(single.size()+crossing.size())
+            <<",\"distinct_textures\":"<<rendered_textures.size()<<",\"crossing_characters_per_segment\":"<<crossing_count
+            <<",\"passes_per_segment\":2,\"pages_per_window\":"<<pages_per_window<<",\"windows\":[";
+        for(unsigned i=0;i<windows.size();++i){
+            const bool compact=compare_advance && windows[i];
+            a::compact_text_advance_enabled.store(compact,std::memory_order_relaxed);
+            begin_page();
+            for(unsigned warm=0;warm<2;++warm)long_page();
+            const auto hits_before=a::compact_text_advance_hits;
+            const auto start=std::chrono::steady_clock::now();const auto cpu_start=cpu_time_ns();
+            for(unsigned iteration=0;iteration<pages_per_window;++iteration)long_page();
+            const auto cpu_ns=cpu_time_ns()-cpu_start;
+            const auto wall_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count();
+            const auto hits=a::compact_text_advance_hits-hits_before;
+            CHECK((hits>0)==compact && recorded.tiles==expected_tiles && text_result==expected_return);
+            std::array<std::uint8_t,16> actual_cursor;p.memory.copy_out(cursor,actual_cursor);
+            std::array<std::uint8_t,0x2000> actual_output;p.memory.copy_out(output,actual_output);
+            CHECK(actual_cursor==expected_cursor && actual_output==expected_output);
+            if(i)timing<<',';
+            timing<<"{\"compact_advance\":"<<(compact?"true":"false")<<",\"cpu_ns\":"<<cpu_ns
+                <<",\"wall_ns\":"<<wall_ns<<",\"hits\":"<<hits<<'}';
+        }
+        timing<<"]}";
+        a::compact_text_advance_enabled.store(false,std::memory_order_relaxed);
+        reveal_args[3]=initial_y;
+        reveal_args[11]=reveal_string;
+    }
     // The new allowance is finite and independent of the generic call budget.
     unsigned guard_cases{};
     {wr::Memory other;CHECK(!a::GlyphCallScope::remaining(p.memory));
@@ -330,6 +479,8 @@ int main(int argc,char** argv){try{
     }
     report<<"],\"two_pass_order_matches_static_reference\":true,\"alpha_only_tile_differences\":"<<partially_faded
         <<",\"same_limit_same_work_and_vertices\":true,\"models_save_loading\":false,\"models_script_progression\":false}";
+    report<<",\"compact_text_advance\":{\"paired_page_hits\":"<<advance_hits<<'}';
+    if(!timing.str().empty())report<<",\"two_pass_timing\":"<<timing.str();
     report<<",\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
         <<",\"maximum_glyphs_per_boundary\":256,\"generic_call_limit_unchanged\":true,\"nested_memory_scopes_checked\":true,\"exhaustion_fallback_preserves_state\":true"
         <<",\"exact_texture_order_vertices_output_and_abi\":true,\"complete_handle_range_still_checked\":true,\"handle_changes_visible_immediately\":true,\"game_launched\":false,\"screen_access\":false,\"source_executable_opened\":false,\"passed\":true}\n";

@@ -32,8 +32,8 @@ def main():
     flags=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS
     binaries=[];observations=[];snapshot_sha=None
     with (folder/'text-comparison.log').open('wb') as log:
-        def run(command,cwd=build):
-            subprocess.run(list(map(str,command)),cwd=cwd,env=env,creationflags=flags,stdout=log,stderr=subprocess.STDOUT,timeout=180,check=True)
+        def run(command,cwd=build,environment=env):
+            subprocess.run(list(map(str,command)),cwd=cwd,env=environment,creationflags=flags,stdout=log,stderr=subprocess.STDOUT,timeout=180,check=True)
         for side in range(2):
             inputs=libraries.copy()
             if not side:inputs[inputs.index('shared_aot/libwa2_shared_aot.a')]=str(old)
@@ -42,7 +42,8 @@ def main():
         for pair in range(3):
             reports=[None,None];snapshots=[None,None]
             for order in range(2):
-                side=(pair+order)&1;path=folder/('text-pair-'+str(pair)+'-'+str(side)+'.json');run([binaries[side],path],ROOT)
+                side=(pair+order)&1;path=folder/('text-pair-'+str(pair)+'-'+str(side)+'.json')
+                run([binaries[side],path],ROOT,{**env,'WA2_NOVEL_TIMING':'historical' if side==0 else 'health'})
                 reports[side]=json.loads(path.read_text());snapshots[side]=digest(Path(str(path)+'.bin'))
                 if not reports[side]['passed']:raise ValueError('Text fixture failed')
             if snapshots[0]!=snapshots[1] or (snapshot_sha and snapshot_sha!=snapshots[0]):raise ValueError('Changed text output/public ABI snapshot')

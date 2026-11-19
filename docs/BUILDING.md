@@ -475,9 +475,11 @@ page, then run `python scripts/compare_android_text.py --serial <ADB-serial>`.
 It compares reference/optimized/optimized/reference windows within one process
 using real presentation FPS and frame-time samples. The running activity's
 dynamic receiver requires the sender's Android DUMP permission; registered-only
-delivery cannot launch the game. In 0.2.99 the switch compares the ordinary
-renderer with the glyph packet continuation and deferred texture bindings.
-Both modes use the same immutable buffer policy. Ordinary switches reset
+delivery cannot launch the game. In 0.2.100 the switch compares the generated
+text layout with a shared routine that advances the cursor after drawing a
+double-byte character. It covers the foreground and outline, including the
+original wrap and page-overflow branches. Both modes use the same renderer.
+Ordinary switches reset
 after 30 seconds. The comparison restores the shipped optimized mode at the
 end and records whether the running activity acknowledged it.
 No launch setting or game file is changed. An inactive/unfocused page, stale
@@ -488,6 +490,13 @@ the HUD timestamp, FPS, frame time and cumulative frame, glyph and tile counts.
 Subtract adjacent totals within the same foreground session to compare work
 per frame. Record only the game's UID and this tag and restore its prior log
 level after the measurement.
+
+The optional Android target `wa2_phone_novel_cpu` runs the shared text routine
+with a recording device. Pass a writable report filename as its only argument.
+`WA2_NOVEL_TIMING=advance` compares both paths with 288 mixed CJK characters,
+including glyphs that span texture boundaries. The report records the thread
+CPU time, elapsed time and the number of glyphs and texture tiles in each run.
+`WA2_NOVEL_TIMING=historical` runs the same input against an older library.
 
 Keep precision-specific results separate: widening admission improves the
 previously declined PC53/PC64 integer cases, while the already-admitted PC24

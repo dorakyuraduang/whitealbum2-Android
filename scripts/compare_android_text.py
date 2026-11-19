@@ -14,7 +14,7 @@ import time
 from build_pak_tool import low_priority
 
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE='glyph-packet-continuation'
+CANDIDATE='cjk-text-advance'
 
 def glyph_work(previous, current):
     frames=current['frames']-previous['frames']
@@ -92,8 +92,8 @@ def main():
                     workload_intervals.append(interval)
                     validate_workload(workload_intervals)
                 time.sleep(.85)
-            # The render thread latches a requested mode on Present. A frame
-            # already in flight at the switch belongs to the warm-up interval.
+            # A text layout call that was already in flight when the switch
+            # arrived belongs to the warm-up interval.
             delta=rows[-1]['candidate_calls']-rows[0]['candidate_calls']
             if mode=='optimized' and delta<=0:raise RuntimeError('Candidate path was not admitted in this scene')
             if mode=='reference' and delta!=0:raise RuntimeError('Reference window unexpectedly used the candidate path')
