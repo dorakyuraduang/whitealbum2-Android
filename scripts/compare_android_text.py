@@ -14,7 +14,20 @@ import time
 from build_pak_tool import low_priority
 
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE='cjk-text-advance'
+CANDIDATE='glyph-layout-and-packets'
+
+def candidate_work(mode, first, last):
+    work={}
+    for key, exclusive in (('layout_hits','layout'),('wide_packets','packets')):
+        delta=last[key]-first[key]
+        if first[key]<0 or delta<0:
+            raise ValueError('Missing or reset candidate counter: '+key)
+        if mode not in ('optimized',exclusive) and delta:
+            raise ValueError('Disabled path ran during comparison: '+key)
+        work[key]=delta
+    if mode!='reference' and not any(work.values()):
+        raise ValueError('No candidate work was admitted in this scene')
+    return work
 
 def glyph_work(previous, current):
     frames=current['frames']-previous['frames']
@@ -39,6 +52,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial',required=True)
     parser.add_argument('--samples',type=int,choices=range(4,13),default=8)
+    parser.add_argument('--path',choices=('optimized','layout','packets'),default='optimized')
     parser.add_argument('--output',type=Path,default=ROOT/'logs/android-text-comparison.json')
     args=parser.parse_args();low_priority()
     adb=ROOT/'tools/android-sdk/platform-tools/adb.exe'
@@ -75,7 +89,7 @@ def main():
         last_response=record['uptime_ms'];return record
     windows=[];workload_intervals=[];failure=None;restore_error=None;restored_mode=None
     try:
-        for mode in ('reference','optimized','optimized','reference'):
+        for mode in ('reference',args.path,args.path,'reference'):
             rows=[]
             window=dict(mode=mode,samples=rows,glyph_work=[],complete=False)
             windows.append(window)
@@ -94,10 +108,8 @@ def main():
                 time.sleep(.85)
             # A text layout call that was already in flight when the switch
             # arrived belongs to the warm-up interval.
-            delta=rows[-1]['candidate_calls']-rows[0]['candidate_calls']
-            if mode=='optimized' and delta<=0:raise RuntimeError('Candidate path was not admitted in this scene')
-            if mode=='reference' and delta!=0:raise RuntimeError('Reference window unexpectedly used the candidate path')
-            window.update(median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_calls=delta,complete=True)
+            work=candidate_work(mode,rows[0],rows[-1])
+            window.update(median_fps=statistics.median(x['fps'] for x in rows),median_frame_ms=statistics.median(x['frame_ms'] for x in rows),candidate_work=work,complete=True)
             print(mode+' median FPS '+str(round(window['median_fps'],2)),flush=True)
     except Exception as error:failure=str(error)
     finally:
@@ -106,9 +118,9 @@ def main():
         try:restored_mode=request('optimized')['mode']
         except Exception as error:
             restore_error=str(error);failure=failure or 'Restore unavailable: '+restore_error
-    report=dict(release=release,candidate=CANDIDATE,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='optimized',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,comparable=False,passed=failure is None)
+    report=dict(release=release,candidate=CANDIDATE,path=args.path,pid=int(pid),windows=windows,error=failure,restored_mode=restored_mode,restoration_verified=restored_mode=='optimized',restore_error=restore_error,app_launched=False,screen_access=False,game_ui_operated=False,measured_on_phone=True,comparable=False,passed=failure is None)
     if not failure:
-        reference=[x['median_frame_ms'] for x in windows if x['mode']=='reference'];candidate=[x['median_frame_ms'] for x in windows if x['mode']=='optimized']
+        reference=[x['median_frame_ms'] for x in windows if x['mode']=='reference'];candidate=[x['median_frame_ms'] for x in windows if x['mode']==args.path]
         report['reference_drift_ratio']=max(reference)/min(reference)
         report['candidate_drift_ratio']=max(candidate)/min(candidate)
         report['comparable']=max(report['reference_drift_ratio'],report['candidate_drift_ratio'])<=1.10

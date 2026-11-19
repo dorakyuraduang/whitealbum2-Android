@@ -2,7 +2,8 @@
 #include "../platform/render/texture_batch.hpp"
 #include <memory>
 namespace texture_batch_test {
-struct Result {unsigned source_draws{},driver_packets{},triangles{},reused_texture_packets{},lifetime_checks{};};
+struct Result {unsigned source_draws{},driver_packets{},triangles{},reused_texture_packets{},lifetime_checks{};
+    unsigned narrow_glyph_packets{},adaptive_glyph_packets{};};
 inline void check_glyph_continuations() {
     namespace g = wa2::graphics;
     const auto plan = g::screen_vertex_plan(0x1c4u, {0, 0, 1280, 720, 0, 1}, {0, 1});
@@ -54,33 +55,76 @@ inline void check_glyph_sampler_units() {
     namespace g = wa2::graphics;
     std::array<unsigned, 16> logical{};
     logical[0] = 100;
-    for (unsigned used = 1; used <= g::TextureBatchSlots; ++used) {
+    for (auto limit : {g::TextureBatchSlots,g::WideTextureBatchSlots})
+    for (unsigned used = 1; used <= limit; ++used) {
         std::array<unsigned, 16> reference, candidate;
         reference.fill(42);
         candidate = reference;
         unsigned immediate = 0, deferred = 0;
-        g::apply_logical_texture_units(logical, false, [&](unsigned n, unsigned value) {
+        g::apply_logical_texture_units(logical, 0, [&](unsigned n, unsigned value) {
             reference[n] = value;
             ++immediate;
         });
-        g::apply_logical_texture_units(logical, true, [&](unsigned n, unsigned value) {
+        g::apply_logical_texture_units(logical, limit, [&](unsigned n, unsigned value) {
             candidate[n] = value;
             ++deferred;
         });
-        CHECK(immediate == logical.size() && immediate - deferred == g::TextureBatchSlots - 1);
-        CHECK(candidate[0] == logical[0] && candidate[8] == 0);
-        for (unsigned n = 0; n < g::TextureBatchSlots; ++n) {
+        CHECK(immediate == logical.size() && immediate - deferred == limit - 1);
+        CHECK(candidate[0] == logical[0]);
+        for (unsigned n = 0; n < limit; ++n) {
             const auto packet_texture = n < used ? 90u + n : 0u;
             candidate[n] = reference[n] = packet_texture;
         }
         CHECK(candidate == reference);
     }
 }
+inline std::vector<unsigned> replay_glyph_packets(const std::vector<unsigned>& textures,unsigned supported){
+    namespace g=wa2::graphics;
+    g::ScreenTextureBatch<unsigned> batch;
+    std::vector<unsigned> occupancies;
+    unsigned source=0;
+    const auto flush=[&]{
+        if(batch.empty())return;
+        occupancies.push_back(batch.binding_count());
+        const std::array<unsigned,6> corners{0,1,2,2,1,3};
+        unsigned index=0;
+        for(auto vertex_index:batch.indices()){
+            const auto& vertex=batch.vertices()[vertex_index];
+            CHECK(source<textures.size() && batch.bindings()[unsigned(vertex.binding)]==textures[source]);
+            CHECK(vertex.screen.position[0]==float(4*source+corners[index]));
+            if(++index==corners.size()){index=0;++source;}
+        }
+        CHECK(index==0);batch.clear();
+    };
+    for(unsigned draw=0;draw<textures.size();++draw){
+        const auto texture=textures[draw];
+        if(!batch.fits(texture,4,6)){
+            const auto next=batch.slots_after_glyph_rollover(texture,supported);
+            flush();batch.set_slot_limit(next);
+        }
+        std::array<g::ScreenVertex,4> quad{};
+        for(unsigned n=0;n<quad.size();++n)quad[n].position[0]=float(4*draw+n);
+        CHECK(batch.append(texture,quad,g::abi::D3DPT_TRIANGLESTRIP,4));
+    }
+    flush();CHECK(source==textures.size());return occupancies;
+}
 inline Result run(){
     namespace g=wa2::graphics;
     check_glyph_continuations();
     check_glyph_sampler_units();
     Result result;
+    CHECK(g::supported_texture_batch_slots(32,false)==0 && g::supported_texture_batch_slots(7,true)==0);
+    CHECK(g::supported_texture_batch_slots(8,true)==8 && g::supported_texture_batch_slots(15,true)==8);
+    CHECK(g::supported_texture_batch_slots(16,true)==16 && g::supported_texture_batch_slots(32,true)==16);
+    std::vector<unsigned> page(676);
+    for(unsigned n=0;n<page.size();++n)page[n]=1+n/2%11;
+    result.narrow_glyph_packets=unsigned(replay_glyph_packets(page,8).size());
+    result.adaptive_glyph_packets=unsigned(replay_glyph_packets(page,16).size());
+    CHECK(result.narrow_glyph_packets==43 && result.adaptive_glyph_packets==2);
+    for(unsigned n=0;n<page.size();++n)page[n]=1+n%8;
+    CHECK((replay_glyph_packets(page,16)==std::vector<unsigned>{8}));
+    page.resize(33);for(unsigned n=0;n<page.size();++n)page[n]=n+1;
+    CHECK((replay_glyph_packets(page,16)==std::vector<unsigned>{8,16,9}));
     struct Expected {unsigned texture;g::ScreenVertex vertex;};
     std::vector<Expected> original,submitted;
     for(unsigned primitive:{4u,5u,6u}){

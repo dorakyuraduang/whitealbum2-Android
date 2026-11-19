@@ -144,6 +144,8 @@ class Graphics final:public wa2::graphics::MoviePresenter {
     std::vector<wa2::graphics::ScreenVertex> pending_screen,screen_scratch;
     std::vector<std::uint16_t> pending_screen_indices;
     wa2::graphics::ScreenTextureBatch<Res> texture_batch;
+    unsigned supported_packet_slots{},peak_packet_bindings{};
+    std::uint64_t wide_packet_submissions{};
     bool texture_batch_available{},texture_batch_mode{};
     bool pending_glyph{};
     wa2::graphics::ScreenVertexPlan pending_glyph_plan{};
@@ -307,6 +309,7 @@ class Graphics final:public wa2::graphics::MoviePresenter {
         for(unsigned unit=0;unit<16;++unit){for(unsigned j=0;j<14;++j)word_differences+=state.sampler[unit][j]!=baseline_words.sampler[unit][j];texture_differences+=state.textures[unit]!=baseline_textures[unit];}}
     void set_word(U32& destination,U32 value,U32 baseline){if(destination!=value){word_differences-=destination!=baseline;word_differences+=value!=baseline;destination=value;}}
     void apply(bool opening_glyph_packet=false);void flush();void bind_sampler(unsigned,const Res&,const std::array<U32,14>* =nullptr);
+    bool begin_texture_packet(unsigned slots,bool glyph);
     void texture_mode(bool enabled){if(texture_batch_mode!=enabled){flush();texture_batch_mode=enabled;applied.reset();}}
     bool batch_textures(std::span<const wa2::graphics::ScreenVertex>,U32,U32,std::span<const U32>,bool);
     U32 draw(U32,U32,std::span<const std::uint8_t>,U32,std::span<const U32> indices = {},bool glyph=false);
@@ -329,7 +332,8 @@ public:
             <<",\"index_upload_bytes\":"<<index_upload_bytes
             <<",\"immutable_text_buffers\":{\"entries\":"<<text_buffers.size()<<",\"payload_bytes\":"<<text_buffers.bytes()<<",\"hits\":"<<text_buffers.hits
             <<",\"creations\":"<<text_buffers.creations<<",\"evictions\":"<<text_buffers.evictions<<",\"maximum_entries\":512,\"maximum_payload_bytes\":2097152}"
-            <<",\"multi_texture_batch\":{\"available\":"<<(texture_batch_available?"true":"false")<<",\"slots\":"<<wa2::graphics::TextureBatchSlots
+            <<",\"multi_texture_batch\":{\"available\":"<<(texture_batch_available?"true":"false")<<",\"slots\":"<<supported_packet_slots
+            <<",\"peak_used_slots\":"<<peak_packet_bindings<<",\"wide_driver_submissions\":"<<wide_packet_submissions
             <<",\"guest_draws\":"<<texture_batch_draws<<",\"driver_submissions\":"<<texture_batch_submissions<<",\"failure\":"<<quote(texture_batch_failure)<<'}'
             <<",\"context_rebinds\":"<<context_rebinds<<",\"context_reuses\":"<<context_reuses<<",\"context_free_calls\":"<<context_free_calls
             <<",\"constant_updates\":"<<constant_updates<<",\"constant_reuses\":"<<constant_reuses<<",\"sampler_parameter_calls\":"<<sampler_parameter_calls<<",\"sampler_parameter_skips\":"<<sampler_parameter_skips
@@ -368,7 +372,7 @@ MOJOSHADER_glShader* Graphics::assemble_shader(const std::string& source){
     return shader;
 }
 MOJOSHADER_glShader* Graphics::fixed_pixel(bool batched){
-    wa2::graphics::FixedPipeline pipeline{};std::array<U32,65> key{};key[64]=batched?wa2::graphics::TextureBatchSlots:1;
+    wa2::graphics::FixedPipeline pipeline{};std::array<U32,65> key{};key[64]=batched?texture_batch.slot_limit():1;
     for(unsigned n=0;n<8;++n){const auto& t=state.stage[n];pipeline.stages[n]={t[D3DTSS_COLOROP],t[D3DTSS_COLORARG1],
         t[D3DTSS_COLORARG2],t[D3DTSS_ALPHAOP],t[D3DTSS_ALPHAARG1],t[D3DTSS_ALPHAARG2],
         t[D3DTSS_TEXTURETRANSFORMFLAGS],bool(state.textures[n])};
@@ -458,7 +462,8 @@ U32 Graphics::init(U32 pp,U32 focus){
         const std::string list=" "+std::string(reinterpret_cast<const char*>(extensions))+" ";
         gradients=list.find(" GL_ARB_shader_texture_lod ")!=list.npos;
     }}
-    texture_batch_available=gradients && texture_units>=GLint(wa2::graphics::TextureBatchSlots);
+    supported_packet_slots=wa2::graphics::supported_texture_batch_slots(texture_units,gradients);
+    texture_batch_available=supported_packet_slots!=0;
     const auto driver_string=[&](GLenum name){const auto text=gl.GetString(name);return text?std::string(reinterpret_cast<const char*>(text)):std::string();};
     driver_vendor=driver_string(GL_VENDOR);driver_renderer=driver_string(GL_RENDERER);driver_version=driver_string(GL_VERSION);
     mojo=MOJOSHADER_glCreateContext(host->embedded_gl()?MOJOSHADER_PROFILE_GLSLES3:MOJOSHADER_PROFILE_GLSL120,
@@ -761,7 +766,7 @@ void Graphics::apply(bool opening_glyph_packet){
     // A texture packet sets every unit it owns immediately before drawing.
     // Leave its empty logical slots alone until that bind. Unit zero still
     // validates and uploads the logical sampler here, including failure paths.
-    wa2::graphics::apply_logical_texture_units(state.textures, opening_glyph_packet, [&](unsigned n, const Res& texture){
+    wa2::graphics::apply_logical_texture_units(state.textures, opening_glyph_packet?texture_batch.slot_limit():0, [&](unsigned n, const Res& texture){
         gl.ActiveTexture(GL_TEXTURE0+n);
         if(texture)bind_sampler(n,texture);
         else gl.BindTexture(GL_TEXTURE_2D,0);
@@ -815,7 +820,7 @@ void Graphics::flush() {
         if(!applied)stop("missing texture batch state");
         // Setters can already describe the next draw. Bind the saved sampler
         // of this pending packet, with its own retained resource references.
-        for(unsigned n=0;n<wa2::graphics::TextureBatchSlots;++n){
+        for(unsigned n=0;n<texture_batch.slot_limit();++n){
             if(n<texture_batch.binding_count())bind_sampler(n,texture_batch.bindings()[n],&applied->sampler[0]);
             else{gl.ActiveTexture(GL_TEXTURE0+n);gl.BindTexture(GL_TEXTURE_2D,0);}
         }
@@ -833,7 +838,30 @@ void Graphics::flush() {
     ++submitted_draws;submitted_vertices+=count;
     if(pending_target)pending_target->levels[0]->gpu_dirty=true;
     pending_vertices.clear();pending_screen.clear();pending_screen_indices.clear();pending_target.reset();pending_glyph=false;
-    if(multiple){++texture_batch_submissions;texture_batch.clear();applied.reset();}
+    if(multiple){
+        ++texture_batch_submissions;
+        peak_packet_bindings=std::max(peak_packet_bindings,texture_batch.binding_count());
+        if(texture_batch.slot_limit()==wa2::graphics::WideTextureBatchSlots){
+            ++wide_packet_submissions;
+            wa2::graphics::record_wide_glyph_packet_submissions(1);
+        }
+        texture_batch.clear();applied.reset();
+    }
+}
+bool Graphics::begin_texture_packet(unsigned slots,bool glyph){
+    texture_batch.set_slot_limit(slots);
+    try{apply(glyph && continue_glyph_packets);}
+    catch(const GuestFault& error){
+        texture_batch_failure=error.what();applied.reset();
+        if(slots==wa2::graphics::WideTextureBatchSlots){
+            // Driver advertised the units but rejected this variant. Retry
+            // the proven narrower shader before falling back to single draws.
+            supported_packet_slots=wa2::graphics::TextureBatchSlots;
+            return begin_texture_packet(supported_packet_slots,glyph);
+        }
+        supported_packet_slots=0;texture_batch_available=false;texture_batch_mode=false;return false;
+    }
+    pending_target=state.target;pending_glyph=glyph;return true;
 }
 bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> vertices,U32 type,U32 count,std::span<const U32> indices,bool glyph){
     if(!texture_batch_available || state.vertex_shader || state.pixel_shader || !state.textures[0])return false;
@@ -844,18 +872,16 @@ bool Graphics::batch_textures(std::span<const wa2::graphics::ScreenVertex> verti
     if(!wa2::graphics::fixed_pipeline_texture_batch(pipeline,wa2::graphics::texture_mask(state.textures)))return false;
     const auto elements=decltype(texture_batch)::index_count(type,count);if(!elements)return false;
     if(!texture_batch.empty() && (!applied || config_version!=applied_config_version || word_differences))flush();
-    if(!texture_batch.fits(state.textures[0],unsigned(vertices.size()),elements))flush();
+    unsigned next_slots=wa2::graphics::TextureBatchSlots;
+    if(!texture_batch.fits(state.textures[0],unsigned(vertices.size()),elements)){
+        if(pending_glyph && glyph && wa2::graphics::wide_glyph_packets_enabled())
+            next_slots=texture_batch.slots_after_glyph_rollover(state.textures[0],supported_packet_slots);
+        flush();
+    }
     if(!texture_batch.fits(state.textures[0],unsigned(vertices.size()),elements))return false;
     texture_mode(true);
     if(texture_batch.empty()){
-        try{apply(glyph && continue_glyph_packets);}
-        catch(const GuestFault& error){
-            // This is an optional native submission optimization. Older or
-            // buggy shader drivers retain the original shared draw path.
-            texture_batch_failure=error.what();texture_batch_available=false;texture_batch_mode=false;applied.reset();return false;
-        }
-        pending_target=state.target;
-        pending_glyph=glyph;
+        if(!begin_texture_packet(next_slots,glyph))return false;
     }
     else pending_glyph&=glyph;
     if(!texture_batch.append(state.textures[0],vertices,type,count,indices))stop("invalid bounded texture batch packet");

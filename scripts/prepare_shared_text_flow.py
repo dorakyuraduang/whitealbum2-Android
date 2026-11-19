@@ -25,6 +25,11 @@ ADVANCE_RANGES=(
     ('446939','446973','b734bf92f8a613fe1c1ea165b35d76a5ca357ac5270120f5ffe6e007c584e6d8'),
     ('44771c','447754','e4f983cf468da117c3efce9b27c7123d71c531c15bd205e848b3b58e63e079c3'),
 )
+LAYOUT_RANGES=(
+    ('44722c','4472ea','6b8fae44c0972be7e10f955f3d928a915eb758a5d9919a68787a8e6797ca2944'),
+    ('447321','4473b3','d54bba1510835e4caefc7172ce9c964d0ccfd03295e1d654e409f1c33d2b6dca'),
+)
+LAYOUT_FTOL=('474f00','474f36','8d56b0df360d361317d9764e221cd2b57a0a7fe47c98a40f4b3fba9dac7b36ae')
 def digest(data):return hashlib.sha256(data).hexdigest()
 def write(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -39,17 +44,40 @@ def scoped_stack(body):
         raise ValueError('Changed selected text stack contract')
     return body,pushes+pops
 
-def advance_reference(body):
-    """The complete original blocks; only the three terminal labels are supplied by the test."""
+def verified_blocks(body,ranges):
     body=body.replace('\r\n','\n')
     parts=[]
-    for start,end,expected in ADVANCE_RANGES:
+    for start,end,expected in ranges:
         first=body.index('L_'+start+': {')
         last=body.index('L_'+end+': {',first)
         original=body[first:last]
-        if digest(original.encode())!=expected:raise ValueError('Changed text advance block '+start)
+        if digest(original.encode())!=expected:raise ValueError('Changed text layout/advance block '+start)
         parts.append(original)
     return ''.join(parts)
+
+def advance_reference(body):
+    """The complete original blocks; only the three terminal labels are supplied by the test."""
+    return verified_blocks(body,ADVANCE_RANGES)
+
+def layout_hooks(body,newline):
+    verified_blocks(body,LAYOUT_RANGES)
+    marker='TextAdvanceScope text_advance;'
+    body=body.replace(marker,marker+newline+'TextLayoutReplay text_layout;')
+    for label in ('44722c','4472ea','4473b3'):
+        anchor=f'L_{label}: {{{newline}s.eip=0x{label}u;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
+        if body.count(anchor)!=1:raise ValueError('Ambiguous text layout label '+label)
+        if label=='44722c':
+            hook=['if constexpr(!Metered)if(text_layout.enabled){',
+                  '    floating.flush();integer.flush();',
+                  '    switch(text_layout.begin(s,scope)){',
+                  '    case 0x4472ea:goto L_4472ea;',
+                  '    case 0x4473b3:goto L_4473b3;',
+                  '    }','}']
+        else:
+            hook=['if constexpr(!Metered)if(text_layout.recording()){',
+                  f'    floating.flush();integer.flush();text_layout.finish(s,scope,0x{label}u);','}']
+        body=body.replace(anchor,anchor+newline.join(hook)+newline)
+    return body
 
 def derive(text,code,base):
     newline='\r\n' if '\r\n' in text else '\n'
@@ -70,6 +98,7 @@ def derive(text,code,base):
     advance_reference(body)
     body=body.replace('TextJumpBudget<Metered> local_text_jumps;',
                       'TextJumpBudget<Metered> local_text_jumps;'+newline+'TextAdvanceScope text_advance;')
+    body=layout_hooks(body,newline)
     anchor=f'L_44751b: {{{newline}s.eip=0x44751bu;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
     if body.count(anchor)!=1:raise ValueError('Ambiguous ordinary text advance entry')
     hook=['if constexpr(!Metered)if(text_advance.enabled){',
@@ -96,7 +125,7 @@ def derive(text,code,base):
     dispatch += [f'case 0x{target:x}u: if(!local_text_jumps.take())return;goto L_{target:x};' for target in sorted(targets)]
     dispatch += ['default:local_text_jumps.external();',old,'return;','}','}']
     body=body[:finish]+newline+newline.join(dispatch)+body[finish:]
-    return '#include "text_advance.hpp"'+newline+'#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
+    return '#include "text_layout_replay.hpp"'+newline+'#include "text_advance.hpp"'+newline+'#include "text_jump_budget.hpp"'+newline+text[:begin]+body+text[end:],sorted(targets)
 
 def prepare():
     prepare_chroma();prepare_language();prepare_progress()
@@ -112,6 +141,9 @@ def prepare():
     outputs={output.relative_to(ROOT).as_posix():digest(data)};helper_bodies=[];stack_sites=0
     advance=ROOT/'recompiled/text_advance.hpp'
     inputs[advance.relative_to(ROOT).as_posix()]=digest(advance.read_bytes())
+    for name in ('text_layout_replay.hpp','text_layout_replay_control.hpp'):
+        header=ROOT/'recompiled'/name
+        inputs[header.relative_to(ROOT).as_posix()]=digest(header.read_bytes())
     reference=output.parent/'text_advance_reference.inc'
     payload=advance_reference(source.read_text(encoding='utf-8')).encode()
     write(reference,payload);outputs[reference.relative_to(ROOT).as_posix()]=digest(payload)
@@ -119,6 +151,7 @@ def prepare():
         path=ROOT/'generated/shared-aot'/name;raw=path.read_bytes();inputs[path.relative_to(ROOT).as_posix()]=digest(raw)
         original=raw.decode('utf-8');newline='\r\n' if '\r\n' in original else '\n'
         if entry=='4462e0':
+            verified_blocks(original,(LAYOUT_FTOL,))
             hook='if constexpr(!Metered)if(wa2::aot::native_draw_glyph(s,m))return;'
             if original.count(hook)!=1:raise ValueError('Changed cached glyph preheader')
             original=original.replace(hook,hook.replace('native_draw_glyph(','native_draw_glyph_or_yield('))

@@ -3,11 +3,13 @@
 #include <mojoshader.h>
 #include <mojoshader_assembler.h>
 #include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <filesystem>
 #include <set>
+#include <sstream>
 #include <vector>
 #define CHECK(x) do{if(!(x))throw std::runtime_error(std::string("check failed: ")+#x);}while(false)
 namespace g=wa2::graphics;using namespace g::abi;
@@ -18,6 +20,35 @@ struct ShaderSource {std::string file,profile;bool pixel;};
 std::vector<ShaderSource> shader_sources;
 void errors(const MOJOSHADER_parseData* data,const std::string& input){
     if(!data)throw std::runtime_error("no shader parse result");if(data->error_count){std::string message;for(int n=0;n<data->error_count;++n)message+=std::string(data->errors[n].error)+"\n";throw std::runtime_error(message+input);}
+}
+void check_batch_sampler_paths(const std::string& assembly,unsigned slots){
+    // Execute the generated selection tree for every possible vertex slot.
+    // Only its matching texture instruction may run, including for slots 8–15.
+    for(unsigned slot=0;slot<slots;++slot){
+        std::istringstream lines(assembly);
+        std::array<std::array<float,4>,4> thresholds{};
+        std::vector<bool> parents;
+        bool active=true;
+        unsigned samples=0;
+        for(std::string line;std::getline(lines,line);){
+            unsigned reg{},sampler{};char component{};
+            std::array<float,4> values{};
+            if(std::sscanf(line.c_str(),"def c%u, %f, %f, %f, %f",&reg,&values[0],&values[1],&values[2],&values[3])==5 && reg>=252){
+                CHECK(reg<=255);thresholds[reg-252]=values;
+            }else if(std::sscanf(line.c_str(),"if_lt v9.x, c%u.%c",&reg,&component)==2){
+                CHECK(reg>=252 && reg<=255);
+                const auto index=std::string("xyzw").find(component);CHECK(index<4);
+                parents.push_back(active);active=active && float(slot)<thresholds[reg-252][index];
+            }else if(line=="else"){
+                CHECK(!parents.empty());active=parents.back() && !active;
+            }else if(line=="endif"){
+                CHECK(!parents.empty());active=parents.back();parents.pop_back();
+            }else if(active && std::sscanf(line.c_str(),"texldd r1, v1, s%u",&sampler)==1){
+                CHECK(sampler==slot);++samples;
+            }
+        }
+        CHECK(samples==1 && parents.empty() && active);
+    }
 }
 unsigned check_shader(const std::string& assembly,bool pixel,std::set<std::pair<int,int>> expected_inputs={}){
     Parsed bytecode(MOJOSHADER_assemble("generated-pipeline",assembly.data(),unsigned(assembly.size()),nullptr,0,nullptr,0,nullptr,0,nullptr,nullptr,nullptr,nullptr,nullptr));errors(bytecode.get(),assembly);
@@ -47,8 +78,9 @@ unsigned check_shader(const std::string& assembly,bool pixel,std::set<std::pair<
             for(int n=0;n<3;++n)CHECK(translated->samplers[n].index==n && translated->samplers[n].type==MOJOSHADER_SAMPLER_2D);
         }
         if(pixel && assembly.find("dcl_texcoord7 v9")!=assembly.npos){
-            CHECK(translated->sampler_count==8);
-            for(int n=0;n<8;++n)CHECK(translated->samplers[n].index==n && translated->samplers[n].type==MOJOSHADER_SAMPLER_2D);
+            const int slots=assembly.find("dcl_2d s15\n")!=assembly.npos?16:8;
+            CHECK(translated->sampler_count==slots);
+            for(int n=0;n<slots;++n)CHECK(translated->samplers[n].index==n && translated->samplers[n].type==MOJOSHADER_SAMPLER_2D);
             CHECK(source.find("textureGrad")!=source.npos || source.find("texture2DGrad")!=source.npos);
             CHECK(source.find("dFdx")!=source.npos && source.find("dFdy")!=source.npos);
         }
@@ -90,8 +122,12 @@ int main(int argc,char** argv){try{
         g::FixedPipeline pipeline{};pipeline.stages[0]={operation,D3DTA_TEXTURE|modifiers,D3DTA_DIFFUSE,
             D3DTOP_MODULATE,D3DTA_TEXTURE,D3DTA_DIFFUSE,0,true};pipeline.stages[1].colour_op=D3DTOP_DISABLE;
         CHECK(g::fixed_pipeline_sample_mask(pipeline)==1);
-        translations+=check_shader(g::fixed_pixel_assembly(pipeline,8),true,
-            {{MOJOSHADER_USAGE_COLOR,0},{MOJOSHADER_USAGE_TEXCOORD,0},{MOJOSHADER_USAGE_TEXCOORD,7}});++texture_batch_variants;
+        for(unsigned slots:{8u,16u}){
+            const auto assembly=g::fixed_pixel_assembly(pipeline,slots);
+            check_batch_sampler_paths(assembly,slots);
+            translations+=check_shader(assembly,true,
+                {{MOJOSHADER_USAGE_COLOR,0},{MOJOSHADER_USAGE_TEXCOORD,0},{MOJOSHADER_USAGE_TEXCOORD,7}});++texture_batch_variants;
+        }
     }
     g::TextureStage stage{D3DTOP_MODULATE,D3DTA_TEXTURE,D3DTA_DIFFUSE,D3DTOP_MODULATE,D3DTA_TEXTURE,D3DTA_DIFFUSE,0,true};
     const auto result=g::fixed_stage_reference(stage,{1,1,1,1},{.5f,.25f,.75f,.5f},{.25f,.5f,1,.5f},{1,1,1,1});CHECK((result==std::array<float,4>{.125f,.125f,.75f,.25f}));

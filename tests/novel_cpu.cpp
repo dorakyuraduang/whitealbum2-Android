@@ -43,6 +43,8 @@ struct Recording {
     }
     void reset(){calls.clear();tiles.clear();texture=0;}
 };
+#include "../tests/novel_layout_oracle.hpp"
+
 static std::uint64_t cpu_time_ns(){
 #ifdef __ANDROID__
     timespec time{};
@@ -267,6 +269,11 @@ int main(int argc,char** argv){try{
     // The finite path changes alpha on its last 15 glyphs on both passes.
     const char* timing_mode=std::getenv("WA2_NOVEL_TIMING");
     const std::string_view mode=timing_mode?timing_mode:"";
+    unsigned layout_cases{};
+    if(mode=="layout"){
+        begin_page();
+        layout_cases=novel_layout_test::verify(p,initial_cpu,output,reveal_args);
+    }
     const auto advance_hits_before=a::compact_text_advance_hits;
     for(auto visible:{immediately_visible,page_length}){
         // A retained pre-optimization library has no candidate admissions.
@@ -295,7 +302,8 @@ int main(int argc,char** argv){try{
 
     std::ostringstream timing;
     const bool compare_advance=mode=="1" || mode=="advance";
-    if(compare_advance || mode=="health" || mode=="historical"){
+    const bool compare_layout=mode=="layout-bench";
+    if(compare_advance || compare_layout || mode=="health" || mode=="historical"){
         // Keep each source segment below its text limit. Select distinct
         // ordinary Shift-JIS kanji from the fixture font's real ranges.
         // The grid predicts candidates; only the actual two source draws
@@ -354,6 +362,11 @@ int main(int argc,char** argv){try{
             }
             CHECK(glyphs==2*long_length);
         };
+        const bool saved_layout=a::text_layout_replay_enabled.load(std::memory_order_relaxed);
+        if(compare_layout){
+            a::text_layout_replay_enabled.store(false,std::memory_order_relaxed);
+            a::compact_text_advance_enabled.store(true,std::memory_order_relaxed);
+        }
         begin_page();
         long_page();
         const auto expected_tiles=recorded.tiles;
@@ -373,25 +386,32 @@ int main(int argc,char** argv){try{
             <<",\"distinct_textures\":"<<rendered_textures.size()<<",\"crossing_characters_per_segment\":"<<crossing_count
             <<",\"passes_per_segment\":2,\"pages_per_window\":"<<pages_per_window<<",\"windows\":[";
         for(unsigned i=0;i<windows.size();++i){
-            const bool compact=compare_advance && windows[i];
+            const bool compact=compare_layout || (compare_advance && windows[i]);
             a::compact_text_advance_enabled.store(compact,std::memory_order_relaxed);
+            if(compare_layout)a::text_layout_replay_enabled.store(windows[i],std::memory_order_relaxed);
             begin_page();
             for(unsigned warm=0;warm<2;++warm)long_page();
             const auto hits_before=a::compact_text_advance_hits;
+            const auto layout_before=a::text_layout_replay_hits;
             const auto start=std::chrono::steady_clock::now();const auto cpu_start=cpu_time_ns();
             for(unsigned iteration=0;iteration<pages_per_window;++iteration)long_page();
             const auto cpu_ns=cpu_time_ns()-cpu_start;
             const auto wall_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count();
             const auto hits=a::compact_text_advance_hits-hits_before;
+            const auto layout_hits=a::text_layout_replay_hits-layout_before;
             CHECK((hits>0)==compact && recorded.tiles==expected_tiles && text_result==expected_return);
+            if(compare_layout)CHECK((layout_hits>0)==windows[i]);
             std::array<std::uint8_t,16> actual_cursor;p.memory.copy_out(cursor,actual_cursor);
             std::array<std::uint8_t,0x2000> actual_output;p.memory.copy_out(output,actual_output);
             CHECK(actual_cursor==expected_cursor && actual_output==expected_output);
             if(i)timing<<',';
             timing<<"{\"compact_advance\":"<<(compact?"true":"false")<<",\"cpu_ns\":"<<cpu_ns
-                <<",\"wall_ns\":"<<wall_ns<<",\"hits\":"<<hits<<'}';
+                <<",\"wall_ns\":"<<wall_ns<<",\"hits\":"<<hits;
+            if(compare_layout)timing<<",\"layout_replay\":"<<(windows[i]?"true":"false")<<",\"layout_hits\":"<<layout_hits;
+            timing<<'}';
         }
         timing<<"]}";
+        if(compare_layout)a::text_layout_replay_enabled.store(saved_layout,std::memory_order_relaxed);
         a::compact_text_advance_enabled.store(false,std::memory_order_relaxed);
         reveal_args[3]=initial_y;
         reveal_args[11]=reveal_string;
@@ -480,6 +500,7 @@ int main(int argc,char** argv){try{
     report<<"],\"two_pass_order_matches_static_reference\":true,\"alpha_only_tile_differences\":"<<partially_faded
         <<",\"same_limit_same_work_and_vertices\":true,\"models_save_loading\":false,\"models_script_progression\":false}";
     report<<",\"compact_text_advance\":{\"paired_page_hits\":"<<advance_hits<<'}';
+    if(layout_cases)report<<",\"layout_state_oracle_cases\":"<<layout_cases;
     if(!timing.str().empty())report<<",\"two_pass_timing\":"<<timing.str();
     report<<",\"exact_full_text_cases\":"<<exact_pages<<",\"formatted_pages\":"<<formatted_pages<<",\"unchanged_page_checks\":"<<unchanged_page_checks<<",\"guard_cases\":"<<guard_cases<<",\"handle_guard_cases\":"<<handle_guards
         <<",\"maximum_glyphs_per_boundary\":256,\"generic_call_limit_unchanged\":true,\"nested_memory_scopes_checked\":true,\"exhaustion_fallback_preserves_state\":true"

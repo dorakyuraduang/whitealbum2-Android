@@ -1,13 +1,19 @@
 #pragma once
 #include "screen_vertices.hpp"
 #include <algorithm>
+#include <stdexcept>
 #include <vector>
 namespace wa2::graphics {
 inline constexpr unsigned TextureBatchSlots=8;
+inline constexpr unsigned WideTextureBatchSlots=16;
+inline unsigned supported_texture_batch_slots(int fragment_units,bool gradients){
+    if(!gradients || fragment_units<int(TextureBatchSlots))return 0;
+    return fragment_units>=int(WideTextureBatchSlots)?WideTextureBatchSlots:TextureBatchSlots;
+}
 template<class Textures, class Apply>
-void apply_logical_texture_units(const Textures& textures, bool opening_glyph_packet, Apply apply) {
+void apply_logical_texture_units(const Textures& textures, unsigned deferred_glyph_slots, Apply apply) {
     for (unsigned unit = 0; unit < textures.size(); ++unit) {
-        if (opening_glyph_packet && unit > 0 && unit < TextureBatchSlots && !textures[unit]) continue;
+        if (unit > 0 && unit < deferred_glyph_slots && !textures[unit]) continue;
         apply(unit, textures[unit]);
     }
 }
@@ -16,7 +22,8 @@ static_assert(sizeof(TextureBatchVertex)==40);
 // The adapter uses this same bounded packet builder on every host. Textures
 // stay separate images: no atlas, resampling, resource copy or UV remapping.
 template<class Texture>class ScreenTextureBatch {
-    std::array<Texture,TextureBatchSlots> bindings_{};
+    std::array<Texture,WideTextureBatchSlots> bindings_{};
+    unsigned limit_{TextureBatchSlots};
     unsigned used_{};
     std::vector<TextureBatchVertex> vertices_;
     std::vector<std::uint16_t> indices_;
@@ -28,6 +35,18 @@ public:
     }
     bool empty()const{return indices_.empty();}
     unsigned binding_count()const{return used_;}
+    unsigned slot_limit()const{return limit_;}
+    void set_slot_limit(unsigned slots){
+        if(!empty() || (slots!=TextureBatchSlots && slots!=WideTextureBatchSlots))
+            throw std::logic_error("invalid texture packet capacity change");
+        limit_=slots;
+    }
+    // Grow only after a real glyph run fills its sampler table. Small or
+    // unrelated draws keep the narrower shader on large and small GPUs alike.
+    unsigned slots_after_glyph_rollover(const Texture& texture,unsigned supported)const{
+        return supported==WideTextureBatchSlots && used_==limit_ && slot(texture)==limit_
+            ?WideTextureBatchSlots:TextureBatchSlots;
+    }
     const auto& bindings()const{return bindings_;}
     std::span<const TextureBatchVertex> vertices()const{return vertices_;}
     std::span<const std::uint16_t> indices()const{return indices_;}
@@ -36,7 +55,7 @@ public:
             (type==abi::D3DPT_TRIANGLESTRIP || type==abi::D3DPT_TRIANGLEFAN) && count>2?(count-2)*3:0;
     }
     bool fits(const Texture& texture,unsigned vertices,unsigned indices)const{
-        return bool(texture) && slot(texture)<TextureBatchSlots &&
+        return bool(texture) && slot(texture)<limit_ &&
             vertices<=MaxVertices-vertices_.size() && indices<=MaxIndices-indices_.size();
     }
     bool append_glyph_quad(const Texture& texture, const ScreenVertexPlan& plan,
@@ -44,7 +63,7 @@ public:
         if (!texture || vertices_.size() + 4 > MaxVertices || indices_.size() + 6 > MaxIndices)
             return false;
         const auto binding = slot(texture);
-        if (binding == TextureBatchSlots) return false;
+        if (binding == limit_) return false;
         std::array<ScreenVertex, 4> quad;
         if (!pack_screen_vertices(plan, bytes, 32, quad)) return false;
 

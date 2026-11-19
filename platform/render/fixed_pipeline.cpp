@@ -44,11 +44,12 @@ bool fixed_pipeline_texture_batch(const FixedPipeline& pipeline,std::uint16_t bo
     try{return fixed_pipeline_sample_mask(pipeline)==1;}catch(const std::invalid_argument&){return false;}
 }
 std::string fixed_pixel_assembly(const FixedPipeline& pipeline,unsigned texture_slots){
-    if(texture_slots!=1 && texture_slots!=8)throw std::invalid_argument("unsupported fixed texture batch size");
+    if(texture_slots!=1 && texture_slots!=8 && texture_slots!=16)throw std::invalid_argument("unsupported fixed texture batch size");
     if(texture_slots!=1 && (fixed_pipeline_sample_mask(pipeline)!=1 || pipeline.stages[0].transform_flags))
         throw std::invalid_argument("texture batches require one unprojected logical sampler");
     std::ostringstream declarations,body;declarations<<"ps_3_0\ndcl_color0 v0\ndef c1, 1, 2, 4, 0\n";body<<"mov r0, v0\n";
     if(texture_slots!=1)declarations<<"dcl_texcoord7 v9\ndef c252, 0.5, 1.5, 2.5, 3.5\ndef c253, 4.5, 5.5, 6.5, 7.5\n";
+    if(texture_slots==16)declarations<<"def c254, 8.5, 9.5, 10.5, 11.5\ndef c255, 12.5, 13.5, 14.5, 15.5\n";
     for(unsigned n=0;n<pipeline.stages.size();++n){const auto& stage=pipeline.stages[n];if(stage.colour_op==abi::D3DTOP_DISABLE)break;
         // The source API terminates the cascade at a null COLORARG1 texture.
         // Untextured diffuse/TFactor stages still execute their operations.

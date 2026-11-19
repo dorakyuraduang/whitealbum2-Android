@@ -73,9 +73,9 @@ def main():
     cmake=ROOT/'tools/python/cmake/data/bin/cmake.exe';ninja=ROOT/'tools/python/bin/ninja.exe'
     ndk=ROOT/'tools/android-sdk/ndk/27.0.12077973';llvm=ndk/'toolchains/llvm/prebuilt/windows-x86_64/bin'
     with (ROOT/'logs/shared-aot-refresh-build.log').open('wb') as log:
-        def run(command,timeout=2400):
+        def run(command,timeout=2400,extra_env=None):
             command=list(map(str,command));log.write(('RUN '+subprocess.list2cmdline(command)+'\n').encode());log.flush()
-            with subprocess.Popen(command,cwd=ROOT,env=env,creationflags=flags,stdout=log,stderr=subprocess.STDOUT) as child:
+            with subprocess.Popen(command,cwd=ROOT,env=env | (extra_env or {}),creationflags=flags,stdout=log,stderr=subprocess.STDOUT) as child:
                 try:status=child.wait(timeout)
                 except subprocess.TimeoutExpired:
                     subprocess.run(['taskkill','/PID',str(child.pid),'/T','/F'],creationflags=flags,stdout=log,stderr=subprocess.STDOUT,timeout=20);child.wait();raise
@@ -106,6 +106,7 @@ def main():
         tracked += [ROOT/'scripts/prepare_shared_language.py',ROOT/'scripts/prepare_ukrainian_resources.py',ROOT/'scripts/pack_lzss.cpp']
         tracked += [ROOT/'scripts/prepare_shared_progress.py',ROOT/'scripts/prepare_shared_text_flow.py',ROOT/'scripts/compare_text_cpu.py',ROOT/'scripts/verify_glyph_precision.py',ROOT/'tests/text_flow_recipe.py',ROOT/'tests/text_control.cpp',ROOT/'tests/glyph_scheduling.cpp',ROOT/'tests/glyph_cache.cpp']
         tracked += [ROOT/'scripts/read_android_counters.py',ROOT/'scripts/compare_android_text.py',ROOT/'tests/android_counters.py']
+        tracked.append(ROOT/'tests/novel_layout_oracle.hpp')
         tracked += [ROOT/'scripts/verify_resource_lookup.py',ROOT/'tests/resource_lookup.cpp',ROOT/'generated/wa2-win64/code_page_1112.cpp']
         tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp',ROOT/'tests/text_ftol.cpp',ROOT/'tests/text_advance.cpp',ROOT/'tests/immutable_buffers.cpp']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
@@ -127,7 +128,10 @@ def main():
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         for name,target in tests.items():
-            path=build/(name+'.json');run([build/(target+'.exe'),path,*(['--correctness-only'] if name=='native_sprite_cpu' else [])],120);report=json.loads(path.read_text())
+            path=build/(name+'.json')
+            run([build/(target+'.exe'),path,*(['--correctness-only'] if name=='native_sprite_cpu' else [])],120,
+                {'WA2_NOVEL_TIMING':'layout'} if name=='novel_cpu' else None)
+            report=json.loads(path.read_text())
             if not report.get('passed') or report.get('game_launched') or report.get('screen_access') or report.get('source_executable_opened'):raise ValueError('Finite memory/file test failed: '+name)
             reports[name]=report
         reader_path=build/'counter_reader.json';run([sys.executable,ROOT/'tests/android_counters.py',reader_path]);reports['counter_reader']=json.loads(reader_path.read_text())
@@ -140,6 +144,10 @@ def main():
         if lookup_reference['native_library_sha256']!=digest(build/'shared_aot/libwa2_function_process.a') or lookup_reference['query_cases']!=574 or lookup_reference['diagnostics']!=116 or lookup_reference['checked_cached_locations']!=123:raise ValueError('Incomplete cached-source resource lookup comparison')
         reports['resource_lookup_reference']=lookup_reference
         packets=reports['render_submission']['multi_texture_batch']
+        if reports['novel_cpu'].get('layout_state_oracle_cases',0)<11:
+            raise ValueError('Missing source/cached layout boundary comparisons')
+        if (packets['eight_slot_page_packets'],packets['adaptive_page_packets'])!=(43,2):
+            raise ValueError('Missing long-page texture rollover comparison')
         if packets['slots']!=8 or packets['source_draws']!=120 or packets['recorded_driver_packets']!=15 or not packets['unchanged_vertex_bits_uv_colour_and_order']:raise ValueError('Incomplete texture batch packet checks')
         if reports['integer_registers']['exact_cpu_stack_fault_cases']!=384:raise ValueError('Incomplete native register mask snapshots')
         sprite=reports['native_sprite_cpu']
