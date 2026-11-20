@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.nio.ByteBuffer;
+import org.wa2.launcher.GameFolderSelection;
 
 /** Original PAKs stay in the user-selected folder; no resource imports. */
 final class ResourceDirectory {
@@ -70,10 +71,9 @@ final class ResourceDirectory {
         if (validTree(tree)) load(activity, token, tree, false);
         else {
             // Discard malformed or non-tree selections, independent of name.
-            preferences().edit().remove(TREE_KEY).apply();
-            if (tree != null) {
-                try { context.getContentResolver().releasePersistableUriPermission(tree,
-                    TREE_ACCESS); } catch (RuntimeException ignored) { }
+            synchronized (GameFolderSelection.class) {
+                preferences().edit().remove(TREE_KEY).apply();
+                releasePrimaryGrant(activity, tree);
             }
             choose(activity, token, null);
         }
@@ -103,6 +103,11 @@ final class ResourceDirectory {
         try { Uri tree = Uri.parse(saved); return validTree(tree) ? tree : null; }
         catch (RuntimeException error) { return null; }
     }
+
+    private static void releasePrimaryGrant(Context application, Uri tree) {
+        if (tree != null) new GameFolderSelection(application)
+            .releaseIfUnused(tree, uri -> uri.equals(selectedTree(application)));
+    }
     static void validatePreparedSelection(Context application) throws IOException {
         Uri tree=selectedTree(application);
         synchronized(LOCK){
@@ -125,21 +130,20 @@ final class ResourceDirectory {
         ContentResolver resolver = application.getContentResolver();
         ArchiveNames<ArchiveDocument> found = scan(resolver, tree);
         SharedPreferences prefs = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
-        String previous = prefs.getString(TREE_KEY, null);
-        if ((grantFlags & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0)
-            resolver.takePersistableUriPermission(tree, grantFlags & TREE_ACCESS);
-        // Persist only a verified tree with durable read/write grants. Providers
-        // without this capability cannot promise a usable next launch.
-        boolean durable = false;
-        for (android.content.UriPermission permission : resolver.getPersistedUriPermissions())
-            if (permission.isReadPermission() && permission.isWritePermission() && tree.equals(permission.getUri())) durable = true;
-        if (!durable) throw new IOException("游戏存档和配置需要所选目录的持久读写授权，请重新选择文件夹授权。");
-        if (!prefs.edit().putString(TREE_KEY, tree.toString()).commit()) throw new IOException("无法保存资源目录设置");
-        synchronized (LOCK) { preparedTree = tree; preparedArchives = found; }
-        if (previous != null && !previous.equals(tree.toString())) {
-            try { resolver.releasePersistableUriPermission(Uri.parse(previous), TREE_ACCESS); }
-            catch (RuntimeException ignored) { }
+        synchronized (GameFolderSelection.class) {
+            String previous = prefs.getString(TREE_KEY, null);
+            if ((grantFlags & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0)
+                resolver.takePersistableUriPermission(tree, grantFlags & TREE_ACCESS);
+            // Persist only a verified tree with durable read/write grants.
+            boolean durable = false;
+            for (android.content.UriPermission permission : resolver.getPersistedUriPermissions())
+                if (permission.isReadPermission() && permission.isWritePermission() && tree.equals(permission.getUri())) durable = true;
+            if (!durable) throw new IOException("游戏存档和配置需要所选目录的持久读写授权，请重新选择文件夹授权。");
+            if (!prefs.edit().putString(TREE_KEY, tree.toString()).commit()) throw new IOException("无法保存资源目录设置");
+            if (previous != null && !previous.equals(tree.toString()))
+                releasePrimaryGrant(application, Uri.parse(previous));
         }
+        synchronized (LOCK) { preparedTree = tree; preparedArchives = found; }
         return found.size();
     }
 
@@ -264,16 +268,16 @@ final class ResourceDirectory {
                 // Provider IPC and preferences I/O stay outside LOCK. Closing
                 // the activity must always be able to wake the SDL thread.
                 SharedPreferences prefs = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
-                String previous = prefs.getString(TREE_KEY, null);
-                if (persist) {
+                synchronized (GameFolderSelection.class) {
+                    String previous = prefs.getString(TREE_KEY, null);
+                    if (persist) {
                         resolver.takePersistableUriPermission(tree, TREE_ACCESS);
                         prefs.edit().putString(TREE_KEY, tree.toString()).apply();
-                        if (previous != null && !previous.equals(tree.toString())) {
-                            try { resolver.releasePersistableUriPermission(Uri.parse(previous),
-                                TREE_ACCESS); } catch (SecurityException ignored) { }
-                        }
-                } else if (previous != null && !previous.equals(tree.toString())) {
-                    prefs.edit().remove(TREE_KEY).apply();
+                        if (previous != null && !previous.equals(tree.toString()))
+                            releasePrimaryGrant(application, Uri.parse(previous));
+                    } else if (previous != null && !previous.equals(tree.toString())) {
+                        prefs.edit().remove(TREE_KEY).apply();
+                    }
                 }
                 boolean durable = false;
                 for (android.content.UriPermission permission : resolver.getPersistedUriPermissions())

@@ -1,4 +1,14 @@
-# 安卓独立启动器
+# 安卓启动入口
+
+## 一个 APK
+
+正篇安卓版的启动页提供 **开始游戏** 和 **Special Contents** 两个入口。正篇沿用原有资源目录和设置。点击 **Special Contents** 可单独选择并记住该版本的资源目录。
+
+Special Contents 的安卓运行模块需要打包在同一个 APK 内。启动页在找到包内对应模块并确认目录授权后才启用「开始游戏」。本次合包包含正篇现有的运行模块，Special Contents 入口可配置目录。
+
+已有通过核验的正篇 APK 和本地构建记录时，运行 `python scripts/package_launcher.py --integrated` 可生成启动页更新包。它使用正篇的包名和签名，输出文件按 APK 版本命名，例如 `WA2-arm64-0.2.108-launcher.1.apk`。正篇运行库和游戏内诊断版本仍对应原构建。
+
+## 独立启动器
 
 在 Android 8.0 及以上安装 `WA2-Launcher-<版本>.apk`，打开 **WA2 启动器**。启动器只包含界面和启动逻辑，游戏文件由玩家自行准备。
 
@@ -7,7 +17,7 @@
 
 ## 运行模块接入
 
-在可启动的 Activity 上声明 `android:exported="true"`，并注册对应版本的 action。Special Contents 的示例如下。
+在可启动的 Activity 上注册对应版本的 action。合包的 Special Contents Activity 可设置 `android:exported="false"`。独立启动器接收的模块需声明 `android:exported="true"`。
 
 ```xml
 <intent-filter>
@@ -18,7 +28,7 @@
 
 正篇模块可注册 `org.wa2.launcher.action.RUN_MAIN`，由独立启动器直接传入为正篇所选的目录。
 
-启动请求的 `Intent.getClipData()` 包含一项，`getItemAt(0).getUri()` 是玩家通过 Android 系统选择器授权的目录树 URI。接收方先验证 action 和树 URI，再通过 `ContentResolver` 访问。请求携带该目录树的临时读写权限。模块将资源访问、存档和游戏配置限定在该版本选中的目录内。启动器为两个版本分别保留目录授权，每次打开时再向用户所选模块传递对应目录。[Android 目录授权](https://developer.android.com/training/data-storage/shared/documents-files) · [Intent URI 权限](https://developer.android.com/reference/android/content/Intent#FLAG_GRANT_PREFIX_URI_PERMISSION)
+启动请求的 `Intent.getClipData()` 包含一项，`getItemAt(0).getUri()` 是玩家通过 Android 系统选择器授权的目录树 URI。接收方先验证 action 和树 URI，再通过 `ContentResolver` 访问。合包由应用持有授权，独立启动器会通过请求为所选模块授予临时读写权限。模块使用该版本所选的目录，并按版本区分存档和游戏配置。[Android 目录授权](https://developer.android.com/training/data-storage/shared/documents-files) · [Intent URI 权限](https://developer.android.com/reference/android/content/Intent#FLAG_GRANT_PREFIX_URI_PERMISSION)
 
 ## 构建
 

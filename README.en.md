@@ -110,7 +110,7 @@ and can be translated before selection.
 
 - [Windows PAK pack/unpack tool](docs/PAK_TOOL.md): folder-to-PAK and PAK-to-folder; KCAP/LAC support.
 - [Android setup](docs/ANDROID.md)
-- [Standalone Android launcher and runtime integration](docs/STANDALONE_LAUNCHER.md)
+- [Android launcher and runtime integration (Chinese)](docs/STANDALONE_LAUNCHER.md)
 - [Ukrainian resource preparation and captions](docs/UKRAINIAN_SUPPORT.md)
 - [External caption format](docs/EXTERNAL_SUBTITLES.en.md)
 - [Building](docs/BUILDING.md) / [Architecture](docs/ARCHITECTURE.md)

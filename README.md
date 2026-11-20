@@ -72,7 +72,7 @@
 
 - [Windows PAK 打包 / 解包工具](docs/PAK_TOOL.md)：选择文件夹打包，或选择 PAK 解包，支持 KCAP/LAC。
 - [Android 安装与目录授权](docs/ANDROID.md)
-- [安卓独立启动器与运行模块接入](docs/STANDALONE_LAUNCHER.md)
+- [安卓启动入口与运行模块接入](docs/STANDALONE_LAUNCHER.md)
 - [游戏语言与汉化补丁适配](docs/LANGUAGE_RESOURCES.md)
 - [乌克兰语资源打包与字幕使用](docs/UKRAINIAN_SUPPORT.md)
 - [外置字幕规则（中文）](docs/EXTERNAL_SUBTITLES.md) / [English](docs/EXTERNAL_SUBTITLES.en.md)
