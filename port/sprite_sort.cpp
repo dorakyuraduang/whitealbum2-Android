@@ -1,6 +1,7 @@
 // Compatibility boundary only: ordering/search execute as native C++.
 #include "sprite_sort.hpp"
 #include "native_backend.hpp"
+#include "../recompiled/source_sort.hpp"
 #include <winrecomp/integer.hpp>
 #include <algorithm>
 #include <bit>
@@ -144,7 +145,13 @@ unsigned sort_objects(Cpu& s,Memory& m,std::uint64_t& budget,unsigned limit,U32 
 #if !defined(WA2_AOT_DIAGNOSTICS) || WA2_AOT_DIAGNOSTICS
 unsigned wa2_sort_objects(Cpu& s,Memory& m,std::uint64_t& budget,unsigned limit,U32 return_pc){return sort_objects<true>(s,m,budget,limit,return_pc);}
 #endif
-bool wa2_sort_objects_full(Cpu& s,Memory& m){std::uint64_t unused{};return sort_objects<false>(s,m,unused,0,0)!=0;}
+bool wa2_sort_objects_full(Cpu& s,Memory& m){
+    if(!wa2_native_code_verified(m,wa2::aot::main_sort_source.begin))return false;
+    const auto before=wa2::aot::source_sort_counts();
+    if(!wa2::aot::source_sort_full(s,m,wa2::aot::main_sort_source))return false;
+    const auto after=wa2::aot::source_sort_counts();
+    ++sort_search_batches;sort_search_objects+=after.objects-before.objects;sort_search_moves+=after.moves-before.moves;return true;
+}
 #if !defined(WA2_AOT_DIAGNOSTICS) || WA2_AOT_DIAGNOSTICS
 unsigned wa2_sort_shift(Cpu& s,Memory& m,std::uint64_t& budget,unsigned limit,U32 return_pc){
     constexpr U32 begin=0x442300,end=0x44233c;

@@ -16,10 +16,14 @@ int main(int argc,char** argv){try{
     const auto selected=root/"selected",private_root=root/"private";CHECK(std::filesystem::create_directory(selected) && std::filesystem::create_directory(private_root));
     wr::ProcessOptions options;options.data_root=private_root;wa2::aot::Runtime runtime(options);auto& p=runtime.process();runtime.load();
     p.state().mutable_files=c::save_files(c::local_files(selected),false);p.state().reports["selected_directory_io"]=[&]{return c::save_files_report(p.state().mutable_files);};
-    std::uint64_t now=1;unsigned events{};c::install_io_diagnostics(p,private_root/"wa2-runtime.json","fixture-release",[&](std::string_view label,auto){if(label.ends_with(" selected_directory_io"))++events;throw std::runtime_error("Optional sink failure");},[&]{return now;});
+    p.state().reports["native_glyph_commands"]=[]{return "{\"accepted\":17}";};
+    p.state().reports["native_sprite_commands"]=[]{return "{\"accepted\":19}";};
+    p.state().reports["native_sort"]=[]{return "{\"completed\":23}";};
+    std::uint64_t now=1;unsigned events{},render_events{};c::install_io_diagnostics(p,private_root/"wa2-runtime.json","fixture-release",[&](std::string_view label,auto){if(label.ends_with(" selected_directory_io"))++events;if(label.ends_with(" native_glyph_commands") || label.ends_with(" native_sprite_commands") || label.ends_with(" native_sort"))++render_events;throw std::runtime_error("Optional sink failure");},[&]{return now;});
     const auto poll=[&]{for(unsigned n=0;n<256;++n)p.state().poll.back()();};const auto touch=[&]{p.state().mutable_files->info("save_00.sav");};const auto progress=private_root/"wa2-runtime-progress.json";
     poll();CHECK(!std::filesystem::exists(progress));touch();p.last_error=123;errno=ERANGE;poll();CHECK(errno==ERANGE && p.last_error==123);
     auto first=read(progress);CHECK(first.find("\"report_kind\":\"file-io-progress\"")!=std::string::npos && first.find("\"complete\":false")!=std::string::npos && first.find("\"sequence\":1")!=std::string::npos && events==1);
+    CHECK(first.find("\"native_sort\":{\"completed\":23}")!=first.npos && first.find("\"native_glyph_commands\":{\"accepted\":17}")!=first.npos && first.find("\"native_sprite_commands\":{\"accepted\":19}")!=first.npos && render_events==3);
     touch();now=400000001;poll();CHECK(read(progress)==first);now=500000001;poll();CHECK(read(progress).find("\"sequence\":2")!=std::string::npos);
     const auto second=read(progress);now+=1000000000;poll();CHECK(read(progress)==second);
     // Resource work alone must refresh the snapshot while skipping, without
@@ -35,6 +39,7 @@ int main(int argc,char** argv){try{
     // The contract bounds attempts too. An isolated transient filesystem
     // failure may consume an attempt, without violating the snapshot cap.
     CHECK(number("attempts")==64 && number("snapshots")==events && events>=4 && number("snapshots")+number("failures")==64);
+    CHECK(render_events==events*3);
     CHECK(std::filesystem::is_empty(selected));CHECK(!std::filesystem::exists(private_root/"wa2-runtime.json") && !std::filesystem::exists(progress.string()+".tmp"));
     CHECK(!p.gui() && !p.directdraw());
     // Failed private output is optional and retried; neither selected files
@@ -57,6 +62,6 @@ int main(int argc,char** argv){try{
     CHECK(labels_ok && final_events>=5 && completion.find("\"source_returned\":true")!=std::string::npos && p.last_error==79 && errno==EDOM && read(progress)==prior);
     c::emit_final_io_counters(p,"fixture-release",[](auto,auto){throw std::runtime_error("sink");},false);
     CHECK(p.last_error==79 && errno==EDOM && std::filesystem::is_empty(selected));
-    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.io-diagnostics.v1\",\"atomic_replacement\":true,\"unchanged_io_not_rewritten\":true,\"resource_activity_sampled\":true,\"rate_and_count_bounded\":true,\"failed_write_retry\":true,\"optional_sink_failure_isolated\":true,\"guest_errors_preserved\":true,\"final_counters_without_file_io\":true,\"selected_directory_written\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out.good());
+    std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.io-diagnostics.v1\",\"atomic_replacement\":true,\"unchanged_io_not_rewritten\":true,\"resource_activity_sampled\":true,\"shared_render_sort_progress_counters\":true,\"rate_and_count_bounded\":true,\"failed_write_retry\":true,\"optional_sink_failure_isolated\":true,\"guest_errors_preserved\":true,\"final_counters_without_file_io\":true,\"selected_directory_written\":false,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";CHECK(out.good());
     std::cout<<"PASS bounded private I/O snapshots, atomic replacement, retry, sink isolation and unchanged game files/errors.\n";
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

@@ -23,14 +23,15 @@ def source_bindings():
     files.update(ROOT/name for name in ('config/porting_contract.json', 'config/special_contents.json','config/special_native_contracts.json','config/special_hot_functions.json',
         'scripts/generate_shared_aot.py','scripts/generate_special_aot.py','scripts/prepare_special_contents.py',
         'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp','tests/special_render.cpp',
-        'tests/special_drawing.cpp','tests/native_sprite_cpu.cpp','tests/glyph_scheduling.cpp',
+        'tests/special_drawing.cpp','tests/native_sprite_cpu.cpp','tests/glyph_scheduling.cpp','tests/special_sort.cpp','tests/io_diagnostics.cpp',
+        'scripts/read_android_counters.py',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
         'scripts/analysis/ExportCachedListing.java',
         'third_party/x87_math/UPSTREAM.json','scripts/verify_x87_transcendental.py',
         'logs/x87-transcendental-verification.json',
         'tools/WindowsRecompTool-main/src/pe.cpp','tools/WindowsRecompTool-main/src/resources.cpp'))
-    files.update(ROOT/name for name in ('port/native_vorbis.cpp','port/native_vorbis.hpp','third_party/stb/stb_vorbis.c'))
+    files.update(ROOT/name for name in ('port/native_vorbis.cpp','port/native_vorbis.hpp','third_party/stb/stb_vorbis.c','port/sprite_sort.cpp','port/sprite_sort.hpp'))
     return {p.relative_to(ROOT).as_posix(): digest(p) for p in sorted(files)}
 
 
@@ -73,7 +74,7 @@ def checked_hot_policy(directory):
 
 
 def compiled_drawing(directory):
-    wanted={(ROOT/name).resolve() for name in ('recompiled/native_sprites.cpp','recompiled/special/render.cpp')}
+    wanted={(ROOT/name).resolve() for name in ('recompiled/native_sprites.cpp','recompiled/special/render.cpp','recompiled/source_sort.cpp')}
     entries=json.loads((directory/'compile_commands.json').read_text())
     return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file']))
             for e in entries if Path(e['file']).resolve() in wanted}
@@ -129,8 +130,8 @@ def main():
                 '-DWA2_SPECIAL_CONTENTS=ON','-DWA2_SPECIAL_CHECKS=ON',
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
             run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests',
-                 'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_windows','--parallel','1'],7200)
-            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph'):
+                 'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_sort_tests','wa2_special_io_tests','wa2_special_windows','--parallel','1'],7200)
+            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io'):
                 command=[win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json']
                 if stem=='main_sprite':command.append('--correctness-only')
                 run(command,60)
@@ -171,7 +172,7 @@ def main():
             raise ValueError('Windows/Android compiled different shared Vorbis sources')
         drawing_sources=compiled_drawing(win)
         if (drawing_sources!=compiled_drawing(android) or
-                set(drawing_sources)!={'recompiled/native_sprites.cpp','recompiled/special/render.cpp'} or
+                set(drawing_sources)!={'recompiled/native_sprites.cpp','recompiled/special/render.cpp','recompiled/source_sort.cpp'} or
                 manifest.get('shared_sprite_and_glyph_entries')!=[0x43cb90,0x447d70]):
             raise ValueError('Missing identical shared main/Special drawing implementation')
         if manifest['pending_transcendental_sites'] or len(manifest.get('supported_transcendental_sites',[]))!=50:
@@ -179,7 +180,7 @@ def main():
         if manifest.get('shared_vorbis_host_boundaries')!=[0x458630,0x458660,0x458700,0x458890]:
             raise ValueError('Missing Special shared codec host boundaries')
         checks={}
-        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph'):
+        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io'):
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
@@ -237,8 +238,18 @@ def main():
             if stem=='main_glyph' and (check.get('glyphs')!=768 or check.get('deferrals')!=2 or
                     not check.get('source_entry_yields_checked') or not check.get('unchanged_cpu_stack_on_defer')):
                 raise ValueError('Missing main default glyph scheduling regression')
+            if stem=='sort' and (check.get('main_source_cases')!=160 or check.get('special_source_cases')!=160 or
+                    check.get('decline_cases')!=20 or not check.get('exact_cpu_fp_flags_arrays_pointer_and_fault_prefix') or
+                    not check.get('duplicate_signed_and_sentinel_order') or not check.get('same_main_special_implementation') or
+                    check.get('window_or_device_created') is not False):
+                raise ValueError('Missing complete Main/Special source sorting comparisons')
+            if stem=='io' and (not check.get('shared_render_sort_progress_counters') or not check.get('rate_and_count_bounded') or
+                    not check.get('guest_errors_preserved') or check.get('selected_directory_written') is not False):
+                raise ValueError('Missing bounded live render/sort diagnostics regression')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
+        if manifest.get('shared_sort_prefix',{}).get('begin')!=0x443c90 or manifest['shared_sort_prefix']['end']!=0x443d7c:
+            raise ValueError('Missing verified Special sorting prefix')
         output=ROOT/'out/special-contents';output.mkdir(parents=True,exist_ok=True)
         strip=ndk/'toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-strip.exe'
         artifacts={}
@@ -277,9 +288,10 @@ def main():
                     'wr::install_wa2_native_vorbis(wr::Process&, wr::NativeVorbisProfile' in symbols,
                 shared_source_drawing='wa2::aot::native_draw_sprite(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols and
                     'wa2::aot::native_draw_glyph_or_yield(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols,
+                shared_source_sort='wa2::aot::source_sort_full(wr::Cpu&, wr::Memory&, wa2::aot::SortSource const&)' in symbols,
                 main_story_static_functions='wa2::aot::f_' in symbols,
                 runtime_instruction_decoder='wr::Decoder::' in symbols)
-            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
+            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or not audit['shared_source_sort'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
                 raise ValueError('Special link contains the wrong game catalogue or an instruction decoder: '+name)
             symbol_audits[name]=audit
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
@@ -287,6 +299,7 @@ def main():
             compiled_scalar_math_sources=math_windows,transcendental_hardware_cases=math_proof['cases'],
             compiled_shared_codec_sources=codec_windows,shared_vorbis_host_boundaries=manifest['shared_vorbis_host_boundaries'],
             compiled_shared_drawing_sources=drawing_sources,shared_sprite_and_glyph_entries=manifest['shared_sprite_and_glyph_entries'],
+            shared_sort_prefix=manifest['shared_sort_prefix'],
             measured_hot_entries=manifest['measured_hot_entries'],compiled_optimization_policy=hot_policy,
             scalar_math_notice=dict(file=str(notice),sha256=digest(notice)),
             instruction_locations=manifest['instruction_locations'],static_bodies=manifest['static_bodies'],

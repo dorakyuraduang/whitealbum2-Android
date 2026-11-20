@@ -45,6 +45,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     platform::compat::install_extended_system(process_);
     process_.state().reports["native_sprite_commands"]=sprite_report;
     process_.state().reports["native_glyph_commands"]=glyph_report;
+    process_.state().reports["native_sort"]=sort_report;
     process_.state().reports["selected_directory_io"]=[this]{return save_files_report(process_.state().mutable_files);};
     process_.state().reports["native_resources"]=[]{return lzss_report();};
     process_.state().resource_io_activity=[this]{return lzss_activity()+wr::wa2_native_vorbis_activity(process_);};

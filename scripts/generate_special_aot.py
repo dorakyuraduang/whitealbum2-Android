@@ -139,6 +139,11 @@ def generate():
     draw_entries={drawing['sprite_entry']:'draw_sprite',drawing['glyph_entry']:'draw_glyph'}
     if set(draw_entries)!={0x43cb90,0x447d70} or any(pc not in merged for pc in draw_entries):
         raise ValueError('Special drawing profile must name the verified source ABI entries')
+    sort_fields=('begin','end','objects','mask','frame_register','pointer','keys','ids','first','last')
+    sorting={key:int(contracts['sort'][key],0) if isinstance(contracts['sort'][key],str) else contracts['sort'][key] for key in sort_fields}
+    sort_owner=owners.get(sorting['begin'])
+    if sorting['begin']!=0x443c90 or sorting['end']!=0x443d7c or sort_owner!=owners.get(sorting['end']):
+        raise ValueError('Special sorting prefix must retain its verified owning function and continuation')
     # The original bodies stay available to finite memory reference checks.
     # Production calls unwind before entering the shared codec ABI adapter.
     call_owners={pc:owner for pc,owner in owners.items() if pc not in codec_entries}
@@ -170,6 +175,8 @@ def generate():
     write('bodies.hpp', '\n'.join(header)+'\n')
     write('render_profile.hpp','#pragma once\n#include "sprite_source.hpp"\nnamespace wa2::special {\n'+
           'inline constexpr wa2::aot::SpriteSource drawing_source{'+','.join(hex(drawing[key])+'u' for key in draw_fields)+'};\n}\n')
+    write('sort_profile.hpp','#pragma once\n#include "source_sort.hpp"\nnamespace wa2::special {\n'+
+          'inline constexpr wa2::aot::SortSource sorting_source{'+','.join(str(sorting[key]) for key in sort_fields)+'};\n}\n')
     write('native_entries.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+
           'inline constexpr std::uint32_t codec_boundary_entries[]={'+','.join(hex(pc)+'u' for pc in codec_entries)+'};\n}\n')
     spans_by_entry = {}
@@ -182,7 +189,7 @@ def generate():
     for name, entries in shards:
         sources.append(name)
         cpp = ['#include "bodies.hpp"', 'namespace wa2::special {']
-        if set(entries)&draw_entries.keys():cpp.insert(1,'#include "special/render.hpp"')
+        if set(entries)&(draw_entries.keys()|{sort_owner}):cpp.insert(1,'#include "special/render.hpp"')
         for entry in entries:
             record = merged[entry]
             parameters='bool Metered,bool NativeRegisters' if entry in hot else 'bool Metered'
@@ -218,6 +225,11 @@ def generate():
                     if entry in hot:
                         invocation='floating.external([&]{return integer.external([&]{return '+invocation+';});})'
                     cpp += [f'if constexpr(!Metered)if({invocation})return;']
+                if pc==sorting['begin']:
+                    invocation='wa2::special::sort_objects(s,m)'
+                    if entry in hot:invocation='floating.external([&]{return integer.external([&]{return '+invocation+';});})'
+                    policy='!Metered && NativeRegisters' if entry in hot else '!Metered'
+                    cpp += [f'if constexpr({policy})if({invocation})goto L_{sorting["end"]:x};']
                 cpp += [native,'}']
                 if spans and spans[-1][0]+len(spans[-1][1]) == pc:
                     spans[-1][1].extend(raw)
@@ -315,6 +327,7 @@ def generate():
         shared_vorbis_host_boundaries=codec_entries,
         measured_hot_entries=sorted(hot),shared_register_fp_and_integer_kernels=True,
         shared_sprite_and_glyph_entries=sorted(draw_entries),source_drawing_profile=drawing,
+        shared_sort_prefix=sorting,shared_sort_owner=sort_owner,
         hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,

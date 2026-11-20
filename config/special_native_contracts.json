@@ -3,6 +3,14 @@
   "program": "special-contents-cn",
   "input_sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
   "all_platforms_use_the_same_sources": true,
+  "sort": {
+    "begin": "0x443c90", "end": "0x443d7c", "objects": "0xab0ef9", "mask": "0x4bf3d8",
+    "frame_register": 5, "pointer": -9240, "keys": -8452, "ids": -4356, "first": -9240, "last": -260,
+    "implementation": "shared recompiled/source_sort.cpp; main and Special use the same exact insertion/search implementation",
+    "source_proof": "immutable complete static function and direct call closure before the generated prefix",
+    "preserved": "all integer registers, flags, FP state, key/ID order, exact duplicate/sentinel rules and source pointer slot",
+    "decline": "unchanged CPU and memory followed by the original static loop"
+  },
   "drawing": {
     "sprite_entry": "0x43cb90",
     "glyph_entry": "0x447d70",

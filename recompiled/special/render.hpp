@@ -12,6 +12,8 @@ struct DrawingReferenceScope {
 };
 bool draw_sprite(wr::Cpu&,wr::Memory&);
 bool draw_glyph(wr::Cpu&,wr::Memory&);
+bool sort_objects(wr::Cpu&,wr::Memory&);
 std::string sprite_report();
 std::string glyph_report();
+std::string sort_report();
 }

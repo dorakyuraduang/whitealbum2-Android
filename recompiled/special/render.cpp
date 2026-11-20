@@ -1,5 +1,6 @@
 #include "render.hpp"
 #include "render_profile.hpp"
+#include "sort_profile.hpp"
 #include "../glyph_command_replay_control.hpp"
 #include "../glyph_budget.hpp"
 namespace wa2::special {
@@ -8,6 +9,12 @@ bool draw_sprite(wr::Cpu& cpu,wr::Memory& memory){
 }
 bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory){
     return !drawing_source_reference && aot::native_draw_glyph_or_yield(cpu,memory,drawing_source);
+}
+bool sort_objects(wr::Cpu& cpu,wr::Memory& memory){return aot::source_sort_full(cpu,memory,sorting_source);}
+std::string sort_report(){
+    const auto c=aot::source_sort_counts();
+    return "{\"completed\":"+std::to_string(c.completed)+",\"objects\":"+std::to_string(c.objects)+
+        ",\"moves\":"+std::to_string(c.moves)+",\"declined\":"+std::to_string(c.declined)+",\"shared_main_implementation\":true}";
 }
 std::string sprite_report(){
     const auto c=aot::native_sprite_counts();

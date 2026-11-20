@@ -1,7 +1,7 @@
 {
   "schema": "wa2.special-hot-functions.v1",
   "input_sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
-  "source": "User-controlled Android 0.2.115 low-FPS scene: 748 app-only CPU-clock samples over 8 seconds, no lost samples; 0x43cb90 appears in 75.13% of inclusive call chains",
+  "source": "User-controlled Android scenes: 0.2.115 748 app-only CPU samples put 0x43cb90 in 75.13% of call chains; after shared drawing, 0.2.117 632 samples put owner 0x44aeb0 in 73.73%. Both 8-second profiles lost no samples.",
   "entries": [4443024],
   "register_floating_point_entries": [4443024],
   "register_integer_entries": [4443024],

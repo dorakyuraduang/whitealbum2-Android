@@ -96,7 +96,7 @@ target_link_libraries(wa2_function_process PUBLIC wa2_shared_aot wa2_aot_memory 
 set_target_properties(wa2_function_process PROPERTIES POSITION_INDEPENDENT_CODE ON)
 option(WA2_SHARED_AOT_CHECKS "Build the memory-only differential check" OFF)
 option(WA2_AOT_DIAGNOSTICS "Include instrumented AOT bodies for differential tests" ${WA2_SHARED_AOT_CHECKS})
-add_library(wa2_source_drawing STATIC native_sprites.cpp)
+add_library(wa2_source_drawing STATIC native_sprites.cpp source_sort.cpp)
 target_compile_features(wa2_source_drawing PUBLIC cxx_std_20)
 target_include_directories(wa2_source_drawing PUBLIC "${CMAKE_CURRENT_LIST_DIR}"
     "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
@@ -120,6 +120,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/vertex_grid.cpp" APPEND PROPERTY COMPILE_OPTIONS "-ffp-contract=off;-frounding-math")
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/native_weather.cpp" APPEND PROPERTY COMPILE_OPTIONS "-ffp-contract=off;-frounding-math")
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/native_sprites.cpp" APPEND PROPERTY COMPILE_OPTIONS "-O2;-ffp-contract=off;-frounding-math")
+    set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/source_sort.cpp" APPEND PROPERTY COMPILE_OPTIONS "-O2")
     set_property(SOURCE "${CMAKE_CURRENT_LIST_DIR}/text_ftol.cpp" APPEND PROPERTY COMPILE_OPTIONS "-O2")
     # Keep the bounded word-fill loop vectorized. Some size-oriented bundled
     # C runtimes implement large memset with a byte loop.
