@@ -129,6 +129,13 @@ def generate():
     from verify_x87_transcendental import fresh as verified_transcendental
     math_proof=verified_transcendental()
     graph, bodies, edges, merged, owners, receipt = analyze()
+    contracts=json.loads((ROOT/'config/special_native_contracts.json').read_text())
+    codec_entries=[int(contracts['vorbis'][key],0) for key in ('construct','reset','format','decode')]
+    if len(set(codec_entries))!=4 or any(pc not in owners for pc in codec_entries):
+        raise ValueError('Missing distinct Special codec ABI functions')
+    # The original bodies stay available to finite memory reference checks.
+    # Production calls unwind before entering the shared codec ABI adapter.
+    call_owners={pc:owner for pc,owner in owners.items() if pc not in codec_entries}
     OUT.mkdir(parents=True, exist_ok=True)
     ordered = sorted(merged)
     positions = {pc: index for record in merged.values() for index, pc in enumerate(record['locations'])}
@@ -144,6 +151,8 @@ def generate():
     # functions.hpp supplies Cpu/Memory, while Image is intentionally separate.
     header.insert(2, '#include <winrecomp/image.hpp>')
     write('bodies.hpp', '\n'.join(header)+'\n')
+    write('native_entries.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+
+          'inline constexpr std::uint32_t codec_boundary_entries[]={'+','.join(hex(pc)+'u' for pc in codec_entries)+'};\n}\n')
     spans_by_entry = {}
     sample_indices={entry:index for index,entry in enumerate(ordered)}
     sources = []
@@ -162,7 +171,7 @@ def generate():
             spans = []
             for pc in record['locations']:
                 body, raw, _ = bodies[pc]
-                native = CONTRACT_FAULT if pc in pending else emit_body(pc, body, edges, owners, positions)
+                native = CONTRACT_FAULT if pc in pending else emit_body(pc, body, edges, call_owners, positions)
                 if pc==0x4382a6:
                     native='if constexpr(!Metered)wa2::special::try_lzss_prefix(s,m);\n'+native
                 if pc in dead_flags:
@@ -263,6 +272,7 @@ def generate():
         recovered_jump_entries=callbacks['recovered_jump_entries'],shared_bulk_string_kernel=True,sampled_static_work=True,
         pending_transcendental_sites=pending,supported_transcendental_sites=transcendental,
         transcendental_verification_cases=math_proof['cases'],native_lzss_prefix=True,differential_probe_entries=probes,
+        shared_vorbis_host_boundaries=codec_entries,
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,
         generated_sha256={p.name: digest(p) for p in sorted(OUT.iterdir()) if p.is_file() and p.name != 'manifest.json'})

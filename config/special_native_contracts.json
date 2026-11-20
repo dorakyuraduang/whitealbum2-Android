@@ -31,6 +31,19 @@
     "return_output_dictionary_argument_slot_stack_and_fp_compared": true,
     "payload_cache": false
   },
+  "vorbis": {
+    "implementation": "engine/vorbis_stream.cpp shared with the main program",
+    "construct": "0x458630",
+    "reset": "0x458660",
+    "format": "0x458700",
+    "decode": "0x458890",
+    "object_bytes": 8952,
+    "object_layout_matches_existing_codec_abi": true,
+    "program_identity_and_immutable_static_code_required": true,
+    "direct_and_indirect_calls_unwind_before_codec_dispatch": true,
+    "original_static_decoder_retained_for_component_reference": true,
+    "whole_game_audio_verified": false
+  },
   "whole_program_complete": false,
   "android_gameplay_validation": "pending-user-controlled-run",
   "android_performance_validation": "pending-comparable-device-run"

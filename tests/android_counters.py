@@ -29,6 +29,8 @@ assert parse([line(1,'music_flag_saves',json.dumps(music))])['latest']['music_fl
 final=[line(65,'native_glyph_commands','{"glyph_budget_deferrals":3}'),line(65,'text_local_control_flow','{"local_jumps":1024}'),line(65,'run_completion','{"game_thread_finished":true,"source_returned":true}')]
 snapshot=parse([old,*final]);assert snapshot['latest']['native_glyph_commands']['glyph_budget_deferrals']==3 and snapshot['latest']['text_local_control_flow']['local_jumps']==1024 and snapshot['latest']['run_completion']['source_returned'];cases+=1
 special='special-contents-aot'
+codec={'backend':'portable-vorbis','calls':8,'output_bytes':262144,'errors':0}
+assert parse([line(3,'native_vorbis',json.dumps(codec))])['latest']['native_vorbis']==codec;cases+=1
 startup='I/WA2IO (456): '+special+' #0 startup_stage {"stage":"game_startup","elapsed_ns":1234}'
 failed='I/WA2IO (456): '+special+' #65 run_completion {"game_thread_finished":true,"source_returned":false}'
 observed=reader.parse_records('\n'.join([old,startup,failed]),special)

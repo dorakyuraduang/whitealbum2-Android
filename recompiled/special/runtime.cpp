@@ -1,5 +1,7 @@
 #include "runtime.hpp"
 #include "lzss.hpp"
+#include "native_entries.hpp"
+#include "../../port/native_vorbis.hpp"
 #include "../../platform/compat/system.hpp"
 #include "../../platform/compat/extended_system.hpp"
 #include "../../platform/compat/scheduler.hpp"
@@ -20,15 +22,20 @@
 #include <sstream>
 namespace wr {void install_wa2_exceptions(Process&);}
 namespace wa2::special {
-Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> surface):
-    process_(wr::FunctionExecutor{[this,samples=std::make_shared<aot::FunctionWorkSamples>(functions())](wr::Cpu& cpu,wr::Memory& memory){
-        if(!program_){program_=std::make_unique<aot::StaticProgram>(memory,functions(),locate);
-            process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};}
+aot::StaticProgram& Runtime::program(){
+    if(!program_)program_=std::make_unique<aot::StaticProgram>(process_.memory,functions(),locate,
+        shared_codecs_?std::span<const std::uint32_t>(codec_boundary_entries):std::span<const std::uint32_t>{});
+    return *program_;
+}
+Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> surface,bool shared_codecs):
+    shared_codecs_(shared_codecs),
+    process_(wr::FunctionExecutor{[this,samples=std::make_shared<aot::FunctionWorkSamples>(functions()),reported=false](wr::Cpu& cpu,wr::Memory& memory)mutable{
+        if(!reported){process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};reported=true;}
         aot::FunctionWorkScope work{samples.get()};
         aot::LeafServiceScope services{[](wr::Cpu& cpu,wr::Memory& memory,void* owner){
             auto& p=*static_cast<wr::Process*>(owner);return &cpu==&p.cpu && &memory==&p.memory && p.dispatch_leaf_api();
         },&process_};
-        return program_->invoke(cpu);
+        return program().invoke(cpu);
     }},std::move(options),std::move(backends)){
     platform::compat::install_scheduler(process_);
     platform::compat::install_system(process_);
@@ -37,7 +44,11 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     platform::compat::install_extended_system(process_);
     process_.state().reports["selected_directory_io"]=[this]{return save_files_report(process_.state().mutable_files);};
     process_.state().reports["native_resources"]=[]{return lzss_report();};
-    process_.state().resource_io_activity=[]{return lzss_activity();};
+    process_.state().resource_io_activity=[this]{return lzss_activity()+wr::wa2_native_vorbis_activity(process_);};
+    if(shared_codecs_)wr::install_wa2_native_vorbis(process_,wr::NativeVorbisProfile{
+        "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
+        codec_boundary_entries[0],codec_boundary_entries[1],codec_boundary_entries[2],codec_boundary_entries[3],
+        [this](wr::Memory& memory,wr::U32 pc){return &memory==&process_.memory && program().verify(pc);}});
     wr::install_wa2_registry(process_);
     wr::install_wa2_exceptions(process_);
     platform::compat::install_acm(process_);

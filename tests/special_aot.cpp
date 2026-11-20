@@ -1,6 +1,7 @@
 #include "static_program.hpp"
 #include "bodies.hpp"
 #include "probe_entries.hpp"
+#include "native_entries.hpp"
 #include <iostream>
 #include <fstream>
 #include <random>
@@ -161,6 +162,20 @@ int main(int argc,char** argv){try{
     for(const auto entry:s::recovered_jump_entries)CHECK(s::locate(entry).function);
     CHECK(std::size(s::recovered_jump_entries)>=26 && s::locate(4673248).function);
     s2::StaticProgram program(actual,s::functions(),s::locate);
+    s2::StaticProgram bridged(actual,s::functions(),s::locate,s::codec_boundary_entries);
+    unsigned codec_boundaries{};
+    for(const auto entry:s::codec_boundary_entries){
+        wr::Cpu cpu;cpu.eip=entry;cpu.r[wr::ESP]=0x07000800;const auto before=cpu;
+        CHECK(bridged.verify(entry));CHECK(!bridged.invoke(cpu));
+        CHECK(cpu.r==before.r && cpu.eip==before.eip && cpu.flags==before.flags && cpu.fp.bytes==before.fp.bytes);++codec_boundaries;
+    }
+    // Actual generated direct and indirect calls must leave their return
+    // frame intact, without executing the old codec beneath a native stack.
+    for(const auto [pc,continuation]:{std::pair{0x460585u,0x46058au},std::pair{0x46052fu,0x460531u}}){
+        wr::Cpu cpu;cpu.eip=pc;cpu.r[wr::EAX]=0x458890;cpu.r[wr::ESP]=0x07000800;
+        CHECK(bridged.invoke(cpu));CHECK(cpu.eip==0x458890 && cpu.r[wr::ESP]==0x070007fc);
+        CHECK(actual.load(cpu.r[wr::ESP],32)==continuation);++codec_boundaries;
+    }
     wr::Cpu unknown;unknown.eip=0xdeadbeef;const auto saved=unknown;
     CHECK(!program.invoke(unknown));CHECK(unknown.r==saved.r && unknown.eip==saved.eip);
     std::mt19937 random(0x57413253);std::size_t comparisons{};
@@ -197,6 +212,7 @@ int main(int argc,char** argv){try{
           <<",\"reported_callback_address\":4739667,\"recovered_callback_entries_checked\":"<<std::size(s::recovered_callback_entries)
           <<",\"reported_copy_address\":4673248,\"recovered_jump_entries_checked\":"<<std::size(s::recovered_jump_entries)<<",\"crt_copy_cases\":"<<copy_cases<<",\"shared_bulk_string_exercised\":true"
           <<",\"reported_transcendental_address\":4642967,\"generated_fyl2x_prefix_cases\":"<<transcendental_cases
+          <<",\"codec_host_boundary_cases\":"<<codec_boundaries
           <<",\"unknown_target_rejected\":true,\"writable_code_rejected\":true,\"changed_code_rejected\":true,"
             "\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";
     CHECK(bool(report));

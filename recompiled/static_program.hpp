@@ -9,6 +9,7 @@ class StaticProgram {
     wr::Memory& memory_;
     std::span<const Function> functions_;
     Location (*locate_)(std::uint32_t) noexcept;
+    std::span<const std::uint32_t> host_boundaries_;
     std::vector<std::uint8_t> verified_;
     std::uint64_t epoch_{~std::uint64_t{0}};
 
@@ -45,6 +46,9 @@ class StaticProgram {
         }
     };
     bool invoke(Context& cpu,Scope& scope) {
+        // A codec/service ABI must unwind the complete native call stack and
+        // release guest memory before Process dispatches it and polls workers.
+        if(std::find(host_boundaries_.begin(),host_boundaries_.end(),cpu.eip)!=host_boundaries_.end())return false;
         const auto location=locate_(cpu.eip);
         if(!location.function)return false;
         prove(*location.function);
@@ -54,8 +58,14 @@ class StaticProgram {
     }
 public:
     StaticProgram(wr::Memory& memory,std::span<const Function> functions,
-                  Location (*locate)(std::uint32_t) noexcept):
-        memory_(memory),functions_(functions),locate_(locate),verified_(functions.size()){}
+                  Location (*locate)(std::uint32_t) noexcept,
+                  std::span<const std::uint32_t> host_boundaries={}):
+        memory_(memory),functions_(functions),locate_(locate),host_boundaries_(host_boundaries),verified_(functions.size()){}
+    bool verify(std::uint32_t entry){
+        auto scope=memory_.execution_scope();
+        const auto location=locate_(entry);if(!location.function)return false;
+        prove(*location.function);return true;
+    }
     bool invoke(Context& cpu) {
         auto scope=memory_.execution_scope();
         Binding binding{this,&cpu};

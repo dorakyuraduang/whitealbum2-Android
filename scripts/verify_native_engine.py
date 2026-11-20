@@ -52,7 +52,12 @@ def verification():
     assert manifest['source_replaced_instructions']>1361 and len(functions['functions'])==10 and manifest['checked_cpp_fallback_retained']
     from verify_retired_modules import verify as check_retired
     retired=check_retired();assert retired==read(ROOT/'logs/retired-modules-verification.json')
-    registered={int(x,16) for source in ['port/native_resources.cpp','port/native_vorbis.cpp'] for x in re.findall(r'register_native_function\(0x([0-9a-f]+),',(ROOT/source).read_text())}
+    registered={int(x,16) for x in re.findall(r'register_native_function\(0x([0-9a-f]+),',(ROOT/'port/native_resources.cpp').read_text())}
+    codec=(ROOT/'port/native_vorbis.cpp').read_text()
+    profile=re.search(r'"246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327",\s*'+
+                      r'(0x[0-9a-f]+),(0x[0-9a-f]+),(0x[0-9a-f]+),(0x[0-9a-f]+),wa2_native_code_verified',codec)
+    assert profile and codec.count('p.register_native_function(state->profile.')==4
+    registered.update(int(pc,16) for pc in profile.groups())
     assert registered=={f['start'] for f in functions['functions']}
     graph=read(ROOT/'logs/cfg.json')
     for function in functions['functions']:

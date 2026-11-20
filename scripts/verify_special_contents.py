@@ -22,13 +22,14 @@ def source_bindings():
                      {'.cpp','.cc','.hpp','.h','.inc','.cmake','.txt'})
     files.update(ROOT/name for name in ('config/porting_contract.json', 'config/special_contents.json','config/special_native_contracts.json',
         'scripts/generate_shared_aot.py','scripts/generate_special_aot.py','scripts/prepare_special_contents.py',
-        'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp',
+        'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
         'scripts/analysis/ExportCachedListing.java',
         'third_party/x87_math/UPSTREAM.json','scripts/verify_x87_transcendental.py',
         'logs/x87-transcendental-verification.json',
         'tools/WindowsRecompTool-main/src/pe.cpp','tools/WindowsRecompTool-main/src/resources.cpp'))
+    files.update(ROOT/name for name in ('port/native_vorbis.cpp','port/native_vorbis.hpp','third_party/stb/stb_vorbis.c'))
     return {p.relative_to(ROOT).as_posix(): digest(p) for p in sorted(files)}
 
 
@@ -44,6 +45,13 @@ def compiled_math(directory):
     prefix=(ROOT/'third_party/x87_math').resolve();bridge=(ROOT/'recompiled/transcend.cpp').resolve()
     return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file']))
             for e in entries if Path(e['file']).resolve().is_relative_to(prefix) or Path(e['file']).resolve()==bridge}
+
+
+def compiled_codec(directory):
+    wanted={(ROOT/name).resolve() for name in ('port/native_vorbis.cpp','engine/vorbis_stream.cpp')}
+    entries=json.loads((directory/'compile_commands.json').read_text())
+    return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file']))
+            for e in entries if Path(e['file']).resolve() in wanted}
 
 
 def fresh():
@@ -95,8 +103,8 @@ def main():
                 '-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
                 '-DWA2_SPECIAL_CONTENTS=ON','-DWA2_SPECIAL_CHECKS=ON',
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
-            run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_windows','--parallel','1'],7200)
-            for stem in ('memory','runtime'):
+            run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_windows','--parallel','1'],7200)
+            for stem in ('memory','runtime','codec'):
                 run([win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json'],60)
             run([acmake,'-S',ROOT/'tests/shared-aot-android','-B',android,'-G','Ninja',
                 '-DCMAKE_MAKE_PROGRAM='+str(ROOT/'tools/python/bin/ninja.exe'),
@@ -124,10 +132,16 @@ def main():
         math_expected['recompiled/transcend.cpp']=digest(ROOT/'recompiled/transcend.cpp')
         if math_windows!=math_android or math_windows!=math_expected:
             raise ValueError('Windows/Android compiled different scalar x87 math sources')
+        codec_windows,codec_android=compiled_codec(win),compiled_codec(android)
+        codec_expected={name:digest(ROOT/name) for name in ('port/native_vorbis.cpp','engine/vorbis_stream.cpp')}
+        if codec_windows!=codec_android or codec_windows!=codec_expected:
+            raise ValueError('Windows/Android compiled different shared Vorbis sources')
         if manifest['pending_transcendental_sites'] or len(manifest.get('supported_transcendental_sites',[]))!=50:
             raise ValueError('Special transcendental sites are not all statically supported')
+        if manifest.get('shared_vorbis_host_boundaries')!=[0x458630,0x458660,0x458700,0x458890]:
+            raise ValueError('Missing Special shared codec host boundaries')
         checks={}
-        for stem in ('memory','runtime'):
+        for stem in ('memory','runtime','codec'):
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
@@ -155,6 +169,13 @@ def main():
                 raise ValueError('Missing Special LZSS original-loop/tail regression')
             if stem=='runtime' and check.get('lzss_admission_declines_checked')!=8:
                 raise ValueError('Missing Special LZSS decline-without-mutation checks')
+            if stem=='memory' and check.get('codec_host_boundary_cases')!=6:
+                raise ValueError('Missing actual Special direct/indirect codec boundaries')
+            if stem=='codec' and (check.get('source_reference_cases')!=2 or check.get('shared_codec_cases')!=28 or
+                    check.get('guard_cases')!=6 or check.get('maximum_sample_error',999)>16 or
+                    check.get('maximum_rms_sample_error',999)>1.5 or check.get('original_audio_used') is not False or
+                    check.get('audio_device_opened') is not False):
+                raise ValueError('Missing Special codec ABI/source PCM regression')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         output=ROOT/'out/special-contents';output.mkdir(parents=True,exist_ok=True)
@@ -181,7 +202,8 @@ def main():
             # do not represent an unavailable PE symbol audit as completed.
             symbol_input=win/'shared_runtime/special/libwa2_special_aot.a' if name=='windows' else Path(artifact['unstripped_file'])
             symbol_inputs=[symbol_input]
-            if name=='windows':symbol_inputs.append(win/'shared_runtime/libwa2_x87_transcend.a')
+            if name=='windows':symbol_inputs.extend([win/'shared_runtime/libwa2_x87_transcend.a',
+                win/'shared_runtime/libwa2_function_process.a',win/'shared_runtime/native_engine/libwa2_engine.a'])
             symbols=subprocess.run([str(nm),'--defined-only','--demangle',*map(str,symbol_inputs)],
                 cwd=ROOT,env=env,creationflags=flags,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                 check=True,timeout=60).stdout.decode('utf-8',errors='replace')
@@ -189,14 +211,17 @@ def main():
                 final_binary_symbols_available=name!='windows',special_static_functions='wa2::special::f_' in symbols,
                 shared_bulk_string_kernel='wa2::aot::try_bulk_string(' in symbols,
                 scalar_x87_math='fyl2x(' in symbols and 'fsin(' in symbols and 'fcos(' in symbols,
+                shared_vorbis_codec='wa2::audio::VorbisStream::push(' in symbols and
+                    'wr::install_wa2_native_vorbis(wr::Process&, wr::NativeVorbisProfile' in symbols,
                 main_story_static_functions='wa2::aot::f_' in symbols,
                 runtime_instruction_decoder='wr::Decoder::' in symbols)
-            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
+            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
                 raise ValueError('Special link contains the wrong game catalogue or an instruction decoder: '+name)
             symbol_audits[name]=audit
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
             same_special_sources_on_all_hosts=True,compiled_shared_sources=windows_sources,
             compiled_scalar_math_sources=math_windows,transcendental_hardware_cases=math_proof['cases'],
+            compiled_shared_codec_sources=codec_windows,shared_vorbis_host_boundaries=manifest['shared_vorbis_host_boundaries'],
             scalar_math_notice=dict(file=str(notice),sha256=digest(notice)),
             instruction_locations=manifest['instruction_locations'],static_bodies=manifest['static_bodies'],
             recovered_callback_entries=len(callbacks['recovered_entries']),pointer_slots_audited=callbacks['pointer_slots_audited'],

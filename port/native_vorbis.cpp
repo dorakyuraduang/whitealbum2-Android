@@ -13,29 +13,46 @@
 namespace wr {namespace {
 struct DecoderState {
     struct Stream {std::unique_ptr<wa2::audio::VorbisStream> codec{std::make_unique<wa2::audio::VorbisStream>()};std::vector<std::uint8_t> input_copy,output_copy;bool finished{};};
-    std::map<U32,Stream> streams;bool enabled{true};
+    std::map<U32,Stream> streams;NativeVorbisProfile profile;bool enabled{true};
     std::uint64_t constructors{},format_queries{},cached_format_queries{},copied_calls{},requests{},calls{},input_bytes{},output_bytes{},resets{},restarts{},exhausted{},errors{},declined{},total_ns{},maximum_ns{};
-    bool supported(Process& p,U32 pc){return enabled && p.input_sha256=="246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327" && wa2_native_code_verified(p.memory,pc);}
+    bool supported(Process& p,U32 pc){return enabled && p.input_sha256==profile.input_sha256 && profile.verified(p.memory,pc);}
     std::string report() const {std::ostringstream out;std::size_t buffered=0;for(const auto& [at,s]:streams)buffered+=s.codec->buffered_bytes();
         out<<"{\"backend\":\"portable-vorbis\",\"enabled\":"<<(enabled?"true":"false")<<",\"constructors\":"<<constructors<<",\"format_queries\":"<<format_queries<<",\"cached_format_queries\":"<<cached_format_queries<<",\"copied_calls\":"<<copied_calls<<",\"requests\":"<<requests<<",\"calls\":"<<calls<<",\"input_bytes\":"<<input_bytes<<",\"output_bytes\":"<<output_bytes<<",\"live_streams\":"<<streams.size()<<",\"buffered_bytes\":"<<buffered<<",\"resets\":"<<resets<<",\"restarts\":"<<restarts<<",\"exhausted_calls\":"<<exhausted<<",\"errors\":"<<errors<<",\"declined\":"<<declined<<",\"total_ns\":"<<total_ns<<",\"max_call_ns\":"<<maximum_ns<<'}';return out.str();}
 };
 thread_local std::map<Process*,std::weak_ptr<DecoderState>> states;
 bool overlaps(U32 a,std::uint64_t an,U32 b,std::uint64_t bn){return std::uint64_t(a)<std::uint64_t(b)+bn && std::uint64_t(b)<std::uint64_t(a)+an;}
 }
+std::uint64_t wa2_native_vorbis_activity(Process& p){
+    if(const auto found=states.find(&p);found!=states.end())if(const auto state=found->second.lock())
+        return state->constructors+state->format_queries+state->requests+state->resets;
+    return 0;
+}
 void install_wa2_native_vorbis(Process& p,bool enabled){
-    if(const auto found=states.find(&p);found!=states.end())if(const auto state=found->second.lock()){state->enabled=enabled;return;}
-    const auto state=std::make_shared<DecoderState>();state->enabled=enabled;states[&p]=state;
+    install_wa2_native_vorbis(p,NativeVorbisProfile{
+        "246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327",
+        0x4566d0,0x456700,0x4567b0,0x456930,wa2_native_code_verified},enabled);
+}
+void install_wa2_native_vorbis(Process& p,NativeVorbisProfile profile,bool enabled){
+    if(!profile.verified || profile.input_sha256.size()!=64 || !profile.construct || !profile.reset || !profile.format || !profile.decode)
+        throw std::invalid_argument("missing verified Vorbis program profile");
+    if(const auto found=states.find(&p);found!=states.end())if(const auto state=found->second.lock()){
+        if(state->profile.input_sha256!=profile.input_sha256 || state->profile.construct!=profile.construct ||
+           state->profile.reset!=profile.reset || state->profile.format!=profile.format || state->profile.decode!=profile.decode)
+            throw std::logic_error("cannot replace a live Vorbis program profile");
+        state->enabled=enabled;return;
+    }
+    const auto state=std::make_shared<DecoderState>();state->profile=std::move(profile);state->enabled=enabled;states[&p]=state;
     p.state().shutdown.push_back([pointer=&p]{states.erase(pointer);});
     p.state().reports["native_vorbis"]=[state]{return state->report();};
-    p.register_native_function(0x4566d0,0,[state](Process& q)->std::optional<U32>{
-        if(!state->supported(q,0x4566d0))return std::nullopt;
+    p.register_native_function(state->profile.construct,0,[state](Process& q)->std::optional<U32>{
+        if(!state->supported(q,state->profile.construct))return std::nullopt;
         const auto object=q.cpu.r[ECX];
         static constexpr std::array<std::uint8_t,0x22f8> zero{};
         q.memory.copy_in(object,zero);state->streams.erase(object);++state->constructors;
         return 0u;
     });
-    p.register_native_function(0x456700,0,[state](Process& q)->std::optional<U32>{
-        if(!state->supported(q,0x456700))return std::nullopt;
+    p.register_native_function(state->profile.reset,0,[state](Process& q)->std::optional<U32>{
+        if(!state->supported(q,state->profile.reset))return std::nullopt;
         const auto object=q.cpu.r[ECX];
         q.memory.check(object,0x22f8,Memory::Read|Memory::Write);
         state->streams.erase(object);++state->resets;
@@ -47,8 +64,8 @@ void install_wa2_native_vorbis(Process& p,bool enabled){
         for(const auto offset:{0x22e8u,0x22ecu,0x22f0u})q.memory.store(object+offset,0,32);
         return 0u;
     });
-    p.register_native_function(0x4567b0,2,[state](Process& q)->std::optional<U32>{
-        if(!state->supported(q,0x4567b0))return std::nullopt;
+    p.register_native_function(state->profile.format,2,[state](Process& q)->std::optional<U32>{
+        if(!state->supported(q,state->profile.format))return std::nullopt;
         const auto object=q.cpu.r[ECX],format=q.argument(0),input=q.argument(1);
         ++state->format_queries;
         if(!format)return 0u;
@@ -67,8 +84,8 @@ void install_wa2_native_vorbis(Process& p,bool enabled){
             return 1u;
         } catch(const wa2::audio::VorbisError&) {return 0u;}
     });
-    p.register_native_function(0x456930,5,[state](Process& q)->std::optional<U32>{
-        if(!state->supported(q,0x456930))return std::nullopt;
+    p.register_native_function(state->profile.decode,5,[state](Process& q)->std::optional<U32>{
+        if(!state->supported(q,state->profile.decode))return std::nullopt;
         ++state->requests;
         const auto object=q.cpu.r[ECX],input=q.argument(0),count=q.argument(1),output=q.argument(2),capacity=q.argument(3),written=q.argument(4);
         const auto found=state->streams.find(object);
