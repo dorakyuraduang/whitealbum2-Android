@@ -109,7 +109,7 @@ def main():
         tracked += [ROOT/'tests/novel_layout_oracle.hpp',ROOT/'tests/glyph_command_oracle.hpp']
         tracked += [ROOT/'scripts/verify_resource_lookup.py',ROOT/'tests/resource_lookup.cpp',ROOT/'generated/wa2-win64/code_page_1112.cpp']
         tracked += [ROOT/'scripts/benchmark_text_renderer.py',ROOT/'tests/owned_gl_trace.hpp',ROOT/'tests/render_submission.cpp',ROOT/'tests/texture_batch_snapshots.hpp',ROOT/'tests/integer_registers.cpp',ROOT/'tests/native_sprite_cpu.cpp',ROOT/'tests/text_ftol.cpp',ROOT/'tests/text_advance.cpp',ROOT/'tests/immutable_buffers.cpp']
-        tracked += [ROOT/'tests/particle_pipeline.cpp']
+        tracked += [ROOT/'tests/particle_pipeline.cpp',ROOT/'tests/save_thumbnail.cpp']
         tracked += [ROOT/'scripts/build_media_codec.py',ROOT/'scripts/verify_movie_codecs.py',ROOT/'tests/movie_codecs.cpp',ROOT/'logs/movie-codec-verification.json']
         tracked += [ROOT/'scripts/verify_movie_formats.py',ROOT/'scripts/make_movie_format_samples.py',ROOT/'tests/movie_formats.cpp',ROOT/'tests/portable_movie_bridge.cpp',ROOT/'logs/movie-format-verification.json']
         tracked += [ROOT/('logs/media-codec-'+host+'-build.json') for host in ('windows','arm64')]
@@ -125,7 +125,7 @@ def main():
         run([cmake,'-S',ROOT/'tests/shared-host-refresh','-B',build,'-G','Ninja','-DCMAKE_MAKE_PROGRAM='+str(ninja),'-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),'-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON','-DWA2_SHARED_SDL_ARCHIVE='+str(archive)])
         tests={name:'wa2_refresh_'+name for name in ('selected_save_files','portable_system','resource_mount','test_profile','portable_scheduler','function_process','subtitles','portable_shell','fast_forward','script_wait_callback','save_inventory','profile_batch','io_diagnostics','resource_reuse','resource_loading','loose_resources','pc_loose_resources','novel_cpu','text_control','glyph_scheduling','glyph_cache','sprite_texture_refs','host_progress','image_chroma','language_resources','language_names','language_prompts','ukrainian','external_subtitles','music_flag_saves','subtitle_spacing')}
         tests['resource_lookup']='wa2_refresh_resource_lookup'
-        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu','particle_pipeline','text_ftol','text_advance','immutable_buffers')})
+        tests.update({name:'wa2_refresh_'+name for name in ('render_submission','integer_registers','native_sprite_cpu','particle_pipeline','save_thumbnail','text_ftol','text_advance','immutable_buffers')})
         run([cmake,'--build',build,'--parallel','1','--target',*tests.values()])
         reports={}
         test_flags={'native_sprite_cpu':['--correctness-only'],'particle_pipeline':['--require-native']}
@@ -162,6 +162,9 @@ def main():
         if reports['integer_registers']['exact_cpu_stack_fault_cases']!=384:raise ValueError('Incomplete native register mask snapshots')
         sprite=reports['native_sprite_cpu']
         if sprite['cases']<200 or sprite['decline_cases']!=24 or not sprite['vertex_bits_and_render_state_equal'] or sprite['performance_samples_rerun']:raise ValueError('Incomplete source/native sprite correctness checks')
+        thumbnails=reports['save_thumbnail']
+        if (thumbnails['cases'],thumbnails['hits'])!=(24,8) or not thumbnails['exact_cpu_ram_and_faults']:
+            raise ValueError('Incomplete save thumbnail pixel copy comparison')
         particles=reports['particle_pipeline']
         if ((particles['cases'],particles['source_draws'],particles['native_admitted'],particles['native_offscreen_draws'])!=(12,3264,3264,2176) or
                 (particles['threshold_cases'],particles['threshold_updates'])!=(10,20) or
@@ -265,6 +268,7 @@ def main():
         data=actual.read_bytes()
         expected={'compatibleOpen':'(Ljava/lang/String;III)I','compatibleReadMetadata':'(Ljava/lang/String;IZ)[Ljava/lang/String;','compatibleReadOpen':'(Ljava/lang/String;Ljava/lang/String;I)I','compatibleReadBatch':'([Ljava/lang/String;[Ljava/lang/String;I)[I','compatibleOperation':'(Ljava/lang/String;Ljava/lang/String;III)I','compatibleReplace':'(Ljava/lang/String;ILjava/nio/ByteBuffer;)V'}
         declarations=output([ROOT/'tools/source-analysis/jdk-21.0.12.1+1/bin/javap.exe','-p','-s',Path(ui['source_sets']['shared-aot']['classes_directory'])/'org/wa2/port/ResourceDirectory.class'])
+        expected.update(beginCompatibleInventory='(I)Lorg/wa2/port/GameDocuments;',compatibleInventoryList='(Ljava/lang/String;ILorg/wa2/port/GameDocuments;)[Ljava/lang/String;')
         for name,signature in expected.items():
             if not re.search(r'\b'+name+r'\([^;]*;\s*descriptor:\s*'+re.escape(signature),declarations) or name.encode()+b'\0' not in data or signature.encode()+b'\0' not in data:raise ValueError('Actual selected-directory Java/JNI signature mismatch: '+name)
         subtitle_declarations=output([ROOT/'tools/source-analysis/jdk-21.0.12.1+1/bin/javap.exe','-p','-s',Path(ui['source_sets']['shared-aot']['classes_directory'])/'org/wa2/port/ExternalSubtitles.class'])

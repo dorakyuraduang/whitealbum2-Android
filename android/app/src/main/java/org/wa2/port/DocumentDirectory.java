@@ -7,11 +7,10 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
 
-/** Directory metadata snapshots for ONE serialized storage operation only.
- * GameDocuments clears this at every operation, including launcher reuse.
- * No file payload or metadata survives into the next API operation.
- */
+/** Full metadata belongs to one operation. A save-list inventory can retain
+ * the lighter ancestor snapshots while visiting its sibling banks. */
 final class DocumentDirectory<K,T> {
     interface Reader<K,T> { List<T> children(K parent) throws IOException; }
     interface Name<T> { String name(T item); }
@@ -38,6 +37,15 @@ final class DocumentDirectory<K,T> {
     DocumentDirectory(Reader<K,T> reader,Name<T> names){this(reader,reader,names);}
     DocumentDirectory(Reader<K,T> reader,Reader<K,T> pathReader,Name<T> names){this.reader=reader;this.pathReader=pathReader;this.names=names;}
     void clear(){snapshots.clear();pathSnapshots.clear();}
+    void clearFull(){snapshots.clear();}
+    K resolve(K root,String[] parts,int count,Function<T,K> directory) throws IOException {
+        K parent=root;
+        for(int n=0;n<count;++n){
+            T child=path(parent).find(parts[n]);
+            if(child==null || (parent=directory.apply(child))==null)return null;
+        }
+        return parent;
+    }
     // A light path entry must never stand in for full file metadata. Once
     // loaded, the full index also carries any publication/mutation updates.
     Snapshot path(K parent) throws IOException {

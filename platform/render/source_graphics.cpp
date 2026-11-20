@@ -21,6 +21,7 @@
 #include "frame_metrics.hpp"
 #include "presentation_pacing.hpp"
 #include "../../recompiled/native_sprites.hpp"
+#include "../../recompiled/save_page_timing.hpp"
 #include "pixel_transfer.hpp"
 #include "../../engine/subtitles.hpp"
 #include "../clock.hpp"
@@ -1329,6 +1330,7 @@ U32 Graphics::present(Args a,bool force){
     draw_subtitles(w,h,last_present_destination);
     const auto before_error=FrameTrace::now();++frame_error_checks;const auto error=gl.GetError();if(error)stop("GL frame error "+std::to_string(error));
     const auto after_error=FrameTrace::now();SDL_GL_SwapWindow(window);const auto after_swap=FrameTrace::now();++presents;
+    if(wa2::aot::save_page_timing.slots)wa2::aot::save_page_timing.presented(after_swap);
     finish_presentation(after_swap);
     frame_trace.presented(presents,present_begin,before_error,after_error,after_swap,copy_total.total_ns,draws,uploads,
         {p.native_function_entries,p.api_calls,p.direct_leaf_api_calls,p.host_work.sleep_wall_ns,p.host_work.wait_wall_ns,p.host_work.sleep_requested_ms,p.host_work.sleep_zero_calls,p.host_work.function_wall_ns,p.host_work.api_wall_ns,p.host_work.poll_wall_ns});host->frame_submitted();

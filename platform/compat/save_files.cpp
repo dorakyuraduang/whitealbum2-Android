@@ -50,6 +50,8 @@ class Saves final:public wr::MutableFiles {
         std::vector<std::pair<Info*,decltype(Info::open_read)>> original_openers;
         struct Listing {std::map<std::string,Info> entries;std::chrono::steady_clock::time_point expires;U32 screen;};
         std::map<std::string,Listing> listings;
+        ReadAheadFiles::InventoryList scoped_list;
+        std::chrono::steady_clock::time_point scoped_list_until{};
         bool list_reader{};
         unsigned read_ahead_mode{};
         std::uint64_t preview_batches{},preview_files{},preview_ns{};
@@ -61,7 +63,7 @@ class Saves final:public wr::MutableFiles {
         bool main_prepared{};
         std::uint64_t revision{},builds{},hits{},chapter_builds{},chapter_hits{},declines{},info_calls{},list_calls{},open_calls{},prepared_reads{},info_ns{},list_ns{},open_ns{},read_batches{},read_ahead_files{},read_ahead_ns{};
         void release_reads(){for(auto& [info,opener]:original_openers)info->open_read=std::move(opener);original_openers.clear();}
-        void reset_active(){key.reset();declined_key.reset();release_reads();directories.clear();read_ahead.clear();read_ahead_mode=0;}
+        void reset_active(){key.reset();declined_key.reset();release_reads();directories.clear();read_ahead.clear();read_ahead_mode=0;scoped_list={};}
         void invalidate(){reset_active();if(!listings.empty()){listings.clear();++listing_invalidations;}}
         struct Mutation {
             Inventory& value;
@@ -88,7 +90,20 @@ class Saves final:public wr::MutableFiles {
         cache.main_prepared=true;return 0;
     }
     std::optional<Info> inspect(std::string_view name){Inventory::Timer timer(inventory_->info_calls,inventory_->info_ns);return files_->info(name);}
-    std::vector<Info> entries(std::string_view name){Inventory::Timer timer(inventory_->list_calls,inventory_->list_ns);return files_->list(name);}
+    std::vector<Info> entries(std::string_view name,bool share_ancestors=false){
+        auto& cache=*inventory_;Inventory::Timer timer(cache.list_calls,cache.list_ns);
+        if(share_ancestors){
+            if(auto* adapter=dynamic_cast<ReadAheadFiles*>(files_.get())){
+                const auto now=std::chrono::steady_clock::now();
+                if(!cache.scoped_list || now>=cache.scoped_list_until){
+                    cache.scoped_list=adapter->begin_inventory_list();
+                    cache.scoped_list_until=now+std::chrono::milliseconds(250);
+                }
+                if(cache.scoped_list)return cache.scoped_list(name);
+            }
+        }
+        return files_->list(name);
+    }
     bool snapshot(bool list_reader){
         const auto key=scope_?scope_():std::nullopt;auto& cache=*inventory_;
         if(!key){cache.invalidate();return false;}
@@ -115,7 +130,7 @@ class Saves final:public wr::MutableFiles {
                 try{
                     if(reuse){index=saved->second.entries;++cache.listing_hits;}
                     else{
-                        for(auto item:entries(directory)){
+                        for(auto item:entries(directory,list_reader && manual_save(leaf))){
                             const auto name=fold(item.name);
                             if(file_name(name) && !index.emplace(name,std::move(item)).second)throw std::runtime_error("Ambiguous save inventory filename");
                         }

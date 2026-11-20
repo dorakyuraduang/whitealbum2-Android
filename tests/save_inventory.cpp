@@ -32,7 +32,13 @@ public:
     unsigned batches{},requested{},maximum{};bool decline{},fail_one{};
     std::vector<std::vector<std::string>> paths;
     std::vector<std::weak_ptr<c::ReadAheadStreams>> pools;
+    std::weak_ptr<int> list_scope;
+    unsigned list_scopes{},scoped_lookups{};
     explicit AheadCounted(std::shared_ptr<wr::MutableFiles> files):Counted(std::move(files),true){}
+    InventoryList begin_inventory_list()override{
+        auto scope=std::make_shared<int>(++list_scopes);list_scope=scope;
+        return [this,scope=std::move(scope)](std::string_view name){++scoped_lookups;return list(name);};
+    }
     std::size_t prepare_reads(std::span<c::ReadAheadFile> files)override{
         CHECK(!files.empty() && files.size()<=limit);
         for(const auto& pool:pools)CHECK(pool.expired()); // Never retain two batches.
@@ -292,8 +298,39 @@ PreviewResult preview_pages(const std::filesystem::path& root){
     const auto writer=backend->batches;preview(30,true,30);CHECK(backend->batches==writer && backend->released());CHECK(p.callback(p.resolve("kernel32.dll","CloseHandle"),std::array<U32,1>{handle})==1);++result.guards;
     p.state().mutable_files.reset();CHECK(backend->released());CHECK(!p.gui() && !p.directdraw());return result;
 }
+void ancestor_scope(const std::filesystem::path& root){
+    const auto selected=root/"ancestor-scope";CHECK(std::filesystem::create_directories(selected/"Documents/Leaf/WHITE ALBUM2"));
+    write(selected/"Documents/Leaf/WHITE ALBUM2/save_00.sav",1);
+    auto adapter=std::make_shared<AheadCounted>(c::local_files(selected));
+    std::optional<std::uint64_t> update=std::uint64_t(1)<<32;
+    auto saves=c::save_files(adapter,false,[&]{return update;},{},[]{return true;});
+    CHECK(saves->info("save_00.sav"));
+    CHECK(!saves->info("documents/leaf/white album2 -introductory chapter-/save_00.sav"));
+    CHECK(adapter->list_scopes==1 && adapter->scoped_lookups==2 && !adapter->list_scope.expired());
+    const auto first=adapter->list_scope;
+    *update+=std::uint64_t(1)<<32;
+    CHECK(!saves->info("documents/leaf/white album2 -closing chapter-/save_00.sav"));
+    CHECK(first.expired() && adapter->list_scopes==2);
+    saves->replace("save_00.sav",std::array<std::uint8_t,1>{5});CHECK(adapter->list_scope.expired());
+    adapter->fail_listing=true;CHECK(saves->info("save_00.sav"));CHECK(adapter->list_scope.expired());
+    adapter->fail_listing=false;*update+=std::uint64_t(1)<<32;
+    CHECK(saves->info("save_00.sav") && !adapter->list_scope.expired());
+    update.reset();CHECK(saves->info("save_00.sav") && adapter->list_scope.expired());
+    update=std::uint64_t(1)<<32;CHECK(saves->info("save_00.sav"));saves.reset();
+    CHECK(adapter->list_scope.expired());
+}
 int main(int argc,char** argv){try{
+    wa2::aot::SavePageTiming timing;
+    for(unsigned n=20;n<30;++n){timing.visit(n,1,100);timing.visit(n,1,110);}
+    timing.presented(150);CHECK(timing.pages==1 && timing.last_ns==50);
+    timing.visit(30,1,200);timing.visit(32,1,205);timing.presented(210);
+    for(unsigned n=40;n<50;++n)timing.visit(n,n<45?1:2,300);
+    timing.presented(350);CHECK(timing.pages==1 && timing.last_ns==50);
+    timing.visit(60,1,400);timing.presented(410);
+    for(unsigned n=61;n<70;++n)timing.visit(n,1,450);
+    timing.presented(460);CHECK(timing.pages==1);
     CHECK(argc==2);const auto root=std::filesystem::path(argv[1]).parent_path()/("save-inventory-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));CHECK(std::filesystem::create_directory(root));
+    ancestor_scope(root);
     unsigned readers{},guards{};for(bool linear:{false,true})for(bool references:{false,true}){const auto baseline=exercise(root,linear,false,references),scoped=exercise(root,linear,true,references);readers+=baseline.readers+scoped.readers;guards+=scoped.guards;}
     unsigned index_calls{};for(bool linear:{false,true})for(bool scoped:{false,true})for(bool missing:{false,true})index_calls+=chapter_index(root,linear,scoped,missing);
     readers+=full_bank(root);

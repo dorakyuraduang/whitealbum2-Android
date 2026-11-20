@@ -9,8 +9,12 @@ namespace wa2::platform::compat {
 struct ReadAheadFile {std::string path;wr::ReadOnlyFileInfo* info;};
 class ReadAheadFiles {
 public:
+    using InventoryList=std::function<std::vector<wr::ReadOnlyFileInfo>(std::string_view)>;
     static constexpr std::size_t limit=16;
     virtual ~ReadAheadFiles()=default;
+    // Optional, short-lived resolver for several bank listings. The caller
+    // owns the scope. Each call still lists the requested directory afresh.
+    virtual InventoryList begin_inventory_list(){return {};}
     virtual std::size_t prepare_reads(std::span<ReadAheadFile>)=0;
 };
 }

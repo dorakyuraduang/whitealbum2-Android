@@ -17,7 +17,46 @@ public final class DocumentDirectoryTest {
         List<Entry> children(String name)throws IOException{++queries;List<Entry> items=directories.get(name);if(items==null)throw new IOException("Missing directory");return new ArrayList<>(items);}
         DocumentDirectory<String,Entry> operation(){return new DocumentDirectory<>(this::children,item->item.name);}
     }
+    private static int readBank(DocumentDirectory<String,Entry> index,String root,String bank,boolean shared)throws IOException{
+        if(shared)index.clearFull();else index.clear();
+        String[] parts={"Documents","Leaf",bank};
+        try{
+            String resolved=index.resolve(root,parts,parts.length,entry->entry.size==0?entry.name:null);
+            if(resolved==null)return -1;
+            Entry file=index.at(resolved).find("save_00.sav");
+            return file==null?0:(int)file.size;
+        }catch(IOException failure){index.clear();throw failure;}
+        finally{index.clearFull();}
+    }
+    private static void siblingBanks()throws IOException{
+        String[] names={"main","ic","cc"};
+        for(boolean populated:new boolean[]{false,true}){
+            Provider provider=new Provider();
+            provider.directories.put("tree",List.of(new Entry("Documents",0)));
+            provider.directories.put("Documents",List.of(new Entry("Leaf",0)));
+            provider.directories.put("Leaf",populated?List.of(new Entry("main",0),new Entry("ic",0),new Entry("cc",0)):List.of());
+            for(String bank:names)provider.directories.put(bank,new ArrayList<>(List.of(new Entry("save_00.sav",20))));
+            for(boolean shared:new boolean[]{false,true}){
+                int before=provider.queries;DocumentDirectory<String,Entry> inventory=provider.operation();
+                for(String bank:names)check(readBank(inventory,"tree",bank,shared)==(populated?20:-1));
+                check(provider.queries-before==(shared?3:9)+(populated?3:0));
+                if(shared && populated){
+                    provider.directories.get("main").set(0,new Entry("save_00.sav",35));
+                    check(readBank(inventory,"tree","main",true)==35 && provider.queries-before==7);
+                }
+            }
+            // A different selected tree and a new inventory both start cold.
+            provider.directories.put("second",List.of());
+            check(readBank(provider.operation(),"second","main",true)==-1);
+            provider.directories.put("Leaf",List.of(new Entry("main",0),new Entry("MAIN",0)));
+            DocumentDirectory<String,Entry> retry=provider.operation();
+            rejects(()->readBank(retry,"tree","main",true));
+            provider.directories.put("Leaf",List.of(new Entry("ic",0)));
+            check(readBank(retry,"tree","ic",true)==20);
+        }
+    }
     public static void main(String[] args)throws Exception{
+        siblingBanks();
         Provider provider=new Provider();List<Entry> root=new ArrayList<>();provider.directories.put("root",root);
         for(int n=0;n<120;++n)root.add(new Entry("resource-"+n+".pak",100000));
         for(int n=0;n<100;++n)root.add(new Entry(String.format(java.util.Locale.ROOT,"save_%02d.sav",n),n+80));
@@ -62,7 +101,7 @@ public final class DocumentDirectoryTest {
         directory.add(new Entry("NEW FOLDER",88));mixed.clear();rejects(()->mixed.path("root").find("new folder"));rejects(()->mixed.at("root").find("New Folder"));++cases;
         rejects(()->mixed.path("missing"));++cases;
         paths.directories.put("excessive",excessive);rejects(()->mixed.path("excessive"));++cases;
-        String report="{\"schema\":\"wa2.document-directory.v2\",\"cases\":"+cases+",\"lookups\":"+lookups+",\"same_directory_queries_for_400_lookups\":1,\"light_path_projection\":true,\"full_metadata_upgrade\":true,\"path_publication_updates\":true,\"path_refresh_and_guards\":true,\"operation_scoped_snapshot\":true,\"next_operation_sees_external_edits\":true,\"publication_index_updates\":true,\"ambiguity_and_size_guards\":true,\"source_files_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
+        String report="{\"populated_bank_queries_before\":12,\"populated_bank_queries_after\":6,\"absent_bank_queries_before\":9,\"absent_bank_queries_after\":3,\"fresh_leaf_and_tree_isolation\":true,\"schema\":\"wa2.document-directory.v3\",\"cases\":"+cases+",\"lookups\":"+lookups+",\"same_directory_queries_for_400_lookups\":1,\"light_path_projection\":true,\"full_metadata_upgrade\":true,\"path_publication_updates\":true,\"path_refresh_and_guards\":true,\"operation_scoped_snapshot\":true,\"next_operation_sees_external_edits\":true,\"publication_index_updates\":true,\"ambiguity_and_size_guards\":true,\"source_files_opened\":false,\"android_device_verified\":false,\"passed\":true}\n";
         Files.write(Paths.get(args[0]),report.getBytes("UTF-8"));
     }
 }

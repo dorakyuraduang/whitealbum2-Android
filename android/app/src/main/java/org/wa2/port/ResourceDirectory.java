@@ -360,6 +360,15 @@ final class ResourceDirectory {
     public static String[] compatibleReadMetadata(String name,int token,boolean list) throws IOException {
         GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleReadMetadata(name,list);}
     }
+    public static GameDocuments beginCompatibleInventory(int token) throws IOException {return gameDocuments(token);}
+    public static String[] compatibleInventoryList(String name,int token,GameDocuments files) throws IOException {
+        synchronized(LOCK){
+            awaitArchives();
+            if(activeTree==null || token!=generation || files==null || !files.belongsTo(activeTree))
+                throw new IOException("Save inventory belongs to a different game directory");
+        }
+        synchronized(STORAGE_LOCK){return files.inventoryReadList(name);}
+    }
     public static int compatibleReadOpen(String name,String reference,int token) throws IOException {
         GameDocuments files=gameDocuments(token);synchronized(STORAGE_LOCK){return files.compatibleReadOpen(name,reference);}
     }

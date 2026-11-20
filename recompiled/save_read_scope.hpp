@@ -1,5 +1,7 @@
 #pragma once
 #include "functions.hpp"
+#include "save_page_timing.hpp"
+#include "save_thumbnail.hpp"
 #include <winrecomp/process.hpp>
 #include <winrecomp/win32_state.hpp>
 #include <optional>
@@ -44,7 +46,9 @@ struct SaveReadAudit {
         if(found!=contexts.end())++found->second;else if(contexts.size()<32)contexts.emplace(key,1);else ++overflow;
     }catch(...){++overflow;}}
     std::string report()const{
-        std::ostringstream out;out<<"{\"calls\":"<<calls<<",\"admitted\":"<<admitted<<",\"memory_faults\":"<<faults<<",\"overflow\":"<<overflow<<",\"contexts\":[";bool first=true;
+        std::ostringstream out;out<<"{\"calls\":"<<calls<<",\"admitted\":"<<admitted<<",\"memory_faults\":"<<faults<<",\"overflow\":"<<overflow
+            <<",\"completed_preview_pages\":"<<save_page_timing.pages<<",\"last_preview_to_present_ns\":"<<save_page_timing.last_ns
+            <<",\"thumbnail_copies\":"<<save_thumbnail_counts.copies<<",\"thumbnail_bytes\":"<<save_thumbnail_counts.bytes<<",\"contexts\":[";bool first=true;
         for(const auto& [key,count]:contexts){if(!first)out<<',';first=false;const auto [thread,caller,screen,writers]=key;out<<"{\"thread\":"<<thread<<",\"caller\":"<<caller<<",\"screen_state\":"<<screen<<",\"open_writers\":"<<writers<<",\"calls\":"<<count<<'}';}
         return out.str()+"]}";
     }
@@ -67,6 +71,7 @@ inline std::optional<std::uint64_t> save_read_scope(wr::Process& p,SaveReadAudit
     }catch(const wr::GuestFault&){if(audit)++audit->faults;return {};}
 }
 inline std::function<std::optional<std::uint64_t>()> traced_save_read_scope(wr::Process& p){
+    save_page_timing={};save_thumbnail_counts={};
     const auto audit=std::make_shared<SaveReadAudit>();p.state().reports["save_read_scope"]=[audit]{return audit->report();};
     return [&p,audit]{return save_read_scope(p,audit.get());};
 }
@@ -100,11 +105,14 @@ inline std::function<bool()> save_page_preview_read_ahead(wr::Process& p){
             // arguments and return to 0x44c4c0, then its 40-byte API frame.
             if(std::uint64_t(sp)+0x15c>0x100000000ull || m.load<32>(sp)!=0x44c4df ||
                m.load<32>(sp+40)!=0x42357e || m.load<32>(sp+48)!=0xa4e5c0 ||
-               m.load<32>(sp+52)!=0x10058 || m.load<32>(sp+0x158)>=100)return false;
+               m.load<32>(sp+52)!=0x10058)return false;
+            const auto slot=m.load<32>(sp+0x158);if(slot>=100)return false;
             const auto caller=m.load<32>(sp+0x154);
             // Only the two ten-slot page-fill loops. Confirmed loads, quick
             // saves and all other callers must keep a single fresh open.
-            return caller==0x41abe9 || caller==0x41d9ba;
+            if(caller!=0x41abe9 && caller!=0x41d9ba)return false;
+            save_page_timing.visit(slot,caller,slot%10==0?save_page_now():0);
+            return true;
         }catch(const wr::GuestFault&){return false;}
     };
 }

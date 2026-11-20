@@ -30,6 +30,7 @@ final class GameDocuments {
         }
     }
     GameDocuments(ContentResolver resolver, Uri tree) { this.resolver=resolver; this.tree=tree; }
+    boolean belongsTo(Uri selected){return tree.equals(selected);}
     private Node node(Cursor cursor) throws IOException {
         return node(cursor,false);
     }
@@ -145,6 +146,14 @@ final class GameDocuments {
     synchronized String[] compatibleReadMetadata(String path,boolean list) throws IOException {
         return metadataRecords(path,list,true);
     }
+    synchronized String[] inventoryReadList(String path) throws IOException {
+        // Only this inventory owns these traversal snapshots. Leave final
+        // file metadata and publication recovery scoped to the current read.
+        directories.clearFull();
+        try{return readMetadataRecords(path,true,true);}
+        catch(IOException | RuntimeException failure){directories.clear();throw failure;}
+        finally{directories.clearFull();}
+    }
     // The reference came from this selected tree's settled publication. Only
     // a fresh read-only descriptor is opened; writes and creates never use it.
     synchronized int compatibleReadOpen(String path,String reference) throws IOException {
@@ -184,15 +193,16 @@ final class GameDocuments {
     }
     private String[] metadataRecords(String path,boolean list,boolean reference) throws IOException {
         directories.clear();
+        return readMetadataRecords(path,list,reference);
+    }
+    private String[] readMetadataRecords(String path,boolean list,boolean reference) throws IOException {
         boolean directory=list || CompatibleStoragePath.valid(path,true);
         String[] parts=CompatibleStoragePath.parts(path,directory);
         Uri address=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
         // Resolve ancestors with only IDs/names/types. Query full metadata
         // for the requested file or listed children, never every ancestor.
-        for(int n=0;n<parts.length-(directory?0:1);++n){
-            Node folder=directories.path(address).find(parts[n]);
-            if(folder==null || !folder.directory)return new String[0];address=folder.uri;
-        }
+        address=directories.resolve(address,parts,parts.length-(directory?0:1),folder->folder.directory?folder.uri:null);
+        if(address==null)return new String[0];
         ArrayList<Node> entries=new ArrayList<>();
         if(list){
             Files files=new Files(address);LinkedHashSet<String> names=new LinkedHashSet<>();

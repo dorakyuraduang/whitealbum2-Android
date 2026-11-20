@@ -39,6 +39,7 @@ RUN_RANGES=(
     ('44722c','447310','7de7a73b0b2f735c0ba69a74b5b3998d04ac9faea1ab8cfc399494873224cc16'),
     ('447321','4473d3','f2923807f7bcd2cb4371a3cb158d89a7448becef12f4de76c2371dda97404e6d'),
 )
+THUMBNAIL_RANGE=('43feb6','43fee4','5486efdd43457c32b2e87b2ff89e5639051ef872d9ff18acb2262ea7459147dc')
 def digest(data):return hashlib.sha256(data).hexdigest()
 def write(path,data):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -196,7 +197,7 @@ def prepare():
     outputs={output.relative_to(ROOT).as_posix():digest(data)};helper_bodies=[];stack_sites=0
     advance=ROOT/'recompiled/text_advance.hpp'
     inputs[advance.relative_to(ROOT).as_posix()]=digest(advance.read_bytes())
-    for name in ('text_layout_replay.hpp','text_layout_replay_control.hpp','text_run_replay.hpp','text_run_replay_control.hpp',
+    for name in ('save_thumbnail.hpp','text_layout_replay.hpp','text_layout_replay_control.hpp','text_run_replay.hpp','text_run_replay_control.hpp',
                  'text_page_packet.hpp','text_page_replay.hpp','text_page_replay_control.hpp'):
         header=ROOT/'recompiled'/name
         inputs[header.relative_to(ROOT).as_posix()]=digest(header.read_bytes())
@@ -224,6 +225,15 @@ def prepare():
         body,count=scoped_stack(body)
         stack_sites+=count;helper_bodies.append(body.replace('\r\n','\n'))
         rest=original[:begin]+original[end:]
+        if name=='native/functions_2.cpp':
+            pixel_loop=verified_blocks(rest,(THUMBNAIL_RANGE,))
+            reference=output.parent/'save_thumbnail_reference.inc'
+            payload=pixel_loop.encode('utf-8');write(reference,payload)
+            outputs[reference.relative_to(ROOT).as_posix()]=digest(payload)
+            anchor=f'L_43feb6: {{{newline}s.eip=0x43feb6u;{newline}'
+            if rest.count(anchor)!=1:raise ValueError('Changed cached save thumbnail entry')
+            rest='#include "save_thumbnail.hpp"'+newline+rest.replace(anchor,anchor+
+                'if constexpr(!Metered)if(copy_save_thumbnail(s,m,scope))goto L_43fec0;'+newline)
         if entry=='4462e0':
             anchor=f'L_474f00: {{{newline}s.eip=0x474f00u;{newline}if constexpr(Metered)wr::tick(budget,s.eip);{newline}'
             if rest.count(anchor)!=1:raise ValueError('Changed cached integer-conversion entry')

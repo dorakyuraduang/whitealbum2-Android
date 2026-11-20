@@ -26,10 +26,26 @@ struct ReadReference {
         auto* file=fdopen(fd,"rb");if(!file){close(fd);throw std::runtime_error("Cannot own resolved game-file descriptor");}error=0;return file;
     }
 };
+// The common inventory owns this single Java traversal object. Its final
+// release may occur on a different native thread from the first listing.
+struct GlobalInventory {
+    JavaVM* vm{};jobject value{};
+    ~GlobalInventory(){
+        if(!value)return;
+        JNIEnv* env=nullptr;
+        const auto status=vm->GetEnv(reinterpret_cast<void**>(&env),JNI_VERSION_1_6);
+        if(status==JNI_EDETACHED){if(vm->AttachCurrentThread(&env,nullptr)!=JNI_OK)return;}
+        else if(status!=JNI_OK)return;
+        env->DeleteGlobalRef(value);if(status==JNI_EDETACHED)vm->DetachCurrentThread();
+    }
+};
 class Files final:public wr::MutableFiles,public platform::compat::ReadAheadFiles {
-    jmethodID open_{},read_open_{},read_batch_{},metadata_{},operation_{},replace_{};jint token_{};
-    std::vector<wr::ReadOnlyFileInfo> metadata(std::string_view path,bool list){
-        Frame frame;auto name=frame.name(path);auto result=static_cast<jobjectArray>(frame.env->CallStaticObjectMethod(resource_directory_class(),metadata_,name,token_,jboolean(list)));frame.check();if(!result)throw std::runtime_error("Missing selected-directory metadata");const auto count=frame.env->GetArrayLength(result);if(count<0 || count>50000 || count%5 || (!list && count>5))throw std::runtime_error("Invalid selected-directory metadata length");
+    jmethodID open_{},read_open_{},read_batch_{},metadata_{},operation_{},replace_{},begin_inventory_{},inventory_list_{};jint token_{};
+    std::vector<wr::ReadOnlyFileInfo> metadata(std::string_view path,bool list,jobject inventory=nullptr){
+        Frame frame;auto name=frame.name(path);auto type=resource_directory_class();
+        auto result=static_cast<jobjectArray>(inventory?frame.env->CallStaticObjectMethod(type,inventory_list_,name,token_,inventory):
+            frame.env->CallStaticObjectMethod(type,metadata_,name,token_,jboolean(list)));
+        frame.check();if(!result)throw std::runtime_error("Missing selected-directory metadata");const auto count=frame.env->GetArrayLength(result);if(count<0 || count>50000 || count%5 || (!list && count>5))throw std::runtime_error("Invalid selected-directory metadata length");
         std::vector<wr::ReadOnlyFileInfo> entries;
         for(jsize at=0;at<count;at+=5){std::array<std::string,5> fields;for(unsigned n=0;n<5;++n){auto item=static_cast<jstring>(frame.env->GetObjectArrayElement(result,at+n));frame.check();fields[n]=frame.text(item,n==4?4096:256);frame.env->DeleteLocalRef(item);}const auto number=[](const auto& text){std::uint64_t value{};const auto parsed=std::from_chars(text.data(),text.data()+text.size(),value);if(text.empty() || parsed.ec!=std::errc{} || parsed.ptr!=text.data()+text.size())throw std::runtime_error("Invalid selected-directory numeric metadata");return value;};
             const auto millis=number(fields[2]),attributes=number(fields[3]);if(millis>(std::numeric_limits<std::uint64_t>::max()-116444736000000000ull)/10000 || (attributes!=16 && attributes!=128))throw std::runtime_error("Selected-directory metadata is out of range");
@@ -47,6 +63,17 @@ public:
         token_=frame.env->CallStaticIntMethod(type,method("gameStorageToken","()I"));frame.check();
         open_=method("compatibleOpen","(Ljava/lang/String;III)I");read_open_=method("compatibleReadOpen","(Ljava/lang/String;Ljava/lang/String;I)I");metadata_=method("compatibleReadMetadata","(Ljava/lang/String;IZ)[Ljava/lang/String;");operation_=method("compatibleOperation","(Ljava/lang/String;Ljava/lang/String;III)I");replace_=method("compatibleReplace","(Ljava/lang/String;ILjava/nio/ByteBuffer;)V");
         read_batch_=method("compatibleReadBatch","([Ljava/lang/String;[Ljava/lang/String;I)[I");
+        begin_inventory_=method("beginCompatibleInventory","(I)Lorg/wa2/port/GameDocuments;");
+        inventory_list_=method("compatibleInventoryList","(Ljava/lang/String;ILorg/wa2/port/GameDocuments;)[Ljava/lang/String;");
+    }
+    InventoryList begin_inventory_list()override{
+        Frame frame;auto inventory=std::make_shared<GlobalInventory>();
+        if(frame.env->GetJavaVM(&inventory->vm)!=JNI_OK)throw std::runtime_error("Cannot own selected-directory inventory");
+        const auto local=frame.env->CallStaticObjectMethod(resource_directory_class(),begin_inventory_,token_);frame.check();
+        if(!local)throw std::runtime_error("Missing selected-directory inventory");
+        inventory->value=frame.env->NewGlobalRef(local);frame.check();
+        if(!inventory->value)throw std::runtime_error("Cannot retain selected-directory inventory");
+        return [this,inventory=std::move(inventory)](std::string_view path){return metadata(path,true,inventory->value);};
     }
     std::size_t prepare_reads(std::span<platform::compat::ReadAheadFile> requests)override{
         if(requests.empty() || requests.size()>limit)throw std::runtime_error("Invalid game-file read ahead bound");
