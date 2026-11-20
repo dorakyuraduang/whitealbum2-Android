@@ -169,6 +169,9 @@ def main():
                 raise ValueError('Missing Special LZSS original-loop/tail regression')
             if stem=='runtime' and check.get('lzss_admission_declines_checked')!=8:
                 raise ValueError('Missing Special LZSS decline-without-mutation checks')
+            if stem=='runtime' and (check.get('unmapped_storage_probe_cases')!=34 or
+                    not check.get('unmapped_storage_provider_untouched') or not check.get('canonical_save_sharing_preserved')):
+                raise ValueError('Missing Special missing-file/access-denied storage probe regression')
             if stem=='memory' and check.get('codec_host_boundary_cases')!=6:
                 raise ValueError('Missing actual Special direct/indirect codec boundaries')
             if stem=='codec' and (check.get('source_reference_cases')!=2 or check.get('shared_codec_cases')!=28 or

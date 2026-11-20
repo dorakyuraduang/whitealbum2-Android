@@ -38,6 +38,8 @@ class Files final:public wr::MutableFiles {
     std::shared_ptr<wr::MutableFiles> files_;
     struct Metric {std::uint64_t calls{},ns{},maximum{};};
     std::array<Metric,4> metrics_{};
+    std::uint64_t unmapped_identities_{};
+    std::string last_unmapped_identity_;
     struct Timer {
         Metric& metric;std::chrono::steady_clock::time_point start;
         explicit Timer(Metric& value):metric(value){const auto saved=errno;start=std::chrono::steady_clock::now();++metric.calls;errno=saved;}
@@ -56,7 +58,15 @@ public:
         auto mapped=path(name,false);if(!mapped)mapped=path(name,true);
         return mapped?files_->info(*mapped):std::nullopt;
     }
-    std::string identity(std::string_view name)override{const auto mapped=path(name,false);if(!mapped)throw std::runtime_error("Unknown Special storage path");return files_->identity(*mapped);}
+    std::string identity(std::string_view name)override{
+        if(const auto mapped=path(name,false))return files_->identity(*mapped);
+        // Identity is only a sharing key. CreateFile prepares it even when
+        // info() found no file; Delete/Move also query it before access checks.
+        // Unmapped probes must reach the normal Win32 error return. They never
+        // reach the provider: open/remove/move retain their path allowlists.
+        ++unmapped_identities_;last_unmapped_identity_=name.substr(0,256);
+        return fold(name);
+    }
     std::vector<wr::ReadOnlyFileInfo> list(std::string_view name)override{
         Timer timing(metrics_[1]);
         const auto mapped=path(name,true);if(!mapped)return {};
@@ -80,7 +90,8 @@ public:
         constexpr const char* names[]={"metadata","enumeration","descriptor_open","directory"};std::ostringstream out;
         out<<"{\"save_policy\":\"special-save-only\",\"root_save_fallback\":false,\"timing\":[";
         for(unsigned n=0;n<metrics_.size();++n){if(n)out<<',';const auto& m=metrics_[n];out<<"{\"stage\":\""<<names[n]<<"\",\"calls\":"<<m.calls<<",\"total_ns\":"<<m.ns<<",\"max_ns\":"<<m.maximum<<'}';}
-        out<<"],\"payload_cached\":false,\"screen_access\":false}";return out.str();
+        out<<"],\"unmapped_identity_queries\":"<<unmapped_identities_<<",\"last_unmapped_identity\":"<<wr::quote(last_unmapped_identity_)
+            <<",\"maximum_logged_path_bytes\":256,\"payload_cached\":false,\"screen_access\":false}";return out.str();
     }
 };
 }

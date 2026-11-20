@@ -36,22 +36,57 @@ public:
 class MemoryFiles final:public wr::MutableFiles {
 public:
     std::string opened,listed,changed;
+    unsigned queries{},identities{},opens{},removes{},moves{};
     std::set<std::string> directories{""};
     std::optional<wr::ReadOnlyFileInfo> info(std::string_view name)override{
+        ++queries;
         if(directories.contains(std::string(name)))return wr::ReadOnlyFileInfo{std::string(name),0,0,16};
         if(name.ends_with("Sys.sav") || name.ends_with("sys.sav"))return wr::ReadOnlyFileInfo{"Sys.sav",4,0,128};
         return {};
     }
+    std::string identity(std::string_view name)override{++identities;return std::string(name);}
     std::vector<wr::ReadOnlyFileInfo> list(std::string_view name)override{listed=name;return {{"Sys.sav",4,0,128},{"save_00.sav",4,0,128},{"bad.pak",4,0,128}};}
     std::FILE* open(std::string_view name,bool,bool write,U32,U32& error)override{
-        opened=name;if(write)changed=name;error=0;auto* file=std::tmpfile();if(file){std::fwrite("TEST",1,4,file);std::rewind(file);}else error=5;return file;
+        ++opens;opened=name;if(write)changed=name;error=0;auto* file=std::tmpfile();if(file){std::fwrite("TEST",1,4,file);std::rewind(file);}else error=5;return file;
     }
     U32 directory(std::string_view name)override{return directories.emplace(name).second?0:183;}
-    U32 remove(std::string_view name,bool)override{changed=name;return 0;}
-    U32 move(std::string_view,std::string_view name)override{changed=name;return 0;}
+    U32 remove(std::string_view name,bool)override{++removes;changed=name;return 0;}
+    U32 move(std::string_view,std::string_view name)override{++moves;changed=name;return 0;}
     U32 attributes(std::string_view name,U32)override{changed=name;return 0;}
     void replace(std::string_view name,std::span<const std::uint8_t>)override{changed=name;}
 };
+unsigned storage_probe_regression(wr::Process& p,const MemoryFiles& files){
+    const auto call=[&](const char* api,std::initializer_list<U32> args){return p.callback(p.resolve("kernel32.dll",api),std::span(args.begin(),args.size()));};
+    const auto activity=[&]{return std::array{files.queries,files.identities,files.opens,files.removes,files.moves};};
+    const std::array names{"optional.bin","save_100.sav","other/Sys.sav","Documents/Leaf/Other/Sys.sav"};
+    unsigned cases{};
+    for(const auto* name:names){
+        const auto before=activity();const auto ansi=p.put_string(name);
+        const auto wide=p.put_wstring(std::u16string(name,name+std::char_traits<char>::length(name)));
+        CHECK(call("CreateFileA",{ansi,0x80000000,7,0,3,0x80,0})==0xffffffffu && p.last_error==2);++cases;
+        CHECK(call("CreateFileW",{wide,0x80000000,7,0,3,0x80,0})==0xffffffffu && p.last_error==2);++cases;
+        for(const auto creation:{1u,2u,4u}){
+            CHECK(call("CreateFileA",{ansi,0x40000000,7,0,creation,0x80,0})==0xffffffffu && p.last_error==5);++cases;
+        }
+        CHECK(call("GetFileAttributesA",{ansi})==0xffffffffu && p.last_error==2);++cases;
+        CHECK(activity()==before);
+    }
+    // Live handles force Delete/Move through the sharing-key lookup too.
+    const auto save=p.put_string("Sys.sav"),handle=call("CreateFileA",{save,0x80000000,1,0,3,0x80,0});
+    CHECK(handle!=0xffffffffu);++cases;
+    const auto other=p.put_string("another-optional.bin");
+    for(const auto* name:names){
+        const auto before=activity();const auto ansi=p.put_string(name);
+        CHECK(call("DeleteFileA",{ansi})==0 && p.last_error==5);++cases;
+        CHECK(call("MoveFileA",{ansi,other})==0 && p.last_error==5);++cases;
+        CHECK(activity()==before);
+    }
+    const auto alias=p.put_string("DOCUMENTS\\LEAF\\WHITE ALBUM2 SPECIAL CONTENTS\\SYS.SAV");
+    const auto opens=files.opens;
+    CHECK(call("CreateFileA",{alias,0x40000000,7,0,3,0x80,0})==0xffffffffu && p.last_error==32);++cases;
+    CHECK(files.opens==opens && call("CloseHandle",{handle})==1);
+    return cases;
+}
 unsigned lzss_regression(wr::Process& p,unsigned& declines){
     constexpr U32 ring=0xa79d10,size=65536;
     const auto source=p.allocate_bytes(size),target=p.allocate_bytes(size),stack=p.cpu.r[wr::ESP]-2048;
@@ -157,6 +192,7 @@ int main(int argc,char** argv){try{
     U32 error{};CHECK(!p.state().mutable_files->open("Documents/Leaf/WHITE ALBUM2 -closing chapter-/Sys.sav",true,true,3,error));
     CHECK(error==5 && files->changed==old);
     CHECK(p.state().mutable_files->directory("../escape")==5);
+    const auto storage_probes=storage_probe_regression(p,*files);
     CHECK(p.executed_instructions==0 && p.native_function_entries==0);
     // Execute only the recovered CRT registration and its rejecting filter
     // paths, using constructed exception records. No game startup or UI.
@@ -188,7 +224,8 @@ int main(int argc,char** argv){try{
           <<",\"reported_callback_address\":4739667,\"crt_initializer_registered_filter\":true,\"crt_filter_rejection_cases\":"<<filter_cases<<",\"game_startup_called\":false,"
             "\"special_final_cpu_and_storage_counters\":true,"
           <<"\"lzss_original_tail_cases\":"<<lzss_cases<<",\"lzss_output_dictionary_stack_fp_agree\":true,"
-          <<"\"lzss_admission_declines_checked\":"<<lzss_declines<<','<<
+          <<"\"lzss_admission_declines_checked\":"<<lzss_declines<<','
+          <<"\"unmapped_storage_probe_cases\":"<<storage_probes<<",\"unmapped_storage_provider_untouched\":true,\"canonical_save_sharing_preserved\":true,"<<
             "\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_opened\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";
     CHECK(bool(report));std::cout<<"PASS Special import/Unicode/storage memory checks; game entry never executed.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}
