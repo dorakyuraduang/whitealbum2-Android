@@ -158,7 +158,11 @@ def generate():
                 if pc in dead_flags:
                     operation = dead_flags[pc]
                     native = native.replace('wr::'+operation+'(', f'wa2::aot::value::{operation}<Metered>(')
-                native = fixed_memory(portable_floating(native))
+                # Raw instruction oracles default to diagnostic REP metering.
+                # Match the enclosing static body's policy on every string
+                # operation, including conditional/segmented fallbacks.
+                native = fixed_memory(portable_floating(native.replace(
+                    'wr::string_op(', 'wr::string_op<Metered>(')))
                 cpp += [f'L_{pc:x}:{{s.eip=0x{pc:x}u;', 'if constexpr(Metered)wr::tick(budget,s.eip);', native, '}']
                 if spans and spans[-1][0]+len(spans[-1][1]) == pc:
                     spans[-1][1].extend(raw)

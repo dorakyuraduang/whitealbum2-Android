@@ -17,7 +17,7 @@ Special 的原程序地址、CRT、资源表和部分 UI 与正篇不同，不�
 和配置互不覆盖，也无需维护第二个应用的安装、签名和启动接口。
 
 合包核验会逐字节保留已验证正篇 APK 的三个运行库和许可证条目，只新增 Special
-运行库及对应入口。合包版本为 `0.2.109-special-aot`；正篇运行库的诊断版本仍是
+运行库及对应入口。当前合包版本为 `0.2.110-special-aot`；正篇运行库的诊断版本仍是
 `0.2.108-shared-aot`。安装使用 `adb install -r`，核对版本、UID、首次安装时间和
 已安装 APK 的 SHA-256，不卸载、不清数据、不启动应用。
 
@@ -57,7 +57,7 @@ python scripts/package_launcher.py --integrated --with-special
 
 本地产物和记录：
 
-- `out/android/WA2-arm64-0.2.109-special-aot.apk`
+- `out/android/WA2-arm64-0.2.110-special-aot.apk`
 - `out/special-contents/WA2_Special_SDL2_x64.exe`（使用 `--root <Special 资源目录>`）
 - `logs/special-aot-verification.json`
 - `logs/special-android-installed.json`
@@ -91,3 +91,22 @@ CPU 特性查询按公共 CPUID 契约报告 CX8、TSC、SSE、SSE2，不读取�
 未发现的间接入口、其他未支持行为仍明确报错，没有解释器、JIT 或运行时解码回退。
 整部剧情、全部 UI/附加内容、存档兼容及手机性能尚需用户控制的实际运行验证；
 组件检查和安装成功都不能证明整部游戏兼容，当前不作 Android 性能提升声明。
+
+## 0.2.110：字符串操作的预算模式
+
+用户报告 `execution budget exhausted at guest address 4691986`。
+该地址为缓存 CFG 中的 `0x479812`，是一条复制 136 个 DWORD 的 `REP MOVSD`。
+Special 生成器此前保留了原始指令 oracle 的默认诊断计数参数，而普通静态函数
+传入的预算槽为零，导致正常内存拷贝在第一个元素前错误停止。
+
+生成器现在为全部 186 处字符串操作显式传递外围函数的 `Metered` 模式，使用现有
+公共 `wr::string_op<Metered>` 语义。没有改变全局预算、内存检查或诊断模式的上限。
+Windows 和 Android 编译同一份修正后的生成源码。
+
+有限回归直接恢复到报错指令，使用构造内存及未映射栈，在下一条 PUSH 停止，
+不会执行其后的游戏调用。覆盖零次/136 次、正向/反向和跨页拷贝，读取故障前的
+两元素完成前缀，以及诊断模式预算耗尽的精确前缀。修复前已复现相同地址和错误；
+修复后的六项检查必须通过，打包器才接受新的源码绑定验证记录。
+本次 Windows/ARM64 同源重编译及六项回归已通过，`0.2.110-special-aot`（113）
+已原位安装到授权手机，UID、首次安装时间和应用数据保留，安装包哈希核验一致。
+手机上的再次启动仍由用户控制，整部运行与性能验证继续待完成。

@@ -104,6 +104,10 @@ def main():
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
+            if stem=='memory' and (check.get('string_regression_cases')!=6 or
+                    check.get('reported_rep_address')!=4691986 or not check.get('string_fault_prefix_checked') or
+                    not check.get('diagnostic_budget_preserved')):
+                raise ValueError('Missing Special REP metering/fault-prefix regression checks')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         output=ROOT/'out/special-contents';output.mkdir(parents=True,exist_ok=True)
