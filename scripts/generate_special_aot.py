@@ -157,6 +157,18 @@ def generate():
     save_values += [save['api_frame'],*[int(save[key],0) for key in ('index','preview','buffer')],save['preview_return'],save['preview_slot']]
     if any(pc not in owners for pc in save_helpers+save_pages+[int(save[key],0) for key in ('index','preview')]):
         raise ValueError('Special save reader profile must name cached instruction boundaries')
+    weather=contracts['weather']
+    weather_region={key:[int(value,0) for value in weather[key]] for key in ('entries','ends','region','iterations','callees')}
+    weather_region.update(typed_color=weather['typed_color'],vector_clear=weather['vector_clear'],component_oracle=True)
+    if drawing['first_weather']!=int(weather['objects'],0)+81*256 or sorting['objects']!=int(weather['objects'],0)+1:
+        raise ValueError('Special weather, sprite drawing and sorting must share the cached object layout')
+    weather_owner=owners.get(weather_region['entries'][0])
+    if weather_region['entries']!=[0x408507,0x408560] or any(owners.get(pc)!=weather_owner for pc in weather_region['entries']):
+        raise ValueError('Special weather prefixes must keep their original static owner')
+    from generate_weather_batch import generate as generate_weather
+    OUT.mkdir(parents=True,exist_ok=True)
+    positions={pc:index for record in merged.values() for index,pc in enumerate(record['locations'])}
+    weather_own,weather_external=generate_weather(bodies,edges,owners,positions,graph['instructions'],weather_region,write)
     # The original bodies stay available to finite memory reference checks.
     # Production calls unwind before entering the shared codec ABI adapter.
     call_owners={pc:owner for pc,owner in owners.items() if pc not in codec_entries}
@@ -193,6 +205,9 @@ def generate():
     write('save_profile.hpp','#pragma once\n#include "save_source.hpp"\nnamespace wa2::special {\n'+
           'inline constexpr wa2::aot::SaveReadSource save_source{'+','.join(map(str,save_values[:2]))+',{'+','.join(map(str,save_helpers))+'},'+','.join(map(str,save_values[2:]))+',{'+','.join(map(str,save_pages))+'}};\n'+
           'inline constexpr wa2::aot::SaveThumbnailSource thumbnail_source{'+','.join(str(thumbnail[key]) for key in thumbnail_fields)+'};\n}\n')
+    write('weather_profile.hpp','#pragma once\n#include "native_weather.hpp"\nnamespace wa2::special {\n'+
+          'inline constexpr wa2::aot::WeatherSource weather_source{'+','.join(map(str,[*weather_region['entries'],
+              *[int(weather[key],0) for key in ('count','objects','weather')],weather['required_register'],weather['required_value']]))+'};\n}\n')
     write('native_entries.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+
           'inline constexpr std::uint32_t codec_boundary_entries[]={'+','.join(hex(pc)+'u' for pc in codec_entries)+'};\n}\n')
     spans_by_entry = {}
@@ -207,6 +222,7 @@ def generate():
         cpp = ['#include "bodies.hpp"', 'namespace wa2::special {']
         if set(entries)&(draw_entries.keys()|{sort_owner}):cpp.insert(1,'#include "special/render.hpp"')
         if thumbnail_owner in entries:cpp.insert(1,'#include "save_profile.hpp"')
+        if weather_owner in entries:cpp.insert(1,'#include "special/weather.hpp"')
         for entry in entries:
             record = merged[entry]
             parameters='bool Metered,bool NativeRegisters' if entry in hot else 'bool Metered'
@@ -249,6 +265,13 @@ def generate():
                     cpp += [f'if constexpr({policy})if({invocation})goto L_{sorting["end"]:x};']
                 if pc==thumbnail['begin']:
                     cpp += [f'if constexpr(!Metered)if(wa2::aot::copy_save_thumbnail(s,m,scope,thumbnail_source))goto L_{thumbnail_end:x};']
+                if pc in weather_region['entries']:
+                    invocation='wa2::special::update_weather(s,m)'
+                    if entry in hot:invocation='floating.external([&]{return integer.external([&]{return '+invocation+';});})'
+                    cpp += [f'if constexpr(!Metered)if({invocation}){{switch(s.eip){{',
+                        *[f'case 0x{target:x}u:goto L_{target:x};' for target in weather_own],
+                        *[f'case 0x{target:x}u:return;' for target in weather_external],
+                        'default:throw wr::GuestFault(wr::FaultKind::unsupported,s.eip,"invalid Special weather continuation");}}']
                 cpp += [native,'}']
                 if spans and spans[-1][0]+len(spans[-1][1]) == pc:
                     spans[-1][1].extend(raw)
@@ -348,6 +371,7 @@ def generate():
         shared_sprite_and_glyph_entries=sorted(draw_entries),source_drawing_profile=drawing,
         shared_sort_prefix=sorting,shared_sort_owner=sort_owner,
         shared_save_read_profile=save,shared_thumbnail_prefix=thumbnail,
+        shared_weather_profile=weather,weather_own_exits=weather_own,weather_external_exits=weather_external,
         hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,

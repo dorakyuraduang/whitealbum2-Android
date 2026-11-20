@@ -14,7 +14,7 @@ CALLEES={0x449860,0x4397e0,0x449870,0x475430,0x449950,0x449980,
          0x43a7d0,0x43a850,0x474f00,0x437db0,0x47e778,0x47e7cf,0x43b290}
 
 
-def flag_elisions(g,functions,bodies,edges,yields):
+def flag_elisions(g,functions,bodies,edges,yields,ends=ENDS):
     """Interprocedural raw/defined flag liveness inside one atomic prefix.
 
     Local memory faults decline the transaction, so only the explicit prefix
@@ -55,7 +55,7 @@ def flag_elisions(g,functions,bodies,edges,yields):
             helpers.remove('shift')
         if helpers-neutral:reads|=g.ALL_FLAGS
         effects[pc]=(reads,g.FLAG_WRITES.get(operation,0),operation)
-    live={pc:g.ALL_FLAGS if pc in yields else 0 for pc in nodes};live.update({pc:g.ALL_FLAGS for pc in ENDS})
+    live={pc:g.ALL_FLAGS if pc in yields else 0 for pc in nodes};live.update({pc:g.ALL_FLAGS for pc in ends})
     changed=True
     while changed:
         changed=False
@@ -75,24 +75,32 @@ def flag_elisions(g,functions,bodies,edges,yields):
     return result
 
 
-def generate(bodies,edges,owners,positions,instructions):
+def generate(bodies,edges,owners,positions,instructions,profile=None,writer=None):
     import generate_shared_aot as g
-    rows={row['address']:row for row in instructions};functions={};yields=set();pending=list(ENTRIES[:1])
+    entries=tuple(profile['entries']) if profile else ENTRIES
+    ends=set(profile['ends']) if profile else ENDS
+    callees=set(profile['callees']) if profile else CALLEES
+    first,last=profile['region'] if profile else (0x4088cf,0x408f5b)
+    iterations=set(profile['iterations']) if profile else {0x4088d1,0x408920,0x408934}
+    color=profile.get('typed_color') if profile else 0x43b290
+    vector_clear=profile.get('vector_clear') if profile else 0x47e798
+    write=writer or g.write
+    rows={row['address']:row for row in instructions};functions={};yields=set();pending=list(entries[:1])
     while pending:
         entry=pending.pop()
         if entry in functions:continue
-        root=entry==ENTRIES[0];todo=list(ENTRIES) if root else [entry];seen=set()
+        root=entry==entries[0];todo=list(entries) if root else [entry];seen=set()
         while todo:
             pc=todo.pop()
-            if pc in seen or (root and pc in ENDS):continue
+            if pc in seen or (root and pc in ends):continue
             if pc not in bodies:raise ValueError('Missing cached weather location: '+hex(pc))
-            if root and not 0x4088cf<=pc<0x408f5b:raise ValueError('Weather region escaped: '+hex(pc))
+            if root and not first<=pc<last:raise ValueError('Weather region escaped: '+hex(pc))
             seen.add(pc);following=edges[pc];kinds={e['kind'] for e in following}
             if kinds&{'call_import','jump_import','call_indirect','stop'} or g.PENDING_TRANSCENDENTAL.search(bodies[pc][0]):
                 yields.add(pc);continue
             if 'call_direct' in kinds:
                 target,={e['to'] for e in following if e['kind']=='call_direct'}
-                if target not in CALLEES:yields.add(pc);continue
+                if target not in callees:yields.add(pc);continue
                 pending.append(target)
                 todo.extend(e['to'] for e in following if e['kind']=='call_continuation')
             elif 'return' not in kinds:
@@ -100,23 +108,26 @@ def generate(bodies,edges,owners,positions,instructions):
                     yields.add(pc);continue
                 todo.extend(e['to'] for e in following if e['to'] is not None and e['kind']!='data_callback_initial')
         functions[entry]=sorted(seen)
-    color_nodes=[pc for pc in functions[0x43b290] if 0x43b290<=pc<=0x43b3be]
-    color_hash=hashlib.sha256(b''.join(bodies[pc][1] for pc in color_nodes)).hexdigest()
-    if len(color_nodes)!=101 or color_hash!='8479b6d4e1c4fce17247dea97c65da581c5822540bcca4febcabfc8a6f27b53f':
-        raise ValueError('Cached source of the typed weather color replacement changed')
-    dead_flags=flag_elisions(g,functions,bodies,edges,yields)
+    color_nodes=[];color_hash=None
+    if color:
+        if color!=0x43b290:raise ValueError('Unknown typed weather color ABI')
+        color_nodes=[pc for pc in functions[color] if 0x43b290<=pc<=0x43b3be]
+        color_hash=hashlib.sha256(b''.join(bodies[pc][1] for pc in color_nodes)).hexdigest()
+        if len(color_nodes)!=101 or color_hash!='8479b6d4e1c4fce17247dea97c65da581c5822540bcca4febcabfc8a6f27b53f':
+            raise ValueError('Cached source of the typed weather color replacement changed')
+    dead_flags=flag_elisions(g,functions,bodies,edges,yields,ends)
     output=['// Generated only from the checked cached C++/CFG; common to all hosts.']
     for entry in sorted(functions):
         output.append(f'[[gnu::noinline]] void weather_{entry:x}(wr::Cpu&,WeatherFrame&,WeatherFloating&);')
     for entry,nodes in sorted(functions.items()):
-        root=entry==ENTRIES[0]
+        root=entry==entries[0]
         output += [f'[[gnu::noinline]] void weather_{entry:x}(wr::Cpu& s,WeatherFrame& scope,WeatherFloating& floating){{']
-        if entry==0x43b290:output.append('if(weather_color_direct(s,scope))return;')
-        if root:output.append(f'if(s.eip==0x{ENTRIES[1]:x}u)goto L_{ENTRIES[1]:x};')
+        if color and entry==color:output.append('if(weather_color_direct(s,scope))return;')
+        if root:output.append(f'if(s.eip==0x{entries[1]:x}u)goto L_{entries[1]:x};')
         output.append(f'goto L_{entry:x};')
         for pc in nodes:
             output += [f'L_{pc:x}: {{',f's.eip=0x{pc:x}u;']
-            if root and pc in (0x4088d1,0x408920,0x408934):output.append('scope.iteration();')
+            if root and pc in iterations:output.append('scope.iteration();')
             kinds={e['kind'] for e in edges[pc]}
             if pc in yields:body='throw WeatherYield{};'
             elif 'call_direct' in kinds:
@@ -141,19 +152,24 @@ def generate(bodies,edges,owners,positions,instructions):
             if 'm.' in body or re.search(r'\bm\b|\bbudget\b|f_[0-9a-f]+<Metered>|wr_(?:x87|sse)_',body):
                 raise ValueError('Unbridged batch state consumer at '+hex(pc)+': '+body)
             # Keep the already proved vector clear as one local buffer write.
-            if pc==0x47e798:body='weather_vector_clear(s,scope);\ngoto L_47e7c8;'
+            if vector_clear and pc==vector_clear:body='weather_vector_clear(s,scope);\ngoto L_47e7c8;'
             output += [body,'}']
         if root:
-            output += [f'L_{pc:x}: s.eip=0x{pc:x}u;return;' for pc in sorted(ENDS)]
+            output += [f'L_{pc:x}: s.eip=0x{pc:x}u;return;' for pc in sorted(ends)]
         output += ['}']
-    g.write('weather_batch.inc','\n'.join(output)+'\n')
-    own=[pc for pc in sorted(ENDS|yields) if owners[pc]==owners[ENTRIES[0]]]
-    external=[pc for pc in sorted(yields) if owners[pc]!=owners[ENTRIES[0]]]
-    g.write('weather_batch.json',json.dumps(dict(entries=ENTRIES,normal_ends=sorted(ENDS),
-        own_exit_targets=own,external_exit_targets=external,callee_entries=sorted(functions.keys()-{ENTRIES[0]}),
+    write('weather_batch.inc','\n'.join(output)+'\n')
+    if profile and profile.get('component_oracle'):
+        # An instruction-level source oracle belongs only to the finite
+        # constructed-memory executable. Neither game host includes it.
+        nodes=sorted(set().union(*map(set,functions.values())))
+        write('weather_oracle.inc','\n'.join(f'case 0x{pc:x}u:{{'+g.portable_floating(bodies[pc][2])+'return true;}' for pc in nodes)+'\n')
+    own=[pc for pc in sorted(ends|yields) if owners[pc]==owners[entries[0]]]
+    external=[pc for pc in sorted(yields) if owners[pc]!=owners[entries[0]]]
+    write('weather_batch.json',json.dumps(dict(entries=entries,normal_ends=sorted(ends),
+        own_exit_targets=own,external_exit_targets=external,callee_entries=sorted(functions.keys()-{entries[0]}),
         cached_locations=sum(map(len,functions.values())),elided_flag_calculations=len(dead_flags),
-        native_color=dict(entry=0x43b290,last_source_location=0x43b3be,cached_locations=len(color_nodes),
+        native_color=dict(entry=color,last_source_location=0x43b3be,cached_locations=len(color_nodes),
             cached_bytes_sha256=color_hash,implementation='recompiled/native_weather.cpp',
-            domain='index < 2048; corner < 4; RGB <= 255; signed 32-bit alpha'),
+            domain='index < 2048; corner < 4; RGB <= 255; signed 32-bit alpha') if color else None,
         source='cached checked C++/CFG only'),indent=2)+'\n')
     return own,external

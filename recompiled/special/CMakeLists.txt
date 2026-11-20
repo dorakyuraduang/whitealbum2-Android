@@ -3,7 +3,7 @@ include("${WA2_SHARED_ROOT}/generated/special-contents/aot/sources.cmake")
 add_library(wa2_special_aot STATIC ${WA2_SPECIAL_AOT_SOURCES}
     "${WA2_SHARED_ROOT}/recompiled/extended80.cpp"
     "${WA2_SHARED_ROOT}/recompiled/native_string.cpp")
-target_sources(wa2_special_aot PRIVATE lzss.cpp render.cpp)
+target_sources(wa2_special_aot PRIVATE lzss.cpp render.cpp weather.cpp)
 target_compile_features(wa2_special_aot PUBLIC cxx_std_20)
 target_include_directories(wa2_special_aot PUBLIC
     "${WA2_SHARED_ROOT}/generated/special-contents/aot"
@@ -21,6 +21,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(wa2_special_aot PRIVATE -Oz)
     set_source_files_properties("${WA2_SHARED_ROOT}/generated/special-contents/aot/functions_hot.cpp"
         PROPERTIES COMPILE_OPTIONS "-O2")
+    set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/weather.cpp" PROPERTIES COMPILE_OPTIONS "-O2;-ffp-contract=off;-frounding-math")
 endif()
 option(WA2_SPECIAL_CHECKS "Build finite memory-only Special checks" OFF)
 if(WA2_SPECIAL_CHECKS AND NOT ANDROID)
@@ -51,4 +52,6 @@ if(WA2_SPECIAL_CHECKS AND NOT ANDROID)
     add_executable(wa2_special_main_thumbnail_tests "${WA2_SHARED_ROOT}/tests/save_thumbnail.cpp")
     target_include_directories(wa2_special_main_thumbnail_tests PRIVATE "${WA2_SHARED_ROOT}/generated/shared-aot/native-text")
     target_link_libraries(wa2_special_main_thumbnail_tests PRIVATE wa2_function_process)
+    add_executable(wa2_special_weather_tests "${WA2_SHARED_ROOT}/tests/special_weather.cpp")
+    target_link_libraries(wa2_special_weather_tests PRIVATE wa2_special_process wa2_function_process)
 endif()

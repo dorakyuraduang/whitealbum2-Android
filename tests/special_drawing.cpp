@@ -24,7 +24,7 @@ struct Draw {
 };
 struct Recorder {
     std::map<std::pair<unsigned,U32>,U32> state;
-    std::vector<Draw> draws;U32 texture{},target{},fvf{},surface{};unsigned gets{},releases{};
+    std::vector<Draw> draws;U32 texture{},target{},fvf{},surface{};unsigned gets{},releases{},particles{};
     void word(a::SpriteState group,U32 key,U32 value){state[{unsigned(group),key}]=value;}
     void api(const std::string& name,std::span<const U32> args,wr::Memory& memory){
         if(name=="SetRenderState")word(a::SpriteState::render,args[1],args[2]);
@@ -42,6 +42,7 @@ struct Recorder {
         }
     }
     bool native(const a::SpriteCommand& command,wr::Memory& memory){
+        particles+=command.particle;
         target=command.target;
         if(command.target_kind==a::SpriteTarget::texture_level_zero){
             CHECK(command.surface_result==s::drawing_source.globals+8);
@@ -67,7 +68,7 @@ struct Recorder {
     }
 };
 int main(int argc,char** argv){try{
-    CHECK(argc==2);unsigned sprite_cases{},glyph_cases{},declines{},proof_guards{},yield_cases{},tiles{};std::uint64_t replays{};
+    CHECK(argc==2);unsigned sprite_cases{},glyph_cases{},declines{},proof_guards{},yield_cases{},tiles{},particle_cases{};std::uint64_t replays{};
     for(bool linear:{false,true}){
         wr::ProcessOptions options;options.prefer_linear_memory=linear;
         s::Runtime runtime(options);auto& p=runtime.process();Recorder recorder;
@@ -81,7 +82,8 @@ int main(int argc,char** argv){try{
         };
         const auto devices=bind("special-device",methods_device,true),textures=bind("special-texture",methods_texture,false),surfaces=bind("special-surface",methods_surface,false);
         const auto image=s::initial_image();p.load(image);
-        const auto data=p.allocate_bytes(65536),device=data,device_table=data+0x100,sprite=data+0x1000,resource=data+0x2000,surface=data+0x7000;
+        const auto data=p.allocate_bytes(65536),device=data,device_table=data+0x100,resource=data+0x2000,surface=data+0x7000;
+        U32 sprite=data+0x1000;
         const auto texture_table=data+0x800,surface_table=data+0xc00;
         const auto put_table=[&](U32 at,const auto& words){for(unsigned n=0;n<words.size();++n)p.memory.store(at+n*4,words[n],32);};
         put_table(device_table,devices);put_table(texture_table,textures);put_table(surface_table,surfaces);
@@ -155,6 +157,16 @@ int main(int argc,char** argv){try{
             if(glyph)++glyph_cases;else ++sprite_cases;
         };
         for(unsigned n=0;n<144;++n)verify(n,false);
+        // Only aligned source records in the two actual weather banks are
+        // marked for state continuation. Their original vertices stay exact.
+        for(const auto [at,particle]:std::array<std::pair<U32,bool>,5>{{
+            {source.first_weather-256,false},{source.first_weather,true},
+            {source.first_weather+799*256,true},{source.first_weather+800*256,false},
+            {source.first_weather+1,false}}}){
+            sprite=at;setup(2,false);const auto original=run(2,false,false),actual=run(2,false,true);
+            original.recorder.same(actual.recorder);CHECK(actual.recorder.particles==unsigned(particle));++particle_cases;
+        }
+        sprite=data+0x1000;
         for(unsigned precision:{0u,2u,3u})for(unsigned n=0;n<36;++n)verify(n,true,precision);
         // Actual native glyph calls must reuse checked commands, while live
         // palette, image/handle and style changes invalidate the cached value.
@@ -222,6 +234,7 @@ int main(int argc,char** argv){try{
     }
     CHECK(sprite_cases==288 && glyph_cases==224 && declines==12 && proof_guards==4 && yield_cases==4 && replays>0);
     std::ofstream out(argv[1]);out<<"{\"schema\":\"wa2.special-shared-drawing.v1\",\"sprite_source_cases\":"<<sprite_cases<<",\"glyph_source_cases\":"<<glyph_cases
+        <<",\"particle_bank_boundary_cases\":"<<particle_cases
         <<",\"decline_cases\":"<<declines<<",\"immutable_code_guards\":"<<proof_guards<<",\"glyph_budget_yield_cases\":"<<yield_cases<<",\"tiles_compared\":"<<tiles<<",\"glyph_command_replay_hits\":"<<replays
         <<",\"raw_vertices_render_state_and_game_objects_equal\":true,\"cdecl_nonvolatile_fp_control_and_host_environment_preserved\":true,\"raw_callee_volatile_state_contract\":false,\"same_main_drawing_implementation\":true,"
           "\"paged_and_linear_memory\":true,\"game_launched\":false,\"screen_access\":false,\"window_or_device_created\":false,\"passed\":true}\n";

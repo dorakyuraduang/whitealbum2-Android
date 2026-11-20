@@ -1,6 +1,8 @@
 #include "runtime.hpp"
 #include "lzss.hpp"
 #include "render.hpp"
+#include "weather.hpp"
+#include "../native_weather.hpp"
 #include "native_entries.hpp"
 #include "save_profile.hpp"
 #include "../movie_settings.hpp"
@@ -55,6 +57,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     process_.state().reports["native_sprite_commands"]=sprite_report;
     process_.state().reports["native_glyph_commands"]=glyph_report;
     process_.state().reports["native_sort"]=sort_report;
+    process_.state().reports["native_weather"]=weather_report;
     process_.state().reports["special_flow"]=[this]{try{
         auto m=process_.memory.execution_scope();return "{\"source_state\":"+std::to_string(m.load<32>(save_source.screen))+
             ",\"source_updates\":"+std::to_string(m.load<32>(save_source.update))+
@@ -64,7 +67,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     process_.state().reports["native_resources"]=[]{return lzss_report();};
     // Continuous BGM must not spend all 64 I/O snapshots before the user
     // opens a save page. Keep the initial codec progress and later file work.
-    process_.state().resource_io_activity=[this]{return lzss_activity()+std::min<std::uint64_t>(256,wr::wa2_native_vorbis_activity(process_))+aot::save_page_timing.pages;};
+    process_.state().resource_io_activity=[this]{return lzss_activity()+std::min<std::uint64_t>(256,wr::wa2_native_vorbis_activity(process_))+aot::save_page_timing.pages+unsigned(aot::weather_batch_counts.completed!=0);};
     if(shared_codecs_)wr::install_wa2_native_vorbis(process_,wr::NativeVorbisProfile{
         "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
         codec_boundary_entries[0],codec_boundary_entries[1],codec_boundary_entries[2],codec_boundary_entries[3],

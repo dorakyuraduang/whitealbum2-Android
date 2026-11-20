@@ -3,6 +3,18 @@
   "program": "special-contents-cn",
   "input_sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
   "all_platforms_use_the_same_sources": true,
+  "weather": {
+    "entries": ["0x408507", "0x408560"], "ends": ["0x408ae8", "0x4097a5"],
+    "region": ["0x408507", "0x408ae8"], "iterations": ["0x408510", "0x408560", "0x408574"],
+    "callees": ["0x4390f0", "0x43ac50", "0x43bc00", "0x43bc80", "0x43c690",
+      "0x44b420", "0x44b430", "0x44b510", "0x44b540", "0x44b580", "0x44b5c0", "0x44b5f0",
+      "0x44b730", "0x44b890", "0x44b8a0", "0x44b8c0", "0x44b8f0", "0x44b900", "0x44b930", "0x44b940", "0x44b990", "0x44b9a0",
+      "0x4749f0", "0x475500", "0x47ce6b"],
+    "typed_color": null, "vector_clear": null,
+    "count": "0x523734", "objects": "0xab0ef8", "weather": "0x51ef60",
+    "required_register": 8, "required_value": 0,
+    "implementation": "same weather_kernel.hpp transaction and static region generator as Main; original SC EBP frame ABI"
+  },
   "movies": {
     "implementation": "shared recompiled/movie_settings.cpp before the original mov_lv profile read",
     "selection": "preserve an available setting; otherwise select a variant present in every indexed movie group",
@@ -47,14 +59,14 @@
     "sine_words": "0x4a9eb0",
     "font_ranges": "0x49e4b8",
     "font_styles": "0xa7f2f3",
-    "first_weather": "0x0",
+    "first_weather": "0xab5ff8",
     "trig_dispatch": "0xbc54f4",
     "implementation": "shared recompiled/native_sprites.cpp and glyph_command_replay.hpp",
     "source_layout": "256-byte sprite, 128-byte image, cdecl sprite(pointer, override), glyph(256-byte by-value sprite, nine DWORD arguments)",
     "preserved": "source drawing state, tile order and raw vertex bits; all nonvolatile registers, return/stack ABI, FP control, SIMD and host environment; game objects/resources",
     "callee_volatile": "flags, volatile integer registers, dead callee scratch, empty x87 payload/status/metadata",
     "decline": "unchanged CPU/game memory followed by the same static source body",
-    "particle_bank_classification": "pending verified Special population layout; ordinary sprite submission still shared"
+    "particle_bank_classification": "cached SC weather update fills two 400-record sprite banks beginning at slot 81"
   },
   "transcendental": {
     "implementation": "shared scalar SoftFloat and Bochs arithmetic",

@@ -6,6 +6,9 @@
 #include "../android/native/android_resources.hpp"
 #include "../android/native/android_host.hpp"
 #include "../platform/compat/diagnostic_chunks.hpp"
+#include "../platform/render/particle_commands.hpp"
+#include "../recompiled/native_glyphs.hpp"
+#include "../recompiled/weather_threshold.hpp"
 #include <SDL.h>
 #include <SDL_main.h>
 #include <android/log.h>
@@ -28,7 +31,14 @@ extern "C" int SDL_main(int argc,char** argv){
             else throw std::runtime_error("Unsupported Special launch argument: "+std::string(argument));
         }
         options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();
-        options.frame_submitted=wa2::android::frame_presented;
+        options.frame_submitted=[]{wa2::android::frame_presented_with_text([]{
+            const auto glyphs=wa2::aot::native_glyph_counts();
+            const auto particles=wa2::graphics::particle_command_counts();
+            const auto weather=wa2::aot::small_weather_counts;
+            return wa2::android::GlyphTotals{glyphs.accepted,glyphs.tiles,0,0,0,0,
+                particles.submitted,particles.tiles,particles.continued,
+                weather.updates,weather.particles,weather.batched_updates};
+        });};
         startup.window=wa2::window::sdl_host(std::move(options));
         startup.mount_resources=wa2::android::mount_compiled_resources;
         startup.io_diagnostic_sink=[](std::string_view label,std::string_view json){wa2::platform::compat::emit_counter_record(label,json,[](std::string_view part,std::string_view body){__android_log_print(ANDROID_LOG_INFO,"WA2IO","%.*s %.*s",int(part.size()),part.data(),int(body.size()),body.data());});};

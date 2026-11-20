@@ -25,6 +25,7 @@ def source_bindings():
         'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp','tests/special_render.cpp',
         'tests/special_drawing.cpp','tests/native_sprite_cpu.cpp','tests/glyph_scheduling.cpp','tests/special_sort.cpp','tests/io_diagnostics.cpp',
         'tests/special_save.cpp','tests/save_inventory.cpp','tests/save_thumbnail.cpp',
+        'tests/special_weather.cpp','scripts/generate_weather_batch.py',
         'scripts/read_android_counters.py',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
@@ -79,6 +80,16 @@ def compiled_drawing(directory):
     entries=json.loads((directory/'compile_commands.json').read_text())
     return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file']))
             for e in entries if Path(e['file']).resolve() in wanted}
+
+def compiled_weather(directory):
+    wanted=(ROOT/'recompiled/special/weather.cpp').resolve()
+    entries=json.loads((directory/'compile_commands.json').read_text())
+    found={Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file'])) for e in entries if Path(e['file']).resolve()==wanted}
+    for entry in entries:
+        if Path(entry['file']).resolve()==wanted:
+            if not all(flag in entry['command'] for flag in ('-O2','-ffp-contract=off','-frounding-math')):
+                raise ValueError('Special shared weather arithmetic compile options differ')
+    return found
 
 
 def fresh():
@@ -135,8 +146,8 @@ def main():
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
             run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests',
                  'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_sort_tests','wa2_special_io_tests',
-                 'wa2_special_save_tests','wa2_special_main_save_tests','wa2_special_main_thumbnail_tests','wa2_special_windows','--parallel','1'],7200)
-            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail'):
+                 'wa2_special_save_tests','wa2_special_main_save_tests','wa2_special_main_thumbnail_tests','wa2_special_weather_tests','wa2_special_windows','--parallel','1'],7200)
+            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather'):
                 command=[win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json']
                 if stem=='main_sprite':command.append('--correctness-only')
                 run(command,60)
@@ -180,12 +191,14 @@ def main():
                 set(drawing_sources)!={'recompiled/native_sprites.cpp','recompiled/special/render.cpp','recompiled/source_sort.cpp'} or
                 manifest.get('shared_sprite_and_glyph_entries')!=[0x43cb90,0x447d70]):
             raise ValueError('Missing identical shared main/Special drawing implementation')
+        if compiled_weather(win)!=compiled_weather(android) or set(compiled_weather(win))!={'recompiled/special/weather.cpp'}:
+            raise ValueError('Missing identical Special shared weather source on both hosts')
         if manifest['pending_transcendental_sites'] or len(manifest.get('supported_transcendental_sites',[]))!=50:
             raise ValueError('Special transcendental sites are not all statically supported')
         if manifest.get('shared_vorbis_host_boundaries')!=[0x458630,0x458660,0x458700,0x458890]:
             raise ValueError('Missing Special shared codec host boundaries')
         checks={}
-        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail'):
+        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather'):
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
@@ -258,6 +271,10 @@ def main():
                 raise ValueError('Missing main save policy regression')
             if stem=='main_thumbnail' and (check.get('cases')!=24 or not check.get('exact_cpu_ram_and_faults')):
                 raise ValueError('Missing main thumbnail prefix regression')
+            if stem=='weather' and (check.get('main_source_cases')!=42 or check.get('special_source_cases')!=42 or
+                    check.get('accepted_batches',0)<84 or check.get('exact_prefix_yields')!=40 or
+                    not check.get('source_oracle_component_only') or not check.get('full_cpu_fp_ram_equal') or check.get('unchanged_declines')!=12):
+                raise ValueError('Missing shared Main/SC weather source comparisons')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         if manifest.get('shared_sort_prefix',{}).get('begin')!=0x443c90 or manifest['shared_sort_prefix']['end']!=0x443d7c:
@@ -301,9 +318,10 @@ def main():
                 shared_source_drawing='wa2::aot::native_draw_sprite(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols and
                     'wa2::aot::native_draw_glyph_or_yield(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols,
                 shared_source_sort='wa2::aot::source_sort_full(wr::Cpu&, wr::Memory&, wa2::aot::SortSource const&)' in symbols,
+                shared_source_weather='wa2::special::update_weather(wr::Cpu&, wr::Memory&)' in symbols and 'weather_408507(' in symbols,
                 main_story_static_functions='wa2::aot::f_' in symbols,
                 runtime_instruction_decoder='wr::Decoder::' in symbols)
-            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or not audit['shared_source_sort'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
+            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or not audit['shared_source_sort'] or not audit['shared_source_weather'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
                 raise ValueError('Special link contains the wrong game catalogue or an instruction decoder: '+name)
             symbol_audits[name]=audit
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
