@@ -1,6 +1,6 @@
 #pragma once
 #include "functions.hpp"
-#include "save_page_timing.hpp"
+#include "save_source.hpp"
 #include "save_thumbnail.hpp"
 #include <winrecomp/process.hpp>
 #include <winrecomp/win32_state.hpp>
@@ -36,84 +36,10 @@ inline std::optional<std::uint64_t> profile_write_scope(wr::Process& p) noexcept
         return m.load<32>(0xa3a130);
     }catch(const wr::GuestFault&){return {};}
 }
-// The source enumerates save slots by opening each filename, including absent
-// slots. Share one directory inventory within that source update.
-struct SaveReadAudit {
-    std::uint64_t calls{},admitted{},faults{},overflow{};
-    std::map<std::tuple<wr::U32,wr::U32,wr::U32,wr::U32>,std::uint64_t> contexts;
-    void observe(wr::U32 thread,wr::U32 caller,wr::U32 screen,wr::U32 writers)noexcept{try{
-        ++calls;const auto key=std::make_tuple(thread,caller,screen,writers);auto found=contexts.find(key);
-        if(found!=contexts.end())++found->second;else if(contexts.size()<32)contexts.emplace(key,1);else ++overflow;
-    }catch(...){++overflow;}}
-    std::string report()const{
-        std::ostringstream out;out<<"{\"calls\":"<<calls<<",\"admitted\":"<<admitted<<",\"memory_faults\":"<<faults<<",\"overflow\":"<<overflow
-            <<",\"completed_preview_pages\":"<<save_page_timing.pages<<",\"last_preview_to_present_ns\":"<<save_page_timing.last_ns
-            <<",\"thumbnail_copies\":"<<save_thumbnail_counts.copies<<",\"thumbnail_bytes\":"<<save_thumbnail_counts.bytes<<",\"contexts\":[";bool first=true;
-        for(const auto& [key,count]:contexts){if(!first)out<<',';first=false;const auto [thread,caller,screen,writers]=key;out<<"{\"thread\":"<<thread<<",\"caller\":"<<caller<<",\"screen_state\":"<<screen<<",\"open_writers\":"<<writers<<",\"calls\":"<<count<<'}';}
-        return out.str()+"]}";
-    }
-};
-// Only the known read-only source helpers qualify, including title-menu
-// loads. Story substates are not an admission requirement. Ordinary API
-// callers still read fresh; payloads and descriptors are never cached.
-inline std::optional<std::uint64_t> save_read_scope(wr::Process& p,SaveReadAudit* audit=nullptr) noexcept {
-    try{
-        auto m=p.memory.execution_scope();const auto caller=m.load<32>(p.cpu.r[wr::ESP]);
-        const auto screen=m.load<32>(0xa39208);wr::U32 writers{};
-        for(const auto& [handle,file]:p.state().files)if(file.owned && file.write && !file.path.empty())++writers;
-        if(audit)audit->observe(p.state().current_thread_id,caller,screen,writers);
-        if(p.state().current_thread_id!=1 || writers)return {};
-        if(caller!=0x44c4df && caller!=0x44c53f && caller!=0x44c60d)return {};
-        // 0x418f8a increments this cumulative counter after each update.
-        // Unlike 0xa3a378, it is not the one-second FPS counter.
-        if(audit)++audit->admitted;
-        return (std::uint64_t(m.load<32>(0xa3a130))<<32)|screen;
-    }catch(const wr::GuestFault&){if(audit)++audit->faults;return {};}
-}
-inline std::function<std::optional<std::uint64_t>()> traced_save_read_scope(wr::Process& p){
-    save_page_timing={};save_thumbnail_counts={};
-    const auto audit=std::make_shared<SaveReadAudit>();p.state().reports["save_read_scope"]=[audit]{return audit->report();};
-    return [&p,audit]{return save_read_scope(p,audit.get());};
-}
-// Only the 24-byte index helper scans the whole bank. Preview/full-load calls
-// must not open neighbouring slots or consume previously prepared streams.
-inline std::function<bool()> save_index_read_ahead(wr::Process& p){
-    return [&p]() noexcept {
-        try{
-            auto m=p.memory.execution_scope();const auto sp=p.cpu.r[wr::ESP];
-            if(std::uint64_t(sp)+56>0x100000000ull)return false;
-            return m.load<32>(sp)==0x44c4df && m.load<32>(sp+40)==0x423465 &&
-                m.load<32>(sp+48)==0xa4e5c0 && m.load<32>(sp+52)==24;
-        }catch(const wr::GuestFault&){return false;}
-    };
-}
-inline std::function<bool()> save_list_metadata_read(wr::Process& p){
-    return [&p]() noexcept {
-        try{
-            auto m=p.memory.execution_scope();const auto sp=p.cpu.r[wr::ESP];
-            if(std::uint64_t(sp)+56>0x100000000ull || m.load<32>(sp)!=0x44c4df || m.load<32>(sp+48)!=0xa4e5c0)return false;
-            const auto caller=m.load<32>(sp+40),bytes=m.load<32>(sp+52);
-            return (caller==0x423465 && bytes==24) || (caller==0x42357e && bytes==0x10058);
-        }catch(const wr::GuestFault&){return false;}
-    };
-}
-inline std::function<bool()> save_page_preview_read_ahead(wr::Process& p){
-    return [&p]() noexcept {
-        try{
-            auto m=p.memory.execution_scope();const auto sp=p.cpu.r[wr::ESP];
-            // Cached 0x4234c0: 0x10c locals, four saved registers, three
-            // arguments and return to 0x44c4c0, then its 40-byte API frame.
-            if(std::uint64_t(sp)+0x15c>0x100000000ull || m.load<32>(sp)!=0x44c4df ||
-               m.load<32>(sp+40)!=0x42357e || m.load<32>(sp+48)!=0xa4e5c0 ||
-               m.load<32>(sp+52)!=0x10058)return false;
-            const auto slot=m.load<32>(sp+0x158);if(slot>=100)return false;
-            const auto caller=m.load<32>(sp+0x154);
-            // Only the two ten-slot page-fill loops. Confirmed loads, quick
-            // saves and all other callers must keep a single fresh open.
-            if(caller!=0x41abe9 && caller!=0x41d9ba)return false;
-            save_page_timing.visit(slot,caller,slot%10==0?save_page_now():0);
-            return true;
-        }catch(const wr::GuestFault&){return false;}
-    };
-}
+// Main address ABI; the policy implementation is shared with Special.
+inline std::optional<std::uint64_t> save_read_scope(wr::Process& p,SaveReadAudit* audit=nullptr)noexcept{return save_read_scope(p,main_save_source,audit);}
+inline auto traced_save_read_scope(wr::Process& p){return traced_save_read_scope(p,main_save_source);}
+inline auto save_index_read_ahead(wr::Process& p){return save_index_read_ahead(p,main_save_source);}
+inline auto save_list_metadata_read(wr::Process& p){return save_list_metadata_read(p,main_save_source);}
+inline auto save_page_preview_read_ahead(wr::Process& p){return save_page_preview_read_ahead(p,main_save_source);}
 }

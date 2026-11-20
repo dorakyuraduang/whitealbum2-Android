@@ -91,6 +91,6 @@ int main(int argc,char** argv){try{
         hits+=unsigned(rows!=0);++cases;
     }
     std::ofstream out(argv[1]);out<<"{\"cases\":"<<cases<<",\"hits\":"<<hits
-        <<",\"exact_cpu_ram_and_faults\":true,\"game_launched\":false,\"passed\":true}\n";
+        <<",\"exact_cpu_ram_and_faults\":true,\"game_launched\":false,\"screen_access\":false,\"passed\":true}\n";
     CHECK(out.good());std::cout<<"PASS "<<cases<<" source/production thumbnail comparisons\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

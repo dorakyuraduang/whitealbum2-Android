@@ -2,6 +2,9 @@
 #include "lzss.hpp"
 #include "render.hpp"
 #include "native_entries.hpp"
+#include "save_profile.hpp"
+#include "../movie_settings.hpp"
+#include "../save_page_timing.hpp"
 #include "../../port/native_vorbis.hpp"
 #include "../../platform/compat/system.hpp"
 #include "../../platform/compat/extended_system.hpp"
@@ -39,16 +42,29 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
         return program().invoke(cpu);
     }},std::move(options),std::move(backends)){
     platform::compat::install_scheduler(process_);
-    platform::compat::install_system(process_);
+    platform::compat::install_system(process_,aot::prepare_movie_profile,[](wr::Process& p)->std::optional<std::uint64_t>{
+        if(p.state().current_thread_id!=1)return {};
+        for(const auto& [id,file]:p.state().files)if(file.owned && file.write && !file.path.empty())return {};
+        try{auto m=p.memory.execution_scope();if(!locate(m.load<32>(p.cpu.r[wr::ESP])).function)return {};
+            return m.load<32>(save_source.update);
+        }catch(const wr::GuestFault&){return {};}
+    });
     platform::compat::install_text(process_);
     platform::compat::install_locale(process_);
     platform::compat::install_extended_system(process_);
     process_.state().reports["native_sprite_commands"]=sprite_report;
     process_.state().reports["native_glyph_commands"]=glyph_report;
     process_.state().reports["native_sort"]=sort_report;
+    process_.state().reports["special_flow"]=[this]{try{
+        auto m=process_.memory.execution_scope();return "{\"source_state\":"+std::to_string(m.load<32>(save_source.screen))+
+            ",\"source_updates\":"+std::to_string(m.load<32>(save_source.update))+
+            ",\"logic_updates\":"+std::to_string(m.load<32>(0xa37070))+",\"screen_access\":false}";
+    }catch(const wr::GuestFault&){return std::string("{\"available\":false}");}};
     process_.state().reports["selected_directory_io"]=[this]{return save_files_report(process_.state().mutable_files);};
     process_.state().reports["native_resources"]=[]{return lzss_report();};
-    process_.state().resource_io_activity=[this]{return lzss_activity()+wr::wa2_native_vorbis_activity(process_);};
+    // Continuous BGM must not spend all 64 I/O snapshots before the user
+    // opens a save page. Keep the initial codec progress and later file work.
+    process_.state().resource_io_activity=[this]{return lzss_activity()+std::min<std::uint64_t>(256,wr::wa2_native_vorbis_activity(process_))+aot::save_page_timing.pages;};
     if(shared_codecs_)wr::install_wa2_native_vorbis(process_,wr::NativeVorbisProfile{
         "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
         codec_boundary_entries[0],codec_boundary_entries[1],codec_boundary_entries[2],codec_boundary_entries[3],
@@ -94,7 +110,7 @@ std::uint32_t run(host::Startup startup){
     try{
         phase("save_directory");
         auto files=startup.files?std::move(startup.files):platform::compat::local_files(process.options.data_root);
-        process.state().mutable_files=save_files(std::move(files));
+        process.state().mutable_files=save_files(std::move(files),&process);
         phase("resource_mount");
         if(startup.mount_resources)startup.mount_resources(process);
         else platform::compat::install_resource_mount(process,platform::compat::local_resource_mount(process.options.data_root));

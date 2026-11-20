@@ -24,6 +24,7 @@ def source_bindings():
         'scripts/generate_shared_aot.py','scripts/generate_special_aot.py','scripts/prepare_special_contents.py',
         'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp','tests/special_render.cpp',
         'tests/special_drawing.cpp','tests/native_sprite_cpu.cpp','tests/glyph_scheduling.cpp','tests/special_sort.cpp','tests/io_diagnostics.cpp',
+        'tests/special_save.cpp','tests/save_inventory.cpp','tests/save_thumbnail.cpp',
         'scripts/read_android_counters.py',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
@@ -124,14 +125,18 @@ def main():
             except (OSError,ValueError):run([sys.executable,ROOT/'scripts/verify_x87_transcendental.py'],600)
             run([sys.executable,ROOT/'scripts/audit_special_callbacks.py'],600)
             run([sys.executable,ROOT/'scripts/generate_special_aot.py'])
+            # Shared thumbnail code is also an input of the cached Main text
+            # derivative used by regression checks. Never reopen its EXE.
+            run([sys.executable,ROOT/'scripts/prepare_shared_text_flow.py'])
             run([cmake,'-S',ROOT/'hosts','-B',win,'-G','Ninja',
                 '-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),
                 '-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
                 '-DWA2_SPECIAL_CONTENTS=ON','-DWA2_SPECIAL_CHECKS=ON',
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
             run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests',
-                 'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_sort_tests','wa2_special_io_tests','wa2_special_windows','--parallel','1'],7200)
-            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io'):
+                 'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_sort_tests','wa2_special_io_tests',
+                 'wa2_special_save_tests','wa2_special_main_save_tests','wa2_special_main_thumbnail_tests','wa2_special_windows','--parallel','1'],7200)
+            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail'):
                 command=[win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json']
                 if stem=='main_sprite':command.append('--correctness-only')
                 run(command,60)
@@ -180,7 +185,7 @@ def main():
         if manifest.get('shared_vorbis_host_boundaries')!=[0x458630,0x458660,0x458700,0x458890]:
             raise ValueError('Missing Special shared codec host boundaries')
         checks={}
-        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io'):
+        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail'):
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
@@ -246,6 +251,13 @@ def main():
             if stem=='io' and (not check.get('shared_render_sort_progress_counters') or not check.get('rate_and_count_bounded') or
                     not check.get('guest_errors_preserved') or check.get('selected_directory_written') is not False):
                 raise ValueError('Missing bounded live render/sort diagnostics regression')
+            if stem=='save' and (check.get('actual_static_save_reader_calls',0)<240 or check.get('actual_preview_stack_checks')!=2 or
+                    check.get('exact_thumbnail_cases')!=24 or check.get('thumbnail_hits',0)<6 or check.get('actual_movie_profile_and_filename_cases')!=58 or not check.get('payload_reads_fresh')):
+                raise ValueError('Missing actual SC save reader/frame/thumbnail comparisons')
+            if stem=='main_save' and (check.get('actual_static_reader_calls',0)<800 or not check.get('page_preview_mode_transition_checked')):
+                raise ValueError('Missing main save policy regression')
+            if stem=='main_thumbnail' and (check.get('cases')!=24 or not check.get('exact_cpu_ram_and_faults')):
+                raise ValueError('Missing main thumbnail prefix regression')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         if manifest.get('shared_sort_prefix',{}).get('begin')!=0x443c90 or manifest['shared_sort_prefix']['end']!=0x443d7c:

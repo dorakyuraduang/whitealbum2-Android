@@ -3,6 +3,29 @@
   "program": "special-contents-cn",
   "input_sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
   "all_platforms_use_the_same_sources": true,
+  "movies": {
+    "implementation": "shared recompiled/movie_settings.cpp before the original mov_lv profile read",
+    "selection": "preserve an available setting; otherwise select a variant present in every indexed movie group",
+    "original_static_profile_helper": "0x44f210",
+    "original_static_filename_prefix": "0x413427",
+    "source_level_to_filename_suffix": {"2": 0, "1": 1, "0": 2},
+    "missing_or_unsupported_movies": "explicit shared media diagnostics; no fabricated playback",
+    "movie_payloads_cached_or_copied": false
+  },
+  "save_read": {
+    "screen": "0xa3614c", "update": "0xa37074",
+    "helpers": ["0x44e1c1", "0x44e221", "0x44e2ef"],
+    "api_frame": 44, "index": "0x422772", "preview": "0x422876", "buffer": "0xa4b500",
+    "preview_return": 348, "preview_slot": 352,
+    "pages": ["0x41a01b", "0x41cdb7"],
+    "implementation": "shared save_source.hpp and platform/compat/save_files.cpp; bounded metadata and read-only descriptor batches; no payload cache"
+  },
+  "thumbnail": {
+    "begin": "0x4415f0", "continuation": "0x4415f6", "after": "0x44161d",
+    "frame_register": 5, "frame_delta": -48, "frame_bytes": 64, "pitch": 12, "height": 40,
+    "from": 7, "to": 3, "row_register": 8, "row_offset": 24,
+    "implementation": "shared save_thumbnail.hpp; leave the last pixel and loop exits to unchanged static instructions"
+  },
   "sort": {
     "begin": "0x443c90", "end": "0x443d7c", "objects": "0xab0ef9", "mask": "0x4bf3d8",
     "frame_register": 5, "pointer": -9240, "keys": -8452, "ids": -4356, "first": -9240, "last": -260,

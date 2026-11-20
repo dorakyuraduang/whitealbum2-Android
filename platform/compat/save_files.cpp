@@ -22,22 +22,23 @@ namespace wa2::platform::compat {namespace {
 using U32=std::uint32_t;using Info=wr::ReadOnlyFileInfo;
 std::string fold(std::string_view value){std::string result(value);for(auto& c:result){if(c=='\\')c='/';else if(c>='A' && c<='Z')c=char(c+32);}return result;}
 constexpr std::string_view main_folder="documents/leaf/white album2";
-constexpr std::string_view main_folder_name="Documents/Leaf/WHITE ALBUM2";
 bool file_name(std::string_view name){return name=="sys.sav" || name=="system.ini" || name=="d3d.ini" || name=="default.ini" || name=="save_q.sav" ||
     (name.size()==11 && name.starts_with("save_") && name.ends_with(".sav") && name[5]>='0' && name[5]<='9' && name[6]>='0' && name[6]<='9');}
-bool folder_name(std::string_view name){return name.empty() || name=="documents" || name=="documents/leaf" || name==main_folder || name=="documents/leaf/white album2 -closing chapter-" || name=="documents/leaf/white album2 -introductory chapter-";}
+bool folder_name(std::string_view name,std::string_view bank=main_folder){return name.empty() || name=="documents" || name=="documents/leaf" || name==bank || name=="documents/leaf/white album2 -closing chapter-" || name=="documents/leaf/white album2 -introductory chapter-";}
 bool save_name(std::string_view name){return file_name(name) && name.ends_with(".sav");}
 bool manual_save(std::string_view name){return name.size()==11 && name.starts_with("save_") && save_name(name);}
-std::optional<std::string> mapped(std::string_view value,bool folder=false){
+std::optional<std::string> map_name(std::string_view value,bool folder,std::string_view bank){
     auto path=fold(value);if(path==".")path.clear();if(path.find('\0')!=path.npos || path.find(':')!=path.npos || path.starts_with('/') || path.find("..")!=path.npos)return {};
-    if(folder){if(!folder_name(path))return {};return path==main_folder?std::string{}:path;}
+    if(folder){if(!folder_name(path,bank))return {};return path==bank?std::string{}:path;}
     const auto slash=path.find_last_of('/');const auto directory=slash==path.npos?std::string{}:path.substr(0,slash),name=slash==path.npos?path:path.substr(slash+1);
-    if(!file_name(name) || !folder_name(directory))return {};
-    if(!directory.empty() && directory!="documents/leaf/white album2" && !directory.starts_with("documents/leaf/white album2 -"))return {};
-    return directory.empty() || directory==main_folder?name:path;
+    if(!file_name(name) || !folder_name(directory,bank))return {};
+    if(!directory.empty() && directory!=bank && !directory.starts_with("documents/leaf/white album2 -"))return {};
+    return directory.empty() || directory==bank?name:path;
 }
-class Saves final:public wr::MutableFiles {
+class Saves final:public wr::MutableFiles,public SaveFileState {
     std::shared_ptr<wr::MutableFiles> files_;std::string prefix_;
+    SaveBank bank_;std::string bank_key_;
+    std::optional<std::string> mapped(std::string_view value,bool folder=false)const{return map_name(value,folder,bank_key_);}
     SaveReadScope scope_;
     SaveReadAhead read_ahead_scope_;
     SaveListRead list_read_scope_;
@@ -77,14 +78,14 @@ class Saves final:public wr::MutableFiles {
         };
     };
     std::shared_ptr<Inventory> inventory_=std::make_shared<Inventory>();
-    bool main_save(std::string_view name)const{return prefix_.empty() && name.find('/')==name.npos && save_name(name);}
+    bool main_save(std::string_view name)const{return prefix_.empty() && name.find('/')==name.npos && (save_name(name) || (bank_.configuration_in_bank && file_name(name)));}
     std::string physical(std::string_view name){
-        if(main_save(name))return std::string(main_folder_name)+"/"+(name=="sys.sav"?"Sys.sav":name=="save_q.sav"?"save_Q.sav":std::string(name));
+        if(main_save(name))return bank_.directory+"/"+(name=="sys.sav"?"Sys.sav":name=="save_q.sav"?"save_Q.sav":std::string(name));
         return name.empty() && !prefix_.empty()?prefix_.substr(0,prefix_.size()-1):prefix_+std::string(name);
     }
-    static U32 prepare_main(const std::shared_ptr<wr::MutableFiles>& files,Inventory& cache,bool required){
+    static U32 prepare_main(const std::shared_ptr<wr::MutableFiles>& files,Inventory& cache,bool required,const std::string& bank){
         if(!required || cache.main_prepared)return 0;
-        for(const auto* folder:{"Documents","Documents/Leaf","Documents/Leaf/WHITE ALBUM2"}){
+        for(const auto& folder:{std::string("Documents"),std::string("Documents/Leaf"),bank}){
             const auto error=files->directory(folder);if(error && error!=183)return error;
         }
         cache.main_prepared=true;return 0;
@@ -149,7 +150,7 @@ class Saves final:public wr::MutableFiles {
                     return {path,inspect(path)};
                 }
                 found=cache.directories.emplace(key,std::move(index)).first;
-                const auto primary=prefix_.empty()?std::string(main_folder):fold(prefix_.substr(0,prefix_.size()-1));
+                const auto primary=prefix_.empty()?bank_key_:fold(prefix_.substr(0,prefix_.size()-1));
                 if(key==primary)++cache.builds;else ++cache.chapter_builds;
                 // Start the bounded lifetime after provider I/O, not before it.
                 cache.expiry(std::chrono::steady_clock::now()+std::chrono::milliseconds(250));
@@ -189,7 +190,7 @@ class Saves final:public wr::MutableFiles {
         // Saves never fall back to a different bank. Existing INI placement is
         // a separate configuration policy and does not admit any .sav file.
         if(!found.second && name.find('/')==name.npos && file_name(name) && !save_name(name)){
-            auto nested=locate_exact(physical(std::string(main_folder)+"/"+name));
+            auto nested=locate_exact(physical(bank_key_+"/"+name));
             if(nested.second)return nested;
         }
         return found;
@@ -197,8 +198,9 @@ class Saves final:public wr::MutableFiles {
     std::string existing(const std::string& name){return locate(name).first;}
 public:
     std::string identity(std::string_view value)override{const auto name=mapped(value);return name?existing(*name):physical(fold(value));}
-    Saves(std::shared_ptr<wr::MutableFiles> files,bool test,SaveReadScope scope,SaveReadAhead ahead,SaveListRead list_read,SavePreviewRead preview):files_(std::move(files)),prefix_(test?"test-mode/":""),scope_(std::move(scope)),read_ahead_scope_(std::move(ahead)),list_read_scope_(std::move(list_read)),preview_read_scope_(std::move(preview)){
+    Saves(std::shared_ptr<wr::MutableFiles> files,bool test,SaveReadScope scope,SaveReadAhead ahead,SaveListRead list_read,SavePreviewRead preview,SaveBank bank):files_(std::move(files)),prefix_(test?"test-mode/":""),bank_(std::move(bank)),bank_key_(fold(bank_.directory)),scope_(std::move(scope)),read_ahead_scope_(std::move(ahead)),list_read_scope_(std::move(list_read)),preview_read_scope_(std::move(preview)){
         if(!files_)throw std::invalid_argument("Missing selected game directory");
+        if(bank_key_!=main_folder && bank_key_!="documents/leaf/white album2 special contents")throw std::invalid_argument("Unsupported save bank profile");
         if(test){const auto error=files_->directory("test-mode");if(error && error!=183)throw std::runtime_error("Cannot create selected-directory test profile");}
     }
     std::optional<Info> info(std::string_view value)override{
@@ -211,13 +213,14 @@ public:
         const auto add=[&](std::string_view directory,bool bank=false){for(auto item:entries(physical(directory))){
             const auto name=fold(item.name);const auto logical=path->empty()?item.name:*path+"/"+item.name;
             if(bank && !save_name(name))continue;
-            if(!bank && path->empty() && prefix_.empty() && save_name(name))continue;
-            if((item.attributes&16)?folder_name(fold(logical)):mapped(logical).has_value())result.try_emplace(name,std::move(item));
+            if(!bank && path->empty() && prefix_.empty() && !bank_.configuration_in_bank && save_name(name))continue;
+            if((item.attributes&16)?folder_name(fold(logical),bank_key_):mapped(logical).has_value())result.try_emplace(name,std::move(item));
         }};
-        add(*path);if(path->empty() && prefix_.empty())add(main_folder_name,true);
+        if(path->empty() && prefix_.empty() && bank_.configuration_in_bank)add(bank_.directory);
+        else{add(*path);if(path->empty() && prefix_.empty())add(bank_.directory,true);}
         if(path->empty())result.try_emplace("documents",Info{"Documents",0,0,16});
         if(*path=="documents")result.try_emplace("leaf",Info{"Leaf",0,0,16});
-        if(*path=="documents/leaf")result.try_emplace("white album2",Info{"WHITE ALBUM2",0,0,16});
+        if(*path=="documents/leaf"){const auto leaf=bank_.directory.substr(bank_.directory.find_last_of('/')+1);result.try_emplace(fold(leaf),Info{leaf,0,0,16});}
         std::vector<Info> entries;for(auto& [key,item]:result)entries.push_back(std::move(item));return entries;
     }
     std::FILE* open(std::string_view value,bool read,bool write,U32 creation,U32& error)override{
@@ -226,7 +229,7 @@ public:
         auto [resolved,info]=(creation==3 || creation==4 || creation==5)?locate(*path):std::pair<std::string,std::optional<Info>>{physical(*path),{}};
         Inventory::Timer timer(inventory_->open_calls,inventory_->open_ns);
         if(read && !write && creation==3 && info && info->open_read){++inventory_->prepared_reads;return info->open_read(error);}
-        if(write || creation!=3){error=prepare_main(files_,*inventory_,main_save(*path));if(error)return nullptr;}
+        if(write || creation!=3){error=prepare_main(files_,*inventory_,main_save(*path),bank_.directory);if(error)return nullptr;}
         return files_->open(resolved,read,write,creation,error);
     }
     OpenPlan prepare_open(std::string_view value)override{
@@ -234,23 +237,23 @@ public:
         if(!name)return {{},physical(fold(value)),[](bool,bool,U32,U32& error)->std::FILE*{error=5;return nullptr;}};
         auto [found,info]=locate(*name);
         auto resolved_read=info?info->open_read:decltype(Info::open_read){};
-        return {std::move(info),found,[files=files_,cache=inventory_,existing=found,primary=physical(*name),canonical=main_save(*name),resolved_read=std::move(resolved_read)](bool read,bool write,U32 creation,U32& error)->std::FILE*{
+        return {std::move(info),found,[files=files_,cache=inventory_,existing=found,primary=physical(*name),canonical=main_save(*name),bank=bank_.directory,resolved_read=std::move(resolved_read)](bool read,bool write,U32 creation,U32& error)->std::FILE*{
             std::optional<Inventory::Mutation> mutation;if(write || creation!=3)mutation.emplace(*cache);
             Inventory::Timer timer(cache->open_calls,cache->open_ns);
             if(read && !write && creation==3 && resolved_read){++cache->prepared_reads;return resolved_read(error);}
-            if(write || creation!=3){error=prepare_main(files,*cache,canonical);if(error)return nullptr;}
+            if(write || creation!=3){error=prepare_main(files,*cache,canonical,bank);if(error)return nullptr;}
             return files->open((creation==3 || creation==4 || creation==5)?existing:primary,read,write,creation,error);
         }};
     }
     U32 directory(std::string_view value)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value,true);if(!path)return 5;if(path->empty())return 183;std::string parent;std::size_t at{};while((at=path->find('/',at))!=path->npos){parent=path->substr(0,at++);const auto error=files_->directory(physical(parent));if(error && error!=183)return error;}return files_->directory(physical(*path));}
     U32 remove(std::string_view value,bool directory)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value,directory);if(!path || directory)return 5;return files_->remove(existing(*path),false);}
-    U32 move(std::string_view from,std::string_view to)override{Inventory::Mutation mutation(*inventory_);const auto a=mapped(from),b=mapped(to);if(!a || !b)return 5;if(info(to))return 183;const auto error=prepare_main(files_,*inventory_,main_save(*b));return error?error:files_->move(existing(*a),physical(*b));}
+    U32 move(std::string_view from,std::string_view to)override{Inventory::Mutation mutation(*inventory_);const auto a=mapped(from),b=mapped(to);if(!a || !b)return 5;if(info(to))return 183;const auto error=prepare_main(files_,*inventory_,main_save(*b),bank_.directory);return error?error:files_->move(existing(*a),physical(*b));}
     U32 attributes(std::string_view value,U32 flags)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);return path?files_->attributes(existing(*path),flags):5;}
-    void replace(std::string_view value,std::span<const std::uint8_t> bytes)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);if(!path || bytes.size()>64u*1024*1024)throw std::runtime_error("Unsupported selected-directory save/configuration path: "+std::string(value));const auto error=prepare_main(files_,*inventory_,main_save(*path));if(error)throw std::runtime_error("Cannot prepare selected-directory save folder (error "+std::to_string(error)+")");files_->replace(physical(*path),bytes);}
-    std::uint64_t revision()const{return inventory_->revision;}
-    std::uint64_t activity()const{const auto& c=*inventory_;return c.revision+c.info_calls+c.list_calls+c.open_calls+c.hits+c.chapter_hits+c.listing_hits;}
+    void replace(std::string_view value,std::span<const std::uint8_t> bytes)override{Inventory::Mutation mutation(*inventory_);const auto path=mapped(value);if(!path || bytes.size()>64u*1024*1024)throw std::runtime_error("Unsupported selected-directory save/configuration path: "+std::string(value));const auto error=prepare_main(files_,*inventory_,main_save(*path),bank_.directory);if(error)throw std::runtime_error("Cannot prepare selected-directory save folder (error "+std::to_string(error)+")");files_->replace(physical(*path),bytes);}
+    std::uint64_t revision()const override{return inventory_->revision;}
+    std::uint64_t activity()const override{const auto& c=*inventory_;return c.revision+c.info_calls+c.list_calls+c.open_calls+c.hits+c.chapter_hits+c.listing_hits;}
     std::string report()const{const auto& c=*inventory_;std::ostringstream out;
-        out<<"{\"save_policy\":\"canonical-only\",\"root_save_fallback\":false,\"normal_save_directory\":\"Documents/Leaf/WHITE ALBUM2\",\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"chapter_inventory_builds\":"<<c.chapter_builds<<",\"chapter_inventory_hits\":"<<c.chapter_hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"list_metadata_hits\":"<<c.listing_hits<<",\"list_metadata_refreshes\":"<<c.listing_refreshes<<",\"list_metadata_invalidations\":"<<c.listing_invalidations<<",\"list_metadata_maximum_age_ms\":2000,\"list_metadata_maximum_directories\":4,\"read_ahead_batches\":"<<c.read_batches<<",\"read_ahead_files\":"<<c.read_ahead_files<<",\"read_ahead_ns\":"<<c.read_ahead_ns<<",\"preview_read_ahead_batches\":"<<c.preview_batches<<",\"preview_read_ahead_files\":"<<c.preview_files<<",\"preview_read_ahead_ns\":"<<c.preview_ns<<",\"maximum_preview_read_ahead_files\":10,\"maximum_preview_scope_ms\":1000,\"maximum_read_ahead_files\":16,\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
+        out<<"{\"save_policy\":\"canonical-only\",\"root_save_fallback\":false,\"normal_save_directory\":\""<<bank_.directory<<"\",\"inventory_builds\":"<<c.builds<<",\"inventory_hits\":"<<c.hits<<",\"chapter_inventory_builds\":"<<c.chapter_builds<<",\"chapter_inventory_hits\":"<<c.chapter_hits<<",\"inventory_declines\":"<<c.declines<<",\"metadata_queries\":"<<c.info_calls<<",\"metadata_ns\":"<<c.info_ns<<",\"directory_queries\":"<<c.list_calls<<",\"directory_ns\":"<<c.list_ns<<",\"descriptor_opens\":"<<c.open_calls<<",\"prepared_read_opens\":"<<c.prepared_reads<<",\"descriptor_open_ns\":"<<c.open_ns<<",\"list_metadata_hits\":"<<c.listing_hits<<",\"list_metadata_refreshes\":"<<c.listing_refreshes<<",\"list_metadata_invalidations\":"<<c.listing_invalidations<<",\"list_metadata_maximum_age_ms\":2000,\"list_metadata_maximum_directories\":4,\"read_ahead_batches\":"<<c.read_batches<<",\"read_ahead_files\":"<<c.read_ahead_files<<",\"read_ahead_ns\":"<<c.read_ahead_ns<<",\"preview_read_ahead_batches\":"<<c.preview_batches<<",\"preview_read_ahead_files\":"<<c.preview_files<<",\"preview_read_ahead_ns\":"<<c.preview_ns<<",\"maximum_preview_read_ahead_files\":10,\"maximum_preview_scope_ms\":1000,\"maximum_read_ahead_files\":16,\"payload_cached\":false,\"maximum_inventory_age_ms\":250}";return out.str();}
 };
 class Local final:public wr::MutableFiles {
     std::filesystem::path root_;
@@ -279,10 +282,10 @@ public:
 }
 std::shared_ptr<wr::MutableFiles> local_files(const std::filesystem::path& root){return std::make_shared<Local>(root);}
 std::string save_files_report(const std::shared_ptr<wr::MutableFiles>& files){if(auto* saves=dynamic_cast<const Saves*>(files.get()))return saves->report();return "{}";}
-std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->revision();return {};}
-std::optional<std::uint64_t> save_files_activity(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const Saves*>(files))return saves->activity();return {};}
-std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope,SaveReadAhead ahead,SaveListRead list_read,SavePreviewRead preview){
-    auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope),std::move(ahead),std::move(list_read),std::move(preview));
+std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const SaveFileState*>(files))return saves->revision();return {};}
+std::optional<std::uint64_t> save_files_activity(const wr::MutableFiles* files){if(auto* saves=dynamic_cast<const SaveFileState*>(files))return saves->activity();return {};}
+std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> source,bool test,SaveReadScope scope,SaveReadAhead ahead,SaveListRead list_read,SavePreviewRead preview,SaveBank bank){
+    auto result=std::make_shared<Saves>(std::move(source),test,std::move(scope),std::move(ahead),std::move(list_read),std::move(preview),std::move(bank));
     if(test){for(const auto* folder:{"Documents","Documents/Leaf","Documents/Leaf/WHITE ALBUM2 -closing chapter-","Documents/Leaf/WHITE ALBUM2 -introductory chapter-"}){const auto error=result->directory(folder);if(error && error!=183)throw std::runtime_error("Cannot prepare selected-directory test saves");}
         for(const auto* file:{"Sys.sav","Documents/Leaf/WHITE ALBUM2 -closing chapter-/Sys.sav","Documents/Leaf/WHITE ALBUM2 -introductory chapter-/Sys.sav"}){
             std::vector<std::uint8_t> bytes(testing::system_save_bytes);U32 error{};auto* opened=result->open(file,true,false,3,error);

@@ -13,7 +13,19 @@ using SaveReadAhead=std::function<bool()>;
 // cached; ordinary opens and actual save restoration retain fresh metadata.
 using SaveListRead=std::function<bool()>;
 using SavePreviewRead=std::function<bool()>;
-std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles>,bool test_mode,SaveReadScope={},SaveReadAhead={},SaveListRead={},SavePreviewRead={});
+struct SaveBank {
+    std::string directory="Documents/Leaf/WHITE ALBUM2";
+    bool configuration_in_bank{};
+};
+// A path-policy wrapper can preserve the common inventory's revision and
+// activity without exposing its implementation or bypassing its allowlist.
+class SaveFileState {
+public:
+    virtual ~SaveFileState()=default;
+    virtual std::uint64_t revision()const=0;
+    virtual std::uint64_t activity()const=0;
+};
+std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles>,bool test_mode,SaveReadScope={},SaveReadAhead={},SaveListRead={},SavePreviewRead={},SaveBank={});
 std::string save_files_report(const std::shared_ptr<wr::MutableFiles>&);
 std::optional<std::uint64_t> save_files_revision(const wr::MutableFiles*);
 std::optional<std::uint64_t> save_files_activity(const wr::MutableFiles*);

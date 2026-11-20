@@ -144,6 +144,19 @@ def generate():
     sort_owner=owners.get(sorting['begin'])
     if sorting['begin']!=0x443c90 or sorting['end']!=0x443d7c or sort_owner!=owners.get(sorting['end']):
         raise ValueError('Special sorting prefix must retain its verified owning function and continuation')
+    thumbnail_fields=('begin','frame_register','frame_delta','frame_bytes','pitch','height','from','to','row_register','row_offset')
+    thumbnail={key:int(contracts['thumbnail'][key],0) if isinstance(contracts['thumbnail'][key],str) else contracts['thumbnail'][key] for key in thumbnail_fields}
+    thumbnail_end=int(contracts['thumbnail']['continuation'],0)
+    thumbnail_owner=owners.get(thumbnail['begin'])
+    if thumbnail['begin']!=0x4415f0 or thumbnail_end!=0x4415f6 or thumbnail_owner!=owners.get(thumbnail_end):
+        raise ValueError('Special thumbnail prefix must keep its verified source loop')
+    save=contracts['save_read']
+    save_values=[int(save[key],0) for key in ('screen','update')]
+    save_helpers=[int(pc,0) for pc in save['helpers']]
+    save_pages=[int(pc,0) for pc in save['pages']]
+    save_values += [save['api_frame'],*[int(save[key],0) for key in ('index','preview','buffer')],save['preview_return'],save['preview_slot']]
+    if any(pc not in owners for pc in save_helpers+save_pages+[int(save[key],0) for key in ('index','preview')]):
+        raise ValueError('Special save reader profile must name cached instruction boundaries')
     # The original bodies stay available to finite memory reference checks.
     # Production calls unwind before entering the shared codec ABI adapter.
     call_owners={pc:owner for pc,owner in owners.items() if pc not in codec_entries}
@@ -177,6 +190,9 @@ def generate():
           'inline constexpr wa2::aot::SpriteSource drawing_source{'+','.join(hex(drawing[key])+'u' for key in draw_fields)+'};\n}\n')
     write('sort_profile.hpp','#pragma once\n#include "source_sort.hpp"\nnamespace wa2::special {\n'+
           'inline constexpr wa2::aot::SortSource sorting_source{'+','.join(str(sorting[key]) for key in sort_fields)+'};\n}\n')
+    write('save_profile.hpp','#pragma once\n#include "save_source.hpp"\nnamespace wa2::special {\n'+
+          'inline constexpr wa2::aot::SaveReadSource save_source{'+','.join(map(str,save_values[:2]))+',{'+','.join(map(str,save_helpers))+'},'+','.join(map(str,save_values[2:]))+',{'+','.join(map(str,save_pages))+'}};\n'+
+          'inline constexpr wa2::aot::SaveThumbnailSource thumbnail_source{'+','.join(str(thumbnail[key]) for key in thumbnail_fields)+'};\n}\n')
     write('native_entries.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+
           'inline constexpr std::uint32_t codec_boundary_entries[]={'+','.join(hex(pc)+'u' for pc in codec_entries)+'};\n}\n')
     spans_by_entry = {}
@@ -190,6 +206,7 @@ def generate():
         sources.append(name)
         cpp = ['#include "bodies.hpp"', 'namespace wa2::special {']
         if set(entries)&(draw_entries.keys()|{sort_owner}):cpp.insert(1,'#include "special/render.hpp"')
+        if thumbnail_owner in entries:cpp.insert(1,'#include "save_profile.hpp"')
         for entry in entries:
             record = merged[entry]
             parameters='bool Metered,bool NativeRegisters' if entry in hot else 'bool Metered'
@@ -230,6 +247,8 @@ def generate():
                     if entry in hot:invocation='floating.external([&]{return integer.external([&]{return '+invocation+';});})'
                     policy='!Metered && NativeRegisters' if entry in hot else '!Metered'
                     cpp += [f'if constexpr({policy})if({invocation})goto L_{sorting["end"]:x};']
+                if pc==thumbnail['begin']:
+                    cpp += [f'if constexpr(!Metered)if(wa2::aot::copy_save_thumbnail(s,m,scope,thumbnail_source))goto L_{thumbnail_end:x};']
                 cpp += [native,'}']
                 if spans and spans[-1][0]+len(spans[-1][1]) == pc:
                     spans[-1][1].extend(raw)
@@ -328,6 +347,7 @@ def generate():
         measured_hot_entries=sorted(hot),shared_register_fp_and_integer_kernels=True,
         shared_sprite_and_glyph_entries=sorted(draw_entries),source_drawing_profile=drawing,
         shared_sort_prefix=sorting,shared_sort_owner=sort_owner,
+        shared_save_read_profile=save,shared_thumbnail_prefix=thumbnail,
         hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,
