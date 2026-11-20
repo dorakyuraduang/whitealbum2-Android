@@ -96,10 +96,26 @@ int main(int argc,char** argv){try{
     CHECK(error==5 && files->changed==old);
     CHECK(p.state().mutable_files->directory("../escape")==5);
     CHECK(p.executed_instructions==0 && p.native_function_entries==0);
+    // Execute only the recovered CRT registration and its rejecting filter
+    // paths, using constructed exception records. No game startup or UI.
+    const auto saved_filter=p.state().unhandled_filter;
+    CHECK(p.callback(4739667,{})==0 && p.state().unhandled_filter==0x485211);
+    const auto pointers=work+256,record=work+512;
+    p.memory.store(pointers,record,32);
+    unsigned filter_cases{};
+    for(const auto code:{0x80000003u,0xe06d7363u}){
+        p.memory.store(record,code,32);p.memory.store(record+16,0,32);
+        CHECK(p.callback(0x485211,std::array<U32,1>{pointers})==0);++filter_cases;
+    }
+    p.memory.store(record+16,3,32);p.memory.store(record+20,0,32);
+    CHECK(p.callback(0x485211,std::array<U32,1>{pointers})==0);++filter_cases;
+    p.state().unhandled_filter=saved_filter;
+    CHECK(p.executed_instructions==0 && p.native_function_entries>0 && p.state().callback_depth==0);
     CHECK(host->devices==0 && host->windows==0 && host->frames==0);
     std::ofstream report(argv[1]);
     report<<"{\"schema\":\"wa2.special-runtime-check.v1\",\"bound_imports\":"<<image.imports.size()
-          <<",\"wide_api_cases\":16,\"main_save_writes_rejected\":true,\"instruction_step_calls\":0,\"game_function_entries\":0,"
+          <<",\"wide_api_cases\":16,\"main_save_writes_rejected\":true,\"instruction_step_calls\":0,\"bounded_static_callback_entries\":"<<p.native_function_entries
+          <<",\"reported_callback_address\":4739667,\"crt_initializer_registered_filter\":true,\"crt_filter_rejection_cases\":"<<filter_cases<<",\"game_startup_called\":false,"
             "\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_opened\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";
     CHECK(bool(report));std::cout<<"PASS Special import/Unicode/storage memory checks; game entry never executed.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

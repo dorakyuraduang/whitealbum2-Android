@@ -5,6 +5,8 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressRange;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Instruction;
+import ghidra.program.model.listing.Data;
+import ghidra.program.model.data.Pointer;
 import ghidra.program.model.symbol.Reference;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +21,7 @@ public class ExportCachedListing extends GhidraScript {
         Map<String,Object> report=new LinkedHashMap<>();
         report.put("schema","wa2.existing-analysis-listing.v1");
         report.put("program_name",currentProgram.getName());
+        report.put("input_sha256",currentProgram.getExecutableSHA256());
         report.put("source_executable_opened",false);
         report.put("new_analysis_performed",false);
         report.put("decompiler_used",false);
@@ -60,6 +63,31 @@ public class ExportCachedListing extends GhidraScript {
             instructions.add(row);
         }
         report.put("functions",functions);report.put("instructions",instructions);
+        List<Map<String,Object>> pointers=new ArrayList<>();
+        var memory=currentProgram.getMemory();
+        var space=currentProgram.getAddressFactory().getDefaultAddressSpace();
+        for(var block:memory.getBlocks()){
+            if(!block.isInitialized() || block.isExecute() ||
+                    !(block.getName().equals(".rdata") || block.getName().equals(".data")))continue;
+            long first=(block.getStart().getOffset()+3)&~3L,end=block.getEnd().getOffset();
+            for(long offset=first;offset+3<=end;offset+=4){
+                monitor.checkCancelled();Address at=space.getAddress(offset);
+                long target=Integer.toUnsignedLong(memory.getInt(at));
+                Address destination=space.getAddress(target);var code=memory.getBlock(destination);
+                if(code==null || !code.isExecute() || !code.isInitialized())continue;
+                Data data=currentProgram.getListing().getDefinedDataContaining(at);
+                Instruction containing=currentProgram.getListing().getInstructionContaining(destination);
+                Map<String,Object> row=new LinkedHashMap<>();
+                row.put("from",offset);row.put("to",target);
+                row.put("source_is_string",data!=null && data.hasStringValue());
+                row.put("source_is_pointer",data!=null && data.getDataType() instanceof Pointer);
+                row.put("source_type",data==null?"undefined":data.getDataType().getName());
+                row.put("target_instruction",currentProgram.getListing().getInstructionAt(destination)!=null);
+                row.put("target_interior",containing!=null && !containing.getAddress().equals(destination));
+                pointers.add(row);
+            }
+        }
+        report.put("static_code_pointer_slots",pointers);
         Path destination=Path.of(args[0]);Files.createDirectories(destination.getParent());
         Files.writeString(destination,new GsonBuilder().disableHtmlEscaping().create().toJson(report)+"\n",StandardCharsets.UTF_8);
         println("READ EXISTING CACHE: "+functions.size()+" functions, "+instructions.size()+" instruction records; no new analysis.");

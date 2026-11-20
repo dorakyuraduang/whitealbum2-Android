@@ -97,7 +97,10 @@ int main(int argc,char** argv){try{
             bytes+=span.bytes.size();++spans;
         }
     }
-    CHECK(starts==139324 && interiors>starts);
+    CHECK(starts==std::size(s::instruction_starts) && starts>=139324 && interiors>starts);
+    for(const auto entry:s::recovered_callback_entries)CHECK(s::locate(entry).function);
+    CHECK(std::size(s::recovered_callback_entries)>=65);
+    CHECK(s::locate(4739667).function && s::locate(0x485211).function);
     s2::StaticProgram program(actual,s::functions(),s::locate);
     wr::Cpu unknown;unknown.eip=0xdeadbeef;const auto saved=unknown;
     CHECK(!program.invoke(unknown));CHECK(unknown.r==saved.r && unknown.eip==saved.eip);
@@ -130,6 +133,7 @@ int main(int argc,char** argv){try{
     report<<"{\"schema\":\"wa2.special-memory-check.v1\",\"static_bodies\":"<<s::functions().size()
           <<",\"code_spans\":"<<spans<<",\"code_bytes\":"<<bytes<<",\"instruction_starts_checked\":"<<starts<<",\"interior_targets_rejected\":"<<interiors<<",\"differential_vectors\":"<<comparisons
           <<",\"reported_rep_address\":4691986,\"string_regression_cases\":"<<string_cases<<",\"zero_budget_rep_words\":136,\"string_fault_prefix_checked\":true,\"diagnostic_budget_preserved\":true"
+          <<",\"reported_callback_address\":4739667,\"recovered_callback_entries_checked\":"<<std::size(s::recovered_callback_entries)
           <<",\"unknown_target_rejected\":true,\"writable_code_rejected\":true,\"changed_code_rejected\":true,"
             "\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";
     CHECK(bool(report));

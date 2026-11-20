@@ -24,6 +24,8 @@ def source_bindings():
         'scripts/generate_shared_aot.py','scripts/generate_special_aot.py','scripts/prepare_special_contents.py',
         'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
+        'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
+        'scripts/analysis/ExportCachedListing.java',
         'tools/WindowsRecompTool-main/src/pe.cpp','tools/WindowsRecompTool-main/src/resources.cpp'))
     return {p.relative_to(ROOT).as_posix(): digest(p) for p in sorted(files)}
 
@@ -73,6 +75,7 @@ def main():
             subprocess.run(list(map(str,command)),cwd=ROOT,env=env,creationflags=flags,
                 stdout=log,stderr=subprocess.STDOUT,check=True,timeout=timeout)
         if not args.record_only:
+            run([sys.executable,ROOT/'scripts/audit_special_callbacks.py'],600)
             run([sys.executable,ROOT/'scripts/generate_special_aot.py'])
             run([cmake,'-S',ROOT/'hosts','-B',win,'-G','Ninja',
                 '-DCMAKE_TOOLCHAIN_FILE='+str(ROOT/'scripts/zig-toolchain.cmake'),
@@ -92,6 +95,8 @@ def main():
             run([acmake,'--build',android,'--target','wa2_special','--parallel','1'],7200)
         manifest_path=ROOT/'generated/special-contents/aot/manifest.json'
         manifest=json.loads(manifest_path.read_text())
+        from audit_special_callbacks import validated_cache
+        callbacks=validated_cache()
         for name,sha in manifest['generated_sha256'].items():
             if digest(manifest_path.parent/name)!=sha:raise ValueError('Special generated file changed: '+name)
         windows_sources,android_sources=compiled_special(win),compiled_special(android)
@@ -108,6 +113,14 @@ def main():
                     check.get('reported_rep_address')!=4691986 or not check.get('string_fault_prefix_checked') or
                     not check.get('diagnostic_budget_preserved')):
                 raise ValueError('Missing Special REP metering/fault-prefix regression checks')
+            if stem=='memory' and (check.get('reported_callback_address')!=4739667 or
+                    check.get('recovered_callback_entries_checked')!=len(callbacks['recovered_entries']) or
+                    check.get('instruction_starts_checked')!=manifest['instruction_locations']):
+                raise ValueError('Missing Special recovered callback catalogue checks')
+            if stem=='runtime' and (check.get('reported_callback_address')!=4739667 or
+                    not check.get('crt_initializer_registered_filter') or check.get('crt_filter_rejection_cases')!=3 or
+                    check.get('game_startup_called') is not False or check.get('bounded_static_callback_entries',0)<4):
+                raise ValueError('Missing bounded Special CRT callback regression checks')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         output=ROOT/'out/special-contents';output.mkdir(parents=True,exist_ok=True)
@@ -145,6 +158,7 @@ def main():
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
             same_special_sources_on_all_hosts=True,compiled_shared_sources=windows_sources,
             instruction_locations=manifest['instruction_locations'],static_bodies=manifest['static_bodies'],
+            recovered_callback_entries=len(callbacks['recovered_entries']),pointer_slots_audited=callbacks['pointer_slots_audited'],
             pending_transcendental_sites=manifest['pending_transcendental_sites'],
             source_sha256=source_bindings(),checks=checks,artifacts=artifacts,elf_load_alignments=load_alignments,symbol_audits=symbol_audits,
             original_main_executable_opened=False,source_executable_executed=False,

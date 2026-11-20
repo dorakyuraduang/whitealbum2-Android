@@ -34,12 +34,14 @@ def analyze():
     for name, expected in receipt['cache_sha256'].items():
         if digest(ROOT/name) != expected:
             raise ValueError('Special preparation cache changed: '+name)
-    graph = json.loads((cache/'cfg.json').read_text())
+    from audit_special_callbacks import validated_cache
+    callbacks=validated_cache()
+    graph = json.loads((cache/'callback-upgrade/cfg.json').read_text())
     if graph['diagnostics']:
         raise ValueError('Special cached discovery has diagnostics')
     instructions = {i['address']: i for i in graph['instructions']}
     bodies = {}
-    for path in sorted((cache/'raw').glob('code_page_*.cpp')):
+    for path in sorted((ROOT/callbacks['raw_directory']).glob('code_page_*.cpp')):
         for match in CASE.finditer(path.read_text()):
             pc = int(match[1], 16)
             proof = PROOF.match(match[2])
@@ -241,11 +243,14 @@ def generate():
     oracle += [f'case 0x{pc:x}u:{{'+bodies[pc][2]+'return true;}' for pc in pcs]
     oracle += ['default:return false;}}', '}']
     write('probe_oracle.cpp', '\n'.join(oracle)+'\n')
+    callbacks=json.loads((ROOT/'generated/special-contents/callback-upgrade/manifest.json').read_text())
     write('probe_entries.hpp', '#pragma once\n#include <cstdint>\nnamespace wa2::special {\ninline constexpr std::uint32_t probe_entries[]={'+','.join(str(pc)+'u' for pc in probes)+'};\n'+
-        'inline constexpr std::uint32_t instruction_starts[]={'+','.join(str(pc)+'u' for pc in sorted(bodies))+'};\n}\n')
+        'inline constexpr std::uint32_t instruction_starts[]={'+','.join(str(pc)+'u' for pc in sorted(bodies))+'};\n'+
+        'inline constexpr std::uint32_t recovered_callback_entries[]={'+','.join(str(pc)+'u' for pc in callbacks['recovered_entries'])+'};\n}\n')
     report = dict(schema='wa2.special-shared-aot.v1', input_sha256=receipt['input_sha256'],
         instruction_locations=len(bodies), function_candidates=len(graph['function_candidates']), static_bodies=len(merged),
         all_discovered_instructions_compiled=True, all_direct_edges_resolve=True,
+        recovered_callback_entries=callbacks['recovered_entries'],pointer_slots_audited=callbacks['pointer_slots_audited'],
         pending_transcendental_sites=pending, differential_probe_entries=probes,
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,
