@@ -108,6 +108,21 @@ unsigned copy_regression(s2::StaticProgram& program,wr::Memory& memory){
     memory.store(0xbc54f0,prior_feature,32);return cases;
 }
 
+unsigned transcendental_regression(s2::StaticProgram& program,wr::Memory& memory){
+    namespace fp=wa2::aot::fp;unsigned cases{};
+    for(const auto precision:{0u,2u,3u})for(const auto exponent:{6u,7u,8u,9u,10u,11u,12u,13u}){
+        wr::Cpu cpu;cpu.eip=4642967;cpu.r[wr::ESP]=0;cpu.fp.put16(0,std::uint16_t(0x7f|(precision<<8)));
+        {fp::detail::Stack stack(&cpu.fp);stack.push(fp::detail::constant(5,0));stack.push(fp::from_integer(1ll<<exponent));}
+        bool stopped{};try{program.invoke(cpu);}catch(const wr::GuestFault& fault){
+            CHECK(fault.kind==wr::FaultKind::memory && fault.address==0);stopped=true;
+        }
+        CHECK(stopped && cpu.eip==0x46d8ab);fp::Environment env;
+        const fp::Extended result{cpu.fp.get64(32),cpu.fp.get16(40)};
+        CHECK(fp::to_binary(result,64,env)==std::bit_cast<std::uint64_t>(double(exponent)+0.5));++cases;
+    }
+    return cases;
+}
+
 int main(int argc,char** argv){try{
     CHECK(argc==2);
     const auto image=s::initial_image();
@@ -164,6 +179,7 @@ int main(int argc,char** argv){try{
     CHECK(comparisons>=1024);
     const auto copy_cases=copy_regression(program,actual);
     const auto string_cases=string_regression(program,actual);
+    const auto transcendental_cases=transcendental_regression(program,actual);
     // A writeable code mapping revokes prior proofs even if bytes still match.
     const auto first=s::probe_entries[0];const auto page=first&~4095u;
     actual.protect(page,4096,wr::Memory::Read|wr::Memory::Write|wr::Memory::Execute);
@@ -180,6 +196,7 @@ int main(int argc,char** argv){try{
           <<",\"reported_rep_address\":4691986,\"string_regression_cases\":"<<string_cases<<",\"zero_budget_rep_words\":136,\"string_fault_prefix_checked\":true,\"diagnostic_budget_preserved\":true"
           <<",\"reported_callback_address\":4739667,\"recovered_callback_entries_checked\":"<<std::size(s::recovered_callback_entries)
           <<",\"reported_copy_address\":4673248,\"recovered_jump_entries_checked\":"<<std::size(s::recovered_jump_entries)<<",\"crt_copy_cases\":"<<copy_cases<<",\"shared_bulk_string_exercised\":true"
+          <<",\"reported_transcendental_address\":4642967,\"generated_fyl2x_prefix_cases\":"<<transcendental_cases
           <<",\"unknown_target_rejected\":true,\"writable_code_rejected\":true,\"changed_code_rejected\":true,"
             "\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";
     CHECK(bool(report));

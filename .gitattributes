@@ -29,3 +29,5 @@
 /tools/WindowsRecompTool-main/include/winrecomp/process.hpp -text
 /tools/WindowsRecompTool-main/include/winrecomp/memory.hpp -text
 /tools/WindowsRecompTool-main/include/winrecomp/win32_state.hpp -text
+# Keep the pinned arithmetic sources identical to their upstream SHA-256s.
+/third_party/x87_math/** text eol=lf whitespace=-blank-at-eol,-blank-at-eof

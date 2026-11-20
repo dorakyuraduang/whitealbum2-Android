@@ -1,4 +1,5 @@
 #include "runtime.hpp"
+#include "lzss.hpp"
 #include "../../platform/compat/system.hpp"
 #include "../../platform/compat/extended_system.hpp"
 #include "../../platform/compat/scheduler.hpp"
@@ -35,6 +36,8 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     platform::compat::install_locale(process_);
     platform::compat::install_extended_system(process_);
     process_.state().reports["selected_directory_io"]=[this]{return save_files_report(process_.state().mutable_files);};
+    process_.state().reports["native_resources"]=[]{return lzss_report();};
+    process_.state().resource_io_activity=[]{return lzss_activity();};
     wr::install_wa2_registry(process_);
     wr::install_wa2_exceptions(process_);
     platform::compat::install_acm(process_);

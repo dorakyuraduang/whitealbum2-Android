@@ -6,6 +6,8 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <random>
+#include "../recompiled/special/lzss.hpp"
 #include "../platform/compat/io_diagnostics.hpp"
 
 #define CHECK(x) do{if(!(x))throw std::runtime_error("check failed: " #x);}while(false)
@@ -50,6 +52,65 @@ public:
     U32 attributes(std::string_view name,U32)override{changed=name;return 0;}
     void replace(std::string_view name,std::span<const std::uint8_t>)override{changed=name;}
 };
+unsigned lzss_regression(wr::Process& p,unsigned& declines){
+    constexpr U32 ring=0xa79d10,size=65536;
+    const auto source=p.allocate_bytes(size),target=p.allocate_bytes(size),stack=p.cpu.r[wr::ESP]-2048;
+    std::vector<std::uint8_t> initial_stack(2048),reference_stack(2048),actual_stack(2048),
+        blank(size,0xa5),reference_output(size),actual_output(size);
+    std::array<std::uint8_t,4096> initial_ring,reference_ring,actual_ring;
+    p.memory.copy_out(stack,initial_stack);const auto fp=p.cpu.fp;
+    std::mt19937 random(0x4c5a5353);unsigned cases{};
+    std::vector<unsigned> token_counts;for(unsigned n=0;n<96;++n)token_counts.push_back(n);
+    for(const auto n:{512u,1024u,2048u,4096u})token_counts.push_back(n);
+    for(const auto tokens:token_counts){
+        std::vector<std::uint8_t> encoded;unsigned output{};
+        for(unsigned token=0;token<tokens;){
+            const auto flag=encoded.size();encoded.push_back(0);
+            for(unsigned bit=0;bit<8 && token<tokens;++bit,++token){
+                if(tokens%3==0 || random()%3==0){encoded[flag]|=std::uint8_t(1u<<bit);encoded.push_back(std::uint8_t(random()));++output;}
+                else{const auto offset=random()%4096,length=3+random()%16;
+                    encoded.push_back(std::uint8_t(offset));encoded.push_back(std::uint8_t((offset>>4&0xf0)|(length-3)));output+=length;}
+            }
+        }
+        for(unsigned n=0;n<initial_ring.size();++n)initial_ring[n]=std::uint8_t(n*7+tokens);
+        CHECK(encoded.size()<=size && output<=size);
+        const auto reset=[&]{p.memory.copy_in(source,encoded);p.memory.copy_in(target,blank);
+            p.memory.copy_in(ring,initial_ring);p.memory.copy_in(stack,initial_stack);p.cpu.fp=fp;};
+        reset();U32 reference{};
+        {wa2::special::LzssReferenceScope original;reference=p.callback(0x438270,std::array<U32,4>{target,source,U32(encoded.size()),output},false);}
+        CHECK(reference==output);p.memory.copy_out(target,reference_output);p.memory.copy_out(ring,reference_ring);p.memory.copy_out(stack,reference_stack);
+        const auto reference_fp=p.cpu.fp;reset();const auto before=wa2::special::lzss_activity();
+        CHECK(p.callback(0x438270,std::array<U32,4>{target,source,U32(encoded.size()),output},false)==reference);
+        CHECK(wa2::special::lzss_activity()==before+1);
+        p.memory.copy_out(target,actual_output);p.memory.copy_out(ring,actual_ring);p.memory.copy_out(stack,actual_stack);
+        CHECK(actual_output==reference_output && actual_ring==reference_ring && actual_stack==reference_stack && p.cpu.fp.bytes==reference_fp.bytes);++cases;
+    }
+    const auto local=p.allocate_bytes(4096),frame=local+128;
+    for(unsigned reason=0;reason<8;++reason){
+        p.memory.copy_in(source,std::array<std::uint8_t,2>{1,'Q'});
+        for(const auto delta:{4u,8u,12u,16u})p.memory.store(frame-delta,0,32);
+        p.memory.store(frame+16,2,32);p.memory.store(frame+20,1,32);
+        wr::Cpu cpu;cpu.eip=0x4382a6;cpu.r[wr::EBP]=frame;cpu.r[wr::ESI]=0xfee;cpu.r[wr::EBX]=source;cpu.r[wr::EDI]=target;
+        const auto page=(target+4095)&~4095u;
+        if(reason==0){p.memory.store(frame+16,1,32);p.memory.copy_in(source,std::array<std::uint8_t,1>{0});}
+        if(reason==1)p.memory.store(frame+20,64u*1024*1024+1,32);
+        if(reason==2)cpu.r[wr::EBX]=target;
+        if(reason==3)cpu.r[wr::EDI]=ring;
+        if(reason==4)cpu.r[wr::EBX]=0xdeadbeef;
+        if(reason==5 || reason==6){cpu.r[wr::EDI]=page;p.memory.protect(page,4096,reason==5?wr::Memory::Read:wr::Memory::Read|wr::Memory::Write|wr::Memory::Execute);}
+        if(reason==7)p.memory.store(frame-4,1,32);
+        p.memory.copy_out(target,reference_output);p.memory.copy_out(ring,reference_ring);
+        std::array<std::uint8_t,64> before_frame,after_frame;p.memory.copy_out(frame-32,before_frame);
+        const auto saved=cpu;
+        CHECK(!wa2::special::try_lzss_prefix(cpu,p.memory));
+        CHECK(cpu.r==saved.r && cpu.eip==saved.eip && cpu.flags==saved.flags && cpu.fp.bytes==saved.fp.bytes);
+        p.memory.copy_out(target,actual_output);p.memory.copy_out(ring,actual_ring);p.memory.copy_out(frame-32,after_frame);
+        CHECK(actual_output==reference_output && actual_ring==reference_ring && before_frame==after_frame);
+        if(reason==5 || reason==6)p.memory.protect(page,4096,wr::Memory::Read|wr::Memory::Write);
+        ++declines;
+    }
+    return cases;
+}
 int main(int argc,char** argv){try{
     CHECK(argc==2);
     auto host=std::make_shared<MemoryHost>();wr::ProcessBackends backends;
@@ -112,6 +173,7 @@ int main(int argc,char** argv){try{
     CHECK(p.callback(0x485211,std::array<U32,1>{pointers})==0);++filter_cases;
     p.state().unhandled_filter=saved_filter;
     CHECK(p.executed_instructions==0 && p.native_function_entries>0 && p.state().callback_depth==0);
+    unsigned lzss_declines{};const auto lzss_cases=lzss_regression(p,lzss_declines);
     bool storage_counters{},cpu_counters{},completion{};
     wa2::platform::compat::emit_final_io_counters(p,"special-contents-aot",[&](std::string_view label,std::string_view value){
         if(label.ends_with(" selected_directory_io"))storage_counters=value.find("special-save-only")!=value.npos;
@@ -125,6 +187,8 @@ int main(int argc,char** argv){try{
           <<",\"wide_api_cases\":16,\"main_save_writes_rejected\":true,\"instruction_step_calls\":0,\"bounded_static_callback_entries\":"<<p.native_function_entries
           <<",\"reported_callback_address\":4739667,\"crt_initializer_registered_filter\":true,\"crt_filter_rejection_cases\":"<<filter_cases<<",\"game_startup_called\":false,"
             "\"special_final_cpu_and_storage_counters\":true,"
+          <<"\"lzss_original_tail_cases\":"<<lzss_cases<<",\"lzss_output_dictionary_stack_fp_agree\":true,"
+          <<"\"lzss_admission_declines_checked\":"<<lzss_declines<<','<<
             "\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_opened\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";
     CHECK(bool(report));std::cout<<"PASS Special import/Unicode/storage memory checks; game entry never executed.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

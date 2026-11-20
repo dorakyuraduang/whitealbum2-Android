@@ -17,15 +17,17 @@ def source_bindings():
     files = set()
     for directory in ('recompiled', 'platform', 'engine', 'hosts', 'android/native',
                       'tools/WindowsRecompTool-main/include', 'tools/WindowsRecompTool-main/src/runtime',
-                      'generated/special-contents/aot'):
+                      'generated/special-contents/aot','third_party/x87_math'):
         files.update(p for p in (ROOT/directory).rglob('*') if p.is_file() and p.suffix in
-                     {'.cpp','.hpp','.h','.inc','.cmake','.txt'})
-    files.update(ROOT/name for name in ('config/porting_contract.json', 'config/special_contents.json',
+                     {'.cpp','.cc','.hpp','.h','.inc','.cmake','.txt'})
+    files.update(ROOT/name for name in ('config/porting_contract.json', 'config/special_contents.json','config/special_native_contracts.json',
         'scripts/generate_shared_aot.py','scripts/generate_special_aot.py','scripts/prepare_special_contents.py',
         'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
         'scripts/analysis/ExportCachedListing.java',
+        'third_party/x87_math/UPSTREAM.json','scripts/verify_x87_transcendental.py',
+        'logs/x87-transcendental-verification.json',
         'tools/WindowsRecompTool-main/src/pe.cpp','tools/WindowsRecompTool-main/src/resources.cpp'))
     return {p.relative_to(ROOT).as_posix(): digest(p) for p in sorted(files)}
 
@@ -36,6 +38,12 @@ def compiled_special(directory):
     return {Path(item['file']).resolve().relative_to(ROOT).as_posix(): digest(Path(item['file']))
             for item in entries if Path(item['file']).resolve().is_relative_to(prefix)
             and Path(item['file']).name != 'probe_oracle.cpp'}
+
+def compiled_math(directory):
+    entries=json.loads((directory/'compile_commands.json').read_text())
+    prefix=(ROOT/'third_party/x87_math').resolve();bridge=(ROOT/'recompiled/transcend.cpp').resolve()
+    return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file']))
+            for e in entries if Path(e['file']).resolve().is_relative_to(prefix) or Path(e['file']).resolve()==bridge}
 
 
 def fresh():
@@ -48,6 +56,8 @@ def fresh():
     for artifact in proof['artifacts'].values():
         if digest(Path(artifact['file'])) != artifact['sha256']:
             raise ValueError('Special artifact changed after verification')
+    if 'scalar_math_notice' in proof and digest(Path(proof['scalar_math_notice']['file']))!=proof['scalar_math_notice']['sha256']:
+        raise ValueError('Special scalar math license notice changed')
     for report in proof['checks'].values():
         if digest(Path(report['file'])) != report['sha256'] or not json.loads(Path(report['file']).read_text())['passed']:
             raise ValueError('Special memory check changed')
@@ -75,6 +85,9 @@ def main():
             subprocess.run(list(map(str,command)),cwd=ROOT,env=env,creationflags=flags,
                 stdout=log,stderr=subprocess.STDOUT,check=True,timeout=timeout)
         if not args.record_only:
+            from verify_x87_transcendental import fresh as math_fresh
+            try:math_fresh()
+            except (OSError,ValueError):run([sys.executable,ROOT/'scripts/verify_x87_transcendental.py'],600)
             run([sys.executable,ROOT/'scripts/audit_special_callbacks.py'],600)
             run([sys.executable,ROOT/'scripts/generate_special_aot.py'])
             run([cmake,'-S',ROOT/'hosts','-B',win,'-G','Ninja',
@@ -97,6 +110,8 @@ def main():
         manifest=json.loads(manifest_path.read_text())
         from audit_special_callbacks import validated_cache
         callbacks=validated_cache()
+        from verify_x87_transcendental import fresh as math_fresh
+        math_proof=math_fresh()
         for name,sha in manifest['generated_sha256'].items():
             if digest(manifest_path.parent/name)!=sha:raise ValueError('Special generated file changed: '+name)
         windows_sources,android_sources=compiled_special(win),compiled_special(android)
@@ -104,6 +119,13 @@ def main():
                   if name.endswith('.cpp') and name!='probe_oracle.cpp'}
         if windows_sources!=android_sources or windows_sources!=expected:
             raise ValueError('Windows/Android compiled different Special C++ source inventories')
+        math_windows,math_android=compiled_math(win),compiled_math(android)
+        math_expected={p.relative_to(ROOT).as_posix():digest(p) for p in (ROOT/'third_party/x87_math').rglob('*.cc')}
+        math_expected['recompiled/transcend.cpp']=digest(ROOT/'recompiled/transcend.cpp')
+        if math_windows!=math_android or math_windows!=math_expected:
+            raise ValueError('Windows/Android compiled different scalar x87 math sources')
+        if manifest['pending_transcendental_sites'] or len(manifest.get('supported_transcendental_sites',[]))!=50:
+            raise ValueError('Special transcendental sites are not all statically supported')
         checks={}
         for stem in ('memory','runtime'):
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
@@ -127,6 +149,12 @@ def main():
                 raise ValueError('Missing Special CRT switch/copy/bulk-string regression checks')
             if stem=='runtime' and not check.get('special_final_cpu_and_storage_counters'):
                 raise ValueError('Missing Special final CPU/storage diagnostics')
+            if stem=='memory' and (check.get('reported_transcendental_address')!=4642967 or check.get('generated_fyl2x_prefix_cases')!=24):
+                raise ValueError('Missing actual Special FYL2X prefix regression')
+            if stem=='runtime' and (check.get('lzss_original_tail_cases')!=100 or not check.get('lzss_output_dictionary_stack_fp_agree')):
+                raise ValueError('Missing Special LZSS original-loop/tail regression')
+            if stem=='runtime' and check.get('lzss_admission_declines_checked')!=8:
+                raise ValueError('Missing Special LZSS decline-without-mutation checks')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         output=ROOT/'out/special-contents';output.mkdir(parents=True,exist_ok=True)
@@ -138,6 +166,7 @@ def main():
             artifacts[name]=dict(file=str(target),sha256=digest(target),bytes=target.stat().st_size,
                                  unstripped_file=str(source),unstripped_sha256=digest(source))
         data=Path(artifacts['android']['file']).read_bytes()
+        notice=output/'X87-MATH-LICENSES.txt';notice.write_bytes((ROOT/'third_party/x87_math/NOTICE.txt').read_bytes())
         if data[:5]!=b'\x7fELF\x02' or struct.unpack_from('<H',data,18)[0]!=183:
             raise ValueError('Special library is not ELF64 ARM64')
         offset=struct.unpack_from('<Q',data,32)[0];size,count=struct.unpack_from('<HH',data,54)
@@ -151,23 +180,29 @@ def main():
             # compiled archive on Windows and the final linked ELF on Android;
             # do not represent an unavailable PE symbol audit as completed.
             symbol_input=win/'shared_runtime/special/libwa2_special_aot.a' if name=='windows' else Path(artifact['unstripped_file'])
-            symbols=subprocess.run([str(nm),'--defined-only','--demangle',str(symbol_input)],
+            symbol_inputs=[symbol_input]
+            if name=='windows':symbol_inputs.append(win/'shared_runtime/libwa2_x87_transcend.a')
+            symbols=subprocess.run([str(nm),'--defined-only','--demangle',*map(str,symbol_inputs)],
                 cwd=ROOT,env=env,creationflags=flags,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                 check=True,timeout=60).stdout.decode('utf-8',errors='replace')
             audit=dict(method='compiled-archive-symbols' if name=='windows' else 'actual-linked-symbols',
                 final_binary_symbols_available=name!='windows',special_static_functions='wa2::special::f_' in symbols,
                 shared_bulk_string_kernel='wa2::aot::try_bulk_string(' in symbols,
+                scalar_x87_math='fyl2x(' in symbols and 'fsin(' in symbols and 'fcos(' in symbols,
                 main_story_static_functions='wa2::aot::f_' in symbols,
                 runtime_instruction_decoder='wr::Decoder::' in symbols)
-            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
+            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
                 raise ValueError('Special link contains the wrong game catalogue or an instruction decoder: '+name)
             symbol_audits[name]=audit
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
             same_special_sources_on_all_hosts=True,compiled_shared_sources=windows_sources,
+            compiled_scalar_math_sources=math_windows,transcendental_hardware_cases=math_proof['cases'],
+            scalar_math_notice=dict(file=str(notice),sha256=digest(notice)),
             instruction_locations=manifest['instruction_locations'],static_bodies=manifest['static_bodies'],
             recovered_callback_entries=len(callbacks['recovered_entries']),pointer_slots_audited=callbacks['pointer_slots_audited'],
             recovered_jump_entries=len(callbacks['recovered_jump_entries']),shared_bulk_string_kernel=True,
             pending_transcendental_sites=manifest['pending_transcendental_sites'],
+            supported_transcendental_sites=manifest['supported_transcendental_sites'],native_lzss_prefix=True,
             source_sha256=source_bindings(),checks=checks,artifacts=artifacts,elf_load_alignments=load_alignments,symbol_audits=symbol_audits,
             original_main_executable_opened=False,source_executable_executed=False,
             game_launched=False,screen_access=False,android_gameplay_validation='pending-user-controlled-run',

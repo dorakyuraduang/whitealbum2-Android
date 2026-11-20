@@ -9,8 +9,8 @@
   "android_library": "wa2_special",
   "android_distribution": "integrated-apk",
   "android_process": ":special",
-  "android_version_name": "0.2.112-special-aot",
-  "android_version_code": 115,
+  "android_version_name": "0.2.113-special-aot",
+  "android_version_code": 116,
   "whole_program_complete": false,
   "complete_gameplay_verified": false
 }

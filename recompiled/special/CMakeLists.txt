@@ -2,14 +2,14 @@
 include("${WA2_SHARED_ROOT}/generated/special-contents/aot/sources.cmake")
 add_library(wa2_special_aot STATIC ${WA2_SPECIAL_AOT_SOURCES}
     "${WA2_SHARED_ROOT}/recompiled/extended80.cpp"
-    "${WA2_SHARED_ROOT}/recompiled/native_string.cpp"
-    "${WA2_SHARED_ROOT}/recompiled/transcend.cpp")
+    "${WA2_SHARED_ROOT}/recompiled/native_string.cpp")
+target_sources(wa2_special_aot PRIVATE lzss.cpp)
 target_compile_features(wa2_special_aot PUBLIC cxx_std_20)
 target_include_directories(wa2_special_aot PUBLIC
     "${WA2_SHARED_ROOT}/generated/special-contents/aot"
     "${WA2_SHARED_ROOT}/recompiled"
     "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
-target_link_libraries(wa2_special_aot PUBLIC wa2_aot_memory wa2_scalar_math)
+target_link_libraries(wa2_special_aot PUBLIC wa2_aot_memory wa2_scalar_math wa2_x87_transcend wa2_engine)
 set_target_properties(wa2_special_aot PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(wa2_special_process STATIC runtime.cpp storage.cpp
     "${WA2_SHARED_ROOT}/platform/compat/extended_system.cpp")

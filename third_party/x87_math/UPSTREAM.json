@@ -1,0 +1,539 @@
+{
+  "repository": "https://github.com/bochs-emu/Bochs",
+  "revision": "b083c0c2515796254de31556989fe4b7b765ddc4",
+  "scope": "Scalar arithmetic only; no CPU, decoder, device or emulator executable",
+  "files": [
+    {
+      "path": "bochs/cpu/fpu/f128_67.cc",
+      "sha256": "b150bae357f60f71185cd06bdee03d3e138d74701d3d00c63ff444ca44f05c4e"
+    },
+    {
+      "path": "bochs/cpu/fpu/f2xm1.cc",
+      "sha256": "5794e2e2f5b072612f66138d376ed82205cb59dd7304f5297271f0760061a156"
+    },
+    {
+      "path": "bochs/cpu/fpu/f2xm1_constants.h",
+      "sha256": "180f02a31e490594ba0eda2fabebcd1fb2045cc0da6672c38d6d99b3fd1153cc"
+    },
+    {
+      "path": "bochs/cpu/fpu/fpatan.cc",
+      "sha256": "ffa31f62df82ea14090d7d826ac9fee5d5990fdccb890e2a1859e2a742adcb28"
+    },
+    {
+      "path": "bochs/cpu/fpu/fpatan_constants.h",
+      "sha256": "d8aaf00b2f3ce6c76ea805fc5af443430a05c070ada0978492036a1abc298c20"
+    },
+    {
+      "path": "bochs/cpu/fpu/fprem.cc",
+      "sha256": "fcab2ba69336c9b4318636ae2e9bcc9b568138afff09d21ebb31366a46879c8b"
+    },
+    {
+      "path": "bochs/cpu/fpu/fpu_constant.h",
+      "sha256": "0b6a981d635e980ea30633e0bdb21da174eae188b482cf39346feb149b12fbb3"
+    },
+    {
+      "path": "bochs/cpu/fpu/fpu_trans.h",
+      "sha256": "2145050620e85a7073a0ac8ca67e00166359854ca0d07fc944e675542a3fb089"
+    },
+    {
+      "path": "bochs/cpu/fpu/fsincos.cc",
+      "sha256": "7acbcda1c919c85da6dffbe1cab14700f5c0b7ac8c88f19f989efc1813f2ce35"
+    },
+    {
+      "path": "bochs/cpu/fpu/fsincos_constants.h",
+      "sha256": "4e260a21afcbd3346dec4688b39914349769fb33b3c3817a876726050b31169f"
+    },
+    {
+      "path": "bochs/cpu/fpu/fyl2x.cc",
+      "sha256": "0d2ec33c64a1eee5723a043be54490dda83d0434bbd84ea954e9f08165c95007"
+    },
+    {
+      "path": "bochs/cpu/fpu/fyl2x_constants.h",
+      "sha256": "f62749aa91e317264d6368063fcb8104099ddee16c70e544aa72f5d6c9ac2cff"
+    },
+    {
+      "path": "bochs/cpu/fpu/softfloat-helpers.h",
+      "sha256": "a5d8b26969ba976551bc4ca3afe7345f76c4a7ab827b4dbd02a33607193eadac"
+    },
+    {
+      "path": "bochs/cpu/fpu/softfloat-specialize.h",
+      "sha256": "4d6d1722e8854f0d338e185fc2a0addc44c3ca800fd8da8a3451b8b620c167b1"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_commonNaNToExtF80UI.cc",
+      "sha256": "8e23067ec12e2ee6d2a245e5e92780134718ccc38bbd150a56a2727602eaf7e1"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_commonNaNToF128UI.cc",
+      "sha256": "e87c6d08b8d3cac0cd8fa11bc12692aed829ebc166834051600fa0a090a02dac"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_commonNaNToF16UI.cc",
+      "sha256": "84905e3c8d8874c28a11d28899fcf54ebce0c8e6aaaa7a7fef7be39640b8f386"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_commonNaNToF32UI.cc",
+      "sha256": "7cc47a45650fd3095e766d18b1ecc6e4774ddc44801869d5d765e1b9d5b6e45d"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_commonNaNToF64UI.cc",
+      "sha256": "0d248a7eb8b33dff541ea5466b0e852a94c6b3982a366a106fd0906ea942bf21"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_propagateNaNExtF80UI.cc",
+      "sha256": "1dac9bbd2b1afd73b2747bd0f181395c64a9f2be8555e3b59dc32dd9601ecb1d"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_propagateNaNF128UI.cc",
+      "sha256": "613cfca764f66a04dc14115a9b513e04b343a4de66a46aac6e57e23faad5b74a"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_propagateNaNF16UI.cc",
+      "sha256": "06bd5b9bbe6ed48acbe620f708ccaa391e55fd1c4e2a4d895369259ce6f54489"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_propagateNaNF32UI.cc",
+      "sha256": "e2f1b9c794f482a55de2c0ba7ab03c09788fc7155f6d05ea45d9543d6cff6bb2"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/8086-SSE/s_propagateNaNF64UI.cc",
+      "sha256": "ad593c3d615c040defac180d6f1306d079a71ff6a833e8ef3b9ea73ca409fb9f"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_addsub.cc",
+      "sha256": "0589d3f7f1c7b3a6dd51b4f150506a6e0d242dfbda4bbd81d9055de419e15f58"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_class.cc",
+      "sha256": "a914385a9eb20f4632f8e6b1ea6959ed396b65977475e23dd69e34dd23575b2a"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_compare.cc",
+      "sha256": "e3e3b76c34e76fc2b0ffccddd950f9df46036d9e56b5993497c140b874b4986d"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_div.cc",
+      "sha256": "80fa0a0f5eaa9e6d55e49991c2ce94cd8f031eac68e4bc3e0ed2b36ca153d061"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_extract.cc",
+      "sha256": "9b7546b5585691eb7f082c34775cd5f5ca91cec0cd1f615248c1e982cb2e3e9c"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_mul.cc",
+      "sha256": "7f77f647d09f4171c659f1392f582a23ccaa8a00a7a639b8fa95f5b8712a847b"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_rem.cc",
+      "sha256": "1c5111e7a9941291ccd26ceb1e3244a2dc01bbc53ccec044e32a56bd8b859093"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_roundToInt.cc",
+      "sha256": "cd6bcfbd11c56bfffea6cf2c3d7cee5f9fbccd7b99b8abae9af5e95aabd96efc"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_scale.cc",
+      "sha256": "2a8cf2234cc50f61e644b070e89d737e5bc6c8124a271714cd30d7523a03451c"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_sqrt.cc",
+      "sha256": "c099f6f20974951e8f95629b66247adf55a49b5aeea388583ef56cf1f90877e7"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_f128.cc",
+      "sha256": "dab45d9ea52a15524eba694ee49eea859d2f715da37b7393ab9d225687b15161"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_f16.cc",
+      "sha256": "a9817f5e5af336d14ac1ee742a3febd1e7be80499ddccca8719c9b4ad62b85fb"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_f32.cc",
+      "sha256": "1303fa28ad9d2b9626a2fb97b4369c5bdf116472d13796a7c3c94e182c099c69"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_f64.cc",
+      "sha256": "177f8abf3d16623ec5f7b55470f073c973187b0a9ac514cb9c006eca807b9299"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_i32.cc",
+      "sha256": "d3a5b2186abc130c68d164385fd6fdccaf21eebb457a09ba0a8df34b099086f1"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_i32_r_minMag.cc",
+      "sha256": "0aadf317cbef1600cd50c8a4d1a9dd9a96e11fe98eb3e74d8a9c2928202676f0"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_i64.cc",
+      "sha256": "ef54548e71de0fbc107e6187e541e5bc8fb4fd7214b0b5aab580210be1800191"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_i64_r_minMag.cc",
+      "sha256": "4a0e52694231c348010eb9f1975e9750fcab2e92bf5deefc204e818a07282289"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_ui32.cc",
+      "sha256": "5be1ca114a27ed06adb551201f3a85407f3445366c9f4a4596317c8dd4b6f8d3"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_ui32_r_minMag.cc",
+      "sha256": "fbaaa2ff5e947bb85221f5584ef62a306c51916977b1032e0d74a0e8cc40ae32"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_ui64.cc",
+      "sha256": "e2c2e99f8b53603def3496e9370dc0d74ac9289f8f06cd71fa59d4897ad72cca"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/extF80_to_ui64_r_minMag.cc",
+      "sha256": "c2bcf1ec73870c43d791c5a2a4ea7029b10e059b076ad1f89de53226e4371c1d"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_addsub.cc",
+      "sha256": "64b0009d89eaa3d2d25f88aba92c7860040dbe989a57d4d719627cf0087dcec9"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_div.cc",
+      "sha256": "84bae4b97bb384fc35aaa0e4a08085209222eb70ee555723c3ba9c54d8c66879"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_mul.cc",
+      "sha256": "2360ea80335cef30e2d5bf144b3cc8ed6642c26beb0550d4be0e1f09d4b79dac"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_mulAdd.cc",
+      "sha256": "8818ce219be2f4c7250c46c467d37460055b748db2188c55f5674e9482d1a7f6"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_mul_by_extF80.cc",
+      "sha256": "65fa77923c5d406bbba42f920c663d72b609c4a1910214ea46ec608a06758381"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_round.cc",
+      "sha256": "5d6afa60024ce8c7d1fc313b5ab588be3a2259766ff478e844ba62e74458a5e4"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_to_extF80.cc",
+      "sha256": "9922b6d4be8b6f360e243ec3ed2694c0482731473bb5283202546a2c619b2b96"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_to_f32.cc",
+      "sha256": "a3250d913701b67986a966259e4772cce9bd890303f19c930cbd2b9de2f99e66"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/f128_to_f64.cc",
+      "sha256": "31f718cfaedc94039e550e30a678baafba4c4890f96dd83c333c36f82734e005"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/i32_to_f128.cc",
+      "sha256": "e79fedbb73ce7158f6a1682055c9c26720feb5e5739eeae10d305ba160adf4be"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/i64_to_f128.cc",
+      "sha256": "ec729e04a3e62c974fe041db8121d3f78fe5e2152c10bde95217e2ed10fa1f90"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/internals.h",
+      "sha256": "61a7f029b32eec09e7eb866cec89f278adf7ac0b1c9b4ac8faecbcad01fb9a31"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/opts-GCC.h",
+      "sha256": "524ae09ffa1bd4705a39e7c9fc12c811a59303eb30da1311375edcf62ae76d01"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/primitiveTypes.h",
+      "sha256": "ab02677ae44438b2f95e020d0a831bcbc479c3b26771dfe84f442eddd11212de"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/primitives.h",
+      "sha256": "202d9a26e279077074b957600edb617d0c58a1f60d37d6fbf3b03635b507c33f"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/softfloat-compare.h",
+      "sha256": "69b461c1de2fc1e6a850447dd16d23d6191ae391c1a30f67988fce19af8a1c1b"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/softfloat-extra.h",
+      "sha256": "33f37fa0818497fa53048e1bd0f90070602cf4530f8d02a542c831ce037bf764"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/softfloat.h",
+      "sha256": "819cdb84e07f93c8a114384abcda250aa07f11d9b421748596849da5bd19a9a2"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/softfloat_types.h",
+      "sha256": "9178533e79401cf1b5c93f37e3d433ea2fdd91eb85d163659b080acd29e63994"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/include/specialize.h",
+      "sha256": "27a655c1ff0dad4a2cee1a64b5d1c9289574b2d46ff1e64000040b9f29bdaccd"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/isNaN.cc",
+      "sha256": "9d7e8b61b5c23eca2214748fb2cb4afaf8e16e56f6796edeaae345c7509c2414"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/isSignalingNaN.cc",
+      "sha256": "72b1121f6e95ea037685cdae09fa2e1f43aa6d13ade0050c92c819b028f7f5b8"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_add128.cc",
+      "sha256": "2dccc61416c159b64dafc10a0fb3b00da224a197665268862f8d4c9f053326f5"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_add256M.cc",
+      "sha256": "e5ed61d93a05a18a86b37f2572de594584700edd2359ff87564a0390b0816019"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_addMagsExtF80.cc",
+      "sha256": "6ca2d8fe8c4af29ca61ee27a93d411e9cd04fa29eef32bf4898c9f0c4291f375"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_addMagsF128.cc",
+      "sha256": "f18069c60a2dc9fc4075c09392f6a2e1d7a2bd71537495ec71914ccbc406cc14"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_addMagsF16.cc",
+      "sha256": "7db151fcd879e89153f1f33511d7d1c0840c0a45aa4056ccb179767040b6d67b"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_addMagsF32.cc",
+      "sha256": "0fa8dd50a0c669d91f29c03a91d1d546c14ab7fcde188190ec3ed337bb4c23b8"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_addMagsF64.cc",
+      "sha256": "f82e0a091bf3e3750c99c41cffb47d7d6383be3c70f8a311989ea58ae98127ff"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_approxRecipSqrt32_1.cc",
+      "sha256": "e0f2be0cce1e3c4f25583e7b1d991aa5ab994a427501075fcb64f269e48cc0c2"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_approxRecipSqrt_1Ks.cc",
+      "sha256": "16c4ef6180bcd35f28ab4abbb87ee6df3ed16de740c2cd1338f4a32490c2a89e"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_approxRecip_1Ks.cc",
+      "sha256": "4f11b1f5cd7e6b6f7233016e1e70ee1d95e7f11a76865f3dc9fc112eaf7dfa7b"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_countLeadingZeros16.cc",
+      "sha256": "24fcd26e907e4f12f6b30f35dc2272515daa3a0016129b12cde386044f9b6647"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_countLeadingZeros32.cc",
+      "sha256": "37a14d5afb625aad95d4684f390de58064bbb9614dc9ba50bbde25fb0859d98b"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_countLeadingZeros64.cc",
+      "sha256": "83564a4f735c93a00b1ab4271011060917c821470a3d0c67d13d37c053815b55"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_countLeadingZeros8.cc",
+      "sha256": "933a83581e67cfd9ddbd5846c9b1b441478f954e8f621c7fdb3b46b1f2e9f3a3"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_eq128.cc",
+      "sha256": "a175c9296e1c0dbf7c983c9c8904b34d4c1851809410bf7c2c81e6bd6a577393"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_le128.cc",
+      "sha256": "6210a8f1a1a15527c2dc3fa9d520cf3a70497c4b1e4434c68439f2583f86b3e7"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_lt128.cc",
+      "sha256": "667903b0618fc605f5300542f303b632264e65f13b9a9cdda5c8b05e2d8e6d72"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_mul128By32.cc",
+      "sha256": "9dc9d02acfbf157177fb244d4a9e098aaa38a2e70217028260313d075c8a3623"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_mul128To256M.cc",
+      "sha256": "7229f7f9ed40066953fff6a434735366f6e4a272a0459ea59113bcb90f964e15"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_mul64ByShifted32To128.cc",
+      "sha256": "085e838988e9c0aa40da8af2bb8c1f3e4d2e1e1fde15fc5c77cb0eb5bb603cb3"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_mul64To128.cc",
+      "sha256": "0e720cb4d1f55cf9611e21708717cb49bee8c55ce6c9622544400281750e8344"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normRoundPackToExtF80.cc",
+      "sha256": "3b4ee39fd74f342768f1aad336488d8c70614ef6cd5766b5d4676e55bd23e510"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normRoundPackToF128.cc",
+      "sha256": "7fac55ff4cbef1a5631466bbe87497c35808338f4b27806b59501735404d55aa"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normRoundPackToF16.cc",
+      "sha256": "7a6cc116b51749c5fc215d1707014378370866c8766381b518fe6416a84c7031"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normRoundPackToF32.cc",
+      "sha256": "6d42245baa5d29888ec12571fe44d31ccd35e06be48268130bcb7eac09e7a8b0"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normRoundPackToF64.cc",
+      "sha256": "1f8521bd34270737d1f02f2687f536e510f4f19671dbed11e73596dd4efdfe97"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normSubnormalExtF80Sig.cc",
+      "sha256": "6554df8c51521b29b48308fecd8a6d35231c3c86bd71f8ecd436cd825ae041ea"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normSubnormalF128Sig.cc",
+      "sha256": "1db3247c1f90c436d507fd03394a197d057aba0c5a482c75113509cfc01f81da"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normSubnormalF16Sig.cc",
+      "sha256": "3f53a52be1d4594b0e44df805e6430b0854e13f427cf70226f33b228ecc81f21"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normSubnormalF32Sig.cc",
+      "sha256": "134b62d5826d928f1cd3098706393a4843990ed7f1e5e831b9a7b77be09d9708"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_normSubnormalF64Sig.cc",
+      "sha256": "117886d1d140dd17a8ff693f0f96d2bb1977ae8d7a73c0fefececca892479374"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_packToExtF80.cc",
+      "sha256": "71d8422fcc49828ca62d48f6dc11f35a086abfb594a679ee8d610c57c47accb6"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundPackToExtF80.cc",
+      "sha256": "3e235be1c33369345378e571e8dd0ae1eae04560bfafa21c83e89cc4ffb4c254"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundPackToF128.cc",
+      "sha256": "9ac20262e4057dd9c0bcf159b533b8e4646e5b8128e1f4104ffa9e50ac64611f"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundPackToF16.cc",
+      "sha256": "feb80945b430bd9a78389d5a3e997852586230c53a56c5fe7397e0661793526d"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundPackToF32.cc",
+      "sha256": "fb03760193dbf972133f6cc768f7915dc4f66f6ed649b13be2a8460e55467b62"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundPackToF64.cc",
+      "sha256": "f157f9d2d129e69d956755e7a17f576fe636d37c86daaf7429618e3bc9e46b3c"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundToI16.cc",
+      "sha256": "72eefc7669680c0279acf3c16374a0d50d598272c4dac3d6c23e2e9c3db082f3"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundToI32.cc",
+      "sha256": "6b129ddd3d7ec2ef18c6421e5174fc62c05e1eab5413766b43b7271f12d5899a"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundToI64.cc",
+      "sha256": "0a52471f011f203f7a9b3d6b85a79e8d0669de8ec16ee861af413a13aa67fb83"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundToI8.cc",
+      "sha256": "694f884ae832a21a8fcd126d3851f151da0a16131840447d7259ab2ab26aa8c5"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundToUI16.cc",
+      "sha256": "e8a2cf148b8a2c1b86eb9ae4498b79214b5407171a4fcfa00d1099fe3cff72b0"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundToUI32.cc",
+      "sha256": "c6f9806736791593e672f42a7e28ee19562abd847d8e81263140b74bd90cefba"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundToUI64.cc",
+      "sha256": "aea74aead7f9960f66cf264214b1e80766315dba3d028a6b21123330846d7ea5"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_roundToUI8.cc",
+      "sha256": "8e4312490baf3dc84b599894316c7222af046c611be54b8d4d8a7a784856446d"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shiftRightJam128.cc",
+      "sha256": "ddd0d6391c5d733ecb9a7ff20ad0c3262707e0d81e3bbf926763b34b97ff405f"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shiftRightJam128Extra.cc",
+      "sha256": "feda1c9983b7e0775e7c8f12e29a8474cbab24d0ebecf6cc138cfd5a3058e3c5"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shiftRightJam256M.cc",
+      "sha256": "c25d1a699f36cbb6a8a86fedae772fc3268fea00faa52d7dcc5fd485987f2b22"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shiftRightJam32.cc",
+      "sha256": "a7fb158d6cb5739d738ad31690b96459cc665c8cf8e77165451c3c5a45a1847f"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shiftRightJam64.cc",
+      "sha256": "4ef92f90ab43fead918729de3b41c6cf774651e42f1dd587364c7bff494cbf40"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shiftRightJam64Extra.cc",
+      "sha256": "d9fcf74c4b67d7ae613d311684c741880ffeae7a7a246c4fd26abf47d89edab9"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shortShiftLeft128.cc",
+      "sha256": "8321fd76ea466f28b0ecaebb0f5eec8ac31df8a3b145d1ef1ed4e0baa62a0364"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shortShiftRight128.cc",
+      "sha256": "e0884b70be913f1bdd7c17cccf101045b0c21c536f7e13beba4a03fefc7bd11e"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shortShiftRightJam128.cc",
+      "sha256": "f47d4f3c20ebe320f55a506710fee56a94c6c9dd47d05e1b005307fe643a6a32"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shortShiftRightJam128Extra.cc",
+      "sha256": "edcfeb79409ae52d4d7b83e0c77a19fcdef65cecb72bc77d61b855fed0e6b573"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shortShiftRightJam64.cc",
+      "sha256": "0848fd9a3adc43c13f9731a4010061fb60e3456f45df48f070c8ad1475a11f04"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_shortShiftRightJam64Extra.cc",
+      "sha256": "33817e4ff6be374f9ab2c9cda33e7e147801dca34a3aee587cb1cc2455c9d1bf"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_sub128.cc",
+      "sha256": "5f49dd201bf02a946aa6f39523814018707a9dc8fb4d0d3f5f00fdf7e5d2e268"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_sub256M.cc",
+      "sha256": "9368a7eb34b0ef227d20ae926e9fdd02c05aff7eb98fa2c59982061bc9218542"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_subMagsExtF80.cc",
+      "sha256": "07bb28b37afa9a2e0b5f66a0bfd505a098a95bc3cce9c1dc591234127b82b4b5"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_subMagsF128.cc",
+      "sha256": "2574cda169b6ae9b6777435e94cbbddf6ac009d8fa1b97ebc34f1a56552ccbbf"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_subMagsF16.cc",
+      "sha256": "995189b89caea748346464328187dd9bc15ee70f18d2711015adc90abcdeb244"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_subMagsF32.cc",
+      "sha256": "58cd74c6703d5611af6d7c86de228d2ea95cf0b9989441efa13df2a7b659ff15"
+    },
+    {
+      "path": "bochs/cpu/softfloat3e/s_subMagsF64.cc",
+      "sha256": "9d8ad22f69a64203379bec42120ce910491af8593fd31bfc4ed86a4081788207"
+    },
+    {
+      "path": "bochs/cpu/wide_int.h",
+      "sha256": "e0ac92d7f51c78b3c1509e09138a7076071fbea3ad44a5f5376db6e3749ec6bf"
+    }
+  ]
+}

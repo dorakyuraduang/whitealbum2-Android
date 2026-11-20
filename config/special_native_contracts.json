@@ -1,0 +1,37 @@
+{
+  "schema": "wa2.special-native-contracts.v1",
+  "program": "special-contents-cn",
+  "input_sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
+  "all_platforms_use_the_same_sources": true,
+  "transcendental": {
+    "implementation": "shared scalar SoftFloat and Bochs arithmetic",
+    "upstream_revision": "b083c0c2515796254de31556989fe4b7b765ddc4",
+    "instructions": ["FYL2X", "FYL2XP1", "F2XM1", "FPATAN", "FSIN", "FCOS", "FPTAN"],
+    "special_instruction_sites": 50,
+    "internal_host_libm_required": false,
+    "hardware_result_status_live_stack_cases": 107520,
+    "serialized_and_register_file_paths_compared": true,
+    "precision_control_modes_tested": [24, 53, 64],
+    "rounding_modes_tested": ["nearest-even", "down", "up", "toward-zero"],
+    "exhaustive_all_inputs_or_all_cpu_models_claimed": false,
+    "unmasked_exception_delivery_remains_unsupported": true
+  },
+  "lzss_prefix": {
+    "source_function": "0x438270",
+    "prefix_hook": "0x4382a6",
+    "unchanged_continuation": "0x4382b0",
+    "dictionary": "0xa79d10",
+    "maximum_input_bytes": 67108864,
+    "maximum_output_bytes": 67108864,
+    "requires_complete_exact_size_stream": true,
+    "overlapping_input_output_dictionary_or_frame_rejected": true,
+    "writable_executable_output_rejected": true,
+    "invalid_or_unadmitted_inputs_use_original_static_loop": true,
+    "original_bounds_debug_trace_and_return_tail_preserved": true,
+    "return_output_dictionary_argument_slot_stack_and_fp_compared": true,
+    "payload_cache": false
+  },
+  "whole_program_complete": false,
+  "android_gameplay_validation": "pending-user-controlled-run",
+  "android_performance_validation": "pending-comparable-device-run"
+}

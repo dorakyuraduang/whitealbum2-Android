@@ -126,13 +126,15 @@ def image_source(graph, data):
 
 
 def generate():
+    from verify_x87_transcendental import fresh as verified_transcendental
+    math_proof=verified_transcendental()
     graph, bodies, edges, merged, owners, receipt = analyze()
     OUT.mkdir(parents=True, exist_ok=True)
     ordered = sorted(merged)
     positions = {pc: index for record in merged.values() for index, pc in enumerate(record['locations'])}
     dead_flags = {pc: op for record in merged.values() for pc, op in dead_flag_operations(record, bodies, edges).items()}
     header = ['#pragma once', '#include "functions.hpp"', '#include "integer_value.hpp"',
-              '#include "native_string.hpp"', '#include "work_samples.hpp"',
+              '#include "native_string.hpp"', '#include "work_samples.hpp"', '#include "special/lzss.hpp"',
               'namespace wa2::special {', 'using aot::Context;using aot::Scope;',
               'using aot::CodeSpan;using aot::Function;using aot::Location;',
               'using aot::call_leaf_service;using aot::call_source_indirect;']
@@ -145,7 +147,8 @@ def generate():
     spans_by_entry = {}
     sample_indices={entry:index for index,entry in enumerate(ordered)}
     sources = []
-    pending = sorted(pc for pc, (body, _, _) in bodies.items() if PENDING_TRANSCENDENTAL.search(body))
+    transcendental = sorted(pc for pc, (body, _, _) in bodies.items() if PENDING_TRANSCENDENTAL.search(body))
+    pending = []
     for shard in range(16):
         name = f'functions_{shard}.cpp'
         sources.append(name)
@@ -160,6 +163,8 @@ def generate():
             for pc in record['locations']:
                 body, raw, _ = bodies[pc]
                 native = CONTRACT_FAULT if pc in pending else emit_body(pc, body, edges, owners, positions)
+                if pc==0x4382a6:
+                    native='if constexpr(!Metered)wa2::special::try_lzss_prefix(s,m);\n'+native
                 if pc in dead_flags:
                     operation = dead_flags[pc]
                     native = native.replace('wr::'+operation+'(', f'wa2::aot::value::{operation}<Metered>(')
@@ -256,7 +261,8 @@ def generate():
         all_discovered_instructions_compiled=True, all_direct_edges_resolve=True,
         recovered_callback_entries=callbacks['recovered_entries'],pointer_slots_audited=callbacks['pointer_slots_audited'],
         recovered_jump_entries=callbacks['recovered_jump_entries'],shared_bulk_string_kernel=True,sampled_static_work=True,
-        pending_transcendental_sites=pending, differential_probe_entries=probes,
+        pending_transcendental_sites=pending,supported_transcendental_sites=transcendental,
+        transcendental_verification_cases=math_proof['cases'],native_lzss_prefix=True,differential_probe_entries=probes,
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,
         generated_sha256={p.name: digest(p) for p in sorted(OUT.iterdir()) if p.is_file() and p.name != 'manifest.json'})

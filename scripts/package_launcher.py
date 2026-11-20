@@ -288,6 +288,11 @@ def main():
                     apk.write(special_library, special_entry, compress_type=zipfile.ZIP_DEFLATED)
                     preserved[special_entry] = special_info['sha256']
                     expected.add(special_entry)
+                    notice='assets/licenses/x87-math.txt'
+                    content=(ROOT/'third_party/x87_math/NOTICE.txt').read_bytes()
+                    if notice in expected:raise ValueError('Duplicate x87 math license entry')
+                    apk.writestr(notice,content,compress_type=zipfile.ZIP_DEFLATED)
+                    preserved[notice]=hashlib.sha256(content).hexdigest();expected.add(notice)
             else:
                 apk.write(ROOT / 'LICENSE', 'META-INF/WA2-LICENSE.txt', compress_type=zipfile.ZIP_DEFLATED)
                 expected = {'AndroidManifest.xml', 'resources.arsc', 'classes.dex',

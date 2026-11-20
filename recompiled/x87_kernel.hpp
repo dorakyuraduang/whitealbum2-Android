@@ -195,8 +195,17 @@ void x87_operation(Stack& stack,void* operand){
         else if constexpr(Opcode==0xd9 && (Encoding==0xf5 || Encoding==0xf8)){
             stack.set(0,remainder(stack.get(0),stack.get(1),environment,Encoding==0xf5));
         }else if constexpr(Opcode==0xd9 && (Encoding==0xfe || Encoding==0xff || Encoding==0xf2)){
+            environment.status&=~RoundUp;
+            if constexpr(Encoding==0xf2){
+                // FPTAN checks both its input and push slot before range or
+                // arithmetic work. A masked fault writes two indefinite NaNs.
+                if(!stack.present(0) || stack.present(7)){
+                    (void)stack.get(0);environment.status&=~0x400;
+                    stack.push(indefinite());stack.set(1,indefinite());return;
+                }
+            }
             const auto value=stack.get(0);
-            if(!value.infinity() && !value.nan() && int(value.exponent())-16383>=63){environment.status|=0x400;}
+            if(!value.unsupported() && !value.infinity() && !value.nan() && int(value.exponent())-16383>=63){environment.status|=0x400;}
             else{
                 environment.status&=~0x400;const auto result=detail::transcend(Encoding,value,{},environment);stack.set(0,result);
                 if constexpr(Encoding==0xf2)stack.push(result.nan()?result:from_integer(1));
