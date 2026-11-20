@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WA2 Launcher</string>
+    <string name="main_game">Main game</string>
+    <string name="special_contents">Special Contents</string>
+    <string name="pick_directory">Choose folder</string>
+    <string name="pick_directory_for">Choose the game folder for %1$s</string>
+    <string name="start">Open</string>
+    <string name="start_edition">Open %1$s</string>
+    <string name="folder_required">Choose the folder containing your game files.</string>
+    <string name="folder_selected">Folder: %1$s</string>
+    <string name="folder_access_expired">Folder access has expired. Choose the folder again.</string>
+    <string name="main_uses_own_folder">Choose the game folder in the installed main game app.</string>
+    <string name="main_runtime_missing">Install the main game Android app to open this entry.</string>
+    <string name="special_runtime_missing">Install a compatible Special Contents runtime to open this entry.</string>
+    <string name="select_runtime">Choose a runtime for %1$s</string>
+    <string name="folder_picker_unavailable">The system folder picker is unavailable.</string>
+    <string name="folder_needs_access">Choose a folder that supports read and write access.</string>
+    <string name="cannot_save_folder">Could not save this folder. Try choosing it again.</string>
+    <string name="cannot_open_runtime">Could not open the runtime. Check that it is still installed and enabled.</string>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="page">#101821</color>
+    <color name="surface">#1B2835</color>
+    <color name="outline">#354658</color>
+    <color name="primary_text">#F2F6FA</color>
+    <color name="secondary_text">#BBC8D5</color>
+    <color name="accent">#9CD7EB</color>
+    <style name="LauncherTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@color/page</item>
+        <item name="android:statusBarColor">@color/page</item>
+        <item name="android:navigationBarColor">@color/page</item>
+    </style>
+</resources>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WA2 启动器</string>
+    <string name="main_game">正篇</string>
+    <string name="special_contents">Special Contents</string>
+    <string name="pick_directory">选择目录</string>
+    <string name="pick_directory_for">选择 %1$s 的游戏目录</string>
+    <string name="start">打开</string>
+    <string name="start_edition">打开 %1$s</string>
+    <string name="folder_required">请选择存放游戏文件的目录。</string>
+    <string name="folder_selected">目录：%1$s</string>
+    <string name="folder_access_expired">目录授权已失效，请重新选择目录。</string>
+    <string name="main_uses_own_folder">请在已安装的正篇应用里选择游戏目录。</string>
+    <string name="main_runtime_missing">安装正篇安卓版后即可打开。</string>
+    <string name="special_runtime_missing">安装兼容的 Special Contents 运行模块后即可打开。</string>
+    <string name="select_runtime">选择 %1$s 的运行模块</string>
+    <string name="folder_picker_unavailable">无法打开系统目录选择器。</string>
+    <string name="folder_needs_access">请选择能授予读写权限的目录。</string>
+    <string name="cannot_save_folder">无法保存目录，请重新选择。</string>
+    <string name="cannot_open_runtime">无法打开运行模块，请检查应用是否仍已安装并启用。</string>
+</resources>
