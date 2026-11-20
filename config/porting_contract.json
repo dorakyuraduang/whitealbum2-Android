@@ -17,6 +17,15 @@
     "android_resource_directory_name_required": false,
     "android_resource_directory_user_selectable": true,
     "source_executable_analysis_allowed": false,
+    "source_executable_analysis_exceptions": [
+      {
+        "program": "special-contents-cn",
+        "filename": "WA2_Special_cn.exe",
+        "sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
+        "authorized_on": "2026-11-20",
+        "static_analysis_only": true
+      }
+    ],
     "screen_monitoring_allowed": false,
     "game_launch_during_development_allowed": false,
     "maximum_build_jobs": 1

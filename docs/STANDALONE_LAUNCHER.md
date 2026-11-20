@@ -4,7 +4,7 @@
 
 正篇安卓版的启动页提供 **开始游戏** 和 **Special Contents** 两个入口。正篇沿用原有资源目录和设置。点击 **Special Contents** 可单独选择并记住该版本的资源目录。
 
-Special Contents 的安卓运行模块需要打包在同一个 APK 内。启动页在找到包内对应模块并确认目录授权后才启用「开始游戏」。本次合包包含正篇现有的运行模块，Special Contents 入口可配置目录。
+Special Contents 的安卓运行模块需要打包在同一个 APK 内。启动页在找到包内对应模块并确认目录授权后才启用「开始游戏」。普通启动页更新包只包含正篇现有运行模块；使用 `--integrated --with-special` 可加入已核验的 Special AOT 模块，保留正篇运行库并在独立进程运行 Special。构建、资源和验证边界见 [Special Contents](SPECIAL_CONTENTS.md)。
 
 已有通过核验的正篇 APK 和本地构建记录时，运行 `python scripts/package_launcher.py --integrated` 可生成启动页更新包。它使用正篇的包名和签名，输出文件按 APK 版本命名，例如 `WA2-arm64-0.2.108-launcher.1.apk`。正篇运行库和游戏内诊断版本仍对应原构建。
 

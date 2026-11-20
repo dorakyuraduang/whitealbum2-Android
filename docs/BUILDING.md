@@ -1,5 +1,14 @@
 # Building and verification
 
+## Special Contents
+
+The explicitly authorized `WA2_Special_cn.exe` has a separate SHA-bound input
+profile and one shared generated AOT source set for Windows and Android.
+`scripts/verify_special_contents.py` builds both hosts serially and runs only
+finite memory checks. `scripts/package_launcher.py --integrated --with-special`
+adds the verified module to the audited main APK, then attempts an in-place ADB
+installation without starting it. See [the Special Contents scope and commands](SPECIAL_CONTENTS.md).
+
 ## Active AOT host refresh
 
 The primary delivery returned to shared AOT on 2026-11-08; the native core

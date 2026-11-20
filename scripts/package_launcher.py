@@ -81,14 +81,80 @@ def copy_runtime(base, destination, libraries):
     return preserved
 
 
+def audited_special():
+    from verify_special_contents import fresh, RECEIPT
+    proof = fresh()
+    if not proof['same_special_sources_on_all_hosts'] or not proof['checks']['runtime']:
+        raise ValueError('Special module lacks shared-source and import/storage checks')
+    artifact = proof['artifacts']['android']
+    return Path(artifact['file']), dict(artifact, verification_sha256=sha256(RECEIPT),
+        gameplay_validation=proof['android_gameplay_validation'])
+
+
+def special_registered_natives(artifact):
+    """Audit hidden callbacks registered by the existing JNI_OnLoad services."""
+    from verify_special_contents import RECEIPT
+    proof = json.loads(RECEIPT.read_text())
+    unstripped = Path(artifact['unstripped_file'])
+    if sha256(unstripped) != artifact['unstripped_sha256']:
+        raise ValueError('Unstripped Special library changed before JNI registration audit')
+    nm = ROOT/'tools/android-sdk/ndk/27.0.12077973/toolchains/llvm/prebuilt/windows-x86_64/bin/llvm-nm.exe'
+    symbols = subprocess.run([str(nm),'--defined-only','--demangle',str(unstripped)],cwd=ROOT,
+        creationflags=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS,
+        stdout=subprocess.PIPE,stderr=subprocess.PIPE,check=True,timeout=60).stdout.decode('utf-8',errors='replace')
+    lifecycle_path = 'android/native/frame_metrics_jni.cpp'
+    lifecycle = (ROOT/lifecycle_path).read_text()
+    if sha256(ROOT/lifecycle_path) != proof['source_sha256'][lifecycle_path] or 'initialize_services<JNIEnv>(env,services)' not in lifecycle or ' JNI_OnLoad(' not in lifecycle:
+        raise ValueError('Special JNI lifecycle differs from the compiled source contract')
+    result = {}
+    for owner,method,signature,source,callback,initializer,native_symbol in (
+        ('org.wa2.port.NativeWidgets','nativeEvent','(IIIIIIILjava/lang/String;)V','android/native/widgets_android.cpp',
+         'Java_org_wa2_port_NativeWidgets_nativeEvent','initialize_widgets_jni','Java_org_wa2_port_NativeWidgets_nativeEvent'),
+        ('org.wa2.port.FileChooser','nativeSelection','(ILjava/lang/String;)V','android/native/shell_android.cpp',
+         'selection','initialize_shell_jni','(anonymous namespace)::selection(')):
+        text = (ROOT/source).read_text()
+        pattern = (r'JNINativeMethod\s+(\w+)\s*\{const_cast<char\*>\("'+re.escape(method)+
+            r'"\),const_cast<char\*>\("'+re.escape(signature)+r'"\),reinterpret_cast<void\*>\('+re.escape(callback)+r'\)\}')
+        match = re.search(pattern,text)
+        if (sha256(ROOT/source) != proof['source_sha256'][source] or not match or
+                f'FindClass("{owner.replace(".","/")}")' not in text or
+                f'RegisterNatives(widgets_class,&{match[1]},1)' not in text or
+                f'wa2::android::{initializer}' not in lifecycle or
+                f'wa2::android::{initializer}(' not in symbols or native_symbol not in symbols):
+            raise ValueError('Missing compiled JNI registration contract: '+owner+'.'+method)
+        result[(owner,method,signature)] = dict(native_symbol=native_symbol,source=source,
+            source_sha256=proof['source_sha256'][source],initializer=initializer,
+            lifecycle_source_sha256=proof['source_sha256'][lifecycle_path])
+    return result
+
+
+def add_special_activity(package):
+    app = package.find('application')
+    if any(a.get(ANDROID+'name') in ('.SpecialContentsActivity','org.wa2.port.SpecialContentsActivity') for a in app.findall('activity')):
+        raise ValueError('Duplicate Special Contents activity')
+    activity = ET.SubElement(app, 'activity', {
+        ANDROID+'name': '.SpecialContentsActivity', ANDROID+'label': 'Special Contents',
+        ANDROID+'exported': 'false', ANDROID+'process': ':special',
+        ANDROID+'screenOrientation': 'sensorLandscape',
+        ANDROID+'windowSoftInputMode': 'stateAlwaysHidden|adjustNothing',
+        ANDROID+'configChanges': 'keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|navigation|density|fontScale'})
+    intent = ET.SubElement(activity, 'intent-filter')
+    ET.SubElement(intent, 'action', {ANDROID+'name': 'org.wa2.launcher.action.RUN_SPECIAL_CONTENTS'})
+    ET.SubElement(intent, 'category', {ANDROID+'name': 'android.intent.category.DEFAULT'})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--integrated', action='store_true', help='Update the launcher in the audited regular Android APK')
+    parser.add_argument('--with-special', action='store_true', help='Include the verified Special module in the integrated APK and install in place')
     parser.add_argument('--sdk', type=Path, default=ROOT / 'tools/android-sdk')
     parser.add_argument('--jdk', type=Path, default=ROOT / 'tools/source-analysis/jdk-21.0.12.1+1')
     parser.add_argument('--keystore', type=Path)
     parser.add_argument('--alias', default='wa2-dev')
     args = parser.parse_args()
+    if args.with_special and not args.integrated:
+        raise ValueError('--with-special requires --integrated')
+    special_library, special_info = audited_special() if args.with_special else (None, None)
 
     key = args.keystore or ROOT / 'private/android-signing/wa2-native-dev.p12'
     if args.keystore is None and not key.is_file():
@@ -125,6 +191,10 @@ def main():
     base = None
     if args.integrated:
         base, version, version_code, libraries = audited_base()
+        if args.with_special:
+            profile = json.loads((ROOT/'config/special_contents.json').read_text())
+            version, version_code = profile['android_version_name'], profile['android_version_code']
+            add_special_activity(package)
         app_id = 'org.wa2.port'
         package.attrib.update({'package': app_id, ANDROID + 'versionName': version,
                                ANDROID + 'versionCode': str(version_code)})
@@ -192,6 +262,11 @@ def main():
         run([javac, '-J-XX:ActiveProcessorCount=1', '-J-XX:+UseSerialGC', '-J-Xmx192m',
              '-J-Duser.language=en', '-encoding', 'UTF-8', '-source', '8', '-target', '8', '-parameters', '-classpath', api,
              '-d', classes, *java_sources])
+        special_jni = None
+        if args.with_special:
+            from verify_sdl_jni import verify as verify_jni
+            special_jni = verify_jni(classes, special_library, 'org/wa2/port', 1,
+                registered=special_registered_natives(special_info))
         bytecode = staging / 'launcher.jar'
         run([jar, '--create', '--file', bytecode, '-C', classes, '.'])
         run([*java, '-cp', tools / 'lib/d8.jar', 'com.android.tools.r8.D8',
@@ -208,6 +283,11 @@ def main():
             if args.integrated:
                 preserved = copy_runtime(base, apk, libraries)
                 expected.update(preserved)
+                if args.with_special:
+                    special_entry = 'lib/arm64-v8a/libwa2_special.so'
+                    apk.write(special_library, special_entry, compress_type=zipfile.ZIP_DEFLATED)
+                    preserved[special_entry] = special_info['sha256']
+                    expected.add(special_entry)
             else:
                 apk.write(ROOT / 'LICENSE', 'META-INF/WA2-LICENSE.txt', compress_type=zipfile.ZIP_DEFLATED)
                 expected = {'AndroidManifest.xml', 'resources.arsc', 'classes.dex',
@@ -228,11 +308,17 @@ def main():
             if len(original) != 1 or original != re.findall(certificate, verification):
                 raise ValueError('Integrated APK must retain the regular app signing identity')
         run([zipalign, '-c', '4', signed])
+        from verify_shared_package import verify_resource_table
+        verify_resource_table(signed)
         badging = run([aapt, 'dump', 'badging', signed])
         if f"package: name='{app_id}' versionCode='{version_code}' versionName='{version}'" not in badging:
             raise ValueError('Launcher APK identity does not match its manifest')
         if f"launchable-activity: name='{app_id}.LauncherActivity'" not in badging:
             raise ValueError('Launcher activity is unavailable')
+        if args.with_special:
+            tree = run([aapt, 'dump', 'xmltree', signed, '--file', 'AndroidManifest.xml'])
+            if not all(value in tree for value in ('SpecialContentsActivity', ':special', 'org.wa2.launcher.action.RUN_SPECIAL_CONTENTS')):
+                raise ValueError('Packaged Special activity/action/process is incomplete')
         permissions = run([aapt, 'dump', 'permissions', signed])
         if any(line.startswith('uses-permission') for line in permissions.splitlines()):
             raise ValueError('The standalone launcher should use only selected-folder grants')
@@ -246,9 +332,19 @@ def main():
                     entries=entries, signature_v2_verified=True, alignment_verified=True,
                     base_apk_sha256=sha256(base) if args.integrated else None,
                     preserved_entries=preserved,
+                    special_contents=special_info,
+                    special_jni=special_jni,
                     app_launched=False, passed=True)
-        (logs / f'{label}.json').write_text(json.dumps(info, indent=2) + '\n', encoding='utf-8')
-        print(json.dumps(info, indent=2))
+        receipt_path = logs / f'{label}.json'
+        receipt_path.write_text(json.dumps(info, indent=2) + '\n', encoding='utf-8')
+        if args.with_special:
+            from install_verified_android import install
+            installation = install(receipt_path)
+            print(json.dumps(dict(file=str(artifact),version=version,version_code=version_code,
+                sha256=info['sha256'],bytes=info['bytes'],special_contents_included=True,
+                original_main_runtime_preserved=True,installation=installation),indent=2),flush=True)
+        else:
+            print(json.dumps(info, indent=2))
 
 
 if __name__ == '__main__':

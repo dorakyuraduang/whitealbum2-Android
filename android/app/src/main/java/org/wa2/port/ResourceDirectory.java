@@ -29,6 +29,14 @@ final class ResourceDirectory {
     private static final int TREE_ACCESS = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
     private static final String PREFERENCES = "resource-directory";
     private static final String TREE_KEY = "tree-uri";
+    // Each runtime runs in a separate process; never rewrite the main title's
+    // persisted folder when the Special activity receives its directory grant.
+    private static boolean specialSession;
+    private static Uri specialTree;
+    static void specialSession(Uri tree) {specialSession=true;specialTree=tree;}
+    static boolean specialSession() {return specialSession;}
+    static boolean validSpecialSession() {return specialSession && specialTree!=null;}
+    private static String preferenceName() {return specialSession?"special-resource-directory":PREFERENCES;}
     private static Context context;
     private static Activity owner;
     private static final class ArchiveDocument {
@@ -61,7 +69,7 @@ final class ResourceDirectory {
             looseDocuments=null;looseGeneration=-1;
         }
         String saved = preferences().getString(TREE_KEY, null);
-        Uri tree = saved == null ? null : Uri.parse(saved);
+        Uri tree = specialSession ? specialTree : saved == null ? null : Uri.parse(saved);
         synchronized (LOCK) {
             if (tree != null && tree.equals(preparedTree) && preparedArchives != null) {
                 archives = preparedArchives; activeTree = tree; preparedArchives = null; preparedTree = null;
@@ -94,10 +102,11 @@ final class ResourceDirectory {
     }
 
     private static SharedPreferences preferences() {
-        return context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
+        return context.getSharedPreferences(preferenceName(), Context.MODE_PRIVATE);
     }
 
     static Uri selectedTree(Context application) {
+        if(specialSession)return specialTree;
         String saved = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE).getString(TREE_KEY, null);
         if (saved == null) return null;
         try { Uri tree = Uri.parse(saved); return validTree(tree) ? tree : null; }
@@ -129,7 +138,7 @@ final class ResourceDirectory {
         if (!validTree(tree)) throw new IOException("请选择存放原版 PAK 的游戏资源文件夹，名称不限。");
         ContentResolver resolver = application.getContentResolver();
         ArchiveNames<ArchiveDocument> found = scan(resolver, tree);
-        SharedPreferences prefs = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
+        SharedPreferences prefs = application.getSharedPreferences(preferenceName(), Context.MODE_PRIVATE);
         synchronized (GameFolderSelection.class) {
             String previous = prefs.getString(TREE_KEY, null);
             if ((grantFlags & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0)
@@ -267,7 +276,7 @@ final class ResourceDirectory {
                 if (!current(activity, token)) return;
                 // Provider IPC and preferences I/O stay outside LOCK. Closing
                 // the activity must always be able to wake the SDL thread.
-                SharedPreferences prefs = application.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE);
+                SharedPreferences prefs = application.getSharedPreferences(preferenceName(), Context.MODE_PRIVATE);
                 synchronized (GameFolderSelection.class) {
                     String previous = prefs.getString(TREE_KEY, null);
                     if (persist) {
@@ -295,6 +304,7 @@ final class ResourceDirectory {
                     if (!current(activity, token)) return;
                     preferences().edit().remove(TREE_KEY).apply();
                     String message = error.getMessage();
+                    if(specialSession){reportFailure(message==null?"无法访问 Special Contents 资源目录":message);activity.finish();return;}
                     choose(activity, token, message == null ? "无法访问资源目录" : message);
                 });
             }

@@ -6,6 +6,10 @@
 
 **[下载与发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
 
+Special Contents 已接入同一套共享 AOT 编译流程，可构建一个 APK 双入口的测试包。
+两部作品使用独立资源目录和运行进程；整部兼容性及手机实际运行验证仍待完成。
+构建方式和存档隔离见 [Special Contents](docs/SPECIAL_CONTENTS.md)。
+
 ## 快速启动
 
 要求：**Android 8.0 及以上、ARM64、OpenGL ES 3.0**。

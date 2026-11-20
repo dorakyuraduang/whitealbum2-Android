@@ -1,4 +1,4 @@
-"""Check compiled SDL Java native declarations against the actual Android ELF.
+"""Check compiled Java native declarations against the actual Android ELF.
 
 No library is loaded and no Android process, emulator or screen is used.
 """
@@ -27,9 +27,9 @@ def mangle(value):
     return ''.join(result)
 
 
-def verify(classes,library):
+def verify(classes,library,package='org/libsdl/app',minimum=50,registered=None):
     classes=Path(classes);library=Path(library)
-    class_files=sorted((classes/'org/libsdl/app').glob('*.class'))
+    class_files=sorted((classes/package).glob('*.class'))
     if not class_files:raise ValueError('Compiled SDL Java classes are missing')
     flags=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS
     def run(command):
@@ -52,15 +52,20 @@ def verify(classes,library):
             short='Java_'+mangle(class_name.replace('.','/'))+'_'+mangle(name)
             long=short+'__'+mangle(signature[1:signature.index(')')])
             found=short if short in symbols else long if long in symbols else None
-            record=dict(owner=class_name,method=name,descriptor=signature,symbol=found)
+            registration=(registered or {}).get((class_name,name,signature))
+            binding='exported'
+            if found is None and registration is not None:
+                found=registration['native_symbol'];binding='RegisterNatives'
+            record=dict(owner=class_name,method=name,descriptor=signature,symbol=found,binding=binding)
+            if registration is not None:record['registration']=registration
             methods.append(record)
             if found is None:missing.append(dict(record,expected=[short,long]))
-    if pending or len(methods)<50:raise ValueError('SDL JNI declaration inventory is incomplete')
+    if pending or len(methods)<minimum:raise ValueError('JNI declaration inventory is incomplete')
     result=dict(schema='wa2.android-sdl-jni.v1',file=str(library),
         sha256=hashlib.sha256(library.read_bytes()).hexdigest(),native_methods=len(methods),methods=methods,
-        missing=missing,game_launched=False,screen_access=False,android_device_verified=False,passed=not missing)
+        missing=missing,java_package=package,game_launched=False,screen_access=False,android_device_verified=False,passed=not missing)
     if missing:
-        raise ValueError('SDL Java native implementations are absent: '+', '.join(x['owner']+'.'+x['method'] for x in missing))
+        raise ValueError('Java native implementations are absent: '+', '.join(x['owner']+'.'+x['method'] for x in missing))
     return result
 
 

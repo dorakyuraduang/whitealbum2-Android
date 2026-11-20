@@ -2,7 +2,7 @@
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
-LEGACY_ONLY=frozenset({'PortUi.java','NativeWidgets.java','WidgetSession.java','WidgetControls.java','WidgetIcon.java','FileChooser.java'})
+LEGACY_ONLY=frozenset({'PortUi.java','NativeWidgets.java','WidgetSession.java','WidgetControls.java','WidgetIcon.java','FileChooser.java','SpecialContentsActivity.java'})
 
 def java_sources(backend):
     main=sorted((ROOT/'android/app/src/main/java').rglob('*.java'))

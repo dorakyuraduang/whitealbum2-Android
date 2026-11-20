@@ -31,6 +31,7 @@ final class LaunchSettings {
     private static String key(Context context) { Uri tree=ResourceDirectory.selectedTree(context);return tree==null?null:tree.toString(); }
     private static LaunchProfileStore store(Context context) { synchronized(LOCK){return profiles.get(key(context));} }
     private static LaunchProfile session(Context context) {
+        if(ResourceDirectory.specialSession())return ResourceDirectory.validSpecialSession()?new LaunchProfile(LaunchProfile.FPS|LaunchProfile.LONG_PRESS):null;
         if(!(context instanceof Wa2Activity))return null;Intent intent=((Activity)context).getIntent();String selected=key(context);
         if(intent==null || selected==null || !selected.equals(intent.getStringExtra(SESSION_TREE)))return null;
         try{return LaunchProfile.decode(intent.getByteArrayExtra(SESSION));}catch(IOException error){return null;}
@@ -52,7 +53,7 @@ final class LaunchSettings {
     static String script(Context context) { return profile(context).scriptLocation(); }
     static String font(Context context) { return profile(context).fontLocation(); }
     static String subtitle(Context context) {return profile(context).subtitle;}
-    static String[] gameArguments(Context context) { return profile(context).gameArguments(); }
+    static String[] gameArguments(Context context) { return ResourceDirectory.specialSession()?new String[0]:profile(context).gameArguments(); }
     static boolean saving(Context context) {LaunchProfileStore current=store(context);return current!=null && current.dirty();}
     // Called after read/write authorization on a launcher worker. Queueing on
     // the same executor drains earlier toggle writes before reload/game start.

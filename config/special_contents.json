@@ -1,0 +1,16 @@
+{
+  "schema": "wa2.program-profile.v1",
+  "id": "special-contents-cn",
+  "filename": "WA2_Special_cn.exe",
+  "sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
+  "backend": "shared-aot",
+  "namespace": "wa2::special",
+  "shared_generated_directory": "generated/special-contents/aot",
+  "android_library": "wa2_special",
+  "android_distribution": "integrated-apk",
+  "android_process": ":special",
+  "android_version_name": "0.2.109-special-aot",
+  "android_version_code": 112,
+  "whole_program_complete": false,
+  "complete_gameplay_verified": false
+}

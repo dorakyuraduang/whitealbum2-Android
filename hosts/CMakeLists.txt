@@ -44,3 +44,23 @@ else()
     target_link_libraries(wa2_native PRIVATE wa2_shared_startup gdi32)
     set_target_properties(wa2_native PROPERTIES OUTPUT_NAME WA2_SDL2_x64)
 endif()
+if(WA2_SPECIAL_CONTENTS)
+    if(ANDROID)
+        add_library(wa2_special SHARED special_android_main.cpp
+            "${WA2_ROOT}/android/native/android_resources.cpp"
+            "${WA2_ROOT}/android/native/compiled_resources.cpp"
+            "${WA2_ROOT}/android/native/compiled_save_files.cpp"
+            "${WA2_ROOT}/android/native/frame_metrics.cpp"
+            "${WA2_ROOT}/android/native/frame_hud_jni.cpp"
+            "${WA2_ROOT}/android/native/subtitles_android.cpp"
+            "${WA2_ROOT}/android/native/frame_metrics_jni.cpp")
+        target_include_directories(wa2_special PRIVATE "${WA2_ROOT}/android/native" "${WA2_ROOT}/engine" "${WA2_ROOT}/platform")
+        target_link_libraries(wa2_special PRIVATE wa2_special_process log android)
+        target_link_options(wa2_special PRIVATE "-Wl,--no-undefined" "-Wl,-z,max-page-size=16384" "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
+    else()
+        add_executable(wa2_special_windows WIN32 special_windows_main.cpp)
+        target_link_libraries(wa2_special_windows PRIVATE wa2_special_process)
+        target_link_options(wa2_special_windows PRIVATE -municode)
+        set_target_properties(wa2_special_windows PROPERTIES OUTPUT_NAME WA2_Special_SDL2_x64)
+    endif()
+endif()

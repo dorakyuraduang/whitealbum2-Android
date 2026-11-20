@@ -12,6 +12,10 @@
   CPU state and guest-memory runtime. All AOT hosts use the same static sources.
 - Use existing generated C++/CFG and cached analysis. Do not open, hash, decode,
   disassemble or execute WA2_chs.exe unless the user changes this restriction.
+- On 2026-11-20 the user authorized static analysis and recompilation of
+  WA2_Special_cn.exe from WHITE ALBUM2 Special Contents. This exception applies
+  only to the SHA-bound Special Contents profile, not WA2_chs.exe. Do not
+  execute either original program or launch a game during this work.
 - Do not monitor/read/capture the screen or operate game UI. Do not launch the
   game, an emulator or a Windows FPS/pressure test. Memory-only checks are allowed.
 - Builds run below normal priority, hidden, with one job; no concurrent heavy

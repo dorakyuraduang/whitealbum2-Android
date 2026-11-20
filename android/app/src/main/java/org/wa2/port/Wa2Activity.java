@@ -9,7 +9,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import org.libsdl.app.SDLActivity;
 
-public final class Wa2Activity extends SDLActivity {
+public class Wa2Activity extends SDLActivity {
     private GameTouchControls touchControls;
     @Override protected void attachBaseContext(Context base){
         Configuration game=new Configuration(base.getResources().getConfiguration());
