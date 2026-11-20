@@ -13,7 +13,7 @@ import re
 
 from generate_shared_aot import (CASE, PROOF, HELPERS, PENDING_TRANSCENDENTAL,
     CONTRACT_FAULT, emit_body, fixed_memory, portable_floating, merge_bodies,
-    dead_flag_operations)
+    dead_flag_operations, register_floating, register_integers)
 from prepare_special_contents import ROOT, digest, write_json
 
 OUT = ROOT/'generated/special-contents/aot'
@@ -136,16 +136,27 @@ def generate():
     # The original bodies stay available to finite memory reference checks.
     # Production calls unwind before entering the shared codec ABI adapter.
     call_owners={pc:owner for pc,owner in owners.items() if pc not in codec_entries}
+    hot_config=json.loads((ROOT/'config/special_hot_functions.json').read_text())
+    hot=set(hot_config['entries'])
+    if (hot_config['input_sha256']!=receipt['input_sha256'] or
+            (hot_config['shared_optimization'],hot_config['other_generated_functions'])!=('O2','Oz') or
+            len(hot)!=len(hot_config['entries']) or not hot.issubset(merged) or
+            set(hot_config['register_floating_point_entries'])!=hot or
+            set(hot_config['register_integer_entries'])!=hot):
+        raise ValueError('Special measured hot-function contract differs from the common compiler policy')
     OUT.mkdir(parents=True, exist_ok=True)
     ordered = sorted(merged)
     positions = {pc: index for record in merged.values() for index, pc in enumerate(record['locations'])}
     dead_flags = {pc: op for record in merged.values() for pc, op in dead_flag_operations(record, bodies, edges).items()}
     header = ['#pragma once', '#include "functions.hpp"', '#include "integer_value.hpp"',
               '#include "native_string.hpp"', '#include "work_samples.hpp"', '#include "special/lzss.hpp"',
+              '#include "fp_registers.hpp"', '#include "gpr_registers.hpp"',
               'namespace wa2::special {', 'using aot::Context;using aot::Scope;',
               'using aot::CodeSpan;using aot::Function;using aot::Location;',
               'using aot::call_leaf_service;using aot::call_source_indirect;']
-    header += [f'template<bool Metered> void f_{entry:x}(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);' for entry in ordered]
+    for entry in ordered:
+        parameters='bool Metered,bool NativeRegisters=true' if entry in hot else 'bool Metered'
+        header += [f'template<{parameters}> void f_{entry:x}(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);']
     header += ['std::span<const Function> functions() noexcept;',
                'Location locate(std::uint32_t) noexcept;', 'wr::Image initial_image();', '}']
     # functions.hpp supplies Cpu/Memory, while Image is intentionally separate.
@@ -158,14 +169,22 @@ def generate():
     sources = []
     transcendental = sorted(pc for pc, (body, _, _) in bodies.items() if PENDING_TRANSCENDENTAL.search(body))
     pending = []
-    for shard in range(16):
-        name = f'functions_{shard}.cpp'
+    shards=[(f'functions_{shard}.cpp',[entry for entry in ordered[shard::16] if entry not in hot]) for shard in range(16)]
+    shards.append(('functions_hot.cpp',sorted(hot)))
+    for name, entries in shards:
         sources.append(name)
         cpp = ['#include "bodies.hpp"', 'namespace wa2::special {']
-        for entry in ordered[shard::16]:
+        for entry in entries:
             record = merged[entry]
-            cpp += [f'template<bool Metered> void f_{entry:x}(Context& s,wr::Memory& m,Scope& scope,std::uint64_t& budget,std::uint32_t resume){{',
-                    f'wa2::aot::FunctionWorkTimer work_timer({sample_indices[entry]}u,0,0,s.fp.get16(0));',
+            parameters='bool Metered,bool NativeRegisters' if entry in hot else 'bool Metered'
+            cpp += [f'template<{parameters}> void f_{entry:x}(Context& s,wr::Memory& m,Scope& scope,std::uint64_t& budget,std::uint32_t resume){{',
+                    f'wa2::aot::FunctionWorkTimer work_timer({sample_indices[entry]}u,0,0,s.fp.get16(0));']
+            if entry in hot:
+                # Both paths use the same arithmetic and source control flow.
+                # The serialized specialization is a finite memory-test oracle.
+                cpp += ['wa2::aot::fp::RegisterFrame<Metered || !NativeRegisters> floating(s,m,scope);',
+                        'wa2::aot::IntegerRegisters<Metered || !NativeRegisters> integer(s,m,scope);']
+            cpp += [
                     'switch(resume){', *[f'case {positions[pc]}u:goto L_{pc:x};' for pc in record['locations']],
                     'default:throw wr::GuestFault(wr::FaultKind::untranslated,s.eip,"invalid Special resume entry");}']
             spans = []
@@ -182,12 +201,18 @@ def generate():
                 # operation, including conditional/segmented fallbacks.
                 native = fixed_memory(portable_floating(native.replace(
                     'wr::string_op(', 'wr::aot_string_op<Metered>(')))
+                if entry in hot:
+                    native=register_integers(register_floating(native))
                 cpp += [f'L_{pc:x}:{{s.eip=0x{pc:x}u;', 'if constexpr(Metered)wr::tick(budget,s.eip);', native, '}']
                 if spans and spans[-1][0]+len(spans[-1][1]) == pc:
                     spans[-1][1].extend(raw)
                 else:
                     spans.append((pc, bytearray(raw)))
-            cpp += ['}', f'template void f_{entry:x}<false>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);']
+            cpp += ['}']
+            if entry in hot:
+                cpp += [f'template void f_{entry:x}<false,{native}>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);' for native in ('false','true')]
+            else:
+                cpp += [f'template void f_{entry:x}<false>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);']
             spans_by_entry[entry] = spans
         cpp.append('}')
         write(name, '\n'.join(cpp)+'\n')
@@ -273,6 +298,8 @@ def generate():
         pending_transcendental_sites=pending,supported_transcendental_sites=transcendental,
         transcendental_verification_cases=math_proof['cases'],native_lzss_prefix=True,differential_probe_entries=probes,
         shared_vorbis_host_boundaries=codec_entries,
+        measured_hot_entries=sorted(hot),shared_register_fp_and_integer_kernels=True,
+        hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,
         generated_sha256={p.name: digest(p) for p in sorted(OUT.iterdir()) if p.is_file() and p.name != 'manifest.json'})

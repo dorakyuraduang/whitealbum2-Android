@@ -20,9 +20,9 @@ def source_bindings():
                       'generated/special-contents/aot','third_party/x87_math'):
         files.update(p for p in (ROOT/directory).rglob('*') if p.is_file() and p.suffix in
                      {'.cpp','.cc','.hpp','.h','.inc','.cmake','.txt'})
-    files.update(ROOT/name for name in ('config/porting_contract.json', 'config/special_contents.json','config/special_native_contracts.json',
+    files.update(ROOT/name for name in ('config/porting_contract.json', 'config/special_contents.json','config/special_native_contracts.json','config/special_hot_functions.json',
         'scripts/generate_shared_aot.py','scripts/generate_special_aot.py','scripts/prepare_special_contents.py',
-        'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp',
+        'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp','tests/special_render.cpp',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
         'scripts/analysis/ExportCachedListing.java',
@@ -52,6 +52,23 @@ def compiled_codec(directory):
     entries=json.loads((directory/'compile_commands.json').read_text())
     return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file']))
             for e in entries if Path(e['file']).resolve() in wanted}
+
+
+def checked_hot_policy(directory):
+    import re
+    entries=json.loads((directory/'compile_commands.json').read_text())
+    generated=(ROOT/'generated/special-contents/aot').resolve()
+    policies={}
+    for entry in entries:
+        path=Path(entry['file']).resolve()
+        if not path.is_relative_to(generated) or path.name=='probe_oracle.cpp':continue
+        options=re.findall(r'(?<!\S)-O(?:[0123sz]|fast)(?=\s|$)',entry['command'])
+        expected='-O2' if path.name=='functions_hot.cpp' else '-Oz'
+        if not options or options[-1]!=expected:
+            raise ValueError('Special compile optimization differs from measured policy: '+str(path))
+        policies[path.name]=expected
+    if policies.get('functions_hot.cpp')!='-O2':raise ValueError('Missing measured Special hot source')
+    return policies
 
 
 def fresh():
@@ -103,8 +120,8 @@ def main():
                 '-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
                 '-DWA2_SPECIAL_CONTENTS=ON','-DWA2_SPECIAL_CHECKS=ON',
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
-            run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_windows','--parallel','1'],7200)
-            for stem in ('memory','runtime','codec'):
+            run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests','wa2_special_windows','--parallel','1'],7200)
+            for stem in ('memory','runtime','codec','render'):
                 run([win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json'],60)
             run([acmake,'-S',ROOT/'tests/shared-aot-android','-B',android,'-G','Ninja',
                 '-DCMAKE_MAKE_PROGRAM='+str(ROOT/'tools/python/bin/ninja.exe'),
@@ -127,6 +144,11 @@ def main():
                   if name.endswith('.cpp') and name!='probe_oracle.cpp'}
         if windows_sources!=android_sources or windows_sources!=expected:
             raise ValueError('Windows/Android compiled different Special C++ source inventories')
+        hot_policy=checked_hot_policy(win)
+        if hot_policy!=checked_hot_policy(android):raise ValueError('Host hot optimization policies differ')
+        if (manifest.get('measured_hot_entries')!=[0x43cb90] or
+                not manifest.get('shared_register_fp_and_integer_kernels')):
+            raise ValueError('Missing measured Special shared register kernels')
         math_windows,math_android=compiled_math(win),compiled_math(android)
         math_expected={p.relative_to(ROOT).as_posix():digest(p) for p in (ROOT/'third_party/x87_math').rglob('*.cc')}
         math_expected['recompiled/transcend.cpp']=digest(ROOT/'recompiled/transcend.cpp')
@@ -141,7 +163,7 @@ def main():
         if manifest.get('shared_vorbis_host_boundaries')!=[0x458630,0x458660,0x458700,0x458890]:
             raise ValueError('Missing Special shared codec host boundaries')
         checks={}
-        for stem in ('memory','runtime','codec'):
+        for stem in ('memory','runtime','codec','render'):
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
@@ -179,6 +201,12 @@ def main():
                     check.get('maximum_rms_sample_error',999)>1.5 or check.get('original_audio_used') is not False or
                     check.get('audio_device_opened') is not False):
                 raise ValueError('Missing Special codec ABI/source PCM regression')
+            if stem=='render' and (check.get('hot_entry')!=0x43cb90 or
+                    check.get('source_differential_cases')!=264 or check.get('precise_fault_cases')!=24 or
+                    not check.get('exact_cpu_fp_stack_data_globals_and_draw_calls') or
+                    not check.get('paged_and_linear_memory') or not check.get('outer_and_leaf_api_boundaries') or
+                    not check.get('serialized_source_reference') or check.get('window_or_device_created') is not False):
+                raise ValueError('Missing Special actual drawing source/state regression')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         output=ROOT/'out/special-contents';output.mkdir(parents=True,exist_ok=True)
@@ -225,6 +253,7 @@ def main():
             same_special_sources_on_all_hosts=True,compiled_shared_sources=windows_sources,
             compiled_scalar_math_sources=math_windows,transcendental_hardware_cases=math_proof['cases'],
             compiled_shared_codec_sources=codec_windows,shared_vorbis_host_boundaries=manifest['shared_vorbis_host_boundaries'],
+            measured_hot_entries=manifest['measured_hot_entries'],compiled_optimization_policy=hot_policy,
             scalar_math_notice=dict(file=str(notice),sha256=digest(notice)),
             instruction_locations=manifest['instruction_locations'],static_bodies=manifest['static_bodies'],
             recovered_callback_entries=len(callbacks['recovered_entries']),pointer_slots_audited=callbacks['pointer_slots_audited'],
