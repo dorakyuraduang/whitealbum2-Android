@@ -1,5 +1,6 @@
 #pragma once
 #include "functions.hpp"
+#include "glyph_budget.hpp"
 #include <algorithm>
 
 namespace wa2::aot {
@@ -68,6 +69,7 @@ public:
     }
     bool invoke(Context& cpu) {
         auto scope=memory_.execution_scope();
+        GlyphCallScope glyphs{memory_};
         Binding binding{this,&cpu};
         NativeCallScope calls{Binding::invoke,&binding};
         return invoke(cpu,scope);

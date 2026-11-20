@@ -26,6 +26,16 @@ thread_local wa2::text::GlyphGeometryMemo<SpriteTile> glyph_geometry;
 thread_local GlyphCommandReplay glyph_commands;
 struct Declined {};
 template<class T> T read(const std::uint8_t* bytes,unsigned at){T value;std::memcpy(&value,bytes+at,sizeof(value));return value;}
+bool matches_words(wr::Memory::ExecutionScope& scope,wr::U32 address,std::span<const std::uint64_t> expected){
+    const auto size=expected.size_bytes();if(std::uint64_t(address)+size>0x100000000ull)return false;
+    const auto* data=reinterpret_cast<const std::uint8_t*>(expected.data());
+    for(std::size_t offset=0;offset<size;){
+        const auto part=scope.readable(address+wr::U32(offset),size-offset);
+        if(part.empty() || std::memcmp(part.data(),data+offset,part.size()))return false;
+        offset+=part.size();
+    }
+    return true;
+}
 float ordinary(float value){
     // Every arithmetic boundary rejects nonfinite/subnormal binary32 values.
     // Classify their representation once, avoiding floating comparisons and
@@ -97,51 +107,52 @@ bool integer_glyph_geometry(SpriteCommand& command,const std::array<std::uint8_t
     }
     command.tiles=tile_buffer;return true;
 }
-bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::array<std::uint8_t,256>& s,std::uint32_t override_image,bool memo_glyph=false,bool integer_glyph=false){
-    if(!memory.load(0xb34004,32))return false;
+bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::array<std::uint8_t,256>& s,std::uint32_t override_image,bool memo_glyph=false,bool integer_glyph=false,const SpriteSource& source=main_sprite_source){
+    if(!memory.load((source.globals+4),32))return false;
     const auto si=[&](unsigned at){return read<std::int16_t>(s.data(),at);};
     const auto su=[&](unsigned at){return read<std::uint32_t>(s.data(),at);};
     const auto sf=[&](unsigned at){return ordinary(read<float>(s.data(),at));};
     if(si(0x4a)<0 || si(0x4c)>=0 || s[0x15]!=4 || s[0x16] || su(0xdc) || su(0x44)>3)return false;
     if(!override_image && (si(0x4a)<0 || si(0x4a)>=1024))return false;
-    const auto resource=override_image?override_image:0xa93fb8+unsigned(si(0x4a))*128;
+    const auto resource=override_image?override_image:source.images+unsigned(si(0x4a))*128;
     std::array<std::uint8_t,128> image;memory.copy_out(resource,image);
     const auto dim=[&](unsigned at){return read<std::int16_t>(image.data(),at);};
     const int width=dim(0x5c),height=dim(0x5e),tw=dim(0x60),th=dim(0x62),nx=dim(0x64),ny=dim(0x66);
     if(!image[0] || width<=0 || height<=0 || tw<=0 || th<=0 || nx<1 || nx>16 || ny<1 || ny>16)return false;
     const auto palette_index=std::bit_cast<std::int8_t>(s[0x52]);
-    std::array<std::uint8_t,4> palette;memory.copy_out(std::uint32_t(0x4c2290+int(palette_index)*4),palette);
+    std::array<std::uint8_t,4> palette;memory.copy_out(std::uint32_t(source.palette+int(palette_index)*4),palette);
     for(unsigned n=1;n<4;++n)if(su(0x53+n*4)!=su(0x53) || su(0x63+n*4)!=su(0x63))return false;
     std::uint32_t colour=su(0x63),secondary=0xff000000u|(su(0x53)&0xffffffu);
     if(palette[3]<=1){colour&=0xff000000u;secondary=0xff000000u;
         for(unsigned n=0;n<3;++n){const auto c=unsigned(std::clamp(channel(unsigned(s[0x53+n])+s[0x63+n],palette[2-n],palette[3]!=0),0,510));
             colour|=std::min(c,255u)<<(n*8);secondary|=(c-std::min(c,255u))<<(n*8);}}
-    const auto filter=su(0x40),linear=memory.load(0xb3442c,32);
+    const auto filter=su(0x40),linear=memory.load((source.globals+0x42c),32);
     command.minimum=command.magnification=(linear?filter==1:filter-1u<2)?2:1;
     command.mipmap=command.minimum;
-    if(linear && filter==2){const auto caps=memory.load(0xb342c0,32);command.mipmap=2;
+    if(linear && filter==2){const auto caps=memory.load((source.globals+0x2c0),32);command.mipmap=2;
         command.minimum=caps&0x10000000?7:caps&0x08000000?6:caps&0x04000000?3:2;
         command.magnification=caps&0x1000?7:caps&0x800?6:caps&0x400?3:2;
     }
-    command.device=memory.load(0xb34438,32);
-    if(si(0x48)<0)command.target=memory.load(memory.load(0xb34428,32)?0xb3443c:0xb34000,32);
+    command.device=memory.load((source.globals+0x438),32);
+    command.surface_result=source.globals+8;
+    if(si(0x48)<0)command.target=memory.load(memory.load((source.globals+0x428),32)?(source.globals+0x43c):source.globals,32);
     else{
         if(si(0x48)>=1024)return false;
-        const auto target=0xa93fb8+unsigned(si(0x48))*128;
+        const auto target=source.images+unsigned(si(0x48))*128;
         // State 2 creates/clears a texture. Keep that first-use side effect
         // in the checked function; already-created targets have no such work.
         if(memory.load(target+0x68,16)!=1)return false;
         const auto sp=std::uint64_t(cpu.r[wr::ESP]);
-        if(sp+0x128>0xb34008ull && sp<0xb3600cull)return false;
-        memory.check(0xb34008,4,wr::Memory::Write);
-        if(memory.permissions(0xb34008)&wr::Memory::Execute)return false;
+        if(sp+0x128>std::uint64_t(source.globals+8) && sp<std::uint64_t(source.globals+0x200c))return false;
+        memory.check((source.globals+8),4,wr::Memory::Write);
+        if(memory.permissions((source.globals+8))&wr::Memory::Execute)return false;
         command.target=memory.load(memory.load(target+0x70,32),32);
         if(!command.target)return false;
         command.target_kind=SpriteTarget::texture_level_zero;
-        if(std::uint64_t(resource)<0xb3400cull && std::uint64_t(resource)+128>0xb34008ull)return false;
+        if(std::uint64_t(resource)<std::uint64_t(source.globals+12) && std::uint64_t(resource)+128>std::uint64_t(source.globals+8))return false;
     }
     command.blend_enabled=1;command.blend_op=1;
-    const auto blend=su(0x3c);const bool separate=bool(memory.load(0xb342a0,32)&0x800);
+    const auto blend=su(0x3c);const bool separate=bool(memory.load((source.globals+0x2a0),32)&0x800);
     switch(blend){
     case 1:case 11:command.source_blend=5;command.destination_blend=6;break;
     case 2:command.source_blend=2;command.destination_blend=6;break;
@@ -156,8 +167,8 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
     default:command.blend_enabled=0;command.source_blend=2;command.destination_blend=1;
     }
     command.alpha_argument=dim(0x68)==1?1:2; // selects which ALPHAARG slot the source changes below
-    const auto half_bits=memory.load(0x4c2280,32),pointer=read<std::uint32_t>(image.data(),0x70);
-    if(command.target_kind==SpriteTarget::texture_level_zero && std::uint64_t(pointer)<0xb3400cull && std::uint64_t(pointer)+nx*ny*4>0xb34008ull)return false;
+    const auto half_bits=memory.load(source.half_pixel,32),pointer=read<std::uint32_t>(image.data(),0x70);
+    if(command.target_kind==SpriteTarget::texture_level_zero && std::uint64_t(pointer)<std::uint64_t(source.globals+12) && std::uint64_t(pointer)+nx*ny*4>std::uint64_t(source.globals+8))return false;
     if(integer_glyph){
         // Validate the same complete range as the former table copy, including
         // inaccessible unused entries and address wrap. Only one value is
@@ -178,8 +189,8 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
     const auto ox=sf(0x78),oy=sf(0x7c),sx=sf(0x80),sy=sf(0x84);
     float cosine=1,sine=0;
     if(su(0x74)){
-        if(!memory.load(0xbc830c,32) || (cpu.fp.get32(24)&0xffc0u)!=0x1f80u)return false;
-        std::uint64_t radians;memory.copy_out(0x4a22f0,{reinterpret_cast<std::uint8_t*>(&radians),8});
+        if((source.trig_dispatch && !memory.load(source.trig_dispatch,32)) || !memory.load(source.sse2,32) || (cpu.fp.get32(24)&0xffc0u)!=0x1f80u)return false;
+        std::uint64_t radians;memory.copy_out(source.radians,{reinterpret_cast<std::uint8_t*>(&radians),8});
         fp::Environment e{cpu.fp.get16(0),0};
         const auto phase_word=fp::to_binary(fp::multiply(fp::from_binary(su(0x74),32,e),fp::from_binary(radians,64,e),e),32,e);
         const auto phase=ordinary(std::bit_cast<float>(std::uint32_t(phase_word)));
@@ -187,8 +198,7 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
         else{
             if(!wa2::math::exact_trigonometry_input(phase))return false;
             const auto expected=wa2::math::trigonometry_source_words();auto scope=memory.execution_scope();
-            for(const auto at:{0x4a84d0u,0x4ac710u}){const auto bytes=scope.readable(at,expected.size_bytes());
-                if(bytes.size()!=expected.size_bytes() || std::memcmp(bytes.data(),expected.data(),bytes.size()))return false;}
+            for(const auto at:{source.cosine_words,source.sine_words})if(!matches_words(scope,at,expected))return false;
             cosine=ordinary(float(wa2::math::cosine_finite(phase).value));sine=ordinary(float(wa2::math::sine_finite(phase).value));
         }
     }
@@ -228,8 +238,8 @@ bool build(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,const std::arr
 }
 }
 NativeSpriteCounts native_sprite_counts(){return counts;}
-bool native_draw_sprite(wr::Cpu& cpu,wr::Memory& memory){
-    auto* service=SpriteService::find(memory);if(!service || cpu.eip!=0x43b7a0)return false;
+bool native_draw_sprite(wr::Cpu& cpu,wr::Memory& memory,const SpriteSource& source){
+    auto* service=SpriteService::find(memory);if(!service || cpu.eip!=source.sprite_entry)return false;
     if(cpu.fp.bytes[4] || (cpu.fp.get16(0)&0xf3f)!=0x3f){++counts.declined;++counts.fp_declined;return false;}
     if(current_native_calls && !current_native_calls->remaining)return false;
     SpriteCommand command{};std::uint32_t returning{};bool capability_filter{};
@@ -238,13 +248,13 @@ bool native_draw_sprite(wr::Cpu& cpu,wr::Memory& memory){
         const auto sp=cpu.r[wr::ESP];if(std::uint64_t(sp)+12>0x100000000ull)return false;
         const auto sprite=memory.load(sp+4,32);if(!sprite)return false;
         std::array<std::uint8_t,256> snapshot;memory.copy_out(sprite,snapshot);
-        if(read<std::int16_t>(snapshot.data(),0x48)>=0 && std::uint64_t(sprite)<0xb3400cull && std::uint64_t(sprite)+256>0xb34008ull)return false;
-        capability_filter=read<std::uint32_t>(snapshot.data(),0x40)==2 && memory.load(0xb3442c,32);
-        if(!build(cpu,memory,command,snapshot,memory.load(sp+8,32)) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++counts.declined;return false;}
+        if(read<std::int16_t>(snapshot.data(),0x48)>=0 && std::uint64_t(sprite)<std::uint64_t(source.globals+12) && std::uint64_t(sprite)+256>std::uint64_t(source.globals+8))return false;
+        capability_filter=read<std::uint32_t>(snapshot.data(),0x40)==2 && memory.load((source.globals+0x42c),32);
+        if(!build(cpu,memory,command,snapshot,memory.load(sp+8,32),false,false,source) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++counts.declined;return false;}
         // Weather populates two banks of 400 records, starting at sprite slot 81.
-        constexpr std::uint32_t stride=256, first_weather=0xab3fb8+81*stride;
+        constexpr std::uint32_t stride=256;const auto first_weather=source.first_weather;
         const auto offset=sprite-first_weather;
-        command.particle=offset<800*stride && offset%stride==0;
+        command.particle=first_weather && offset<800*stride && offset%stride==0;
     }catch(const Declined&){++counts.declined;return false;}catch(const wr::GuestFault&){++counts.declined;return false;}
     if(!service->submit(command)){++counts.declined;++counts.adapter_declined;return false;}
     if(current_native_calls)--current_native_calls->remaining;
@@ -252,7 +262,7 @@ bool native_draw_sprite(wr::Cpu& cpu,wr::Memory& memory){
     cpu.r[wr::EAX]=0;cpu.r[wr::ESP]+=4;cpu.eip=returning;return true;
 }
 NativeGlyphCounts native_glyph_counts(){return glyph_counts;}
-bool prepare_integer_glyph(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,std::array<std::uint8_t,256> sprite,const std::array<std::uint32_t,9>& args){
+bool prepare_integer_glyph(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& command,std::array<std::uint8_t,256> sprite,const std::array<std::uint32_t,9>& args,const SpriteSource& source){
 #if defined(WA2_AOT_DIAGNOSTICS) && WA2_AOT_DIAGNOSTICS
     if(wa2::geometry::single_tile_reference_enabled)return false;
 #endif
@@ -270,32 +280,32 @@ bool prepare_integer_glyph(wr::Cpu& cpu,wr::Memory& memory,SpriteCommand& comman
         positions[n]=value*256+(n&1?*y:*x);if(positions[n] < -4194304 || positions[n]>4194304)return false;}
     if(i(5)<0 || i(5)>32768 || i(6)<=0 || i(6)>32768)return false;
     auto code=std::uint16_t(args[0]);if(std::uint16_t(code+0x4f)>0x2c && code>255)code=std::uint16_t((code<<8)|(code>>8));
-    auto scope=memory.execution_scope();const auto table=scope.readable(0x4a14b8,256);if(table.size()!=256)return false;
+    auto scope=memory.execution_scope();const auto table=scope.readable(source.font_ranges,256);if(table.size()!=256)return false;
     const auto resolved=glyph_index.lookup(std::span<const std::uint8_t,256>{table.data(),256},code);if(!resolved || *resolved>0x7fffffffu)return false;
     const std::int64_t cell=i(8)<2?40:24,u=std::int64_t(*resolved%80)*cell+i(5),v=std::int64_t(*resolved/80)*cell+i(5);
     if(u<0 || v<0 || u+i(6)>32768 || v+i(6)>32768)return false;
     const auto put=[&]<class T>(unsigned at,T value){std::memcpy(sprite.data()+at,&value,sizeof(value));};
     const auto style=read<std::int16_t>(sprite.data(),0x50);
-    const auto source_cell=std::int32_t(std::bit_cast<std::int8_t>(std::uint8_t(memory.load(std::uint32_t(0xa823b3+int(style)*0x34),8))));
+    const auto source_cell=std::int32_t(std::bit_cast<std::int8_t>(std::uint8_t(memory.load(std::uint32_t(source.font_styles+int(style)*0x34),8))));
     if(source_cell!=std::bit_cast<std::int32_t>(args[3]-args[1]))put(0x40,1u);
     put(0x4a,std::uint16_t(read<std::uint16_t>(sprite.data(),0x4a)+args[8]));
     for(unsigned n=0;n<4;++n){put(0x88+n*4,dyadic_bits(positions[n&1?2:0],8));put(0x98+n*4,dyadic_bits(positions[n>>1?3:1],8));
         put(0x53+n*4,0xff000000u);put(0x63+n*4,args[7]);}
     put(0xbc,dyadic_bits(std::int32_t(u*256),8));put(0xc0,dyadic_bits(std::int32_t((u+i(6))*256),8));
     put(0xc4,dyadic_bits(std::int32_t(v*256),8));put(0xc8,dyadic_bits(std::int32_t((v+i(6))*256),8));put(0x3c,1u);
-    if(!build(cpu,memory,command,sprite,0,true,true))return false;
+    if(!build(cpu,memory,command,sprite,0,true,true,source))return false;
 #if defined(WA2_AOT_DIAGNOSTICS) && WA2_AOT_DIAGNOSTICS
     ++wa2::geometry::single_tile_diagnostics.integer_glyphs;
 #endif
     return true;
 }
 namespace {
-bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
+bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer,const SpriteSource& source){
     defer=false;
     const auto control=cpu.fp.get16(0);
     const auto precision=control&0x300u;
     auto* service=SpriteService::find(memory);
-    if(!service || cpu.eip!=0x4462e0 || cpu.fp.bytes[4] || (control&0xc3f)!=0x3f || precision==0x100)return false;
+    if(!service || cpu.eip!=source.glyph_entry || cpu.fp.bytes[4] || (control&0xc3f)!=0x3f || precision==0x100)return false;
     auto* glyph_allowance=GlyphCallScope::remaining(memory);
     if(glyph_allowance){
         if(!*glyph_allowance){++glyph_budget_counts.exhaustions;defer=true;return false;}
@@ -322,10 +332,10 @@ bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
         enabled=enabled && !wa2::geometry::single_tile_reference_enabled;
 #endif
         if(enabled){
-            try{replay=glyph_commands.find(memory,scope,glyph_index,sprite,args,control,command,replay_tiles,ticket);}
+            try{replay=glyph_commands.find(memory,scope,glyph_index,source,sprite,args,control,command,replay_tiles,ticket);}
             catch(const wr::GuestFault&){ticket=nullptr;}
         }
-        if(!replay && !prepare_integer_glyph(cpu,memory,command,sprite,args)){
+        if(!replay && !prepare_integer_glyph(cpu,memory,command,sprite,args,source)){
         // The admitted integer path uses dyadic endpoints on one power-of-two
         // tile. All source intermediates are exact at PC24, PC53 and PC64.
         // Crossings and other floating geometry retain their original body
@@ -336,23 +346,23 @@ bool draw_glyph(wr::Cpu& cpu,wr::Memory& memory,bool& defer){
         const auto i=[&](unsigned n){return std::bit_cast<std::int32_t>(args[n]);};
         const auto f=[&](unsigned n){return ordinary(float(i(n)));};
         const auto style=read<std::int16_t>(sprite.data(),0x50);
-        const auto cell=std::int32_t(std::bit_cast<std::int8_t>(std::uint8_t(memory.load(std::uint32_t(0xa823b3+int(style)*0x34),8))));
+        const auto cell=std::int32_t(std::bit_cast<std::int8_t>(std::uint8_t(memory.load(std::uint32_t(source.font_styles+int(style)*0x34),8))));
         if(cell!=std::bit_cast<std::int32_t>(args[3]-args[1]))put(0x40,1u);
         put(0x4a,std::uint16_t(read<std::uint16_t>(sprite.data(),0x4a)+args[8]));
         const auto x=ordinary(read<float>(sprite.data(),0x88)),y=ordinary(read<float>(sprite.data(),0x98));
         const auto left=add(f(1),x),right=add(x,f(3)),top=add(y,f(2)),bottom=add(y,f(4));
         for(unsigned n=0;n<4;++n){put(0x88+n*4,n&1?right:left);put(0x98+n*4,n>>1?bottom:top);put(0x53+n*4,0xff000000u);put(0x63+n*4,args[7]);}
         auto code=std::uint16_t(args[0]);if(std::uint16_t(code+0x4f)>0x2c && code>255)code=std::uint16_t((code<<8)|(code>>8));
-        const auto table=scope.readable(0x4a14b8,256);if(table.size()!=256)return false;
+        const auto table=scope.readable(source.font_ranges,256);if(table.size()!=256)return false;
         const auto resolved=glyph_index.lookup(std::span<const std::uint8_t,256>{table.data(),256},code);
         if(!resolved || *resolved>0x7fffffffu)return false;const auto index=*resolved;
         const float cell_size=i(8)<2?40.f:24.f;
         const auto u=add(f(5),mul(float(index%80),cell_size)),v=add(mul(float(index/80),cell_size),f(5));
         put(0xbc,u);put(0xc0,add(f(6),u));put(0xc4,v);put(0xc8,add(v,f(6)));put(0x3c,1u);
-        if(!build(cpu,memory,command,sprite,0,true) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++glyph_counts.declined;return false;}
+        if(!build(cpu,memory,command,sprite,0,true,false,source) || std::fetestexcept(FE_INVALID|FE_DIVBYZERO|FE_OVERFLOW|FE_UNDERFLOW)){++glyph_counts.declined;return false;}
         }
         if(ticket){
-            try{glyph_commands.capture(memory,scope,glyph_index,*ticket,command);}
+            try{glyph_commands.capture(memory,scope,glyph_index,source,*ticket,command);}
             catch(const wr::GuestFault&){ticket->ready=false;}
         }
     }catch(const Declined&){++glyph_counts.declined;return false;}catch(const wr::GuestFault&){++glyph_counts.declined;return false;}
@@ -369,9 +379,14 @@ void count_page_glyph(unsigned tiles,bool wide){
     ++glyph_counts.accepted;glyph_counts.tiles+=tiles;
     native_wide_glyph_calls+=unsigned(wide);
 }
-bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){bool defer;return draw_glyph(cpu,memory,defer);}
+bool native_draw_sprite(wr::Cpu& cpu,wr::Memory& memory){return native_draw_sprite(cpu,memory,main_sprite_source);}
+bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory,const SpriteSource& source){bool defer;return draw_glyph(cpu,memory,defer,source);}
+bool native_draw_glyph(wr::Cpu& cpu,wr::Memory& memory){return native_draw_glyph(cpu,memory,main_sprite_source);}
 bool native_draw_glyph_or_yield(wr::Cpu& cpu,wr::Memory& memory){
-    bool defer;const auto accepted=draw_glyph(cpu,memory,defer);
+    return native_draw_glyph_or_yield(cpu,memory,main_sprite_source);
+}
+bool native_draw_glyph_or_yield(wr::Cpu& cpu,wr::Memory& memory,const SpriteSource& source){
+    bool defer;const auto accepted=draw_glyph(cpu,memory,defer,source);
     if(defer)++glyph_budget_deferrals;
     return accepted || defer;
 }

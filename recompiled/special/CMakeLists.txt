@@ -3,13 +3,13 @@ include("${WA2_SHARED_ROOT}/generated/special-contents/aot/sources.cmake")
 add_library(wa2_special_aot STATIC ${WA2_SPECIAL_AOT_SOURCES}
     "${WA2_SHARED_ROOT}/recompiled/extended80.cpp"
     "${WA2_SHARED_ROOT}/recompiled/native_string.cpp")
-target_sources(wa2_special_aot PRIVATE lzss.cpp)
+target_sources(wa2_special_aot PRIVATE lzss.cpp render.cpp)
 target_compile_features(wa2_special_aot PUBLIC cxx_std_20)
 target_include_directories(wa2_special_aot PUBLIC
     "${WA2_SHARED_ROOT}/generated/special-contents/aot"
     "${WA2_SHARED_ROOT}/recompiled"
     "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
-target_link_libraries(wa2_special_aot PUBLIC wa2_aot_memory wa2_scalar_math wa2_x87_transcend wa2_engine)
+target_link_libraries(wa2_special_aot PUBLIC wa2_aot_memory wa2_scalar_math wa2_x87_transcend wa2_engine wa2_source_drawing)
 set_target_properties(wa2_special_aot PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(wa2_special_process STATIC runtime.cpp storage.cpp
     "${WA2_SHARED_ROOT}/platform/compat/extended_system.cpp")
@@ -34,4 +34,10 @@ if(WA2_SPECIAL_CHECKS AND NOT ANDROID)
     target_link_libraries(wa2_special_codec_tests PRIVATE wa2_special_process)
     add_executable(wa2_special_render_tests "${WA2_SHARED_ROOT}/tests/special_render.cpp")
     target_link_libraries(wa2_special_render_tests PRIVATE wa2_special_process)
+    add_executable(wa2_special_drawing_tests "${WA2_SHARED_ROOT}/tests/special_drawing.cpp")
+    target_link_libraries(wa2_special_drawing_tests PRIVATE wa2_special_process)
+    add_executable(wa2_special_main_sprite_tests "${WA2_SHARED_ROOT}/tests/native_sprite_cpu.cpp")
+    target_link_libraries(wa2_special_main_sprite_tests PRIVATE wa2_function_process)
+    add_executable(wa2_special_main_glyph_tests "${WA2_SHARED_ROOT}/tests/glyph_scheduling.cpp")
+    target_link_libraries(wa2_special_main_glyph_tests PRIVATE wa2_function_process)
 endif()

@@ -23,6 +23,7 @@ def source_bindings():
     files.update(ROOT/name for name in ('config/porting_contract.json', 'config/special_contents.json','config/special_native_contracts.json','config/special_hot_functions.json',
         'scripts/generate_shared_aot.py','scripts/generate_special_aot.py','scripts/prepare_special_contents.py',
         'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp','tests/special_render.cpp',
+        'tests/special_drawing.cpp','tests/native_sprite_cpu.cpp','tests/glyph_scheduling.cpp',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
         'scripts/analysis/ExportCachedListing.java',
@@ -69,6 +70,13 @@ def checked_hot_policy(directory):
         policies[path.name]=expected
     if policies.get('functions_hot.cpp')!='-O2':raise ValueError('Missing measured Special hot source')
     return policies
+
+
+def compiled_drawing(directory):
+    wanted={(ROOT/name).resolve() for name in ('recompiled/native_sprites.cpp','recompiled/special/render.cpp')}
+    entries=json.loads((directory/'compile_commands.json').read_text())
+    return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file']))
+            for e in entries if Path(e['file']).resolve() in wanted}
 
 
 def fresh():
@@ -120,9 +128,12 @@ def main():
                 '-DCMAKE_BUILD_TYPE=MinSizeRel','-DCMAKE_EXPORT_COMPILE_COMMANDS=ON',
                 '-DWA2_SPECIAL_CONTENTS=ON','-DWA2_SPECIAL_CHECKS=ON',
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
-            run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests','wa2_special_windows','--parallel','1'],7200)
-            for stem in ('memory','runtime','codec','render'):
-                run([win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json'],60)
+            run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests',
+                 'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_windows','--parallel','1'],7200)
+            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph'):
+                command=[win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json']
+                if stem=='main_sprite':command.append('--correctness-only')
+                run(command,60)
             run([acmake,'-S',ROOT/'tests/shared-aot-android','-B',android,'-G','Ninja',
                 '-DCMAKE_MAKE_PROGRAM='+str(ROOT/'tools/python/bin/ninja.exe'),
                 '-DCMAKE_TOOLCHAIN_FILE='+str(ndk/'build/cmake/android.toolchain.cmake'),
@@ -158,12 +169,17 @@ def main():
         codec_expected={name:digest(ROOT/name) for name in ('port/native_vorbis.cpp','engine/vorbis_stream.cpp')}
         if codec_windows!=codec_android or codec_windows!=codec_expected:
             raise ValueError('Windows/Android compiled different shared Vorbis sources')
+        drawing_sources=compiled_drawing(win)
+        if (drawing_sources!=compiled_drawing(android) or
+                set(drawing_sources)!={'recompiled/native_sprites.cpp','recompiled/special/render.cpp'} or
+                manifest.get('shared_sprite_and_glyph_entries')!=[0x43cb90,0x447d70]):
+            raise ValueError('Missing identical shared main/Special drawing implementation')
         if manifest['pending_transcendental_sites'] or len(manifest.get('supported_transcendental_sites',[]))!=50:
             raise ValueError('Special transcendental sites are not all statically supported')
         if manifest.get('shared_vorbis_host_boundaries')!=[0x458630,0x458660,0x458700,0x458890]:
             raise ValueError('Missing Special shared codec host boundaries')
         checks={}
-        for stem in ('memory','runtime','codec','render'):
+        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph'):
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
@@ -207,6 +223,20 @@ def main():
                     not check.get('paged_and_linear_memory') or not check.get('outer_and_leaf_api_boundaries') or
                     not check.get('serialized_source_reference') or check.get('window_or_device_created') is not False):
                 raise ValueError('Missing Special actual drawing source/state regression')
+            if stem=='drawing' and (check.get('sprite_source_cases')!=288 or check.get('glyph_source_cases')!=224 or
+                    check.get('decline_cases')!=12 or check.get('immutable_code_guards')!=4 or
+                    check.get('glyph_budget_yield_cases')!=4 or
+                    check.get('glyph_command_replay_hits',0)<1 or
+                    not check.get('raw_vertices_render_state_and_game_objects_equal') or
+                    not check.get('cdecl_nonvolatile_fp_control_and_host_environment_preserved') or
+                    not check.get('same_main_drawing_implementation') or check.get('window_or_device_created') is not False):
+                raise ValueError('Missing Special shared sprite/glyph source comparison')
+            if stem=='main_sprite' and (not check.get('vertex_bits_and_render_state_equal') or
+                    not check.get('void_cdecl_abi_preserved') or check.get('performance_samples_rerun') is not False):
+                raise ValueError('Missing main default drawing-profile correctness regression')
+            if stem=='main_glyph' and (check.get('glyphs')!=768 or check.get('deferrals')!=2 or
+                    not check.get('source_entry_yields_checked') or not check.get('unchanged_cpu_stack_on_defer')):
+                raise ValueError('Missing main default glyph scheduling regression')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         output=ROOT/'out/special-contents';output.mkdir(parents=True,exist_ok=True)
@@ -234,7 +264,8 @@ def main():
             symbol_input=win/'shared_runtime/special/libwa2_special_aot.a' if name=='windows' else Path(artifact['unstripped_file'])
             symbol_inputs=[symbol_input]
             if name=='windows':symbol_inputs.extend([win/'shared_runtime/libwa2_x87_transcend.a',
-                win/'shared_runtime/libwa2_function_process.a',win/'shared_runtime/native_engine/libwa2_engine.a'])
+                win/'shared_runtime/libwa2_function_process.a',win/'shared_runtime/native_engine/libwa2_engine.a',
+                win/'shared_runtime/libwa2_source_drawing.a'])
             symbols=subprocess.run([str(nm),'--defined-only','--demangle',*map(str,symbol_inputs)],
                 cwd=ROOT,env=env,creationflags=flags,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                 check=True,timeout=60).stdout.decode('utf-8',errors='replace')
@@ -244,15 +275,18 @@ def main():
                 scalar_x87_math='fyl2x(' in symbols and 'fsin(' in symbols and 'fcos(' in symbols,
                 shared_vorbis_codec='wa2::audio::VorbisStream::push(' in symbols and
                     'wr::install_wa2_native_vorbis(wr::Process&, wr::NativeVorbisProfile' in symbols,
+                shared_source_drawing='wa2::aot::native_draw_sprite(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols and
+                    'wa2::aot::native_draw_glyph_or_yield(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols,
                 main_story_static_functions='wa2::aot::f_' in symbols,
                 runtime_instruction_decoder='wr::Decoder::' in symbols)
-            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
+            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
                 raise ValueError('Special link contains the wrong game catalogue or an instruction decoder: '+name)
             symbol_audits[name]=audit
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
             same_special_sources_on_all_hosts=True,compiled_shared_sources=windows_sources,
             compiled_scalar_math_sources=math_windows,transcendental_hardware_cases=math_proof['cases'],
             compiled_shared_codec_sources=codec_windows,shared_vorbis_host_boundaries=manifest['shared_vorbis_host_boundaries'],
+            compiled_shared_drawing_sources=drawing_sources,shared_sprite_and_glyph_entries=manifest['shared_sprite_and_glyph_entries'],
             measured_hot_entries=manifest['measured_hot_entries'],compiled_optimization_policy=hot_policy,
             scalar_math_notice=dict(file=str(notice),sha256=digest(notice)),
             instruction_locations=manifest['instruction_locations'],static_bodies=manifest['static_bodies'],

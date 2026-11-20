@@ -18,9 +18,9 @@ class GlyphCommandReplay {
     using Tiles = std::array<SpriteTile,4>;
     struct Resources {
         std::array<std::uint8_t,128> image;
-        Word index, palette, cell, half, active, device, target, linear, caps, separate;
+        Word index, palette, cell, half, active, device, target, linear, caps, separate, source_entry;
         bool operator==(const Resources& other) const {
-            return index==other.index && palette==other.palette && cell==other.cell &&
+            return source_entry==other.source_entry && index==other.index && palette==other.palette && cell==other.cell &&
                    half==other.half && active==other.active && device==other.device &&
                    target==other.target && linear==other.linear && caps==other.caps &&
                    separate==other.separate &&
@@ -61,31 +61,35 @@ private:
         return h ? h : 1;
     }
     static bool current(wr::Memory& memory,Scope& scope,wa2::text::GlyphIndex& mapping,
-                        const Entry& entry,Resources& r) {
+                        const SpriteSource& source,const Entry& entry,Resources& r) {
+        r.source_entry=source.glyph_entry;
         const auto& s=entry.sprite;
         const auto& a=entry.args;
         const unsigned image=std::uint16_t(word<std::uint16_t>(s.data(),0x4a)+a[8]);
         if(image>=1024)return false;
         auto code=std::uint16_t(a[0]);
         if(std::uint16_t(code+0x4f)>0x2c && code>255)code=std::uint16_t((code<<8)|(code>>8));
-        const auto ranges=scope.readable(0x4a14b8,256);
+        const auto ranges=scope.readable(source.font_ranges,256);
         if(ranges.size()!=256)return false;
         const auto index=mapping.lookup(std::span<const std::uint8_t,256>{ranges.data(),256},code);
         if(!index || *index>0x7fffffffu)return false;
         r.index=*index;
-        const auto globals=scope.readable(0xb34000,0x440);
-        if(globals.size()!=0x440)return false;
-        const auto global=[&](unsigned at){return word<Word>(globals.data(),at);};
+        const auto globals=scope.readable(source.globals,0x440);
+        // Special's globals straddle a backing-page boundary. Keep the main
+        // profile's single-view path; crossings read the same live fields
+        // through the already-held checked scope instead of losing reuse.
+        const auto global=[&](unsigned at){return globals.size()==0x440?
+            word<Word>(globals.data(),at):scope.load<32>(source.globals+at);};
         r.active=global(4);r.device=global(0x438);r.linear=global(0x42c);
         r.caps=global(0x2c0);r.separate=global(0x2a0);
         r.target=global(global(0x428) ? 0x43c : 0);
         if(!r.active)return false;
         const int style=word<std::int16_t>(s.data(),0x50);
         const int palette=std::bit_cast<std::int8_t>(s[0x52]);
-        r.cell=scope.load<8>(Word(0xa823b3+style*0x34));
-        r.palette=scope.load<32>(Word(0x4c2290+palette*4));
-        r.half=scope.load<32>(0x4c2280);
-        const auto address=0xa93fb8+image*128;
+        r.cell=scope.load<8>(Word(source.font_styles+style*0x34));
+        r.palette=scope.load<32>(Word(source.palette+palette*4));
+        r.half=scope.load<32>(source.half_pixel);
+        const auto address=source.images+image*128;
         const auto view=scope.readable(address,128);
         if(view.size()==128)std::memcpy(r.image.data(),view.data(),128);
         else memory.copy_out(address,r.image);
@@ -135,7 +139,7 @@ public:
     // A null ticket after a miss lets one-use glyphs bypass the capture cost.
     // The source still submits through the live SpriteService on every hit.
     bool find(wr::Memory& memory,Scope& scope,wa2::text::GlyphIndex& mapping,
-              const Sprite& sprite,const Args& args,Word control,SpriteCommand& out,
+              const SpriteSource& source,const Sprite& sprite,const Args& args,Word control,SpriteCommand& out,
               Tiles& tiles,Entry*& ticket) {
         if(word<std::int16_t>(sprite.data(),0x48)>=0 || word<Word>(sprite.data(),0x74))return false;
         const auto hash=fingerprint(sprite,args,control);
@@ -156,7 +160,7 @@ public:
             ticket=&e;
             Resources current_state;
             std::array<Word,4> live_handles{};
-            if(!e.ready || !current(memory,scope,mapping,e,current_state) ||
+            if(!e.ready || !current(memory,scope,mapping,source,e,current_state) ||
                !(current_state==e.resources) || !handles(memory,scope,current_state,e.atlas,live_handles) ||
                live_handles!=e.atlas.handles)return false;
             out=e.command;
@@ -171,10 +175,10 @@ public:
         return false;
     }
     void capture(wr::Memory& memory,Scope& scope,wa2::text::GlyphIndex& mapping,
-                 Entry& e,const SpriteCommand& command) {
+                 const SpriteSource& source,Entry& e,const SpriteCommand& command) {
         e.ready=false;
         if(command.target_kind!=SpriteTarget::surface || command.tiles.size()>e.tiles.size() ||
-           !current(memory,scope,mapping,e,e.resources) || !covered(e.args,e.resources,e.atlas))return;
+           !current(memory,scope,mapping,source,e,e.resources) || !covered(e.args,e.resources,e.atlas))return;
         e.atlas.handles.fill(0);
         if(!handles(memory,scope,e.resources,e.atlas,e.atlas.handles))return;
         e.command=command;e.command.tiles={};

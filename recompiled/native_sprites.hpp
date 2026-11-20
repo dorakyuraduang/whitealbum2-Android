@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <span>
+#include "sprite_source.hpp"
 namespace wr {struct Cpu;class Memory;}
 namespace wa2::aot {
 struct SpriteVertex {float x,y,z,rhw;std::uint32_t colour,secondary;float u,v;};
@@ -17,6 +18,9 @@ struct SpriteCommand {
     std::span<const SpriteTile> tiles;
     bool glyph{};
     bool particle{};
+    // GetSurfaceLevel's source ABI output slot; the builder checks it before
+    // a presentation adapter may submit an offscreen command.
+    std::uint32_t surface_result{};
 };
 enum class SpriteState {render,stage,sampler};
 template<class Set>void sprite_state_words(const SpriteCommand& c,Set set){
@@ -59,4 +63,5 @@ public:
 struct NativeSpriteCounts {std::uint64_t accepted{},declined{},tiles{},offscreen{},capability_filter{},fp_declined{},adapter_declined{};};
 NativeSpriteCounts native_sprite_counts();
 bool native_draw_sprite(wr::Cpu&,wr::Memory&);
+bool native_draw_sprite(wr::Cpu&,wr::Memory&,const SpriteSource&);
 }

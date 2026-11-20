@@ -133,6 +133,12 @@ def generate():
     codec_entries=[int(contracts['vorbis'][key],0) for key in ('construct','reset','format','decode')]
     if len(set(codec_entries))!=4 or any(pc not in owners for pc in codec_entries):
         raise ValueError('Missing distinct Special codec ABI functions')
+    draw_fields=('sprite_entry','glyph_entry','globals','images','palette','half_pixel','sse2',
+                 'radians','cosine_words','sine_words','font_ranges','font_styles','first_weather','trig_dispatch')
+    drawing={key:int(contracts['drawing'][key],0) for key in draw_fields}
+    draw_entries={drawing['sprite_entry']:'draw_sprite',drawing['glyph_entry']:'draw_glyph'}
+    if set(draw_entries)!={0x43cb90,0x447d70} or any(pc not in merged for pc in draw_entries):
+        raise ValueError('Special drawing profile must name the verified source ABI entries')
     # The original bodies stay available to finite memory reference checks.
     # Production calls unwind before entering the shared codec ABI adapter.
     call_owners={pc:owner for pc,owner in owners.items() if pc not in codec_entries}
@@ -162,6 +168,8 @@ def generate():
     # functions.hpp supplies Cpu/Memory, while Image is intentionally separate.
     header.insert(2, '#include <winrecomp/image.hpp>')
     write('bodies.hpp', '\n'.join(header)+'\n')
+    write('render_profile.hpp','#pragma once\n#include "sprite_source.hpp"\nnamespace wa2::special {\n'+
+          'inline constexpr wa2::aot::SpriteSource drawing_source{'+','.join(hex(drawing[key])+'u' for key in draw_fields)+'};\n}\n')
     write('native_entries.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+
           'inline constexpr std::uint32_t codec_boundary_entries[]={'+','.join(hex(pc)+'u' for pc in codec_entries)+'};\n}\n')
     spans_by_entry = {}
@@ -174,6 +182,7 @@ def generate():
     for name, entries in shards:
         sources.append(name)
         cpp = ['#include "bodies.hpp"', 'namespace wa2::special {']
+        if set(entries)&draw_entries.keys():cpp.insert(1,'#include "special/render.hpp"')
         for entry in entries:
             record = merged[entry]
             parameters='bool Metered,bool NativeRegisters' if entry in hot else 'bool Metered'
@@ -203,7 +212,13 @@ def generate():
                     'wr::string_op(', 'wr::aot_string_op<Metered>(')))
                 if entry in hot:
                     native=register_integers(register_floating(native))
-                cpp += [f'L_{pc:x}:{{s.eip=0x{pc:x}u;', 'if constexpr(Metered)wr::tick(budget,s.eip);', native, '}']
+                cpp += [f'L_{pc:x}:{{s.eip=0x{pc:x}u;', 'if constexpr(Metered)wr::tick(budget,s.eip);']
+                if pc in draw_entries:
+                    invocation=f'wa2::special::{draw_entries[pc]}(s,m)'
+                    if entry in hot:
+                        invocation='floating.external([&]{return integer.external([&]{return '+invocation+';});})'
+                    cpp += [f'if constexpr(!Metered)if({invocation})return;']
+                cpp += [native,'}']
                 if spans and spans[-1][0]+len(spans[-1][1]) == pc:
                     spans[-1][1].extend(raw)
                 else:
@@ -299,6 +314,7 @@ def generate():
         transcendental_verification_cases=math_proof['cases'],native_lzss_prefix=True,differential_probe_entries=probes,
         shared_vorbis_host_boundaries=codec_entries,
         measured_hot_entries=sorted(hot),shared_register_fp_and_integer_kernels=True,
+        shared_sprite_and_glyph_entries=sorted(draw_entries),source_drawing_profile=drawing,
         hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,

@@ -1056,7 +1056,7 @@ bool Graphics::continue_particle(const wa2::aot::SpriteCommand& command){
             // handle has no locks; an existing handle gains a reference.
             // Its matching Release is therefore deferred in either case.
             const auto handle=wrap(pending_target);
-            p.memory.store(0xb34008,handle,32);
+            p.memory.store(command.surface_result,handle,32);
             const std::array<U32,1> args{handle};
             method(object(handle),2,args);
         }))return false;
@@ -1084,7 +1084,7 @@ bool Graphics::sprite_command(const wa2::aot::SpriteCommand& command,std::uint64
     const auto target=offscreen?surface(image(target_resource),target_resource):target_resource;
     // Preserve the source GetSurfaceLevel output, interface lifetime and
     // Release even though the state change itself uses a typed native packet.
-    U32 target_interface{};if(offscreen){target_interface=wrap(target);p.memory.store(0xb34008,target_interface,32);}
+    U32 target_interface{};if(offscreen){target_interface=wrap(target);p.memory.store(command.surface_result,target_interface,32);}
     const auto i=image(target);const D3DVIEWPORT9 viewport{0,0,i->width,i->height,0,1};
     if(state.target!=target || std::memcmp(&state.viewport,&viewport,sizeof(viewport)))++config_version;
     state.target=target;state.viewport=viewport;

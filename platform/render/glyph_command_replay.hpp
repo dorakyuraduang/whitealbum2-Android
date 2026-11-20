@@ -28,14 +28,15 @@ struct GlyphCommandState {
 struct ParticleCommandState {
     decltype(GlyphCommandState::words) words{};
     aot::SpriteTarget target_kind{};
+    std::uint32_t surface_result{};
     ScreenVertexPlan plan{};
     bool valid{};
     void capture(const aot::SpriteCommand& command,const ScreenVertexPlan& layout){
-        words=GlyphCommandState::inputs(command);target_kind=command.target_kind;plan=layout;valid=true;
+        words=GlyphCommandState::inputs(command);target_kind=command.target_kind;surface_result=command.surface_result;plan=layout;valid=true;
     }
     bool matches(const aot::SpriteCommand& command)const{
         return valid && command.particle && !command.glyph && command.tiles.size()==1 &&
-            command.target_kind==target_kind && GlyphCommandState::inputs(command)==words;
+            command.target_kind==target_kind && command.surface_result==surface_result && GlyphCommandState::inputs(command)==words;
     }
 };
 
