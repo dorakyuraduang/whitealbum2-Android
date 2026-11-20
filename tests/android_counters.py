@@ -28,6 +28,15 @@ music={'duplicate_writes_avoided':119,'committed':1}
 assert parse([line(1,'music_flag_saves',json.dumps(music))])['latest']['music_flag_saves']==music;cases+=1
 final=[line(65,'native_glyph_commands','{"glyph_budget_deferrals":3}'),line(65,'text_local_control_flow','{"local_jumps":1024}'),line(65,'run_completion','{"game_thread_finished":true,"source_returned":true}')]
 snapshot=parse([old,*final]);assert snapshot['latest']['native_glyph_commands']['glyph_budget_deferrals']==3 and snapshot['latest']['text_local_control_flow']['local_jumps']==1024 and snapshot['latest']['run_completion']['source_returned'];cases+=1
+special='special-contents-aot'
+startup='I/WA2IO (456): '+special+' #0 startup_stage {"stage":"game_startup","elapsed_ns":1234}'
+failed='I/WA2IO (456): '+special+' #65 run_completion {"game_thread_finished":true,"source_returned":false}'
+observed=reader.parse_records('\n'.join([old,startup,failed]),special)
+assert observed['latest']['startup_stage']['stage']=='game_startup' and not observed['latest']['run_completion']['source_returned'] and 'native_resources' not in observed['latest'];cases+=1
+restarted=reader.parse_records('\n'.join([failed,startup]),special)
+assert 'run_completion' not in restarted['latest'] and restarted['latest']['startup_stage']['elapsed_ns']==1234;cases+=1
+fresh=startup.replace('"game_startup"','"runtime"').replace('1234','0')
+assert len(reader.parse_records('\n'.join([startup,fresh]),special)['events'])==1;cases+=1
 sys.path.insert(0,str(root/'scripts'))
 from compare_android_text import particle_work,validate_particles,weather_work,validate_weather
 base=dict(frames=10,particle_commands=50,particle_tiles=55,particle_continuations=10,limit_60_fps=False)

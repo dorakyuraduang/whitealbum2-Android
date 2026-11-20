@@ -146,7 +146,7 @@ def audit():
     if 4739667 not in selected:raise ValueError('Reported CRT initializer was not independently recovered')
     OUT.mkdir(parents=True,exist_ok=True)
     flags=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS
-    seeds=set(base['seeds'])|set(selected);graph=original;history=[]
+    seeds=set(base['seeds'])|set(selected);graph=original;history=[];jump_edges=set()
     def run(mode,destination):
         command=[str(TOOL),mode,str(CACHE/'image.bin'),str(destination)]
         for entry in sorted(seeds):command+=['--seed',hex(entry)]
@@ -157,12 +157,23 @@ def audit():
         run('cfg',OUT/'cfg.json');graph=json.loads((OUT/'cfg.json').read_text())
         if graph['diagnostics']:raise ValueError('Special callback discovery diagnostics: '+repr(graph['diagnostics'][:20]))
         live={i['address'] for i in graph['instructions']};new=candidates(pe,graph,seeds)
-        for pc in live:
-            record=independent.get(pc)
+        for instruction in graph['instructions']:
+            pc=instruction['address'];record=independent.get(pc)
             if record is None:continue
             for target in record.get('code_references',[]):
                 if target not in live and target not in seeds and target in independent and executable(target):
                     new[target]=f'independent_code_reference:0x{pc:x}'
+            # MSVC embeds memcpy/memmove switch tables inside .text, outside
+            # the initialized data-pointer scan. Consume the independently
+            # resolved computed edges, never the table words as instructions.
+            if 'COMPUTED' in record['flow_type'] and 'JUMP' in record['flow_type']:
+                for target in record['flows']:
+                    if not executable(target):continue
+                    if record['bytes']!=instruction['bytes'] or target not in independent:
+                        raise ValueError(f'Independent switch boundary differs at {pc:#x}')
+                    jump_edges.add((pc,target))
+                    if target not in live and target not in seeds:
+                        new[target]=f'independent_computed_jump:0x{pc:x}'
         fresh=set(new)-seeds
         history.append(dict(round=round_number,instructions=len(live),seeds=len(seeds),new_seeds=len(fresh)))
         print(json.dumps(history[-1]),flush=True)
@@ -171,6 +182,10 @@ def audit():
         seeds.update(fresh)
     live={i['address'] for i in graph['instructions']}
     if not set(selected)<=live:raise ValueError('A recovered Special callback is still untranslated')
+    if any(target not in live for _,target in jump_edges):
+        raise ValueError('An independently resolved Special jump target is still untranslated')
+    recovered_jumps=sorted({target for _,target in jump_edges if target not in known})
+    if 4673248 not in recovered_jumps:raise ValueError('Reported memcpy switch branch was not recovered')
     run('coverage',OUT/'coverage.json')
     if json.loads((OUT/'coverage.json').read_text())['unsupported']:
         raise ValueError('A Special callback uses an unsupported instruction form')
@@ -181,6 +196,8 @@ def audit():
     proof=dict(schema='wa2.special-callback-audit.v1',input_sha256=base['input_sha256'],
         base_instruction_locations=len(known),instruction_locations=len(live),
         pointer_slots_audited=len(slots),recovered_entries=sorted(selected),
+        recovered_jump_entries=recovered_jumps,independent_jump_edges=sorted(jump_edges),
+        all_independently_resolved_jump_targets_compiled=True,
         raw_directory=raw.relative_to(ROOT).as_posix(),
         pointer_references={hex(k):v for k,v in sorted(selected.items())},excluded_candidates=excluded,
         discovery_history=history,seeds=sorted(seeds),all_recovered_entries_resolve=True,

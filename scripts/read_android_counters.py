@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 
-KEYS={'selected_directory_io','save_read_scope','native_resources','scheduler','host_event_pump','frame_work','static_cpu_work','native_image_chroma','music_flag_saves','native_glyph_commands','native_sprite_commands','text_local_control_flow','run_completion'}
+KEYS={'startup_stage','selected_directory_io','save_read_scope','native_resources','scheduler','host_event_pump','frame_work','static_cpu_work','native_image_chroma','music_flag_saves','native_glyph_commands','native_sprite_commands','text_local_control_flow','run_completion'}
 
 def parse_records(text,release):
     pattern=re.compile(re.escape(release)+r' #(\d+) (\w+) (.*)')
@@ -32,6 +32,11 @@ def parse_records(text,release):
         try:data=json.loads(body)
         except ValueError:incomplete+=1;continue
         if not isinstance(data,dict):incomplete+=1;continue
+        if key=='startup_stage' and data.get('stage')=='runtime':
+            # A force-stopped startup may have emitted only sequence zero.
+            # Its next startup must not inherit those earlier phase events.
+            latest.clear();latest_sequence.clear();events.clear();pending.clear();incomplete=0
+            latest_sequence[key]=sequence
         latest[key]=data;events.append(dict(sequence=sequence,key=key,data=data))
     return dict(release=release,available=bool(latest),latest=latest,events=events,incomplete_records=incomplete+len(pending),game_launched=False,screen_access=False,process_taken_over=False)
 
@@ -45,7 +50,7 @@ def main():
     def call(command):return subprocess.run([str(args.adb),'-s',args.serial,*command],creationflags=flags,capture_output=True,check=True,timeout=20).stdout.decode('utf-8',errors='replace')
     uid=re.search(r'^package:org\.wa2\.port uid:(\d+)\s*$',call(['shell','cmd','package','list','packages','-U','org.wa2.port']),re.M)
     if not uid:raise RuntimeError('Exact WA2 app UID is unavailable')
-    log=call(['logcat','-d','--uid='+uid[1],'-v','brief','WA2IO:I','*:S'])
+    log=call(['logcat','-b','main','-d','-t','30000','--uid='+uid[1],'-v','brief','WA2IO:I','*:S'])
     proof=parse_records(log,release);args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(proof,indent=2)+'\n',encoding='utf-8')
     print(json.dumps({key:value for key,value in proof.items() if key!='events'}),flush=True)
 if __name__=='__main__':main()

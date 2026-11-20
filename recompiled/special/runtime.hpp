@@ -6,6 +6,7 @@ wr::Image initial_image();
 std::span<const aot::Function> functions() noexcept;
 aot::Location locate(std::uint32_t) noexcept;
 std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles>);
+std::string save_files_report(const std::shared_ptr<wr::MutableFiles>&);
 class Runtime {
     std::unique_ptr<aot::StaticProgram> program_;
     wr::Process process_;

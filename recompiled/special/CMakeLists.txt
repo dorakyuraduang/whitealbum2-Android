@@ -2,6 +2,7 @@
 include("${WA2_SHARED_ROOT}/generated/special-contents/aot/sources.cmake")
 add_library(wa2_special_aot STATIC ${WA2_SPECIAL_AOT_SOURCES}
     "${WA2_SHARED_ROOT}/recompiled/extended80.cpp"
+    "${WA2_SHARED_ROOT}/recompiled/native_string.cpp"
     "${WA2_SHARED_ROOT}/recompiled/transcend.cpp")
 target_compile_features(wa2_special_aot PUBLIC cxx_std_20)
 target_include_directories(wa2_special_aot PUBLIC

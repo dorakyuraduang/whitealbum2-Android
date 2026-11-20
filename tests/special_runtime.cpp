@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include "../platform/compat/io_diagnostics.hpp"
 
 #define CHECK(x) do{if(!(x))throw std::runtime_error("check failed: " #x);}while(false)
 using wr::U32;
@@ -111,11 +112,19 @@ int main(int argc,char** argv){try{
     CHECK(p.callback(0x485211,std::array<U32,1>{pointers})==0);++filter_cases;
     p.state().unhandled_filter=saved_filter;
     CHECK(p.executed_instructions==0 && p.native_function_entries>0 && p.state().callback_depth==0);
+    bool storage_counters{},cpu_counters{},completion{};
+    wa2::platform::compat::emit_final_io_counters(p,"special-contents-aot",[&](std::string_view label,std::string_view value){
+        if(label.ends_with(" selected_directory_io"))storage_counters=value.find("special-save-only")!=value.npos;
+        if(label.ends_with(" static_cpu_work"))cpu_counters=value.find("hot_functions")!=value.npos;
+        if(label.ends_with(" run_completion"))completion=value.find("\"source_returned\":false")!=value.npos;
+    },false);
+    CHECK(storage_counters && cpu_counters && completion);
     CHECK(host->devices==0 && host->windows==0 && host->frames==0);
     std::ofstream report(argv[1]);
     report<<"{\"schema\":\"wa2.special-runtime-check.v1\",\"bound_imports\":"<<image.imports.size()
           <<",\"wide_api_cases\":16,\"main_save_writes_rejected\":true,\"instruction_step_calls\":0,\"bounded_static_callback_entries\":"<<p.native_function_entries
           <<",\"reported_callback_address\":4739667,\"crt_initializer_registered_filter\":true,\"crt_filter_rejection_cases\":"<<filter_cases<<",\"game_startup_called\":false,"
+            "\"special_final_cpu_and_storage_counters\":true,"
             "\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"graphics_device_opened\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";
     CHECK(bool(report));std::cout<<"PASS Special import/Unicode/storage memory checks; game entry never executed.\n";return 0;
 }catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 1;}}

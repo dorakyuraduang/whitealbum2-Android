@@ -5,6 +5,7 @@
 #include "../android/native/compiled_resources.hpp"
 #include "../android/native/android_resources.hpp"
 #include "../android/native/android_host.hpp"
+#include "../platform/compat/diagnostic_chunks.hpp"
 #include <SDL.h>
 #include <SDL_main.h>
 #include <android/log.h>
@@ -30,7 +31,7 @@ extern "C" int SDL_main(int argc,char** argv){
         options.frame_submitted=wa2::android::frame_presented;
         startup.window=wa2::window::sdl_host(std::move(options));
         startup.mount_resources=wa2::android::mount_compiled_resources;
-        startup.io_diagnostic_sink=[](std::string_view label,std::string_view json){__android_log_print(ANDROID_LOG_INFO,"WA2Special","%.*s %.*s",int(label.size()),label.data(),int(json.size()),json.data());};
+        startup.io_diagnostic_sink=[](std::string_view label,std::string_view json){wa2::platform::compat::emit_counter_record(label,json,[](std::string_view part,std::string_view body){__android_log_print(ANDROID_LOG_INFO,"WA2IO","%.*s %.*s",int(part.size()),part.data(),int(body.size()),body.data());});};
         return int(wa2::special::run(std::move(startup)));
     }catch(const std::exception& error){__android_log_print(ANDROID_LOG_ERROR,"WA2Special","%s",error.what());wa2::android::report_game_failure(error.what());return 1;}
 }

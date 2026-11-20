@@ -1,6 +1,10 @@
 #include "runtime.hpp"
 #include <winrecomp/path_name.hpp>
 #include <algorithm>
+#include <array>
+#include <chrono>
+#include <cerrno>
+#include <sstream>
 
 namespace wa2::special {namespace {
 constexpr std::string_view special="Documents/Leaf/WHITE ALBUM2 Special Contents";
@@ -32,36 +36,54 @@ std::optional<std::string> path(std::string_view name,bool directory,bool writin
 }
 class Files final:public wr::MutableFiles {
     std::shared_ptr<wr::MutableFiles> files_;
+    struct Metric {std::uint64_t calls{},ns{},maximum{};};
+    std::array<Metric,4> metrics_{};
+    struct Timer {
+        Metric& metric;std::chrono::steady_clock::time_point start;
+        explicit Timer(Metric& value):metric(value){const auto saved=errno;start=std::chrono::steady_clock::now();++metric.calls;errno=saved;}
+        ~Timer(){const auto saved=errno;const auto ns=std::uint64_t(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-start).count());metric.ns+=ns;metric.maximum=std::max(metric.maximum,ns);errno=saved;}
+    };
 public:
     explicit Files(std::shared_ptr<wr::MutableFiles> files):files_(std::move(files)){
         if(!files_)throw std::invalid_argument("missing Special storage adapter");
         for(const auto& folder:{std::string("Documents"),std::string("Documents/Leaf"),std::string(special)}){
+            Timer timing(metrics_[3]);
             const auto error=files_->directory(folder);if(error && error!=183)throw std::runtime_error("Cannot prepare Special Contents save directory: "+std::to_string(error));
         }
     }
     std::optional<wr::ReadOnlyFileInfo> info(std::string_view name)override{
+        Timer timing(metrics_[0]);
         auto mapped=path(name,false);if(!mapped)mapped=path(name,true);
         return mapped?files_->info(*mapped):std::nullopt;
     }
     std::string identity(std::string_view name)override{const auto mapped=path(name,false);if(!mapped)throw std::runtime_error("Unknown Special storage path");return files_->identity(*mapped);}
     std::vector<wr::ReadOnlyFileInfo> list(std::string_view name)override{
+        Timer timing(metrics_[1]);
         const auto mapped=path(name,true);if(!mapped)return {};
         auto entries=files_->list(mapped->empty()?special:*mapped);
         entries.erase(std::remove_if(entries.begin(),entries.end(),[](const auto& item){return !filename(fold(item.name));}),entries.end());
         return entries;
     }
     std::FILE* open(std::string_view name,bool read,bool write,std::uint32_t creation,std::uint32_t& error)override{
+        Timer timing(metrics_[2]);
         const auto mapped=path(name,false,write || creation!=3);if(!mapped){error=5;return nullptr;}
         return files_->open(*mapped,read,write,creation,error);
     }
-    std::uint32_t directory(std::string_view name)override{const auto mapped=path(name,true,true);if(!mapped)return 5;if(mapped->empty())return 183;return files_->directory(*mapped);}
+    std::uint32_t directory(std::string_view name)override{Timer timing(metrics_[3]);const auto mapped=path(name,true,true);if(!mapped)return 5;if(mapped->empty())return 183;return files_->directory(*mapped);}
     std::uint32_t remove(std::string_view name,bool directory)override{
         const auto mapped=path(name,directory,true);if(!mapped || directory)return 5;return files_->remove(*mapped,false);
     }
     std::uint32_t move(std::string_view from,std::string_view to)override{const auto a=path(from,false,true),b=path(to,false,true);return a && b?files_->move(*a,*b):5;}
     std::uint32_t attributes(std::string_view name,std::uint32_t flags)override{const auto mapped=path(name,false,true);return mapped?files_->attributes(*mapped,flags):5;}
     void replace(std::string_view name,std::span<const std::uint8_t> bytes)override{const auto mapped=path(name,false,true);if(!mapped)throw std::runtime_error("Unknown Special save/configuration path");files_->replace(*mapped,bytes);}
+    std::string report()const{
+        constexpr const char* names[]={"metadata","enumeration","descriptor_open","directory"};std::ostringstream out;
+        out<<"{\"save_policy\":\"special-save-only\",\"root_save_fallback\":false,\"timing\":[";
+        for(unsigned n=0;n<metrics_.size();++n){if(n)out<<',';const auto& m=metrics_[n];out<<"{\"stage\":\""<<names[n]<<"\",\"calls\":"<<m.calls<<",\"total_ns\":"<<m.ns<<",\"max_ns\":"<<m.maximum<<'}';}
+        out<<"],\"payload_cached\":false,\"screen_access\":false}";return out.str();
+    }
 };
 }
 std::shared_ptr<wr::MutableFiles> save_files(std::shared_ptr<wr::MutableFiles> files){return std::make_shared<Files>(std::move(files));}
+std::string save_files_report(const std::shared_ptr<wr::MutableFiles>& files){const auto* special=dynamic_cast<const Files*>(files.get());return special?special->report():"{\"available\":false}";}
 }

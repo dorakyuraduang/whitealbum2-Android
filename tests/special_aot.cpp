@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <random>
+#include <cstring>
 
 namespace s=wa2::special;
 namespace s2=wa2::aot;
@@ -57,13 +58,54 @@ unsigned string_regression(s2::StaticProgram& program,wr::Memory& memory){
     wr::Cpu diagnostic;diagnostic.eip=instruction;diagnostic.r[wr::ECX]=words;
     diagnostic.r[wr::ESI]=source;diagnostic.r[wr::EDI]=target;diagnostic.flags=2;
     std::uint64_t budget=2;bool exhausted{};
-    try{wr::string_op<true>(diagnostic,memory,0,32,32,1,0,budget);}catch(const wr::GuestFault& fault){
+    try{wr::aot_string_op<true>(diagnostic,memory,0,32,32,1,0,budget);}catch(const wr::GuestFault& fault){
         CHECK(fault.kind==wr::FaultKind::budget && fault.address==instruction);exhausted=true;
     }
     CHECK(exhausted && budget==0 && diagnostic.r[wr::ECX]==words-2);
     CHECK(diagnostic.r[wr::ESI]==source+8 && diagnostic.r[wr::EDI]==target+8);
     memory.copy_out(target,output);CHECK(output==expected);++checked;
     return checked;
+}
+
+unsigned copy_regression(s2::StaticProgram& program,wr::Memory& memory){
+    // Both recovered CRT copy routines run solely against constructed RAM.
+    // The caller owns arguments; a sentinel returns before any game caller.
+    constexpr wr::U32 buffer=0x07200000,bytes=196608,stack=0x07000800,returned=0xfefefefe;
+    memory.map(buffer,bytes,wr::Memory::Read|wr::Memory::Write);
+    std::vector<std::uint8_t> input(bytes),expected(bytes),output(bytes);
+    for(unsigned n=0;n<bytes;++n)input[n]=std::uint8_t(n*29+(n>>8)*7+17);
+    const auto prior_feature=memory.load(0xbc54f0,32);memory.store(0xbc54f0,0,32);
+    s2::FunctionWorkSamples samples(s::functions());s2::FunctionWorkScope work(&samples);
+    unsigned cases{};
+    const auto check=[&](wr::U32 entry,unsigned from,unsigned to,unsigned size){
+        memory.copy_in(buffer,input);expected=input;std::memmove(expected.data()+to,expected.data()+from,size);
+        wr::Cpu cpu;cpu.eip=entry;cpu.r[wr::ESP]=stack;cpu.r[wr::EBX]=0x12345678;
+        cpu.r[wr::EBP]=0x33445566;cpu.r[wr::ESI]=0x778899aa;cpu.r[wr::EDI]=0xbbccddee;cpu.flags=2;
+        const auto saved=cpu;memory.store(stack,returned,32);memory.store(stack+4,buffer+to,32);
+        memory.store(stack+8,buffer+from,32);memory.store(stack+12,size,32);
+        for(unsigned slices=0;cpu.eip!=returned;++slices){CHECK(slices<128);CHECK(program.invoke(cpu));}
+        CHECK(cpu.r[wr::EAX]==buffer+to && cpu.r[wr::ESP]==stack+4 && !(cpu.flags&wr::DF));
+        for(const auto reg:{wr::EBX,wr::EBP,wr::ESI,wr::EDI})CHECK(cpu.r[reg]==saved.r[reg]);
+        memory.copy_out(buffer,output);CHECK(output==expected);++cases;
+    };
+    for(const auto entry:{0x474e20u,0x475190u}){
+        for(unsigned source=0;source<4;++source)for(unsigned target=0;target<4;++target){
+            for(unsigned size=0;size<=80;++size)check(entry,4096+source,102400+target,size);
+            for(const auto size:{96u,127u,128u,255u,256u,511u,1023u,4093u,4096u,65537u})
+                check(entry,4096+source,102400+target,size);
+        }
+        for(unsigned alignment=0;alignment<4;++alignment)for(const auto delta:{-3,-1,0,1,3}){
+            const unsigned source=8192+alignment,target=unsigned(int(source)+delta);
+            for(unsigned size=0;size<=40;++size)check(entry,source,target,size);
+            for(const auto size:{127u,128u,4093u})check(entry,source,target,size);
+        }
+    }
+    CHECK(samples.string_bulk_completed>0 && samples.string_bulk_bytes>=131072);
+    // The CRT's initialized SSE2 selection must also retain the same result.
+    memory.store(0xbc54f0,1,32);
+    for(const auto entry:{0x474e20u,0x475190u})for(const auto size:{128u,4096u,65537u})
+        check(entry,4096,102400,size);
+    memory.store(0xbc54f0,prior_feature,32);return cases;
 }
 
 int main(int argc,char** argv){try{
@@ -101,6 +143,8 @@ int main(int argc,char** argv){try{
     for(const auto entry:s::recovered_callback_entries)CHECK(s::locate(entry).function);
     CHECK(std::size(s::recovered_callback_entries)>=65);
     CHECK(s::locate(4739667).function && s::locate(0x485211).function);
+    for(const auto entry:s::recovered_jump_entries)CHECK(s::locate(entry).function);
+    CHECK(std::size(s::recovered_jump_entries)>=26 && s::locate(4673248).function);
     s2::StaticProgram program(actual,s::functions(),s::locate);
     wr::Cpu unknown;unknown.eip=0xdeadbeef;const auto saved=unknown;
     CHECK(!program.invoke(unknown));CHECK(unknown.r==saved.r && unknown.eip==saved.eip);
@@ -118,6 +162,7 @@ int main(int argc,char** argv){try{
         CHECK(cpu.fp.bytes==reference.fp.bytes);++comparisons;
     }
     CHECK(comparisons>=1024);
+    const auto copy_cases=copy_regression(program,actual);
     const auto string_cases=string_regression(program,actual);
     // A writeable code mapping revokes prior proofs even if bytes still match.
     const auto first=s::probe_entries[0];const auto page=first&~4095u;
@@ -134,6 +179,7 @@ int main(int argc,char** argv){try{
           <<",\"code_spans\":"<<spans<<",\"code_bytes\":"<<bytes<<",\"instruction_starts_checked\":"<<starts<<",\"interior_targets_rejected\":"<<interiors<<",\"differential_vectors\":"<<comparisons
           <<",\"reported_rep_address\":4691986,\"string_regression_cases\":"<<string_cases<<",\"zero_budget_rep_words\":136,\"string_fault_prefix_checked\":true,\"diagnostic_budget_preserved\":true"
           <<",\"reported_callback_address\":4739667,\"recovered_callback_entries_checked\":"<<std::size(s::recovered_callback_entries)
+          <<",\"reported_copy_address\":4673248,\"recovered_jump_entries_checked\":"<<std::size(s::recovered_jump_entries)<<",\"crt_copy_cases\":"<<copy_cases<<",\"shared_bulk_string_exercised\":true"
           <<",\"unknown_target_rejected\":true,\"writable_code_rejected\":true,\"changed_code_rejected\":true,"
             "\"source_executable_opened\":false,\"game_launched\":false,\"screen_access\":false,\"complete_gameplay_verified\":false,\"passed\":true}\n";
     CHECK(bool(report));

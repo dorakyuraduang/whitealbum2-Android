@@ -2,7 +2,7 @@
 
 Consumes the verified, local-only preparation cache, never an executable.
 Uses the existing shared AOT control-flow, integer, memory and FP transforms.
-No main-story addresses, native replacements, UI patches or subtitles apply.
+No main-story address hooks, UI patches or subtitles apply.
 """
 from __future__ import annotations
 from collections import defaultdict
@@ -132,6 +132,7 @@ def generate():
     positions = {pc: index for record in merged.values() for index, pc in enumerate(record['locations'])}
     dead_flags = {pc: op for record in merged.values() for pc, op in dead_flag_operations(record, bodies, edges).items()}
     header = ['#pragma once', '#include "functions.hpp"', '#include "integer_value.hpp"',
+              '#include "native_string.hpp"', '#include "work_samples.hpp"',
               'namespace wa2::special {', 'using aot::Context;using aot::Scope;',
               'using aot::CodeSpan;using aot::Function;using aot::Location;',
               'using aot::call_leaf_service;using aot::call_source_indirect;']
@@ -142,6 +143,7 @@ def generate():
     header.insert(2, '#include <winrecomp/image.hpp>')
     write('bodies.hpp', '\n'.join(header)+'\n')
     spans_by_entry = {}
+    sample_indices={entry:index for index,entry in enumerate(ordered)}
     sources = []
     pending = sorted(pc for pc, (body, _, _) in bodies.items() if PENDING_TRANSCENDENTAL.search(body))
     for shard in range(16):
@@ -151,6 +153,7 @@ def generate():
         for entry in ordered[shard::16]:
             record = merged[entry]
             cpp += [f'template<bool Metered> void f_{entry:x}(Context& s,wr::Memory& m,Scope& scope,std::uint64_t& budget,std::uint32_t resume){{',
+                    f'wa2::aot::FunctionWorkTimer work_timer({sample_indices[entry]}u,0,0,s.fp.get16(0));',
                     'switch(resume){', *[f'case {positions[pc]}u:goto L_{pc:x};' for pc in record['locations']],
                     'default:throw wr::GuestFault(wr::FaultKind::untranslated,s.eip,"invalid Special resume entry");}']
             spans = []
@@ -164,7 +167,7 @@ def generate():
                 # Match the enclosing static body's policy on every string
                 # operation, including conditional/segmented fallbacks.
                 native = fixed_memory(portable_floating(native.replace(
-                    'wr::string_op(', 'wr::string_op<Metered>(')))
+                    'wr::string_op(', 'wr::aot_string_op<Metered>(')))
                 cpp += [f'L_{pc:x}:{{s.eip=0x{pc:x}u;', 'if constexpr(Metered)wr::tick(budget,s.eip);', native, '}']
                 if spans and spans[-1][0]+len(spans[-1][1]) == pc:
                     spans[-1][1].extend(raw)
@@ -246,11 +249,13 @@ def generate():
     callbacks=json.loads((ROOT/'generated/special-contents/callback-upgrade/manifest.json').read_text())
     write('probe_entries.hpp', '#pragma once\n#include <cstdint>\nnamespace wa2::special {\ninline constexpr std::uint32_t probe_entries[]={'+','.join(str(pc)+'u' for pc in probes)+'};\n'+
         'inline constexpr std::uint32_t instruction_starts[]={'+','.join(str(pc)+'u' for pc in sorted(bodies))+'};\n'+
-        'inline constexpr std::uint32_t recovered_callback_entries[]={'+','.join(str(pc)+'u' for pc in callbacks['recovered_entries'])+'};\n}\n')
+        'inline constexpr std::uint32_t recovered_callback_entries[]={'+','.join(str(pc)+'u' for pc in callbacks['recovered_entries'])+'};\n'+
+        'inline constexpr std::uint32_t recovered_jump_entries[]={'+','.join(str(pc)+'u' for pc in callbacks['recovered_jump_entries'])+'};\n}\n')
     report = dict(schema='wa2.special-shared-aot.v1', input_sha256=receipt['input_sha256'],
         instruction_locations=len(bodies), function_candidates=len(graph['function_candidates']), static_bodies=len(merged),
         all_discovered_instructions_compiled=True, all_direct_edges_resolve=True,
         recovered_callback_entries=callbacks['recovered_entries'],pointer_slots_audited=callbacks['pointer_slots_audited'],
+        recovered_jump_entries=callbacks['recovered_jump_entries'],shared_bulk_string_kernel=True,sampled_static_work=True,
         pending_transcendental_sites=pending, differential_probe_entries=probes,
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,

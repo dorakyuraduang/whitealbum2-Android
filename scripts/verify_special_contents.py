@@ -121,6 +121,12 @@ def main():
                     not check.get('crt_initializer_registered_filter') or check.get('crt_filter_rejection_cases')!=3 or
                     check.get('game_startup_called') is not False or check.get('bounded_static_callback_entries',0)<4):
                 raise ValueError('Missing bounded Special CRT callback regression checks')
+            if stem=='memory' and (check.get('reported_copy_address')!=4673248 or check.get('crt_copy_cases',0)<3000 or
+                    check.get('recovered_jump_entries_checked')!=len(callbacks['recovered_jump_entries']) or
+                    not check.get('shared_bulk_string_exercised')):
+                raise ValueError('Missing Special CRT switch/copy/bulk-string regression checks')
+            if stem=='runtime' and not check.get('special_final_cpu_and_storage_counters'):
+                raise ValueError('Missing Special final CPU/storage diagnostics')
             binary=win/f'shared_runtime/special/wa2_special_{stem}_tests.exe'
             checks[stem]=dict(file=str(path),sha256=digest(path),binary=str(binary),binary_sha256=digest(binary))
         output=ROOT/'out/special-contents';output.mkdir(parents=True,exist_ok=True)
@@ -150,15 +156,17 @@ def main():
                 check=True,timeout=60).stdout.decode('utf-8',errors='replace')
             audit=dict(method='compiled-archive-symbols' if name=='windows' else 'actual-linked-symbols',
                 final_binary_symbols_available=name!='windows',special_static_functions='wa2::special::f_' in symbols,
+                shared_bulk_string_kernel='wa2::aot::try_bulk_string(' in symbols,
                 main_story_static_functions='wa2::aot::f_' in symbols,
                 runtime_instruction_decoder='wr::Decoder::' in symbols)
-            if not audit['special_static_functions'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
+            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
                 raise ValueError('Special link contains the wrong game catalogue or an instruction decoder: '+name)
             symbol_audits[name]=audit
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
             same_special_sources_on_all_hosts=True,compiled_shared_sources=windows_sources,
             instruction_locations=manifest['instruction_locations'],static_bodies=manifest['static_bodies'],
             recovered_callback_entries=len(callbacks['recovered_entries']),pointer_slots_audited=callbacks['pointer_slots_audited'],
+            recovered_jump_entries=len(callbacks['recovered_jump_entries']),shared_bulk_string_kernel=True,
             pending_transcendental_sites=manifest['pending_transcendental_sites'],
             source_sha256=source_bindings(),checks=checks,artifacts=artifacts,elf_load_alignments=load_alignments,symbol_audits=symbol_audits,
             original_main_executable_opened=False,source_executable_executed=False,
