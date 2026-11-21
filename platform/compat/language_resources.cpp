@@ -31,11 +31,12 @@ class SelectedResources final:public wr::ReadOnlyFiles {
         }return {std::move(name)};
     }
     std::optional<resource::Archive> english_,base_script_,ic_script_;
-    bool ukrainian_{},separate_ic_{},packed_font_{};
+    bool ukrainian_{},separate_ic_{},packed_font_{},special_{};
     std::map<std::string,std::pair<std::uint32_t,std::uint32_t>,std::less<>> directories_;
 public:
     explicit SelectedResources(std::shared_ptr<wr::ReadOnlyFiles> original):original_(std::move(original)){}
-    void english(wr::Process& process,bool ukrainian,std::string_view script,bool packed_font){
+    void english(wr::Process& process,bool ukrainian,std::string_view script,bool packed_font,bool special){
+        special_=special;
         ukrainian_=ukrainian;separate_ic_=ukrainian && script=="ua.pak";packed_font_=packed_font;
         english_=resource::Archive::open(open_process_resource(process,process.options.data_root/std::string(script)));
         const auto members=english_->members();
@@ -75,9 +76,9 @@ public:
     std::optional<LanguageMember> member(std::string_view path,std::string_view name)const{
         if(!english_)return {};
         auto logical=fold(path);const bool ic=logical.starts_with("ic/");if(ic)logical.erase(0,3);
-        const bool script=logical=="ck-gal.pak" || logical=="script.pak" || logical=="en.pak" || (ukrainian_ && logical=="ua.pak");
+        const bool script=logical=="ck-gal.pak" || logical=="script.pak" || logical=="en.pak" || (special_ && (logical=="script_cn.pak" || logical=="script_cn2.pak")) || (ukrainian_ && logical=="ua.pak");
         const bool font=packed_font_ && (logical=="fon.pak" || logical=="fnt.pak");
-        const auto group=script?std::string_view(separate_ic_ && ic?"ic/script":"script"):font?std::string_view("fnt"):logical=="bak.pak"?std::string_view("bak"):logical=="grp.pak"?std::string_view("grp"):std::string_view{};
+        const auto group=script?std::string_view(separate_ic_ && ic?"ic/script":"script"):font?std::string_view("fnt"):logical=="bak.pak"?std::string_view("bak"):(logical=="grp.pak" || (special_ && logical=="gcn.pak"))?std::string_view("grp"):std::string_view{};
         if(group.empty())return {};
         auto found=english_->find_first(name);
         if(const auto range=directories_.find(group);range!=directories_.end()){
@@ -96,7 +97,7 @@ public:
     void select(std::string_view physical,std::initializer_list<std::string_view> targets,std::string_view legacy_folder,std::string_view pc_folder){
         if(physical.empty())return;
         const auto name=std::string(physical);
-        const auto stem=fold(legacy_folder.substr(0,legacy_folder.size()-4));for(const auto target:targets)folders_.insert_or_assign(std::string(target.substr(0,target.size()-4)),std::array<std::string,2>{std::string(pc_folder),stem});
+        if(!pc_folder.empty()){const auto stem=fold(legacy_folder.substr(0,legacy_folder.size()-4));for(const auto target:targets)folders_.insert_or_assign(std::string(target.substr(0,target.size()-4)),std::array<std::string,2>{std::string(pc_folder),stem});}
         const auto info=original_->info(name);
         if(!info || (info->attributes&16))throw resource::NotFound("Selected language PAK is missing: "+name);
         for(const auto target:targets)for(const auto prefix:{"","IC/"}){
@@ -170,14 +171,22 @@ void select_language_resources(wr::Process& process,const resource::LanguageReso
         const bool translated=selection.language==resource::GameLanguage::english || selection.language==resource::GameLanguage::ukrainian;
         if(selection.language==resource::GameLanguage::ukrainian && !process.state().read_only_files->info(script) && process.state().read_only_files->info("en.pak"))script="en.pak";
         check_pack(process,script,false);
-        packed_font=translated && !process.state().read_only_files->info(font);
+        // SC's English patch owns all four font atlases in its fnt group.
+        // Never borrow a Main font pack that happens to share this directory.
+        packed_font=translated && (special || !process.state().read_only_files->info(font));
         if(packed_font)font=script;else check_pack(process,font,true);
         auto selected=std::make_shared<SelectedResources>(process.state().read_only_files);
-        if(translated)selected->english(process,selection.language==resource::GameLanguage::ukrainian,script,packed_font);
+        if(translated)selected->english(process,selection.language==resource::GameLanguage::ukrainian,script,packed_font,special);
         const bool chinese=selection.language==resource::GameLanguage::chinese;
         if(special){
             selected->select(profile.ui,{"gcn.pak","grp.pak"},profile.ui,"grp");
             selected->select(script,{"script_cn.pak","script_cn2.pak","script.pak"},profile.script,"script");
+            if(translated){
+                // Optional sidecars preserve the Japanese/Chinese videos when
+                // several language versions share the same external folder.
+                for(const auto names:{std::pair{"mv000_en.pak","mv000.pak"},std::pair{"credits_en.pak","credits0.pak"}})
+                    if(process.state().read_only_files->info(names.first))selected->select(names.first,{names.second},names.second,"");
+            }
         }else selected->select(script,{"ck-gal.pak","script.pak"},profile.script,chinese?"ck-gal":"script");
         selected->select(font,{"fon.pak","fnt.pak"},profile.font,chinese?"fon":"fnt");
         install_resource_mount(process,std::move(selected));

@@ -9,8 +9,10 @@
   "android_library": "wa2_special",
   "android_distribution": "integrated-apk",
   "android_process": ":special",
-  "android_version_name": "0.2.125-special-aot",
-  "android_version_code": 128,
+  "android_version_name": "0.2.126-special-aot",
+  "android_version_code": 129,
+  "english_sha256": "849fd5e414a0ee2b34cec65aba4981c6101f9a59d57b6299c832ae77080b9736",
+  "english_filename": "WA2_Special_en.exe",
   "whole_program_complete": false,
   "complete_gameplay_verified": false
 }

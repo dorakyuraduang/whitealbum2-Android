@@ -35,9 +35,12 @@ std::vector<std::uint8_t> pak(std::span<const std::string> names,std::uint8_t ma
 int main(int argc,char** argv){try{
     CHECK(argc==2);
     const std::array<std::string,4> font{"\x96\x7b\x91\xcc" "80.tga","\x91\xdc\x89\x65" "80.tga","14pt\x96\x7b\x91\xcc.tga","14pt\x91\xdc.tga"};
-    const std::array<std::string,2> script{"1001.bnr","1001.txt"};const std::array<std::string,1> ui{"logo.tga"};
+    const std::array<std::string,2> script{"1001.bnr","1001.txt"};const std::array<std::string,1> ui{"logo.tga"};const std::array<std::string,2> base_ui{"logo.tga","base.tga"};
+    std::vector<std::string> grouped{"bak","background.tga","fnt"};grouped.insert(grouped.end(),font.begin(),font.end());grouped.insert(grouped.end(),{"grp","logo.tga","script","4000.bnr","4000.txt"});auto english_pack=pak(grouped,0x61);
+    for(unsigned n:{0u,2u,7u,9u}){const auto at=16+n*44;for(unsigned k=0;k<4;++k){english_pack[at+k]=0xcc;english_pack[at+40+k]=0;}}
     std::map<std::string,std::vector<std::uint8_t>> packs{
-        {"gcn.pak",pak(ui,0x31)},{"grp.pak",pak(ui,0x32)},
+        {"gcn.pak",pak(ui,0x31)},{"grp.pak",pak(base_ui,0x32)},{"en.pak",english_pack},
+        {"mv000.pak",{0x71}},{"mv000_en.pak",{0x72}},{"credits0.pak",{0x73}},{"credits_en.pak",{0x74}},
         {"script_cn.pak",pak(script,0x11)},{"script_cn2.pak",pak(script,0x12)},
         {"script.pak",pak(script,0x13)},{"ck-gal.pak",pak(script,0x14)},
         {"fon.pak",pak(font,0x21)},{"fnt.pak",pak(font,0x22)},
@@ -74,7 +77,14 @@ int main(int argc,char** argv){try{
         auto fewer=entries;std::erase_if(fewer,[&](const auto& item){return item.name==missing;});auto incomplete=std::make_shared<pc::ResourceMount>(fewer,open);auto p=process();pc::install_resource_mount(*p,incomplete);
         rejects([&]{pc::select_language_resources(*p,{r::GameLanguage::japanese,true},special);});CHECK(p->state().read_only_files==incomplete && !p->state().reports.contains("language_resources"));
     }
-    for(const auto language:{r::GameLanguage::english,r::GameLanguage::ukrainian,static_cast<r::GameLanguage>(99)})rejects([&]{r::language_profile(language,special);});
+    auto english=process();pc::install_resource_mount(*english,mount);pc::select_language_resources(*english,{r::GameLanguage::english,true},special);
+    const auto selected=[&](std::string_view path,std::string_view name){const auto member=pc::language_resource_member(*english,root/path,name);CHECK(member && member->archive && member->member!=r::Archive::missing);return member->archive->load(member->member);};
+    for(auto path:{"script_cn.pak","script_cn2.pak","script.pak","en.pak"}){CHECK(selected(path,"4000.txt")==std::vector<std::uint8_t>{0x61});CHECK(selected(path,"1001.txt")==std::vector<std::uint8_t>{0x13});}
+    CHECK(selected("grp.pak","logo.tga")==std::vector<std::uint8_t>{0x61});CHECK(selected("gcn.pak","logo.tga")==std::vector<std::uint8_t>{0x61});CHECK(!pc::language_resource_member(*english,root/"grp.pak","base.tga"));CHECK(read(*english,"grp.pak","base.tga")==std::vector<std::uint8_t>{0x32});
+    CHECK(selected("fnt.pak",font[0])==std::vector<std::uint8_t>{0x61});CHECK(selected("fon.pak",font[0])==std::vector<std::uint8_t>{0x61});CHECK(selected("bak.pak","background.tga")==std::vector<std::uint8_t>{0x61});
+    for(auto path:{"mv000.pak","credits0.pak"}){auto* file=english->state().read_only_files->open(path);CHECK(file);CHECK(std::fgetc(file)==(std::string_view(path)=="mv000.pak"?0x72:0x74));std::fclose(file);}
+    for(const auto missing:{"en.pak","script.pak","grp.pak"}){auto fewer=entries;std::erase_if(fewer,[&](const auto& item){return item.name==missing;});auto incomplete=std::make_shared<pc::ResourceMount>(fewer,open);auto p=process();pc::install_resource_mount(*p,incomplete);rejects([&]{pc::select_language_resources(*p,{r::GameLanguage::english,true},special);});CHECK(p->state().read_only_files==incomplete);}
+    for(const auto language:{r::GameLanguage::ukrainian,static_cast<r::GameLanguage>(99)})rejects([&]{r::language_profile(language,special);});
     rejects([&]{r::language_profile(r::GameLanguage::chinese,static_cast<r::ResourceTitle>(99));});
     CHECK(!chinese->executed_instructions && !japanese->executed_instructions);
     const auto report=japanese->state().reports.at("language_resources")();CHECK(report.find("\"ui\":\"grp.pak\"")!=report.npos && report.find("\"script\":\"script.pak\"")!=report.npos && report.find("\"font\":\"fnt.pak\"")!=report.npos);

@@ -24,6 +24,14 @@
         "sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
         "authorized_on": "2026-11-20",
         "static_analysis_only": true
+      },
+      {
+        "program": "special-contents-en",
+        "filename": "WA2_Special_en.exe",
+        "sha256": "849fd5e414a0ee2b34cec65aba4981c6101f9a59d57b6299c832ae77080b9736",
+        "authorized_on": "2026-11-21",
+        "static_analysis_only": true,
+        "shared_special_code_required": true
       }
     ],
     "screen_monitoring_allowed": false,

@@ -35,7 +35,7 @@ extern "C" int SDL_main(int argc,char** argv){
             else throw std::runtime_error("Unsupported Special launch argument: "+std::string(argument));
         }
         wa2::resource::validate_language_resources(startup.language,wa2::resource::ResourceTitle::special_contents);
-        startup.captions=wa2::android::selected_subtitles();
+        startup.captions=wa2::android::selected_subtitles(startup.language.language,true);
         options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();
         options.frame_submitted=[]{wa2::android::frame_presented_with_text([]{
             const auto glyphs=wa2::aot::native_glyph_counts();

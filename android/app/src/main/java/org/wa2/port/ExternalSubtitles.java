@@ -44,15 +44,17 @@ final class ExternalSubtitles {
         Context context=SDL.getContext();if(!(context instanceof Wa2Activity))throw new IOException("字幕运行会话尚未准备好");
         if(!LaunchSettings.sessionValid((Wa2Activity)context))throw new IOException("字幕设置与当前游戏目录不匹配");
         if(!LaunchSettings.chineseSubtitles(context))return null;
+        if(ResourceDirectory.specialSession())return readSpecial(context,ResourceDirectory.selectedTree(context),LaunchTarget.SPECIAL.subtitleFile(new LaunchProfile(0,LaunchSettings.language(context),"")),1024*1024);
         String location=LaunchSettings.subtitle(context);
         if(!location.isEmpty())return read(context,location);
-        return ResourceDirectory.specialSession()?readSpecial(context,ResourceDirectory.selectedTree(context),"subtext.dat",1024*1024):null;
+        return null;
     }
-    static void checkSpecialResources(Context context,Uri tree)throws IOException{
+    static void checkSpecialResources(Context context,Uri tree,LaunchProfile profile)throws IOException{
         ReadOnlyDocuments documents=new ReadOnlyDocuments(context.getContentResolver(),tree);
-        for(String name:new String[]{"subtext.dat","subfont.tga","songfont.tga"}){
+        String data=LaunchTarget.SPECIAL.subtitleFile(profile);
+        for(String name:profile.language==LaunchProfile.CHINESE?new String[]{data,"subfont.tga","songfont.tga"}:new String[]{data}){
             String[] info=documents.metadata(name,false);long limit=name.endsWith(".dat")?1024*1024:8*1024*1024;
-            if(info.length!=4 || Long.parseLong(info[1])<=0 || Long.parseLong(info[1])>limit || "16".equals(info[3]))throw new IOException("SC 字幕需要所选目录中的 "+name+"；也可选择外置字幕，或关闭补充字幕。");
+            if(info.length!=4 || Long.parseLong(info[1])<=0 || Long.parseLong(info[1])>limit || "16".equals(info[3]))throw new IOException("SC 当前版本字幕需要所选目录中的 "+name+"；请添加对应版本文件，或关闭补充字幕。");
         }
     }
     private static byte[] readSpecial(Context context,Uri tree,String name,int maximum)throws IOException{
@@ -65,7 +67,7 @@ final class ExternalSubtitles {
         }
     }
     public static byte[] readSpecialFont(boolean song)throws IOException{
-        Context context=SDL.getContext();if(!(context instanceof Wa2Activity) || !ResourceDirectory.validSpecialSession() || !LaunchSettings.sessionValid((Wa2Activity)context) || !LaunchSettings.chineseSubtitles(context) || !LaunchSettings.subtitle(context).isEmpty())throw new IOException("SC 字幕字图会话无效");
+        Context context=SDL.getContext();if(!(context instanceof Wa2Activity) || !ResourceDirectory.validSpecialSession() || !LaunchSettings.sessionValid((Wa2Activity)context) || !LaunchSettings.chineseSubtitles(context) || LaunchSettings.language(context)!=LaunchProfile.CHINESE)throw new IOException("SC 字幕字图会话无效");
         return readSpecial(context,ResourceDirectory.selectedTree(context),song?"songfont.tga":"subfont.tga",8*1024*1024);
     }
     static String display(String location) {

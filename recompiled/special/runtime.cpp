@@ -34,6 +34,13 @@
 #include <sstream>
 namespace wr {void install_wa2_exceptions(Process&);}
 namespace wa2::special {
+namespace {
+std::string_view identity(resource::GameLanguage language){
+    (void)resource::language_profile(language,resource::ResourceTitle::special_contents);
+    return language==resource::GameLanguage::english?"849fd5e414a0ee2b34cec65aba4981c6101f9a59d57b6299c832ae77080b9736":"1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1";
+}
+}
+wr::Image localized_image(resource::GameLanguage language){(void)identity(language);return language==resource::GameLanguage::english?english_image():initial_image();}
 aot::StaticProgram& Runtime::program(){
     if(!program_){
         if(shared_codecs_)host_boundaries_.insert(host_boundaries_.end(),std::begin(codec_boundary_entries),std::end(codec_boundary_entries));
@@ -42,7 +49,8 @@ aot::StaticProgram& Runtime::program(){
     }
     return *program_;
 }
-Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> surface,bool shared_codecs,bool captions_enabled,std::shared_ptr<const subtitles::Catalogue> captions,bool shared_resources):
+Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> surface,bool shared_codecs,bool captions_enabled,std::shared_ptr<const subtitles::Catalogue> captions,bool shared_resources,resource::GameLanguage language):
+    source_identity_(identity(language)),
     shared_codecs_(shared_codecs),
     shared_resources_(shared_resources),
     subtitle_player_(std::make_shared<subtitles::Playback>()),
@@ -72,7 +80,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
             return execute_(cpu,memory,true);
         }},std::move(options),std::move(backends)){
     subtitle_player_->enabled(captions_enabled);
-    if(captions_enabled && !captions)throw std::invalid_argument("SC captions need external subtext.dat/fonts or a selected subtitle document");
+    if(captions_enabled && !captions)throw std::invalid_argument("SC captions need the subtitle resources matching the selected language");
     subtitle_player_->catalogue(std::move(captions));
     process_.state().reports["special_subtitles"]=[state=subtitle_state_]{return state->report();};
     platform::compat::install_scheduler(process_,[this](auto ms,auto caller){return aot::source_fast_forward_idle(process_.memory,ms,caller,fast_forward_source);});
@@ -116,7 +124,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     process_.state().reports["native_resources"]=[]{return lzss_report();};
     std::function<std::uint64_t()> image_activity;
     if(shared_resources_){
-        auto profile=image_resource_profile();profile.verify=[this](wr::Memory& memory,wr::U32 pc){return &memory==&process_.memory && program().verify(pc);};
+        auto profile=image_resource_profile();profile.sha256=source_identity_;profile.verify=[this](wr::Memory& memory,wr::U32 pc){return &memory==&process_.memory && program().verify(pc);};
         wr::install_wa2_native_resources(process_,std::move(profile));
         image_activity=process_.state().resource_io_activity;
     }
@@ -124,7 +132,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     // opens a save page. Keep the initial codec progress and later file work.
     process_.state().resource_io_activity=[this,image_activity]{return (image_activity?image_activity():0)+lzss_activity()+std::min<std::uint64_t>(256,wr::wa2_native_vorbis_activity(process_))+aot::save_page_timing.pages+unsigned(aot::weather_batch_counts.completed!=0)+unsigned(aot::source_text_counts.layout_hits!=0)+unsigned(aot::source_text_counts.page_spans!=0);};
     if(shared_codecs_)wr::install_wa2_native_vorbis(process_,wr::NativeVorbisProfile{
-        "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
+        source_identity_,
         codec_boundary_entries[0],codec_boundary_entries[1],codec_boundary_entries[2],codec_boundary_entries[3],
         [this](wr::Memory& memory,wr::U32 pc){return &memory==&process_.memory && program().verify(pc);}});
     wr::install_wa2_registry(process_);
@@ -137,14 +145,13 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
         platform::compat::install_media(process_,std::move(audio),std::move(renderer));
         platform::compat::install_d3dx43_aliases(process_);
     }
-    process_.state().reports["program_profile"]=[]{return std::string(
-        "{\"id\":\"special-contents-cn\",\"backend\":\"shared-aot\",\"main_story_address_hooks\":false,\"complete_gameplay_verified\":false}");};
+    process_.state().reports["program_profile"]=[language]{return std::string("{\"id\":\"special-contents\",\"language\":")+wr::quote(std::string(resource::language_profile(language,resource::ResourceTitle::special_contents).tag))+",\"backend\":\"shared-aot\",\"shared_static_functions\":true,\"main_story_address_hooks\":false,\"complete_gameplay_verified\":false}";};
 }
 std::uint32_t run(host::Startup startup){
     if(!startup.window)throw std::invalid_argument("missing Special window/device adapter");
     if(startup.test_mode)throw std::invalid_argument("Special Contents full-unlock test profile is not established");
-    startup.options.image_name="WA2_Special_cn.exe";
-    startup.options.command_line="\"C:\\WinRecomp\\WA2_Special_cn.exe\"";
+    startup.options.image_name=startup.language.language==resource::GameLanguage::english?"WA2_Special_en.exe":"WA2_Special_cn.exe";
+    startup.options.command_line="\"C:\\WinRecomp\\"+startup.options.image_name+"\"";
     const auto counter_sink=startup.io_diagnostic_sink;
     const auto begun=platform::Clock::counter();auto previous=begun;
     const auto phase=[&](std::string_view name)noexcept{
@@ -158,12 +165,12 @@ std::uint32_t run(host::Startup startup){
     wr::ProcessBackends backends;
     backends.gui=[adapter=startup.window](wr::Process& p){return window::install(p,adapter);};
     backends.directdraw=[adapter=startup.window](wr::Process& p){return platform::compat::install_legacy_display(p,adapter);};
-    Runtime runtime(std::move(startup.options),std::move(backends),startup.window,true,startup.language.chinese_subtitles,std::move(startup.captions));
+    Runtime runtime(std::move(startup.options),std::move(backends),startup.window,true,startup.language.chinese_subtitles,std::move(startup.captions),true,startup.language.language);
     auto& process=runtime.process();
     process.state().reports["host_event_pump"]=[host=startup.window]{return host->event_pump_report();};
     const auto report=[&](std::string_view error){
         if(startup.report_file.empty())return;
-        std::ofstream out(startup.report_file);out<<"{\"program\":\"special-contents-cn\",\"error\":"<<wr::quote(std::string(error))<<",\"process\":"<<process.report()<<"}\n";
+        std::ofstream out(startup.report_file);out<<"{\"program\":\"special-contents\",\"error\":"<<wr::quote(std::string(error))<<",\"process\":"<<process.report()<<"}\n";
     };
     try{
         phase("save_directory");
@@ -174,7 +181,7 @@ std::uint32_t run(host::Startup startup){
         else platform::compat::install_resource_mount(process,platform::compat::local_resource_mount(process.options.data_root));
         platform::compat::select_language_resources(process,startup.language,resource::ResourceTitle::special_contents);
         phase("image_load");
-        const auto image=initial_image();std::ostringstream missing;unsigned count{};
+        const auto image=localized_image(startup.language.language);std::ostringstream missing;unsigned count{};
         for(const auto& item:image.imports){const auto name=item.ordinal?"#"+std::to_string(*item.ordinal):item.name;
             if(!process.resolve(item.dll,name)){if(count++)missing<<", ";missing<<item.dll<<'!'<<name;}}
         if(count)throw std::runtime_error("Unsupported Special Contents imports: "+missing.str());

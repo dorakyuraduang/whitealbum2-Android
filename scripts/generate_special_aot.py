@@ -370,6 +370,8 @@ def generate():
     # It has no opcode decoder, per-instruction dispatch, or interpreter.
     data = (ROOT/'generated/special-contents/image.bin').read_bytes()
     image_source(graph, data)
+    from prepare_special_english import generate as english_image_source
+    english_image_source(write)
     cpp = ['#include "bodies.hpp"', '#include <algorithm>', '#include <bit>',
            'namespace wa2::special {', 'extern const std::uint8_t image_bytes[];', 'namespace {']
     sections = graph['image']['sections']
@@ -410,7 +412,7 @@ def generate():
             'if(!(bits&(std::uint64_t(1)<<bit)))return {};',
             'return {&table[it->index],it->ordinal+it->ranks[word]+std::popcount(bits&((std::uint64_t(1)<<bit)-1))};}', '}']
     write('table.cpp', '\n'.join(cpp)+'\n')
-    sources += ['table.cpp', 'image.cpp']
+    sources += ['table.cpp', 'image.cpp', 'english_image.cpp']
     write('sources.cmake', 'set(WA2_SPECIAL_AOT_SOURCES\n'+''.join(f'  "${{CMAKE_CURRENT_LIST_DIR}}/{name}"\n' for name in sources)+')\n')
     # Small, closed integer functions form a finite independent memory oracle.
     probes = []
@@ -441,6 +443,7 @@ def generate():
         'inline constexpr std::uint32_t recovered_callback_entries[]={'+','.join(str(pc)+'u' for pc in callbacks['recovered_entries'])+'};\n'+
         'inline constexpr std::uint32_t recovered_jump_entries[]={'+','.join(str(pc)+'u' for pc in callbacks['recovered_jump_entries'])+'};\n}\n')
     report = dict(schema='wa2.special-shared-aot.v1', input_sha256=receipt['input_sha256'],
+        english_input_sha256='849fd5e414a0ee2b34cec65aba4981c6101f9a59d57b6299c832ae77080b9736',english_shared_static_functions=True,
         instruction_locations=len(bodies), function_candidates=len(graph['function_candidates']), static_bodies=len(merged),
         all_discovered_instructions_compiled=True, all_direct_edges_resolve=True,
         recovered_callback_entries=callbacks['recovered_entries'],pointer_slots_audited=callbacks['pointer_slots_audited'],

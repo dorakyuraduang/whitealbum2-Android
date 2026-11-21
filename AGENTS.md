@@ -16,6 +16,10 @@
   WA2_Special_cn.exe from WHITE ALBUM2 Special Contents. This exception applies
   only to the SHA-bound Special Contents profile, not WA2_chs.exe. Do not
   execute either original program or launch a game during this work.
+- On 2026-11-21 the user authorized analysis of the supplied English Special
+  patch ZIP and its SHA-bound WA2_Special_en.exe. Its identical code must reuse
+  the existing Special static sources; localized image data are shared by hosts.
+  The Main executable restriction and game-launch prohibition still apply.
 - Do not monitor/read/capture the screen or operate game UI. Do not launch the
   game, an emulator or a Windows FPS/pressure test. Memory-only checks are allowed.
 - Builds run below normal priority, hidden, with one job; no concurrent heavy

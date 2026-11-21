@@ -6,6 +6,9 @@
 #include <stdexcept>
 
 namespace wa2::subtitles {
+std::string_view special_subtitle_name(resource::GameLanguage language){
+    switch(language){case resource::GameLanguage::chinese:return "subtext.dat";case resource::GameLanguage::japanese:return "subtext_ja.dat";case resource::GameLanguage::english:return "subtext_en.dat";default:throw std::invalid_argument("Unsupported SC subtitle language");}
+}
 namespace {
 struct EncodedCue {std::uint32_t begin,end;std::vector<std::uint16_t> text;};
 using EncodedTracks=std::map<std::uint32_t,std::vector<EncodedCue>>;

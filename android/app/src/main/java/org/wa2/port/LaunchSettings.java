@@ -55,7 +55,7 @@ final class LaunchSettings {
     static String languageLabel(Context context) {return profile(context).languageLabel();}
     static String script(Context context) { return target(context).script(profile(context)); }
     static String uiArchive(Context context) {return target(context).ui(profile(context));}
-    static String font(Context context) { return profile(context).fontLocation(); }
+    static String font(Context context) { return target(context)==LaunchTarget.SPECIAL && language(context)==LaunchProfile.ENGLISH?"en.pak/fnt":profile(context).fontLocation(); }
     static String subtitle(Context context) {return profile(context).subtitle;}
     static String[] gameArguments(Context context) {return target(context).arguments(profile(context));}
     static boolean saving(Context context) {LaunchProfileStore current=store(context);return current!=null && current.dirty();}
@@ -81,7 +81,7 @@ final class LaunchSettings {
                 };
                 current=new LaunchProfileStore(files,importPrevious && target==LaunchTarget.MAIN?previous(application):target.defaults());
             } else { current.flush();current.reload(); }
-            target.validate(current.current());current.flush();synchronized(LOCK){profiles.put(selected,current);}return null;
+            target.normalize(current);target.validate(current.current());current.flush();synchronized(LOCK){profiles.put(selected,current);}return null;
         }).get(); } catch(InterruptedException error){Thread.currentThread().interrupt();throw new IOException("Launcher configuration interrupted",error);}
         catch(ExecutionException error){Throwable cause=error.getCause();if(cause instanceof IOException)throw (IOException)cause;throw new IOException("Cannot access launcher configuration",cause);}
     }
@@ -102,6 +102,7 @@ final class LaunchSettings {
         IO.execute(() -> {String problem=null;try{store.flush();}catch(IOException | RuntimeException error){problem=error.getMessage();if(problem==null)problem="无法保存游戏语言";}completed.accept(problem);});
     }
     static void setSubtitle(Context context,String uri,Consumer<String> completed) {
+        if(target(context)==LaunchTarget.SPECIAL){completed.accept("SC 字幕随游戏语言自动读取。");return;}
         final LaunchProfileStore store=store(context);if(store==null){completed.accept("请先选择并检查游戏文件夹。");return;}
         if(!store.setSubtitle(uri)){completed.accept(null);return;}
         IO.execute(() -> {String problem=null;try{store.flush();}catch(IOException | RuntimeException error){problem=error.getMessage();if(problem==null)problem="无法保存字幕文件选择";}completed.accept(problem);});

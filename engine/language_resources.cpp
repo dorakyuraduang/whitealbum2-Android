@@ -6,7 +6,7 @@ const LanguageProfile& language_profile(GameLanguage language,ResourceTitle titl
     static constexpr LanguageProfile chinese{"zh-CN","ck-gal.pak","fon.pak","grp.pak"},japanese{"ja-JP","script.pak","fnt.pak","grp.pak"},english{"en-US","en.pak","fon_en.pak","grp.pak"},ukrainian{"uk-UA","ua.pak","font_ua.pak","grp.pak"},special_chinese{"zh-CN","script_cn.pak","fon.pak","gcn.pak"};
     if(title==ResourceTitle::special_contents){
         if(language==GameLanguage::chinese)return special_chinese;
-        if(language!=GameLanguage::japanese)throw std::invalid_argument("SC resource profiles support zh-CN and ja-JP only");
+        if(language!=GameLanguage::japanese && language!=GameLanguage::english)throw std::invalid_argument("SC resource profiles support zh-CN, ja-JP and en-US only");
     }else if(title!=ResourceTitle::main_story)throw std::invalid_argument("Unsupported resource title");
     switch(language){case GameLanguage::chinese:return chinese;case GameLanguage::japanese:return japanese;case GameLanguage::english:return english;case GameLanguage::ukrainian:return ukrainian;}
     throw std::invalid_argument("Unsupported game language");

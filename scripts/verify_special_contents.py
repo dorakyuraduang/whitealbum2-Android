@@ -11,7 +11,7 @@ import sys
 from prepare_special_contents import ROOT, digest, write_json
 
 RECEIPT = ROOT/'logs/special-aot-verification.json'
-CHECKS=('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle','fast','image','main_resource','pixel','music','optimization','main_ftol','main_text','main_music','main_profile','main_page')
+CHECKS=('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle','fast','image','main_resource','pixel','music','optimization','main_ftol','main_text','main_music','main_profile','main_page','english','main_language','main_external')
 
 
 def source_bindings():
@@ -23,7 +23,7 @@ def source_bindings():
                      {'.cpp','.cc','.hpp','.h','.inc','.cmake','.txt'})
     files.update(ROOT/name for name in ('config/porting_contract.json', 'config/special_contents.json','config/special_native_contracts.json','config/special_hot_functions.json',
         'scripts/generate_shared_aot.py','scripts/generate_special_aot.py','scripts/prepare_special_contents.py',
-        'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp','tests/special_render.cpp',
+        'scripts/verify_special_contents.py','scripts/prepare_special_english.py','scripts/prepare_special_english_resources.py','scripts/special_mkv_subtitles.py','tests/test_special_english_import.py','tests/special_english.cpp','tests/language_resources.cpp','tests/external_subtitles.cpp','generated/special-contents/english/preparation.json','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp','tests/special_render.cpp',
         'tests/special_drawing.cpp','tests/native_sprite_cpu.cpp','tests/glyph_scheduling.cpp','tests/special_sort.cpp','tests/io_diagnostics.cpp',
         'tests/special_save.cpp','tests/save_inventory.cpp','tests/save_thumbnail.cpp',
         'tests/special_weather.cpp','tests/special_language.cpp','tests/special_subtitles.cpp','tests/special_fast_forward.cpp','tests/special_images.cpp','tests/special_image_pixels.cpp','tests/native_resource_cache.cpp','scripts/generate_weather_batch.py',
@@ -171,11 +171,12 @@ def main():
                 '-DWA2_SPECIAL_CONTENTS=ON','-DWA2_SPECIAL_CHECKS=ON',
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
             run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests',
-                 'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_sort_tests','wa2_special_io_tests',
+                 'wa2_special_english_tests','wa2_special_main_language_tests','wa2_special_main_external_tests','wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_sort_tests','wa2_special_io_tests',
                  'wa2_special_save_tests','wa2_special_main_save_tests','wa2_special_main_thumbnail_tests','wa2_special_weather_tests','wa2_special_language_tests','wa2_special_subtitle_tests','wa2_special_fast_tests','wa2_special_image_tests','wa2_special_main_resource_tests','wa2_special_pixel_tests','wa2_special_music_tests','wa2_special_optimization_tests','wa2_special_main_ftol_tests','wa2_special_main_text_tests','wa2_special_main_music_tests','wa2_special_main_profile_tests','wa2_special_main_page_tests','wa2_special_windows','--parallel','1'],7200)
             for stem in CHECKS:
                 command=[win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json']
                 if stem=='main_sprite':command.append('--correctness-only')
+                if stem=='english':command.append(ROOT/'out/special-english-resources')
                 if stem=='main_page':env['WA2_NOVEL_TIMING']='page'
                 run(command,60)
                 env.pop('WA2_NOVEL_TIMING',None)
@@ -262,8 +263,10 @@ def main():
                 raise ValueError('Missing exact SC pixel-loop/source comparisons')
             if stem=='subtitle' and (check.get('static_return_comparisons')!=8 or check.get('main_cue_regressions')!=315 or not all(check.get(k) for k in ('sc_dialogue_secondary_and_song_merged','chapter_delay_checked','disabled_skips_guest_reads','source_ret_fault_precedes_observer'))):
                 raise ValueError('Missing shared SC caption/state/source-RET checks')
-            if stem=='language' and (check.get('japanese_alias_cases')!=10 or check.get('guards')!=7 or not all(check.get(k) for k in ('chinese_banks_preserved','main_pairs_preserved','loose_resources_routed','patch_priority_preserved','missing_pack_atomic_failure'))):
+            if stem=='language' and (check.get('japanese_alias_cases')!=10 or check.get('guards')!=9 or not all(check.get(k) for k in ('chinese_banks_preserved','main_pairs_preserved','loose_resources_routed','patch_priority_preserved','missing_pack_atomic_failure'))):
                 raise ValueError('Missing common Main/SC language resource routing checks')
+            if stem=='english' and (check.get('external_tracks')!=24 or check.get('external_cues')!=2972 or not all(check.get(k) for k in ('english_image_sha256_verified','shared_text_and_data','english_native_codec_and_resources','automatic_subtitle_language_guards'))):
+                raise ValueError('Missing English data/profile/subtitle verification')
             if stem=='memory' and (check.get('string_regression_cases')!=6 or
                     check.get('reported_rep_address')!=4691986 or not check.get('string_fault_prefix_checked') or
                     not check.get('diagnostic_budget_preserved')):

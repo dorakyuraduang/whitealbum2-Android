@@ -41,16 +41,18 @@ bool initialize_subtitles_jni(JNIEnv* env)noexcept{
     if(!read_method || !raster_method || !special_font_method){release_subtitles_jni(env);return false;}return true;
 }
 void release_subtitles_jni(JNIEnv* env)noexcept{if(subtitles_class)env->DeleteGlobalRef(subtitles_class);subtitles_class=nullptr;read_method=raster_method=special_font_method=nullptr;}
-std::shared_ptr<const subtitles::Catalogue> selected_subtitles(){
+std::shared_ptr<const subtitles::Catalogue> selected_subtitles(resource::GameLanguage language,bool special){
     auto* env=static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());if(!env || !subtitles_class || !read_method)throw std::runtime_error("External subtitle bridge is unavailable");
     if(env->PushLocalFrame(12)<0)throw std::runtime_error(exception(env));
     try{auto array=static_cast<jbyteArray>(env->CallStaticObjectMethod(subtitles_class,read_method));check(env);std::shared_ptr<const subtitles::Catalogue> result;
         if(array){const auto data=bytes(env,array);
-            if(data.size()>=4 && data[0]=='x' && data[1]=='s' && data[2]=='n' && data[3]=='7'){
+            if(special && language!=resource::GameLanguage::chinese)result=subtitles::compile_special_text(data,language,[env](auto characters){return rasterize(env,characters);});
+            else if(data.size()>=4 && data[0]=='x' && data[1]=='s' && data[2]=='n' && data[3]=='7'){
                 auto dialogue=static_cast<jbyteArray>(env->CallStaticObjectMethod(subtitles_class,special_font_method,JNI_FALSE));check(env);
                 auto song=static_cast<jbyteArray>(env->CallStaticObjectMethod(subtitles_class,special_font_method,JNI_TRUE));check(env);
                 result=subtitles::compile_special_binary(data,bytes(env,dialogue,8*1024*1024),bytes(env,song,8*1024*1024));
-            }else result=compile(env,array);
+            }else if(special)throw std::runtime_error("SC Chinese subtitle resources have an unsupported format");
+            else result=compile(env,array);
         }
         env->PopLocalFrame(nullptr);return result;
     }catch(...){env->PopLocalFrame(nullptr);throw;}

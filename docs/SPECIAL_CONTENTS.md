@@ -17,7 +17,7 @@ Special 的原程序地址、CRT、资源表和部分 UI 与正篇不同，不�
 和配置互不覆盖，也无需维护第二个应用的安装、签名和启动接口。
 
 合包核验会逐字节保留已验证正篇 APK 的三个运行库和许可证条目，只新增 Special
-运行库及对应入口。当前合包版本为 `0.2.124-special-aot`；正篇运行库的诊断版本仍是
+运行库及对应入口。当前合包版本为 `0.2.126-special-aot`；正篇运行库的诊断版本仍是
 `0.2.108-shared-aot`。安装使用 `adb install -r`，核对版本、UID、首次安装时间和
 已安装 APK 的 SHA-256，不卸载、不清数据、不启动应用。
 
@@ -35,7 +35,7 @@ Special 存档和 INI 配置位于：
 
 源程序的根目录存档/配置别名也映射到这里。正篇 IC/CC 进度目录在 Special 中仅可读；
 写入、删除和移动到正篇存档目录会被拒绝。不会自动复制或合并现有存档。
-当前没有为 Special 应用正篇的语言替换、附加字幕、全部解锁或固定地址加速补丁。
+语言和附加字幕使用下文的 SC 独立资源配置与来源身份，全部解锁仍未建立。
 
 ## 复现
 
@@ -44,6 +44,7 @@ Special 存档和 INI 配置位于：
 
 ```powershell
 python scripts/prepare_special_contents.py --exe 'D:\WHITE ALBUM2 Special Contents\WA2_Special_cn.exe'
+python scripts/prepare_special_english_resources.py 'D:\download\White Album 2 Special Contents full patch (v1.0).zip' --base-root 'D:\WHITE ALBUM2 Special Contents'
 python scripts/verify_special_contents.py
 python scripts/package_launcher.py --integrated --with-special
 ```
@@ -795,3 +796,85 @@ LOAD 对齐。已验证整合 APK `WA2-arm64-0.2.125-special-aot.apk`（版本�
 
 安装证据保留于 `logs/special-android-installed.json`。本轮安装前 SC 未在运行，
 尚无 0.2.124／0.2.125 同一剧情、设置的设备对照，Android 性能收益仍记为待测。
+
+### 0.2.126（2026-11-21）：英文 Special 与按版本读取字幕
+
+分析用户提供的 `White Album 2 Special Contents full patch (v1.0).zip` 后，
+确认 `WA2_Special_en.exe` 的完整 SHA-256 为
+`849fd5e414a0ee2b34cec65aba4981c6101f9a59d57b6299c832ae77080b9736`。
+其 `.text` 与初始化 `.data` 和现有中文 SC 缓存逐字节一致。两端继续编译
+同一份 SC 静态函数；英文只增加共享的初始映像数据，恢复英文只读字符串、
+PE 头及 Windows 对话框资源。生成器和有限内存检查核对重建后的完整文件
+SHA-256，不使用运行时指令解码器，也不重新分析或打开本体 EXE。
+
+SC 语言现可选择中文、日文和 English。英文 `en.pak` 的目录标记实际包含
+`bak`、`fnt`、`grp`、`script` 四组，共 184 项索引、四张字体和 49 组脚本。
+共有文件适配层按组覆盖图片、背景、字体和脚本，缺少的脚本回到原始
+`script.pak`，缺少的图片保持 `grp.pak` 后备。不会把整个 `en.pak` 当作一个
+无分组资源目录。英文原生资源和 Vorbis 服务使用英文 SHA 身份，并继续核验
+共有静态函数代码；中文两个脚本包及本体各语言的选择规则保持原有行为。
+
+SC 不再提供外置字幕选择入口。加载旧配置时清除 SC 的历史字幕 URI，
+保留语言、开关、FPS、帧率限制、长按快进和菜单设置。本体自选字幕继续保留。
+SC 的「补充字幕」开关决定是否加载对应版本的固定资源：
+
+| SC 语言 | 自动读取的文件 |
+| --- | --- |
+| 中文 | `subtext.dat`、`subfont.tga`、`songfont.tga` |
+| English | `subtext_en.dat` |
+| 日文 | `subtext_ja.dat`（本补丁没有提供日文补充字幕数据） |
+
+缺少当前版本文件时明确报缺失文件名，可补齐或关闭补充字幕；不会借用另一
+语言字幕。Windows SC 同样自动选择版本文件，移除自选 `--subtitles` 参数。
+英文／日文文本使用带语言标识的有界 `SCU1` 数据与系统离屏字体适配器，
+沿用共有字幕排版、播放和提交实现；文本数据的语言与设置不符时拒绝读取。
+
+英文 ZIP 没有中文补丁的 `subtext.dat`。准备工具从十一段 MKV 的单一
+`S_TEXT/UTF8` 字幕轨提取英文，包括两段没有正确标记 `eng` 的字幕轨。
+依据原始 BGM 的完整 Vorbis 包序列识别 23 个音轨分段及其时间轴，避免按
+视频名称猜测 BGM 编号。另一个 AAC 重编码片段绑定输入 SHA，并通过有限
+离屏音频解码比较开头、中段、结尾三个窗口：均得到 3970 毫秒偏移，能量
+相关系数为 0.985～0.989，时间分辨率 10 毫秒。导出时扣除该偏移，字幕按
+实际章节边界拆分，并保留同时出现的文字。最终为 24 个章节、2972 条合并
+时间区间、122296 个 Unicode 码点；不解码 HEVC 画面、不播放音频或视频。
+手机上的主观字幕同步仍须用户手动确认。
+
+资源准备命令见上文。输出仅位于被忽略的 `out/special-english-resources/`，
+以下四个新增文件应放在已授权的 SC 原资源目录中：
+
+```text
+en.pak
+subtext_en.dat
+mv000_en.pak
+credits_en.pak
+```
+
+后两项保存 ZIP 中英文开场／片尾影片；只有 English 选择将原逻辑文件名
+映射到这些新增文件，保留中日文原影片。原始 `grp.pak`、`script.pak`、
+BGM、SE、VOICE 等资源仍需存在，PAK 和字幕均不进入 APK 或公开源码。
+ZIP 另附的 PDF、HTML 链接及备用小说 TXT 作为独立资料保留，不伪装为已接入
+游戏的场景。
+
+本版 29 组 C++ 检查通过，新增英文完整映像哈希、相同代码／初始化数据、
+PE 资源目录、分页／连续内存下英文图片和音频原生接纳、错误字幕语言与
+截断数据保护，并实际编译全部英文字幕数据。本体语言资源回归有 352 个检查，
+外置字幕回归有 2876 个检查。字幕导入器通过自写 EBML／四种分帧／时间轴／
+重叠文字／非法输入检查；两套 Java 适配编译和十四项纯状态检查通过，
+其中配置路由有 107 例、99 个守卫。两端实际编译同一套 21 份 SC 生成 C++；
+其中新增的一份仅为英文数据，游戏函数没有分叉。链接审计和 16 KiB 对齐通过。
+
+整合包 `WA2-arm64-0.2.126-special-aot.apk` 为版本码 129、18,036,656 字节，
+保留已核验的本体 `0.2.108-shared-aot` 运行库。2026-11-21 通过授权无线 ADB
+保留数据原位安装，安装版本、包哈希、UID 和首次安装时间核验通过。四个
+英文新增文件已部署到手机已授权的 SC 目录，并逐项核验 SHA-256；没有修改
+原中日文资源文件。用户可在 SC 配置中手动选择 English。
+
+- APK SHA-256：`052dd16592629ee9494aa403d465243961db6cd8e88922efbd3614558d3aeb6d`
+- SC 运行库 SHA-256：`20998bcfa0d165c2061808fee15dc6a91d5b372f47f09b06bb9090d13b3eeba4`
+- 未剥离库 SHA-256：`732ad729fbec6eaac93125f6236a3dd1b05cca0e56791f91cb117c3a5414303e`
+
+没有启动游戏、操作 UI、打开图形／音频设备或读取屏幕。完整英文流程、手机
+字幕观感及同场景性能仍待用户手动运行核对；上述组件结果不能证明整段游戏
+兼容或新的 Android 性能收益。私有证据为 `logs/special-aot-verification.json`、
+`logs/special-english-resources.json`、`logs/special-english-check.json`、
+`logs/special-android-installed.json` 和 `logs/special-english-device-resources.json`。

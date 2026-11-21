@@ -1,4 +1,5 @@
 #include "external_subtitles.hpp"
+#include "special_subtitles.hpp"
 #include <cmath>
 #include <algorithm>
 #include <array>
@@ -156,8 +157,8 @@ const Track* Catalogue::find_audio(std::uint32_t key,std::uint32_t scene)const n
     return find(key);
 }
 FontSpec Catalogue::font()const noexcept{return atlas_?atlas_->spec:font_spec();}
-std::shared_ptr<const Catalogue> compile_external(const Document& document,const GlyphRasterizer& rasterizer){
-    if(document.tracks.empty() || document.tracks.size()>1024 || document.characters.empty() || document.characters.size()>1536 || !document.cue_count || document.cue_count>8192 || document.text_count>131072)throw std::runtime_error("Invalid external subtitle document bounds");
+std::shared_ptr<const Catalogue> compile_document(const Document& document,const GlyphRasterizer& rasterizer,std::size_t text_limit){
+    if(document.tracks.empty() || document.tracks.size()>1024 || document.characters.empty() || document.characters.size()>1536 || !document.cue_count || document.cue_count>8192 || document.text_count>text_limit)throw std::runtime_error("Invalid external subtitle document bounds");
     auto out=std::shared_ptr<Catalogue>(new Catalogue);out->legacy_audio_scene_matching_=document.legacy_audio_scene_matching;std::map<char32_t,std::uint16_t> lookup;const auto embedded=characters();bool covered=true;
     for(auto cp:document.characters){const auto it=std::lower_bound(embedded.begin(),embedded.end(),cp);if(it==embedded.end() || *it!=cp){covered=false;break;}}
     const bool full_width=std::any_of(document.characters.begin(),document.characters.end(),[](char32_t cp){return (cp>=0x2e80 && cp<=0x9fff) || (cp>=0xac00 && cp<=0xd7af) || (cp>=0xf900 && cp<=0xfaff) || (cp>=0xff01 && cp<=0xffee) || cp>=0x20000;});
@@ -173,9 +174,29 @@ std::shared_ptr<const Catalogue> compile_external(const Document& document,const
     std::size_t total{};std::uint32_t last_key{};bool first=true;
     for(const auto& track:document.tracks){
         if(track.cues.empty() || (!first && track.key<=last_key))throw std::runtime_error("Invalid external subtitle track order");last_key=track.key;first=false;const auto start=out->cues_.size();std::uint32_t previous{};
-        for(const auto& cue:track.cues){if(cue.text.empty() || cue.text.size()>512 || cue.begin<previous || cue.begin>=cue.end || cue.text.size()>document.text_count-total || out->cues_.size()>=document.cue_count)throw std::runtime_error("Invalid external subtitle cue bounds");previous=cue.end;const auto offset=out->glyphs_.size();for(auto cp:cue.text){if(cp=='\n' && document.legacy_audio_scene_matching){out->glyphs_.push_back(line_break);continue;}const auto it=lookup.find(cp);if(it==lookup.end())throw std::runtime_error("Subtitle character missing from validated font");out->glyphs_.push_back(it->second);}total+=cue.text.size();out->cues_.push_back({cue.begin,cue.end,{out->glyphs_.data()+offset,cue.text.size()}});}
+        for(const auto& cue:track.cues){if(cue.text.empty() || cue.text.size()>512 || cue.begin<previous || cue.begin>=cue.end || cue.text.size()>document.text_count-total || out->cues_.size()>=document.cue_count)throw std::runtime_error("Invalid external subtitle cue bounds");previous=cue.end;const auto offset=out->glyphs_.size();for(auto cp:cue.text){if(cp=='\n' && (document.legacy_audio_scene_matching || document.line_breaks)){out->glyphs_.push_back(line_break);continue;}const auto it=lookup.find(cp);if(it==lookup.end())throw std::runtime_error("Subtitle character missing from validated font");out->glyphs_.push_back(it->second);}total+=cue.text.size();out->cues_.push_back({cue.begin,cue.end,{out->glyphs_.data()+offset,cue.text.size()}});}
         out->tracks_.push_back({track.key,{out->cues_.data()+start,track.cues.size()}});
     }
     if(total!=document.text_count || out->cues_.size()!=document.cue_count)throw std::runtime_error("External subtitle counts changed after validation");return out;
+}
+std::shared_ptr<const Catalogue> compile_external(const Document& document,const GlyphRasterizer& rasterizer){return compile_document(document,rasterizer,131072);}
+std::shared_ptr<const Catalogue> compile_special_text(std::span<const std::uint8_t> bytes,resource::GameLanguage language,const GlyphRasterizer& rasterizer){
+    (void)special_subtitle_name(language);
+    if(language==resource::GameLanguage::chinese || bytes.size()<12 || bytes.size()>maximum_yaml_bytes)throw std::runtime_error("Invalid SC text subtitle bounds");
+    std::size_t at{};const auto word=[&]{if(bytes.size()-at<4)throw std::runtime_error("Truncated SC text subtitles");std::uint32_t v{};for(unsigned n=0;n<4;++n)v|=std::uint32_t(bytes[at++])<<(8*n);return v;};
+    if(word()!=0x31554353 || word()!=static_cast<unsigned>(language))throw std::runtime_error("SC subtitle language/format differs from the selected version");
+    Document document;document.line_breaks=true;std::set<char32_t> charset;
+    const auto count=word();if(!count || count>32)throw std::runtime_error("Invalid SC text track count");
+    std::uint32_t last{};
+    for(unsigned n=0;n<count;++n){TextTrack track;track.key=word();const auto cues=word();
+        if((track.key>>16)<80 || (track.key>>16)>85 || (track.key&65535)>6 || (n && track.key<=last) || !cues || cues>8192-document.cue_count)throw std::runtime_error("Invalid SC text track identity");last=track.key;
+        for(unsigned k=0;k<cues;++k){TextCue cue{word(),word(),{}};const auto size=word();if(!size || size>2048 || size>bytes.size()-at || cue.begin>=cue.end || cue.end>86400000 || (!track.cues.empty() && cue.begin<track.cues.back().end))throw std::runtime_error("Invalid SC text cue bounds");
+            cue.text=utf8(std::string_view(reinterpret_cast<const char*>(bytes.data()+at),size),k+1);at+=size;
+            if(cue.text.empty() || cue.text.size()>512 || cue.text.size()>262144-document.text_count)throw std::runtime_error("SC text limit exceeded");
+            for(auto cp:cue.text){if(cp=='\n')continue;if(cp<32 || (cp>=127 && cp<160) || cp==0xfeff)throw std::runtime_error("SC text control character");charset.insert(cp);}if(charset.size()>1536)throw std::runtime_error("SC text charset limit exceeded");
+            document.text_count+=cue.text.size();++document.cue_count;track.cues.push_back(std::move(cue));
+        }document.tracks.push_back(std::move(track));
+    }
+    if(at!=bytes.size())throw std::runtime_error("Trailing SC text subtitle data");document.characters.assign(charset.begin(),charset.end());return compile_document(document,rasterizer,262144);
 }
 }
