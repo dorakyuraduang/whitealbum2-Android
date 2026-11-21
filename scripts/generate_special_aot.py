@@ -135,7 +135,7 @@ def generate():
     fast={key:int(contracts['fast_forward'][key],0) if isinstance(contracts['fast_forward'][key],str) else contracts['fast_forward'][key] for key in fast_fields}
     image_fields=('image_check','image_load','dictionary','trace_set','trace_clear')
     image_resources={key:int(contracts['image_resources'][key],0) for key in image_fields}
-    for section in ('fast_forward','image_resources'):
+    for section in ('fast_forward','image_resources','image_pixels'):
         for source in contracts[section]['source_proofs']:
             entry=int(source['entry'],0)
             if entry not in merged or owners.get(entry)!=entry:raise ValueError('Special performance source must retain its own function')
@@ -190,8 +190,19 @@ def generate():
     positions={pc:index for record in merged.values() for index,pc in enumerate(record['locations'])}
     weather_own,weather_external=generate_weather(bodies,edges,owners,positions,graph['instructions'],weather_region,write)
     # The original bodies stay available to finite memory reference checks.
-    # Production calls unwind before entering the shared codec ABI adapter.
-    call_owners={pc:owner for pc,owner in owners.items() if pc not in codec_entries}
+    # Direct calls must use the same host boundary as indirect calls. Keeping
+    # a service in this map silently bypasses its installed native adapter.
+    service_entries=set(codec_entries)|{image_resources[k] for k in ('image_check','image_load')}
+    call_owners={pc:owner for pc,owner in owners.items() if pc not in service_entries}
+    pixels=contracts['image_pixels']
+    pixel_hooks={}
+    for kind in ('chroma','colour'):
+        entries=[int(pc,0) for pc in pixels[kind+'_entries']]
+        ends=[int(pc,0) for pc in pixels[kind+'_ends']]
+        if len(entries)!=6 or len(ends)!=6:raise ValueError('Expected six closed image loops per kernel')
+        for entry,end in zip(entries,ends):
+            if entry not in owners or owners[entry]!=owners.get(end):raise ValueError('Image loop must retain its static owner')
+            pixel_hooks[entry]=(end,kind)
     hot_config=json.loads((ROOT/'config/special_hot_functions.json').read_text())
     hot=set(hot_config['entries'])
     if (hot_config['input_sha256']!=receipt['input_sha256'] or
@@ -236,6 +247,20 @@ def generate():
         'inline wr::NativeResourceProfile image_resource_profile(){wr::NativeResourceProfile profile;profile.sha256="'+receipt['input_sha256']+'";\n'+
         'profile.decoder=profile.directory_lookup=profile.resource_load=profile.resource_decode=0;\n'+''.join('profile.'+key+'='+str(image_resources[key])+'u;\n' for key in image_fields)+
         'profile.report_key="native_image_resources";return profile;}\n}\n')
+    write('image_pixel_profile.hpp','#pragma once\n#include "image_chroma.hpp"\n#include "image_colours.hpp"\nnamespace wa2::special {\n'+
+        'inline constexpr aot::ImageChromaSource image_chroma_source{{'+','.join(pixels['chroma_entries'])+'},{'+','.join(pixels['chroma_ends'])+'},'+pixels['channel']+',true};\n'+
+        'inline constexpr aot::ImageColourSource image_colour_source{{'+','.join(pixels['colour_entries'])+'},{'+','.join(pixels['colour_ends'])+'},true};\n}\n')
+    pixel_nodes=sorted({pc for proof in pixels['source_proofs'] for pc in merged[int(proof['entry'],0)]['locations']})
+    write('image_pixel_oracle.inc','\n'.join(f'case 0x{pc:x}u:{{'+portable_floating(bodies[pc][2])+'return true;}' for pc in pixel_nodes)+'\n')
+    # Regression oracle for the default Main ABI. Consume only the existing
+    # checked C++ cache, and include this file in the memory test alone.
+    main_pixels={}
+    for page in sorted((ROOT/'generated/wa2-win64').glob('code_page_*.cpp')):
+        for match in CASE.finditer(page.read_text(encoding='utf-8')):
+            pc=int(match[1],16)
+            if 0x438820<=pc<0x438b00 or 0x439110<=pc<0x439400:main_pixels[pc]=match[2]
+    if len(main_pixels)<400:raise ValueError('Missing cached Main image loops')
+    write('main_image_pixel_oracle.inc','\n'.join(f'case 0x{pc:x}u:{{'+portable_floating(body)+'return true;}' for pc,body in sorted(main_pixels.items()))+'\n')
     subtitle_constants={**{f"{event['event']}_entry":entry for entry,event in subtitle_events.items()},
         'playing_chapter':int(subtitles['playing_chapter'],0),'next_chapter':int(subtitles['next_chapter'],0),'chapter_delay':subtitles['chapter_delay_ms']}
     write('subtitle_profile.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+''.join(f'inline constexpr std::uint32_t subtitle_{key}={value}u;\n' for key,value in subtitle_constants.items())+'}\n')
@@ -250,6 +275,7 @@ def generate():
         sources.append(name)
         cpp = ['#include "bodies.hpp"', 'namespace wa2::special {']
         if set(entries)&subtitle_events.keys():cpp.insert(1,'#include "subtitle_events.hpp"')
+        if set(entries)&{owners[pc] for pc in pixel_hooks}:cpp.insert(1,'#include "special/images.hpp"')
         if set(entries)&(draw_entries.keys()|{sort_owner}):cpp.insert(1,'#include "special/render.hpp"')
         if thumbnail_owner in entries:cpp.insert(1,'#include "save_profile.hpp"')
         if weather_owner in entries:cpp.insert(1,'#include "special/weather.hpp"')
@@ -275,6 +301,9 @@ def generate():
                     native=('const auto subtitle_arguments=std::uint32_t(s.r[wr::ESP]+4u);\n'+native[:-len('\nreturn;')]+f'\nwa2::aot::notify_subtitle_return<Metered>(0x{entry:x}u,s,m,subtitle_arguments);\nreturn;')
                 if pc==0x4382a6:
                     native='if constexpr(!Metered)wa2::special::try_lzss_prefix(s,m);\n'+native
+                if pc in pixel_hooks:
+                    end,kind=pixel_hooks[pc]
+                    native=f'if constexpr(!Metered)if(wa2::special::image_{kind}(s,m))goto L_{end:x};\n'+native
                 if pc in dead_flags:
                     operation = dead_flags[pc]
                     native = native.replace('wr::'+operation+'(', f'wa2::aot::value::{operation}<Metered>(')
@@ -407,6 +436,7 @@ def generate():
         shared_weather_profile=weather,weather_own_exits=weather_own,weather_external_exits=weather_external,
         shared_subtitle_events=subtitles,
         shared_fast_forward_profile=fast,shared_image_resources=image_resources,
+        shared_resource_direct_call_boundaries=sorted(service_entries),shared_image_pixel_profile=pixels,
         hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,

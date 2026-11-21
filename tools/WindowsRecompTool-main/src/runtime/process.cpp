@@ -170,7 +170,16 @@ bool Process::dispatch_native_function() {
     const auto stack=cpu.r[ESP],pc=cpu.eip;const auto return_address=memory.load(stack,32);
     memory.check(stack,(function.arguments+1)*4,Memory::Read);
     const auto result=function.function(*this);
-    if(!result)return false;
+    if(!result){
+        // A native optimization may decline a valid source layout. In the
+        // function backend, resume its immutable static body at this released
+        // API boundary; never fall back to instruction decoding or retry the
+        // same adapter beneath a live translated call stack.
+        if(!function_execution() || !functions_.source_fallback)return false;
+        WallSample timing(&host_work.function_wall_ns);
+        if(!functions_.source_fallback(cpu,memory))return false;
+        ++native_function_entries;return true;
+    }
     if(cpu.r[ESP]!=stack || cpu.eip!=pc)
         throw GuestFault(FaultKind::unsupported,pc,"native engine function corrupted ABI state");
     cpu.r[EAX]=*result;cpu.r[ESP]+=4+(function.caller_cleans_stack?0:function.arguments*4);

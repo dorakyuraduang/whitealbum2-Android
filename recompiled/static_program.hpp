@@ -46,10 +46,10 @@ class StaticProgram {
             return b.program->invoke(cpu,scope);
         }
     };
-    bool invoke(Context& cpu,Scope& scope) {
-        // A codec/service ABI must unwind the complete native call stack and
-        // release guest memory before Process dispatches it and polls workers.
-        if(std::find(host_boundaries_.begin(),host_boundaries_.end(),cpu.eip)!=host_boundaries_.end())return false;
+    bool invoke(Context& cpu,Scope& scope,bool source_entry=false) {
+        // A declined adapter can enter its proved source body once. Every
+        // nested call still releases the complete translated call stack.
+        if(!source_entry && std::find(host_boundaries_.begin(),host_boundaries_.end(),cpu.eip)!=host_boundaries_.end())return false;
         const auto location=locate_(cpu.eip);
         if(!location.function)return false;
         prove(*location.function);
@@ -67,12 +67,16 @@ public:
         const auto location=locate_(entry);if(!location.function)return false;
         prove(*location.function);return true;
     }
-    bool invoke(Context& cpu) {
+private:
+    bool enter(Context& cpu,bool source_entry) {
         auto scope=memory_.execution_scope();
         GlyphCallScope glyphs{memory_};
         Binding binding{this,&cpu};
         NativeCallScope calls{Binding::invoke,&binding};
-        return invoke(cpu,scope);
+        return invoke(cpu,scope,source_entry);
     }
+public:
+    bool invoke(Context& cpu){return enter(cpu,false);}
+    bool invoke_source(Context& cpu){return enter(cpu,true);}
 };
 }

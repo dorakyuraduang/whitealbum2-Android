@@ -2,6 +2,7 @@
 #include "lzss.hpp"
 #include "render.hpp"
 #include "weather.hpp"
+#include "images.hpp"
 #include "../native_weather.hpp"
 #include "native_entries.hpp"
 #include "performance_profile.hpp"
@@ -43,15 +44,22 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     shared_resources_(shared_resources),
     subtitle_player_(std::make_shared<subtitles::Playback>()),
     subtitle_state_(std::make_shared<SubtitleState>(subtitle_player_)),
-    process_(wr::FunctionExecutor{[this,samples=std::make_shared<aot::FunctionWorkSamples>(functions()),reported=false](wr::Cpu& cpu,wr::Memory& memory)mutable{
+    execute_([this,samples=std::make_shared<aot::FunctionWorkSamples>(functions()),reported=false](wr::Cpu& cpu,wr::Memory& memory,bool source)mutable{
         if(!reported){process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};reported=true;}
         aot::FunctionWorkScope work{samples.get()};
         aot::SubtitleEventScope subtitle_events{memory,[](std::uint32_t entry,const wr::Cpu& state,wr::Memory& ram,std::uint32_t args,void* owner){static_cast<SubtitleState*>(owner)->returned(entry,state,ram,args);},subtitle_state_.get()};
         aot::LeafServiceScope services{[](wr::Cpu& cpu,wr::Memory& memory,void* owner){
             auto& p=*static_cast<wr::Process*>(owner);return &cpu==&p.cpu && &memory==&p.memory && p.dispatch_leaf_api();
         },&process_};
-        return program().invoke(cpu);
-    }},std::move(options),std::move(backends)){
+        return source?program().invoke_source(cpu):program().invoke(cpu);
+    }),
+    process_(wr::FunctionExecutor{[this](wr::Cpu& cpu,wr::Memory& memory){return execute_(cpu,memory,false);},
+        [this](wr::Cpu& cpu,wr::Memory& memory){
+            // Resource admission can decline a legacy archive/layout. Codec
+            // identity, overlap and capacity guards retain their rejection.
+            if(std::find(std::begin(resource_boundary_entries),std::end(resource_boundary_entries),cpu.eip)==std::end(resource_boundary_entries))return false;
+            return execute_(cpu,memory,true);
+        }},std::move(options),std::move(backends)){
     subtitle_player_->enabled(captions_enabled);
     if(captions_enabled && !captions)throw std::invalid_argument("SC captions need external subtext.dat/fonts or a selected subtitle document");
     subtitle_player_->catalogue(std::move(captions));
@@ -71,10 +79,20 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     process_.state().reports["native_glyph_commands"]=glyph_report;
     process_.state().reports["native_sort"]=sort_report;
     process_.state().reports["native_weather"]=weather_report;
+    process_.state().reports["native_image_pixels"]=image_pixel_report;
     process_.state().reports["special_flow"]=[this]{try{
         auto m=process_.memory.execution_scope();return "{\"source_state\":"+std::to_string(m.load<32>(save_source.screen))+
             ",\"source_updates\":"+std::to_string(m.load<32>(save_source.update))+
-            ",\"logic_updates\":"+std::to_string(m.load<32>(0xa37070))+",\"screen_access\":false}";
+            ",\"logic_updates\":"+std::to_string(m.load<32>(0xa37070))+
+            ",\"current_state\":"+std::to_string(m.load<32>(fast_forward_source.current_state))+
+            ",\"completed_state\":"+std::to_string(m.load<32>(fast_forward_source.previous_state))+
+            ",\"window_state\":"+std::to_string(m.load<32>(fast_forward_source.window_state))+
+            ",\"skip_mode\":"+std::to_string(m.load<32>(fast_forward_source.skip_mode))+
+            ",\"skip_latch\":"+std::to_string(m.load<32>(fast_forward_source.skip_latch))+
+            ",\"skip_input_held\":"+std::to_string(m.load<8>(fast_forward_source.input_held)&1u)+
+            ",\"skip_inhibit\":"+std::to_string(m.load<32>(fast_forward_source.inhibit))+
+            ",\"skip_ui_blocked\":"+std::to_string(m.load<32>(fast_forward_source.ui_blocked))+
+            ",\"skip_requested\":"+(aot::source_skip_requested(m,fast_forward_source)?"true":"false")+",\"screen_access\":false}";
     }catch(const wr::GuestFault&){return std::string("{\"available\":false}");}};
     process_.state().reports["selected_directory_io"]=[this]{return save_files_report(process_.state().mutable_files);};
     process_.state().reports["native_resources"]=[]{return lzss_report();};

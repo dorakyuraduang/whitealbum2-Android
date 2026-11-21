@@ -193,6 +193,7 @@
     "implementation": "same read-only fast_forward.hpp policy, scheduler idle policy and PresentationPacing as Main; settings/save/load remain paced"
   },
   "image_resources": {
+    "direct_and_indirect_calls_unwind_before_dispatch": true,
     "image_check": "0x438490",
     "image_load": "0x4385a0",
     "dictionary": "0xa79d10",
@@ -209,5 +210,59 @@
       }
     ],
     "implementation": "same native_resources.cpp image index, decoder and bounded decoded image reuse as Main; original SC source ABI and immutable program identity"
+  },
+  "image_pixels": {
+    "implementation": "same image_chroma.cpp / image_colours.cpp bulk kernels as Main, with SC frame-pointer ABI; original static loops retained on decline",
+    "channel": "0xa80cf0",
+    "chroma_entries": [
+      "0x439b7d",
+      "0x439bc7",
+      "0x439c32",
+      "0x439cb0",
+      "0x439d54",
+      "0x439db3"
+    ],
+    "chroma_ends": [
+      "0x439bb6",
+      "0x439c03",
+      "0x439ca0",
+      "0x439d1f",
+      "0x439d93",
+      "0x439e1f"
+    ],
+    "colour_entries": [
+      "0x43a4f5",
+      "0x43a57c",
+      "0x43a5c8",
+      "0x43a685",
+      "0x43a70c",
+      "0x43a758"
+    ],
+    "colour_ends": [
+      "0x43a533",
+      "0x43a5a5",
+      "0x43a5f5",
+      "0x43a6c3",
+      "0x43a735",
+      "0x43a785"
+    ],
+    "source_proofs": [
+      {
+        "entry": "0x439b50",
+        "cached_body_sha256": "fe1980ac4c5b63846808fedccd7e3387b87400b85bfa276af3380586d54b3600"
+      },
+      {
+        "entry": "0x439d30",
+        "cached_body_sha256": "9d86fc783d63ad104c8c04bd1be0bf9ff2f69690ac98e4c4950feca8868f9a21"
+      },
+      {
+        "entry": "0x43a480",
+        "cached_body_sha256": "cf07eb26a914617f65e373fcce589f5f3afd03531b86846639ad86c36edf0dfb"
+      },
+      {
+        "entry": "0x43a610",
+        "cached_body_sha256": "d90e360020f03058ecc6b6a104ca09b2cc594c2c359d190e7dc16c7f7149e2db"
+      }
+    ]
   }
 }

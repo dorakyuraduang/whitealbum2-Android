@@ -18,7 +18,7 @@ target_include_directories(wa2_initial_data PUBLIC "${WA2_SHARED_ROOT}/tools/Win
 target_compile_features(wa2_initial_data PUBLIC cxx_std_20)
 set_target_properties(wa2_initial_data PROPERTIES POSITION_INDEPENDENT_CODE ON)
 include("${WA2_SHARED_ROOT}/third_party/x87_math/library.cmake")
-add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp native_gateways.cpp native_math.cpp native_string.cpp image_colours.cpp image_chroma.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp music_flag_save.cpp text_ftol.cpp
+add_library(wa2_shared_aot STATIC functions.cpp extended80.cpp native_gateways.cpp native_math.cpp native_string.cpp uv_clip.cpp vertex_grid.cpp native_weather.cpp music_flag_save.cpp text_ftol.cpp
     "${WA2_SHARED_ROOT}/port/sprite_sort.cpp"
     "${WA2_SHARED_ROOT}/port/vertex_batch.cpp" ${WA2_SHARED_AOT_SOURCES})
 target_link_libraries(wa2_shared_aot PUBLIC wa2_initial_data wa2_engine wa2_x87_transcend)
@@ -96,6 +96,13 @@ target_link_libraries(wa2_function_process PUBLIC wa2_shared_aot wa2_aot_memory 
 set_target_properties(wa2_function_process PROPERTIES POSITION_INDEPENDENT_CODE ON)
 option(WA2_SHARED_AOT_CHECKS "Build the memory-only differential check" OFF)
 option(WA2_AOT_DIAGNOSTICS "Include instrumented AOT bodies for differential tests" ${WA2_SHARED_AOT_CHECKS})
+add_library(wa2_source_image_pixels STATIC image_colours.cpp image_chroma.cpp)
+target_compile_features(wa2_source_image_pixels PUBLIC cxx_std_20)
+target_include_directories(wa2_source_image_pixels PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
+target_compile_definitions(wa2_source_image_pixels PUBLIC WA2_AOT_DIAGNOSTICS=$<BOOL:${WA2_AOT_DIAGNOSTICS}>)
+target_link_libraries(wa2_source_image_pixels PUBLIC wa2_aot_memory wa2_engine)
+set_target_properties(wa2_source_image_pixels PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(wa2_shared_aot PUBLIC wa2_source_image_pixels)
 add_library(wa2_source_drawing STATIC native_sprites.cpp source_sort.cpp)
 target_compile_features(wa2_source_drawing PUBLIC cxx_std_20)
 target_include_directories(wa2_source_drawing PUBLIC "${CMAKE_CURRENT_LIST_DIR}"

@@ -12,7 +12,12 @@
 namespace wr {
 using StepFunction=bool(*)(Cpu&,Memory&,std::uint64_t&);
 class Process;
-struct FunctionExecutor {std::function<bool(Cpu&,Memory&)> invoke;};
+struct FunctionExecutor {
+    std::function<bool(Cpu&,Memory&)> invoke;
+    // Optional, explicitly supplied immutable source entry after a native
+    // optimization declines. Hosts without it retain their existing policy.
+    std::function<bool(Cpu&,Memory&)> source_fallback;
+};
 struct ProcessBackends {
     std::function<std::unique_ptr<GuiBackend>(Process&)> gui;
     std::function<std::unique_ptr<DirectDrawBackend>(Process&)> directdraw;

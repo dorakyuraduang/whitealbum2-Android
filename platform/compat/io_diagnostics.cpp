@@ -26,7 +26,7 @@ struct State {
             const auto time=now();if(attempts && (time<last_attempt || time-last_attempt<interval))return;
             ++attempts;last_attempt=time;
             std::map<std::string,std::string> records;
-            for(const auto* key:{"selected_directory_io","save_read_scope","profile_write_io","native_resources","native_image_resources","native_vorbis","resource_graphics","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves","native_glyph_commands","native_sprite_commands","native_sort","native_weather","directshow","movie_resource_settings","language_resources","special_subtitles","special_flow","file_io","profile_io"}){
+            for(const auto* key:{"selected_directory_io","save_read_scope","profile_write_io","native_resources","native_image_resources","native_image_pixels","native_vorbis","resource_graphics","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves","native_glyph_commands","native_sprite_commands","native_sort","native_weather","directshow","movie_resource_settings","language_resources","special_subtitles","special_flow","file_io","profile_io"}){
                 const auto found=process.state().reports.find(key);if(found!=process.state().reports.end())records.emplace(key,found->second());
             }
             std::ostringstream text;text<<"{\"host_release\":"<<wr::quote(release)<<",\"report_kind\":\"file-io-progress\",\"complete\":false,\"error\":\"\",\"sequence\":"<<snapshots+1<<",\"process\":{";bool comma=false;
@@ -36,7 +36,7 @@ struct State {
             try{std::ofstream out(temporary,std::ios::binary|std::ios::trunc);out.write(bytes.data(),std::streamsize(bytes.size()));out.close();if(!out)throw std::runtime_error("Cannot write I/O progress report");std::filesystem::rename(temporary,path);}
             catch(...){std::error_code ignored;std::filesystem::remove(temporary,ignored);throw;}
             ++snapshots;last_activity=activity;last_resources=resources;
-            for(const auto* key:{"selected_directory_io","save_read_scope","profile_write_io","native_resources","native_image_resources","native_vorbis","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves","native_glyph_commands","native_sprite_commands","native_sort","native_weather","directshow","movie_resource_settings","language_resources","special_subtitles","special_flow","file_io","profile_io"})if(auto found=records.find(key);found!=records.end())emit(key,found->second);
+            for(const auto* key:{"selected_directory_io","save_read_scope","profile_write_io","native_resources","native_image_resources","native_image_pixels","native_vorbis","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves","native_glyph_commands","native_sprite_commands","native_sort","native_weather","directshow","movie_resource_settings","language_resources","special_subtitles","special_flow","file_io","profile_io"})if(auto found=records.find(key);found!=records.end())emit(key,found->second);
         }catch(...){++failures;emit("snapshot_error","{\"write_failed\":true}");}
     }
 };
@@ -57,7 +57,7 @@ void emit_final_io_counters(wr::Process& process,std::string_view release,const 
         if(value.size()>65536)return;
         try{sink(std::string(release)+" #65 "+std::string(key),value);}catch(...){}
     };
-    for(const auto* key:{"selected_directory_io","save_read_scope","native_resources","native_image_resources","native_vorbis","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves","native_glyph_commands","native_sprite_commands","native_sort","native_weather","directshow","movie_resource_settings","language_resources","special_subtitles","special_flow","file_io","profile_io","text_local_control_flow"}){
+    for(const auto* key:{"selected_directory_io","save_read_scope","native_resources","native_image_resources","native_image_pixels","native_vorbis","scheduler","host_event_pump","frame_work","static_cpu_work","native_image_chroma","music_flag_saves","native_glyph_commands","native_sprite_commands","native_sort","native_weather","directshow","movie_resource_settings","language_resources","special_subtitles","special_flow","file_io","profile_io","text_local_control_flow"}){
         try{const auto found=process.state().reports.find(key);if(found!=process.state().reports.end())emit(key,found->second());}catch(...){}
     }
     emit("run_completion",source_returned?"{\"game_thread_finished\":true,\"source_returned\":true}":"{\"game_thread_finished\":true,\"source_returned\":false}");

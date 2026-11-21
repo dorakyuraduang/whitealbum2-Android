@@ -47,34 +47,37 @@ template<unsigned Step>void convert_pages(wr::Memory::ExecutionScope& scope,wr::
     }
 }
 }
-bool native_image_colours(wr::Cpu& cpu,wr::Memory& memory){
+bool native_image_colours(wr::Cpu& cpu,wr::Memory& memory,const ImageColourSource& source){
 #if defined(WA2_AOT_DIAGNOSTICS) && WA2_AOT_DIAGNOSTICS
     if(!image_colours_enabled)return false;
 #endif
     unsigned step{},counter{},scratch{};bool composed{},single{};wr::U32 exit{};
-    switch(cpu.eip){
-    case 0x439156:step=4;composed=true;exit=0x439193;break;
-    case 0x4391de:step=4;exit=0x439208;break;
-    case 0x43922a:step=4;single=true;exit=0x439257;break;
-    case 0x4392e6:step=3;composed=true;exit=0x439323;break;
-    case 0x43936e:step=3;exit=0x439398;break;
-    case 0x4393ba:step=3;single=true;exit=0x4393e7;break;
-    default:return false;
-    }
-    counter=composed?wr::EDX:single?wr::ESI:wr::EBP;scratch=composed?wr::EBX:wr::EDX;
-    const auto count=cpu.r[counter],first=cpu.r[wr::EBX];
+    const auto found=std::find(source.entries.begin(),source.entries.end(),cpu.eip);
+    if(found==source.entries.end())return false;
+    const auto kind=unsigned(found-source.entries.begin());exit=source.ends[kind];
+    step=kind<3?4:3;composed=kind%3==0;single=kind%3==2;
+    counter=composed?(source.frame_pointer?wr::EBX:wr::EDX):single?wr::ESI:source.frame_pointer?wr::EDX:wr::EBP;
+    scratch=composed || (source.frame_pointer && !single)?wr::EBX:wr::EDX;
+    const auto count=cpu.r[counter];
+    auto scope=memory.execution_scope();const auto pages=scope.native_pages();
+    const auto frame=cpu.r[wr::EBP];
+    if(source.frame_pointer && composed && (std::uint64_t(frame)+20>Limit || frame<cpu.r[wr::ESP] || frame-cpu.r[wr::ESP]>16 ||
+        !admitted(pages,frame+8,12,wr::Memory::Read|wr::Memory::Write)))return false;
+    const auto first=source.frame_pointer && composed?scope.load<32>(frame+8):cpu.r[wr::EBX];
     // Small palettes retain the original loop. A negative source count, a
     // wrapping next-pixel register or an oversized rectangle must decline.
     if(count<64 || count>MaximumBytes/step || std::uint64_t(first)+1+std::uint64_t(count)*step>=Limit)return false;
     ++counts.attempts;
     const auto bytes=count*step-(step-3);
-    std::array<wr::U32,3> addresses=composed?std::array{cpu.r[wr::EBP],cpu.r[wr::EDI],cpu.r[wr::ESI]}:
+    std::array<wr::U32,3> addresses=composed?std::array{cpu.r[source.frame_pointer?wr::EDX:wr::EBP],cpu.r[wr::EDI],cpu.r[wr::ESI]}:
         single?std::array{cpu.r[wr::ECX],cpu.r[wr::ECX],cpu.r[wr::ECX]}:
                std::array{cpu.r[wr::EDI],cpu.r[wr::ESI],cpu.r[wr::ECX]};
-    auto scope=memory.execution_scope();const auto pages=scope.native_pages();
     if(!admitted(pages,first,bytes,wr::Memory::Read|wr::Memory::Write))return false;
-    for(auto address:addresses)if(!admitted(pages,address,256,wr::Memory::Read) || overlaps(first,bytes,address,256))return false;
-    if(composed && (!admitted(pages,cpu.r[wr::ECX],256,wr::Memory::Read) || overlaps(first,bytes,cpu.r[wr::ECX],256)))return false;
+    if(source.frame_pointer && composed && overlaps(first,bytes,frame+8,12))return false;
+    for(auto address:addresses)if(!admitted(pages,address,256,wr::Memory::Read) || overlaps(first,bytes,address,256) ||
+        (source.frame_pointer && composed && overlaps(frame+0x10,4,address,256)))return false;
+    if(composed && (!admitted(pages,cpu.r[wr::ECX],256,wr::Memory::Read) || overlaps(first,bytes,cpu.r[wr::ECX],256) ||
+        (source.frame_pointer && overlaps(frame+0x10,4,cpu.r[wr::ECX],256))))return false;
     Tables tables;std::array<std::uint8_t,256> final;
     if(composed)memory.copy_out(cpu.r[wr::ECX],final);
     // Compose the two read-only lookups once, instead of once per pixel. No
@@ -85,7 +88,10 @@ bool native_image_colours(wr::Cpu& cpu,wr::Memory& memory){
     }
     if(step==4)convert_pages<4>(scope,first,count,tables);else convert_pages<3>(scope,first,count,tables);
     cpu.r[scratch]=scope.load<8>(first+(count-1)*step);
-    cpu.r[wr::EAX]=first+1+count*step;cpu.r[counter]=wr::sub(cpu,1,1,32);cpu.eip=exit;
+    cpu.r[wr::EAX]=first+1+count*step;
+    if(source.frame_pointer && composed){scope.store<32>(frame+0x10,0);(void)wr::sub(cpu,1,1,32);}
+    else cpu.r[counter]=wr::sub(cpu,1,1,32);
+    cpu.eip=exit;
     ++counts.completed;counts.pixels+=count;return true;
 }
 ImageColourCounts image_colour_counts(){return counts;}

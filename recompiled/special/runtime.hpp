@@ -16,6 +16,7 @@ class Runtime {
     std::vector<std::uint32_t> host_boundaries_;
     std::shared_ptr<subtitles::Playback> subtitle_player_;
     std::shared_ptr<SubtitleState> subtitle_state_;
+    std::function<bool(wr::Cpu&,wr::Memory&,bool)> execute_;
     wr::Process process_;
     aot::StaticProgram& program();
 public:
