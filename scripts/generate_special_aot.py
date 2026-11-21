@@ -131,6 +131,18 @@ def generate():
     math_proof=verified_transcendental()
     graph, bodies, edges, merged, owners, receipt = analyze()
     contracts=json.loads((ROOT/'config/special_native_contracts.json').read_text())
+    fast_fields=('inhibit','ui_blocked','skip_mode','skip_latch','input_held','line','script','history','allow_unread','script_skip','current_state','previous_state','window_state','screen','idle_return','modal_screens')
+    fast={key:int(contracts['fast_forward'][key],0) if isinstance(contracts['fast_forward'][key],str) else contracts['fast_forward'][key] for key in fast_fields}
+    image_fields=('image_check','image_load','dictionary','trace_set','trace_clear')
+    image_resources={key:int(contracts['image_resources'][key],0) for key in image_fields}
+    for section in ('fast_forward','image_resources'):
+        for source in contracts[section]['source_proofs']:
+            entry=int(source['entry'],0)
+            if entry not in merged or owners.get(entry)!=entry:raise ValueError('Special performance source must retain its own function')
+            snapshot=b''.join(pc.to_bytes(4,'little')+bodies[pc][1] for pc in merged[entry]['locations'])
+            if hashlib.sha256(snapshot).hexdigest()!=source['cached_body_sha256']:raise ValueError('Special performance source ABI changed: '+source['entry'])
+    idle_call=int(contracts['fast_forward']['idle_call'],0)
+    if idle_call+len(bodies[idle_call][1])!=fast['idle_return']:raise ValueError('Special idle return must follow the cached Sleep call')
     subtitles=contracts['subtitles'];subtitle_events={int(e['entry'],0):e for e in subtitles['events']}
     if set(subtitle_events)!={0x460bb0,0x44b790,0x406a30}:raise ValueError('Unexpected SC subtitle event entries')
     for entry,event in subtitle_events.items():
@@ -217,7 +229,13 @@ def generate():
           'inline constexpr wa2::aot::WeatherSource weather_source{'+','.join(map(str,[*weather_region['entries'],
               *[int(weather[key],0) for key in ('count','objects','weather')],weather['required_register'],weather['required_value']]))+'};\n}\n')
     write('native_entries.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+
-          'inline constexpr std::uint32_t codec_boundary_entries[]={'+','.join(hex(pc)+'u' for pc in codec_entries)+'};\n}\n')
+          'inline constexpr std::uint32_t codec_boundary_entries[]={'+','.join(hex(pc)+'u' for pc in codec_entries)+'};\n'+
+          'inline constexpr std::uint32_t resource_boundary_entries[]={'+','.join(hex(image_resources[k])+'u' for k in ('image_check','image_load'))+'};\n}\n')
+    write('performance_profile.hpp','#pragma once\n#include "fast_forward.hpp"\n#include "../../../port/native_resources.hpp"\nnamespace wa2::special {\n'+
+        'inline constexpr aot::FastForwardSource fast_forward_source{'+','.join(str(fast[key])+'u' for key in fast_fields)+'};\n'+
+        'inline wr::NativeResourceProfile image_resource_profile(){wr::NativeResourceProfile profile;profile.sha256="'+receipt['input_sha256']+'";\n'+
+        'profile.decoder=profile.directory_lookup=profile.resource_load=profile.resource_decode=0;\n'+''.join('profile.'+key+'='+str(image_resources[key])+'u;\n' for key in image_fields)+
+        'profile.report_key="native_image_resources";return profile;}\n}\n')
     subtitle_constants={**{f"{event['event']}_entry":entry for entry,event in subtitle_events.items()},
         'playing_chapter':int(subtitles['playing_chapter'],0),'next_chapter':int(subtitles['next_chapter'],0),'chapter_delay':subtitles['chapter_delay_ms']}
     write('subtitle_profile.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+''.join(f'inline constexpr std::uint32_t subtitle_{key}={value}u;\n' for key,value in subtitle_constants.items())+'}\n')
@@ -388,6 +406,7 @@ def generate():
         shared_save_read_profile=save,shared_thumbnail_prefix=thumbnail,
         shared_weather_profile=weather,weather_own_exits=weather_own,weather_external_exits=weather_external,
         shared_subtitle_events=subtitles,
+        shared_fast_forward_profile=fast,shared_image_resources=image_resources,
         hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,

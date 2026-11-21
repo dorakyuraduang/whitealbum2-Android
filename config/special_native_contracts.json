@@ -25,7 +25,7 @@
     "movie_payloads_cached_or_copied": false
   },
   "save_read": {
-    "screen": "0xa3614c", "update": "0xa37074",
+    "screen": "0xa36168", "update": "0xa37074",
     "helpers": ["0x44e1c1", "0x44e221", "0x44e2ef"],
     "api_frame": 44, "index": "0x422772", "preview": "0x422876", "buffer": "0xa4b500",
     "preview_return": 348, "preview_slot": 352,
@@ -153,5 +153,61 @@
     ],
     "upstream_commit": "bb3cbc2f459549f8afbcb56cafd4b861d763bd29",
     "implementation": "shared subtitle Playback, Catalogue, viewport and drawing; SC BGM/chapter/reset source-return ABI; external SC data only"
+  },
+  "fast_forward": {
+    "inhibit": "0x4bb03c",
+    "ui_blocked": "0x4bf36c",
+    "skip_mode": "0xa366c8",
+    "skip_latch": "0x4bb018",
+    "input_held": "0x4bb00c",
+    "line": "0xa36148",
+    "script": "0xa36144",
+    "history": "0x5642c0",
+    "allow_unread": "0x4bb048",
+    "script_skip": "0xa36154",
+    "current_state": "0xa372ac",
+    "previous_state": "0xa372c0",
+    "window_state": "0x4bf360",
+    "screen": "0xa36168",
+    "idle_return": "0x434a88",
+    "modal_screens": 224,
+    "source_proofs": [
+      {
+        "entry": "0x40a850",
+        "cached_body_sha256": "10ee770a3314d03f4d690e46164b16e7365d2f0ad3c13516599182fb096fdeee"
+      },
+      {
+        "entry": "0x405110",
+        "cached_body_sha256": "a20d5aef4f3b46d53fe311940fc32624733637d241f4b35a6f3741103014ccfe"
+      },
+      {
+        "entry": "0x418200",
+        "cached_body_sha256": "25a1b0cfb0ec6da35cd4b276e956b0fcdfca95d5267ef87e24d776e808bf0792"
+      },
+      {
+        "entry": "0x417b80",
+        "cached_body_sha256": "751f20696bf08d47ab3119cbb4272fe0debb9eead463b92d8618aba9a4b8b900"
+      }
+    ],
+    "idle_call": "0x434a82",
+    "implementation": "same read-only fast_forward.hpp policy, scheduler idle policy and PresentationPacing as Main; settings/save/load remain paced"
+  },
+  "image_resources": {
+    "image_check": "0x438490",
+    "image_load": "0x4385a0",
+    "dictionary": "0xa79d10",
+    "trace_set": "0x4a1250",
+    "trace_clear": "0x4a124c",
+    "source_proofs": [
+      {
+        "entry": "0x438490",
+        "cached_body_sha256": "8a3d0358f1253096f5c03033fced64cd34cd00b00a7d1eab678595d269e3db02"
+      },
+      {
+        "entry": "0x4385a0",
+        "cached_body_sha256": "568f8b65136d4a49810179db47029e4fc9b20078075a61420248961f9e11d7ff"
+      }
+    ],
+    "implementation": "same native_resources.cpp image index, decoder and bounded decoded image reuse as Main; original SC source ABI and immutable program identity"
   }
 }

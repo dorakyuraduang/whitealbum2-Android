@@ -25,7 +25,7 @@ def source_bindings():
         'scripts/verify_special_contents.py','tests/special_aot.cpp','tests/special_runtime.cpp','tests/special_vorbis.cpp','tests/special_vorbis_fixture.hpp','tests/special_render.cpp',
         'tests/special_drawing.cpp','tests/native_sprite_cpu.cpp','tests/glyph_scheduling.cpp','tests/special_sort.cpp','tests/io_diagnostics.cpp',
         'tests/special_save.cpp','tests/save_inventory.cpp','tests/save_thumbnail.cpp',
-        'tests/special_weather.cpp','tests/special_language.cpp','tests/special_subtitles.cpp','scripts/generate_weather_batch.py',
+        'tests/special_weather.cpp','tests/special_language.cpp','tests/special_subtitles.cpp','tests/special_fast_forward.cpp','tests/special_images.cpp','tests/native_resource_cache.cpp','scripts/generate_weather_batch.py',
         'scripts/read_android_counters.py',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
@@ -33,7 +33,7 @@ def source_bindings():
         'third_party/x87_math/UPSTREAM.json','scripts/verify_x87_transcendental.py',
         'logs/x87-transcendental-verification.json',
         'tools/WindowsRecompTool-main/src/pe.cpp','tools/WindowsRecompTool-main/src/resources.cpp'))
-    files.update(ROOT/name for name in ('port/native_vorbis.cpp','port/native_vorbis.hpp','third_party/stb/stb_vorbis.c','port/sprite_sort.cpp','port/sprite_sort.hpp'))
+    files.update(ROOT/name for name in ('port/native_resources.cpp','port/native_resources.hpp','port/native_vorbis.cpp','port/native_vorbis.hpp','third_party/stb/stb_vorbis.c','port/sprite_sort.cpp','port/sprite_sort.hpp'))
     return {p.relative_to(ROOT).as_posix(): digest(p) for p in sorted(files)}
 
 
@@ -99,6 +99,12 @@ def compiled_subtitles(directory):
     return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file'])) for e in entries if Path(e['file']).resolve() in paths}
 
 
+def compiled_image_resources(directory):
+    wanted=(ROOT/'port/native_resources.cpp').resolve()
+    entries=json.loads((directory/'compile_commands.json').read_text())
+    return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file'])) for e in entries if Path(e['file']).resolve()==wanted}
+
+
 def fresh():
     proof = json.loads(RECEIPT.read_text())
     if not proof['passed'] or proof['input_sha256'] != json.loads((ROOT/'config/special_contents.json').read_text())['sha256']:
@@ -153,8 +159,8 @@ def main():
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
             run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests',
                  'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_sort_tests','wa2_special_io_tests',
-                 'wa2_special_save_tests','wa2_special_main_save_tests','wa2_special_main_thumbnail_tests','wa2_special_weather_tests','wa2_special_language_tests','wa2_special_subtitle_tests','wa2_special_windows','--parallel','1'],7200)
-            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle'):
+                 'wa2_special_save_tests','wa2_special_main_save_tests','wa2_special_main_thumbnail_tests','wa2_special_weather_tests','wa2_special_language_tests','wa2_special_subtitle_tests','wa2_special_fast_tests','wa2_special_image_tests','wa2_special_main_resource_tests','wa2_special_windows','--parallel','1'],7200)
+            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle','fast','image','main_resource'):
                 command=[win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json']
                 if stem=='main_sprite':command.append('--correctness-only')
                 run(command,60)
@@ -200,6 +206,9 @@ def main():
             raise ValueError('Missing identical shared main/Special drawing implementation')
         if compiled_weather(win)!=compiled_weather(android) or set(compiled_weather(win))!={'recompiled/special/weather.cpp'}:
             raise ValueError('Missing identical Special shared weather source on both hosts')
+        image_sources=compiled_image_resources(win)
+        if image_sources!=compiled_image_resources(android) or len(image_sources)!=1:
+            raise ValueError('Both hosts must compile the same shared image resource adapter')
         subtitle_sources=compiled_subtitles(win)
         if subtitle_sources!=compiled_subtitles(android) or len(subtitle_sources)!=5:
             raise ValueError('Windows/Android must compile the identical SC/shared subtitle core')
@@ -210,10 +219,14 @@ def main():
         if manifest.get('shared_subtitle_events')!=json.loads((ROOT/'config/special_native_contracts.json').read_text())['subtitles']:
             raise ValueError('Missing SHA-bound SC BGM/chapter subtitle events')
         checks={}
-        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle'):
+        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle','fast','image','main_resource'):
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
+            if stem=='fast' and (check.get('source_predicate_comparisons')!=4608 or not all(check.get(k) for k in ('original_sleep_caller_checked','settings_save_load_pacing_preserved','all_draws_preserved'))):
+                raise ValueError('Missing SC source/fast-forward PC component checks')
+            if stem=='image' and (check.get('source_image_comparisons')!=30 or not check.get('dictionary_and_trace_preserved') or not check.get('original_static_loader_used')):
+                raise ValueError('Missing SC source/image PC component checks')
             if stem=='subtitle' and (check.get('static_return_comparisons')!=8 or check.get('main_cue_regressions')!=315 or not all(check.get(k) for k in ('sc_dialogue_secondary_and_song_merged','chapter_delay_checked','disabled_skips_guest_reads','source_ret_fault_precedes_observer'))):
                 raise ValueError('Missing shared SC caption/state/source-RET checks')
             if stem=='language' and (check.get('japanese_alias_cases')!=10 or check.get('guards')!=7 or not all(check.get(k) for k in ('chinese_banks_preserved','main_pairs_preserved','loose_resources_routed','patch_priority_preserved','missing_pack_atomic_failure'))):
@@ -334,18 +347,19 @@ def main():
                 shared_source_drawing='wa2::aot::native_draw_sprite(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols and
                     'wa2::aot::native_draw_glyph_or_yield(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols,
                 shared_source_sort='wa2::aot::source_sort_full(wr::Cpu&, wr::Memory&, wa2::aot::SortSource const&)' in symbols,
+                shared_image_resource_adapter='wr::install_wa2_native_resources(wr::Process&, wr::NativeResourceProfile, bool)' in symbols,
                 shared_source_subtitles='wa2::special::SubtitleState::returned(' in symbols and 'wa2::subtitles::compile_special_binary(' in symbols,
                 shared_source_weather='wa2::special::update_weather(wr::Cpu&, wr::Memory&)' in symbols and 'weather_408507(' in symbols,
                 main_story_static_functions='wa2::aot::f_' in symbols,
                 runtime_instruction_decoder='wr::Decoder::' in symbols)
-            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or not audit['shared_source_sort'] or not audit['shared_source_weather'] or not audit['shared_source_subtitles'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
+            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or not audit['shared_source_sort'] or not audit['shared_source_weather'] or not audit['shared_source_subtitles'] or not audit['shared_image_resource_adapter'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
                 raise ValueError('Special link contains the wrong game catalogue or an instruction decoder: '+name)
             symbol_audits[name]=audit
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
             same_special_sources_on_all_hosts=True,compiled_shared_sources=windows_sources,
             compiled_scalar_math_sources=math_windows,transcendental_hardware_cases=math_proof['cases'],
             compiled_shared_codec_sources=codec_windows,shared_vorbis_host_boundaries=manifest['shared_vorbis_host_boundaries'],
-            compiled_shared_subtitle_sources=subtitle_sources,compiled_shared_drawing_sources=drawing_sources,shared_sprite_and_glyph_entries=manifest['shared_sprite_and_glyph_entries'],
+            compiled_shared_image_resources=image_sources,compiled_shared_subtitle_sources=subtitle_sources,compiled_shared_drawing_sources=drawing_sources,shared_sprite_and_glyph_entries=manifest['shared_sprite_and_glyph_entries'],
             shared_sort_prefix=manifest['shared_sort_prefix'],
             measured_hot_entries=manifest['measured_hot_entries'],compiled_optimization_policy=hot_policy,
             scalar_math_notice=dict(file=str(notice),sha256=digest(notice)),

@@ -21,6 +21,7 @@
 namespace wr {
 namespace {
 struct ResourceState {
+    NativeResourceProfile profile;
     struct Cached {std::FILE* stream{};std::filesystem::path path;wa2::resource::Archive archive;};
     struct PathCached {std::uintmax_t size{};std::uint64_t modified{},used{},identity{};wa2::resource::Archive archive;};
     struct Timing {std::uint64_t calls{},total{},maximum{};};
@@ -42,7 +43,7 @@ struct ResourceState {
     std::uint64_t image_payload_reads{},image_payload_bytes{};
     U32 heap_alloc{},heap_free{},get_heap{},debug_string{};
     bool supported(Process& p,U32 entry) {
-        if(p.input_sha256=="246a263b965147a274fa59cdd7a72f6be10ba063d8cf4e61e74baefb56f29327" && wa2_native_code_verified(p.memory,entry))return true;
+        if(p.input_sha256==profile.sha256 && (profile.verify?profile.verify(p.memory,entry):wa2_native_code_verified(p.memory,entry)))return true;
         ++declined;return false;
     }
     const PathCached& get(Process& p,const std::filesystem::path& path) {
@@ -132,21 +133,22 @@ struct ResourceState {
         return size;
     }
     void trace(Process& p,unsigned flags) {
-        const std::array<U32,1> message{flags&0x100?0x4a40ecu:0x4a40f0u};p.callback(debug_string,message);
+        const std::array<U32,1> message{flags&0x100?profile.trace_set:profile.trace_clear};p.callback(debug_string,message);
     }
 };
 }
-void install_wa2_native_resources(Process& p,bool image_directory_functions) {
-    auto state=std::make_shared<ResourceState>();
+void install_wa2_native_resources(Process& p,bool image_directory_functions) {install_wa2_native_resources(p,NativeResourceProfile{},image_directory_functions);}
+void install_wa2_native_resources(Process& p,NativeResourceProfile profile,bool image_directory_functions) {
+    auto state=std::make_shared<ResourceState>();state->profile=std::move(profile);
     p.state().resource_io_activity=[state]{return state->loads+state->lookups+state->image_decodes+state->image_checks+state->missing_archives+state->errors+state->declined;};
     state->heap_alloc=p.resolve("kernel32.dll","HeapAlloc");state->heap_free=p.resolve("kernel32.dll","HeapFree");
     state->get_heap=p.resolve("kernel32.dll","GetProcessHeap");
     state->debug_string=p.resolve("kernel32.dll","OutputDebugStringA");
-    p.register_native_function(0x437000,4,[state](Process& q)->std::optional<U32> {
-        if(!state->supported(q,0x437000))return std::nullopt;
+    if(state->profile.decoder)p.register_native_function(state->profile.decoder,4,[state](Process& q)->std::optional<U32> {
+        if(!state->supported(q,state->profile.decoder))return std::nullopt;
         ResourceState::Timer total(state->timing["image_decoder"]);
         const auto output=q.argument(0),input=q.argument(1),compressed=q.argument(2),expanded=q.argument(3);
-        constexpr U32 dictionary=0xa7cdd0;
+        const U32 dictionary=state->profile.dictionary;
         auto overlap=[](U32 a,U32 an,U32 b,U32 bn){return std::uint64_t(a)<std::uint64_t(b)+bn && std::uint64_t(b)<std::uint64_t(a)+an;};
         if(compressed>128u*1024*1024 || expanded>128u*1024*1024 ||
             overlap(input,compressed,output,expanded) || overlap(input,compressed,dictionary,4096) || overlap(output,expanded,dictionary,4096) ||
@@ -184,8 +186,8 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         state->trace(q,flags);
         ++state->image_decodes;++state->decodes;state->bytes+=expanded;return expanded;
     },true);
-    if(image_directory_functions)p.register_native_function(0x437220,2,[state](Process& q)->std::optional<U32> {
-        if(!state->supported(q,0x437220))return std::nullopt;
+    if(image_directory_functions && state->profile.image_check)p.register_native_function(state->profile.image_check,2,[state](Process& q)->std::optional<U32> {
+        if(!state->supported(q,state->profile.image_check))return std::nullopt;
         ResourceState::Timer time(state->timing["image_check"]);
         try {
             const auto path=guest_file_path(q,q.read_string(q.argument(0),32768));
@@ -203,10 +205,10 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
          catch(const wa2::resource::Error&){++state->declined;return std::nullopt;}
          catch(const std::bad_alloc&){++state->declined;return std::nullopt;}
     },true);
-    if(image_directory_functions)p.register_native_function(0x437310,3,[state](Process& q)->std::optional<U32> {
-        if(!state->supported(q,0x437310))return std::nullopt;
+    if(image_directory_functions && state->profile.image_load)p.register_native_function(state->profile.image_load,3,[state](Process& q)->std::optional<U32> {
+        if(!state->supported(q,state->profile.image_load))return std::nullopt;
         ResourceState::Timer total(state->timing["image_load"]);
-        constexpr U32 dictionary=0xa7cdd0;
+        const U32 dictionary=state->profile.dictionary;
         const auto output=q.argument(2);
         wa2::resource::StoredResource stored;
         wa2::resource::DecodedKey cache_key{};std::array<std::uint8_t,18> input_tail{};
@@ -298,8 +300,8 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         if(state->tracing){state->load_trace.push_back({total.started,wa2::platform::Clock::counter()-total.started,stored.expanded_size,q.read_string(q.argument(1),1024)});if(state->load_trace.size()>128)state->load_trace.pop_front();}
         return stored.expanded_size;
     },true);
-    p.register_native_function(0x4588a0,3,[state](Process& q)->std::optional<U32> {
-        if(!state->supported(q,0x4588a0))return std::nullopt;
+    if(state->profile.directory_lookup)p.register_native_function(state->profile.directory_lookup,3,[state](Process& q)->std::optional<U32> {
+        if(!state->supported(q,state->profile.directory_lookup))return std::nullopt;
         const auto directory=state->directory(q,q.cpu.r[ECX],q.argument(0));
         const auto name=q.argument(1);const auto requested=q.read_string(name,1024);
         const auto found=wa2::resource::find_directory_record(directory.count,requested,[&](std::size_t index){
@@ -320,8 +322,8 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         }
         return U32(found);
     });
-    p.register_native_function(0x458050,3,[state](Process& q)->std::optional<U32> {
-        if(!state->supported(q,0x458050))return std::nullopt;
+    if(state->profile.resource_load)p.register_native_function(state->profile.resource_load,3,[state](Process& q)->std::optional<U32> {
+        if(!state->supported(q,state->profile.resource_load))return std::nullopt;
         ResourceState::Timer total(state->timing["resource_load"]);
         const auto manager=q.cpu.r[ECX],index=q.argument(0),member=q.argument(1),output=q.argument(2);
         try {
@@ -352,8 +354,8 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         } catch(const wa2::resource::Error&) {++state->errors;q.memory.store(output,0,32);return 0;}
           catch(const std::bad_alloc&) {++state->errors;q.memory.store(output,0,32);return 0;}
     });
-    p.register_native_function(0x457010,3,[state](Process& q)->std::optional<U32> {
-        if(!state->supported(q,0x457010))return std::nullopt;
+    if(state->profile.resource_decode)p.register_native_function(state->profile.resource_decode,3,[state](Process& q)->std::optional<U32> {
+        if(!state->supported(q,state->profile.resource_decode))return std::nullopt;
         ResourceState::Timer total(state->timing["resource_buffer_load"]);
         const auto compressed=q.argument(0),input=q.argument(1),output=q.argument(2);
         q.memory.check(output,4,Memory::Write);
@@ -371,7 +373,7 @@ void install_wa2_native_resources(Process& p,bool image_directory_functions) {
         } catch(const wa2::resource::Error&) {++state->errors;q.memory.store(output,0,32);return 0;}
           catch(const std::bad_alloc&) {++state->errors;q.memory.store(output,0,32);return 0;}
     });
-    p.state().reports["native_resources"]=[state] {
+    p.state().reports[state->profile.report_key]=[state] {
         std::ostringstream detail;detail<<"[";bool first=true;
         for(const auto& [name,time]:state->timing){if(!first)detail<<',';first=false;detail<<"{\"stage\":\""<<name<<"\",\"calls\":"<<time.calls<<",\"total_ns\":"<<time.total<<",\"max_ns\":"<<time.maximum<<'}';}detail<<"]";
         return "{\"backend\":\"portable-cpp-archive\",\"lookups\":"+std::to_string(state->lookups)+

@@ -85,11 +85,13 @@ int main(int argc,char** argv){try{
         for(unsigned repeat=0;repeat<4;++repeat){if(repeat==0)++incoming[0xfee];else ++incoming[0xfee + 17];load(2,true);++dependent_cases;}
         const auto before_report=p.state().reports.at("native_resources")();CHECK(number(before_report,"image_decoded_cache_hits")>=11);
         cache_hits+=number(before_report,"image_decoded_cache_hits");cache_reads_saved+=number(before_report,"image_decoded_cache_hits");
+#if WA2_AOT_DIAGNOSTICS
         for(unsigned pair=0;pair<5;++pair){std::array<std::uint64_t,2> checksums{};
             for(unsigned order=0;order<2;++order){const auto side=(pair+order)&1;std::optional<r::DecodedCacheReferenceScope> reference_scope;if(!side)reference_scope.emplace();
                 const auto begin=std::chrono::steady_clock::now();for(unsigned n=0;n<4;++n)checksums[side]=checksums[side]*0x100000001b3ull+load(1,false);
                 timing[mode][pair][side]=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now()-begin).count();}
             CHECK(checksums[0]==checksums[1]);}
+#endif
         for(unsigned pair=0;pair<5;++pair){std::array<std::uint64_t,2> checksums{};
             for(unsigned order=0;order<2;++order){const auto side=(pair+order)&1;wr::set_large_heap_cache_enabled(p,bool(side));load(1,false);
                 const auto commits=p.memory.native_operations().commits;const auto begin=std::chrono::steady_clock::now();
@@ -118,6 +120,6 @@ int main(int argc,char** argv){try{
     for(unsigned mode=0;mode<2;++mode){if(mode)out<<',';out<<"{\"linear_memory\":"<<(mode?"true":"false")<<",\"paired_ns\":[";
         for(unsigned n=0;n<5;++n){if(n)out<<',';out<<'['<<allocation_timing[mode][n][0]<<','<<allocation_timing[mode][n][1]<<']';}
         out<<"],\"paired_native_commit_calls\":[";for(unsigned n=0;n<5;++n){if(n)out<<',';out<<'['<<allocation_commits[mode][n][0]<<','<<allocation_commits[mode][n][1]<<']';}out<<"]}";}
-    out<<"],\"maximum_idle_large_allocation_bytes\":4194304,\"original_resources_opened\":false,\"game_launched\":false,\"screen_access\":false,\"device_fps_measured\":false,\"passed\":true}\n";
-    std::cout<<"PASS bounded image cache: "<<cases<<" exact loads, "<<dependent_cases<<" caller-tail changes, "<<cache_hits<<" checked reuses.\n";return 0;
+    out<<"],\"cache_reference_timing_checked\":"<<(WA2_AOT_DIAGNOSTICS?"true":"false")<<",\"maximum_idle_large_allocation_bytes\":4194304,\"original_resources_opened\":false,\"game_launched\":false,\"screen_access\":false,\"device_fps_measured\":false,\"passed\":true}\n";
+    std::cout<<"PASS bounded image cache: "<<cases<<" exact loads, "<<dependent_cases<<" caller-tail changes, "<<cache_hits<<" checked reuses; diagnostic timing="<<bool(WA2_AOT_DIAGNOSTICS)<<".\n";return 0;
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

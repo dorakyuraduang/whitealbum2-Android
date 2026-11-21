@@ -4,6 +4,7 @@
 #include "weather.hpp"
 #include "../native_weather.hpp"
 #include "native_entries.hpp"
+#include "performance_profile.hpp"
 #include "save_profile.hpp"
 #include "../movie_settings.hpp"
 #include "../save_page_timing.hpp"
@@ -30,12 +31,16 @@
 namespace wr {void install_wa2_exceptions(Process&);}
 namespace wa2::special {
 aot::StaticProgram& Runtime::program(){
-    if(!program_)program_=std::make_unique<aot::StaticProgram>(process_.memory,functions(),locate,
-        shared_codecs_?std::span<const std::uint32_t>(codec_boundary_entries):std::span<const std::uint32_t>{});
+    if(!program_){
+        if(shared_codecs_)host_boundaries_.insert(host_boundaries_.end(),std::begin(codec_boundary_entries),std::end(codec_boundary_entries));
+        if(shared_resources_)host_boundaries_.insert(host_boundaries_.end(),std::begin(resource_boundary_entries),std::end(resource_boundary_entries));
+        program_=std::make_unique<aot::StaticProgram>(process_.memory,functions(),locate,host_boundaries_);
+    }
     return *program_;
 }
-Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> surface,bool shared_codecs,bool captions_enabled,std::shared_ptr<const subtitles::Catalogue> captions):
+Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> surface,bool shared_codecs,bool captions_enabled,std::shared_ptr<const subtitles::Catalogue> captions,bool shared_resources):
     shared_codecs_(shared_codecs),
+    shared_resources_(shared_resources),
     subtitle_player_(std::make_shared<subtitles::Playback>()),
     subtitle_state_(std::make_shared<SubtitleState>(subtitle_player_)),
     process_(wr::FunctionExecutor{[this,samples=std::make_shared<aot::FunctionWorkSamples>(functions()),reported=false](wr::Cpu& cpu,wr::Memory& memory)mutable{
@@ -51,7 +56,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     if(captions_enabled && !captions)throw std::invalid_argument("SC captions need external subtext.dat/fonts or a selected subtitle document");
     subtitle_player_->catalogue(std::move(captions));
     process_.state().reports["special_subtitles"]=[state=subtitle_state_]{return state->report();};
-    platform::compat::install_scheduler(process_);
+    platform::compat::install_scheduler(process_,[this](auto ms,auto caller){return aot::source_fast_forward_idle(process_.memory,ms,caller,fast_forward_source);});
     platform::compat::install_system(process_,aot::prepare_movie_profile,[](wr::Process& p)->std::optional<std::uint64_t>{
         if(p.state().current_thread_id!=1)return {};
         for(const auto& [id,file]:p.state().files)if(file.owned && file.write && !file.path.empty())return {};
@@ -73,9 +78,15 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     }catch(const wr::GuestFault&){return std::string("{\"available\":false}");}};
     process_.state().reports["selected_directory_io"]=[this]{return save_files_report(process_.state().mutable_files);};
     process_.state().reports["native_resources"]=[]{return lzss_report();};
+    std::function<std::uint64_t()> image_activity;
+    if(shared_resources_){
+        auto profile=image_resource_profile();profile.verify=[this](wr::Memory& memory,wr::U32 pc){return &memory==&process_.memory && program().verify(pc);};
+        wr::install_wa2_native_resources(process_,std::move(profile));
+        image_activity=process_.state().resource_io_activity;
+    }
     // Continuous BGM must not spend all 64 I/O snapshots before the user
     // opens a save page. Keep the initial codec progress and later file work.
-    process_.state().resource_io_activity=[this]{return lzss_activity()+std::min<std::uint64_t>(256,wr::wa2_native_vorbis_activity(process_))+aot::save_page_timing.pages+unsigned(aot::weather_batch_counts.completed!=0);};
+    process_.state().resource_io_activity=[this,image_activity]{return (image_activity?image_activity():0)+lzss_activity()+std::min<std::uint64_t>(256,wr::wa2_native_vorbis_activity(process_))+aot::save_page_timing.pages+unsigned(aot::weather_batch_counts.completed!=0);};
     if(shared_codecs_)wr::install_wa2_native_vorbis(process_,wr::NativeVorbisProfile{
         "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
         codec_boundary_entries[0],codec_boundary_entries[1],codec_boundary_entries[2],codec_boundary_entries[3],
@@ -86,7 +97,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     platform::compat::install_shell(process_,platform::compat::native_shell_services(process_.options.data_root));
     auto audio=wr::install_wa2_audio_service(process_);
     if(surface){
-        auto renderer=graphics::install(process_,std::move(surface),subtitle_player_);
+        auto renderer=graphics::install(process_,std::move(surface),subtitle_player_,[this]{return process_.state().current_thread_id==1 && aot::source_fast_forward(process_.memory,fast_forward_source);});
         platform::compat::install_media(process_,std::move(audio),std::move(renderer));
         platform::compat::install_d3dx43_aliases(process_);
     }
