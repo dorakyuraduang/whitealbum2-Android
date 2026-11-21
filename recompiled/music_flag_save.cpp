@@ -5,9 +5,9 @@
 namespace wa2::aot {namespace {
 struct ErrorScope {int value{errno};~ErrorScope(){errno=value;}};
 }
-MusicFlagSaves::Snapshot MusicFlagSaves::capture(wr::Memory& memory){
-    Snapshot result;memory.copy_out(0x521930,result.flags);
-    unsigned n{};for(;n<result.path.size();++n){result.path[n]=std::uint8_t(memory.load(0x4bf530+n,8));if(!result.path[n])break;}
+MusicFlagSaves::Snapshot MusicFlagSaves::capture(wr::Memory& memory)const{
+    Snapshot result;memory.copy_out(source_.flags,result.flags);
+    unsigned n{};for(;n<result.path.size();++n){result.path[n]=std::uint8_t(memory.load(source_.path+n,8));if(!result.path[n])break;}
     if(!n || n==result.path.size())throw std::runtime_error("Unbounded music system-save path");
     return result;
 }
@@ -17,9 +17,10 @@ bool MusicFlagSaves::prepare(wr::Cpu& cpu,wr::Memory& memory,MusicFlagStampReade
         const auto sp=cpu.r[wr::ESP];
         // Only the cached music registration caller is admitted. Script flags,
         // explicit saves, other writers and workers retain their normal I/O.
-        if(std::uint64_t(sp)+40>0x100000000ull || memory.load(sp+28,32)!=0x40fb98 ||
-           memory.load(sp+32,32)<100 || memory.load(sp+32,32)>299 || memory.load(sp+36,32)!=1 ||
-           memory.load(sp,32)!=0x4bf530 || memory.load(sp+4,32)!=0x521930 ||
+        const auto caller=source_.registration_slot;
+        if(std::uint64_t(sp)+caller+12>0x100000000ull || memory.load(sp+caller,32)!=source_.registration_return ||
+           memory.load(sp+caller+4,32)<100 || memory.load(sp+caller+4,32)>299 || memory.load(sp+caller+8,32)!=1 ||
+           memory.load(sp,32)!=source_.path || memory.load(sp+4,32)!=source_.flags ||
            memory.load(sp+8,32)!=0x268480 || memory.load(sp+12,32)!=4096){++declined_;valid_=false;return false;}
         const auto stamp=reader?reader(owner):std::nullopt;
         if(!stamp || !stamp->files){++declined_;valid_=false;return false;}
@@ -31,7 +32,7 @@ bool MusicFlagSaves::prepare(wr::Cpu& cpu,wr::Memory& memory,MusicFlagStampReade
 void MusicFlagSaves::closed(const wr::Cpu& cpu,wr::Memory& memory)noexcept{
     if(!pending_)return;ErrorScope error;
     try{const auto sp=cpu.r[wr::ESP];
-        if(std::uint64_t(sp)+12!=stack_ || memory.load(sp+8,32)!=0x405361)return;
+        if(std::uint64_t(sp)+source_.close_frame!=stack_ || memory.load(sp+source_.close_return_slot,32)!=source_.write_return)return;
         closed_=cpu.r[wr::EAX]!=0 && memory.load(sp+4,32)==4096;
     }catch(...){closed_=false;}
 }

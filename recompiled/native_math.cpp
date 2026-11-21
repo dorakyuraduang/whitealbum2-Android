@@ -40,12 +40,12 @@ void commit(wr::Cpu& s,wr::Memory& memory,wa2::math::ScalarResult result,unsigne
     s.fp.put64(32,value.significand);s.fp.put16(40,value.sign_exponent);std::fill_n(s.fp.bytes.data()+42,6,0);
     s.fp.put16(2,environment.status);s.r[wr::ESP]+=4;s.eip=returning;
 }
-template<std::uint32_t Entry,auto Function> bool unary(wr::Cpu& s,wr::Memory& memory){
-    if(s.eip!=Entry || !admitted(s,1))return false;
+template<auto Function> bool unary(wr::Cpu& s,wr::Memory& memory,const TrigonometrySource& source){
+    if(s.eip!=source.entry || !admitted(s,1))return false;
     // The ordinary source SSE path uses nearest IEEE arithmetic. Other modes
     // retain the original statically compiled function, without state changes.
     const auto mxcsr=s.fp.get32(24);if((mxcsr&0x1f80)!=0x1f80 || (mxcsr&0xe040))return false;
-    if((s.fp.get16(0)&0x7f)!=0x7f || !memory.load(0xbc830c,32))return false;
+    if((s.fp.get16(0)&0x7f)!=0x7f || !memory.load(source.feature,32))return false;
     // This dispatch prefix stores ST0 as binary64 before the SSE polynomial.
     // Preserve that explicit rounding for extended intermediate phase values.
     double input{};std::uint16_t conversion{};if(!argument(s,0,input,false,&conversion))return false;
@@ -53,14 +53,25 @@ template<std::uint32_t Entry,auto Function> bool unary(wr::Cpu& s,wr::Memory& me
     // Source data is normally immutable. A modified table must still take
     // the original compiled body, never a stale native replacement.
     auto scope=memory.execution_scope();
-    constexpr auto table=Entry==0x474990?0x4a84d0u:0x4ac710u;
     const auto expected=wa2::math::trigonometry_source_words();
-    const auto actual=scope.readable(table,expected.size_bytes());
-    if(actual.size()!=expected.size_bytes() || std::memcmp(actual.data(),expected.data(),expected.size_bytes()))return false;
+    const auto actual=scope.readable(source.table,expected.size_bytes());
+    if(actual.size()==expected.size_bytes()){
+        if(std::memcmp(actual.data(),expected.data(),expected.size_bytes()))return false;
+    }else{
+        // SC's two identical tables cross backing pages. Validate the same
+        // complete immutable words without requiring a contiguous host view.
+        const auto* bytes=reinterpret_cast<const std::uint8_t*>(expected.data());
+        for(unsigned done=0;done<expected.size_bytes();){
+            const auto at=source.table+done,count=unsigned(std::min<std::size_t>(expected.size_bytes()-done,4096-(at&4095)));
+            const auto part=scope.readable(at,count);
+            if(part.size()!=count || std::memcmp(part.data(),bytes+done,count))return false;
+            done+=count;
+        }
+    }
     auto result=Function(input);result.exceptions|=conversion;
     commit(s,memory,result,1);
 #if WA2_AOT_DIAGNOSTICS
-    if constexpr(Entry==0x474990)++native_math_test_counts.cosine;else ++native_math_test_counts.sine;
+    if constexpr(Function==wa2::math::cosine_finite)++native_math_test_counts.cosine;else ++native_math_test_counts.sine;
 #endif
     return true;
 }
@@ -69,8 +80,8 @@ template<std::uint32_t Entry,auto Function> bool unary(wr::Cpu& s,wr::Memory& me
 thread_local bool native_math_ports_enabled=true;
 thread_local NativeMathTestCounts native_math_test_counts;
 #endif
-bool native_atan2(wr::Cpu& s,wr::Memory& memory){
-    if(s.eip!=0x47885a || !admitted(s,2))return false;
+bool native_atan2(wr::Cpu& s,wr::Memory& memory,std::uint32_t entry){
+    if(s.eip!=entry || !admitted(s,2))return false;
     double x{},y{};if(!argument(s,0,x) || !argument(s,1,y))return false;
     const auto result=wa2::math::atan2_finite(y,x);
     commit(s,memory,result,2);
@@ -79,6 +90,6 @@ bool native_atan2(wr::Cpu& s,wr::Memory& memory){
 #endif
     return true;
 }
-bool native_sine(wr::Cpu& s,wr::Memory& memory){return unary<0x474d50,wa2::math::sine_finite>(s,memory);}
-bool native_cosine(wr::Cpu& s,wr::Memory& memory){return unary<0x474990,wa2::math::cosine_finite>(s,memory);}
+bool native_sine(wr::Cpu& s,wr::Memory& memory,const TrigonometrySource& source){return unary<wa2::math::sine_finite>(s,memory,source);}
+bool native_cosine(wr::Cpu& s,wr::Memory& memory,const TrigonometrySource& source){return unary<wa2::math::cosine_finite>(s,memory,source);}
 }

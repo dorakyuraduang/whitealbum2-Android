@@ -4,15 +4,57 @@
   "input_sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
   "all_platforms_use_the_same_sources": true,
   "weather": {
-    "entries": ["0x408507", "0x408560"], "ends": ["0x408ae8", "0x4097a5"],
-    "region": ["0x408507", "0x408ae8"], "iterations": ["0x408510", "0x408560", "0x408574"],
-    "callees": ["0x4390f0", "0x43ac50", "0x43bc00", "0x43bc80", "0x43c690",
-      "0x44b420", "0x44b430", "0x44b510", "0x44b540", "0x44b580", "0x44b5c0", "0x44b5f0",
-      "0x44b730", "0x44b890", "0x44b8a0", "0x44b8c0", "0x44b8f0", "0x44b900", "0x44b930", "0x44b940", "0x44b990", "0x44b9a0",
-      "0x4749f0", "0x475500", "0x47ce6b"],
-    "typed_color": null, "vector_clear": null,
-    "count": "0x523734", "objects": "0xab0ef8", "weather": "0x51ef60",
-    "required_register": 8, "required_value": 0,
+    "entries": [
+      "0x408507",
+      "0x408560"
+    ],
+    "ends": [
+      "0x408ae8",
+      "0x4097a5"
+    ],
+    "region": [
+      "0x408507",
+      "0x408ae8"
+    ],
+    "iterations": [
+      "0x408510",
+      "0x408560",
+      "0x408574"
+    ],
+    "callees": [
+      "0x4390f0",
+      "0x43ac50",
+      "0x43bc00",
+      "0x43bc80",
+      "0x43c690",
+      "0x44b420",
+      "0x44b430",
+      "0x44b510",
+      "0x44b540",
+      "0x44b580",
+      "0x44b5c0",
+      "0x44b5f0",
+      "0x44b730",
+      "0x44b890",
+      "0x44b8a0",
+      "0x44b8c0",
+      "0x44b8f0",
+      "0x44b900",
+      "0x44b930",
+      "0x44b940",
+      "0x44b990",
+      "0x44b9a0",
+      "0x4749f0",
+      "0x475500",
+      "0x47ce6b"
+    ],
+    "typed_color": "0x43c690",
+    "vector_clear": "0x47ce8b",
+    "count": "0x523734",
+    "objects": "0xab0ef8",
+    "weather": "0x51ef60",
+    "required_register": 8,
+    "required_value": 0,
     "implementation": "same weather_kernel.hpp transaction and static region generator as Main; original SC EBP frame ABI"
   },
   "movies": {
@@ -20,27 +62,60 @@
     "selection": "preserve an available setting; otherwise select a variant present in every indexed movie group",
     "original_static_profile_helper": "0x44f210",
     "original_static_filename_prefix": "0x413427",
-    "source_level_to_filename_suffix": {"2": 0, "1": 1, "0": 2},
+    "source_level_to_filename_suffix": {
+      "2": 0,
+      "1": 1,
+      "0": 2
+    },
     "missing_or_unsupported_movies": "explicit shared media diagnostics; no fabricated playback",
     "movie_payloads_cached_or_copied": false
   },
   "save_read": {
-    "screen": "0xa36168", "update": "0xa37074",
-    "helpers": ["0x44e1c1", "0x44e221", "0x44e2ef"],
-    "api_frame": 44, "index": "0x422772", "preview": "0x422876", "buffer": "0xa4b500",
-    "preview_return": 348, "preview_slot": 352,
-    "pages": ["0x41a01b", "0x41cdb7"],
+    "screen": "0xa36168",
+    "update": "0xa37074",
+    "helpers": [
+      "0x44e1c1",
+      "0x44e221",
+      "0x44e2ef"
+    ],
+    "api_frame": 44,
+    "index": "0x422772",
+    "preview": "0x422876",
+    "buffer": "0xa4b500",
+    "preview_return": 348,
+    "preview_slot": 352,
+    "pages": [
+      "0x41a01b",
+      "0x41cdb7"
+    ],
     "implementation": "shared save_source.hpp and platform/compat/save_files.cpp; bounded metadata and read-only descriptor batches; no payload cache"
   },
   "thumbnail": {
-    "begin": "0x4415f0", "continuation": "0x4415f6", "after": "0x44161d",
-    "frame_register": 5, "frame_delta": -48, "frame_bytes": 64, "pitch": 12, "height": 40,
-    "from": 7, "to": 3, "row_register": 8, "row_offset": 24,
+    "begin": "0x4415f0",
+    "continuation": "0x4415f6",
+    "after": "0x44161d",
+    "frame_register": 5,
+    "frame_delta": -48,
+    "frame_bytes": 64,
+    "pitch": 12,
+    "height": 40,
+    "from": 7,
+    "to": 3,
+    "row_register": 8,
+    "row_offset": 24,
     "implementation": "shared save_thumbnail.hpp; leave the last pixel and loop exits to unchanged static instructions"
   },
   "sort": {
-    "begin": "0x443c90", "end": "0x443d7c", "objects": "0xab0ef9", "mask": "0x4bf3d8",
-    "frame_register": 5, "pointer": -9240, "keys": -8452, "ids": -4356, "first": -9240, "last": -260,
+    "begin": "0x443c90",
+    "end": "0x443d7c",
+    "objects": "0xab0ef9",
+    "mask": "0x4bf3d8",
+    "frame_register": 5,
+    "pointer": -9240,
+    "keys": -8452,
+    "ids": -4356,
+    "first": -9240,
+    "last": -260,
     "implementation": "shared recompiled/source_sort.cpp; main and Special use the same exact insertion/search implementation",
     "source_proof": "immutable complete static function and direct call closure before the generated prefix",
     "preserved": "all integer registers, flags, FP state, key/ID order, exact duplicate/sentinel rules and source pointer slot",
@@ -71,13 +146,30 @@
   "transcendental": {
     "implementation": "shared scalar SoftFloat and Bochs arithmetic",
     "upstream_revision": "b083c0c2515796254de31556989fe4b7b765ddc4",
-    "instructions": ["FYL2X", "FYL2XP1", "F2XM1", "FPATAN", "FSIN", "FCOS", "FPTAN"],
+    "instructions": [
+      "FYL2X",
+      "FYL2XP1",
+      "F2XM1",
+      "FPATAN",
+      "FSIN",
+      "FCOS",
+      "FPTAN"
+    ],
     "special_instruction_sites": 50,
     "internal_host_libm_required": false,
     "hardware_result_status_live_stack_cases": 107520,
     "serialized_and_register_file_paths_compared": true,
-    "precision_control_modes_tested": [24, 53, 64],
-    "rounding_modes_tested": ["nearest-even", "down", "up", "toward-zero"],
+    "precision_control_modes_tested": [
+      24,
+      53,
+      64
+    ],
+    "rounding_modes_tested": [
+      "nearest-even",
+      "down",
+      "up",
+      "toward-zero"
+    ],
     "exhaustive_all_inputs_or_all_cpu_models_claimed": false,
     "unmasked_exception_delivery_remains_unsupported": true
   },
@@ -262,6 +354,150 @@
       {
         "entry": "0x43a610",
         "cached_body_sha256": "d90e360020f03058ecc6b6a104ca09b2cc594c2c359d190e7dc16c7f7149e2db"
+      }
+    ]
+  },
+  "source_optimizations": {
+    "ftol": {
+      "entry": "0x4749f0",
+      "feature": "0xbc54f0",
+      "store_ip": "0x474a02"
+    },
+    "cosine": {
+      "entry": "0x474480",
+      "feature": "0xbc54f4",
+      "table": "0x4a5be0"
+    },
+    "sine": {
+      "entry": "0x474840",
+      "feature": "0xbc54f4",
+      "table": "0x4a9eb0"
+    },
+    "atan2": "0x47805a",
+    "music": {
+      "flags": "0x51e890",
+      "path": "0x4bc528",
+      "registration_return": "0x40f50a",
+      "write_return": "0x405282",
+      "registration_slot": 32,
+      "close_frame": 16,
+      "close_return_slot": 12,
+      "write_call": "0x40527d",
+      "closed": "0x44e04a"
+    },
+    "profile_write": {
+      "api_return": "0x44f1f6",
+      "caller_first": "0x434b8b",
+      "caller_last": "0x43506e",
+      "owner": "0x433fa0",
+      "update": "0xa37074",
+      "caller_slot": 56,
+      "section_slot": 68,
+      "key_slot": 60
+    },
+    "text": {
+      "entry": "0x447f60",
+      "layout_begin": "0x448d6c",
+      "outline_end": "0x448e44",
+      "fill_end": "0x448f06",
+      "page_begin": "0x448f32",
+      "glyph_call": "0x448f2d",
+      "glyph_return": "0x448f32",
+      "glyph_entry": "0x447d70",
+      "speed": "0x446ce0",
+      "remainder": "0xb31484",
+      "frame_bytes": 336,
+      "frame_capture": 688,
+      "argument_bytes": 104,
+      "font_metrics": "0xa7f2f1",
+      "layout_slots": [
+        -248,
+        -228,
+        -208,
+        -216,
+        -204
+      ],
+      "page_output_slot": -280,
+      "page_ruby_slot": -304,
+      "cursor_slot": -200,
+      "string_slot": -212,
+      "outline_argument": 80,
+      "jump_tables": [
+        [
+          "0x448193",
+          "0x4493e4",
+          10
+        ],
+        [
+          "0x448235",
+          "0x44948c",
+          4
+        ],
+        [
+          "0x4482d8",
+          "0x4494e0",
+          10
+        ],
+        [
+          "0x448695",
+          "0x449540",
+          11
+        ],
+        [
+          "0x448a6c",
+          "0x44956c",
+          7
+        ]
+      ]
+    },
+    "source_proofs": [
+      {
+        "entry": "0x401250",
+        "cached_body_sha256": "d6f7631bdf9b36a68f63e866cc12922720f58cda5420aeeb8b2bfd7dd8f98f53"
+      },
+      {
+        "entry": "0x405240",
+        "cached_body_sha256": "8acc237e727ec5cc5c267e77107f9b4137835fe210dea19692a55c4634146981"
+      },
+      {
+        "entry": "0x40f4f0",
+        "cached_body_sha256": "27e6107d415568ed705f7975fe99cf2c81667592b6aa31df6f879a5df1499225"
+      },
+      {
+        "entry": "0x433fa0",
+        "cached_body_sha256": "b10525bb3593f4836849ae4149d3bea3973380ce0826dd2c62baf67fb9973d27"
+      },
+      {
+        "entry": "0x446ce0",
+        "cached_body_sha256": "cc933ddb89c737dc2baf29312d0b544463d3541952d46d3d32648fdc2ddb4192"
+      },
+      {
+        "entry": "0x447f60",
+        "cached_body_sha256": "9c50003009f441321d151318d1d1de6b4d77bc93c7b0d2018efb7c60de90a15c"
+      },
+      {
+        "entry": "0x44aeb0",
+        "cached_body_sha256": "bd3e4f0dc686cde7805daa05bc4447f4538829425c538ada627faedab32a5560"
+      },
+      {
+        "entry": "0x44dff0",
+        "cached_body_sha256": "34a4f4a9b753e1296fcd882ed51203a28f087edc5f6b7a0c5973cfa0368338b9"
+      },
+      {
+        "entry": "0x44f1a0",
+        "cached_body_sha256": "49e67bb3cd504bf5b89bd6cbb704b1498e72e749245e0c945708d79924463cdd"
+      },
+      {
+        "entry": "0x474480",
+        "cached_body_sha256": "fe7e1f81f5000268b3e6a421ebe8c7523491c389825de73eec5975ac00fdc230"
+      },
+      {
+        "entry": "0x474840",
+        "cached_body_sha256": "0baa91ea1fee102e7dcf9b95f44d852d38744d368044420597f99d9335696cc8"
+      },
+      {
+        "entry": "0x47805a",
+        "cached_body_sha256": "2496ac93390a8ba92a57d334c3b42d072a85ba658672d08c77499048be214f10"
       }
     ]
   }

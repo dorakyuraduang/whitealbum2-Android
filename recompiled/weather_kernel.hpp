@@ -160,9 +160,9 @@ inline void weather_string(wr::Cpu& s,WeatherFrame& frame,unsigned kind,unsigned
     }
     if(kind==0)s.r[wr::ESI]+=bytes;s.r[wr::EDI]+=bytes;if(repeat)s.r[wr::ECX]=0;
 }
-inline void weather_vector_clear(wr::Cpu& s,WeatherFrame& frame){
-    const auto count=s.r[wr::ECX];if(!count || count>8192 || (s.r[wr::EDI]&15) || s.fp.get64(160) || s.fp.get64(168))throw WeatherDeclined{};
-    std::memset(frame.writable(s.r[wr::EDI],count*128),0,count*128);s.r[wr::EDI]+=count*128;s.r[wr::ECX]=wr::incdec(s,1,32,true);
+inline void weather_vector_clear(wr::Cpu& s,WeatherFrame& frame,unsigned counter=wr::ECX,unsigned destination=wr::EDI){
+    const auto count=s.r[counter];if(!count || count>8192 || (s.r[destination]&15) || s.fp.get64(160) || s.fp.get64(168))throw WeatherDeclined{};
+    std::memset(frame.writable(s.r[destination],count*128),0,count*128);s.r[destination]+=count*128;s.r[counter]=wr::incdec(s,1,32,true);
 }
 template<auto Kernel>void weather_sse_memory(wr::Cpu& s,WeatherFrame& frame,wr::U32 at,unsigned size,bool store,unsigned alignment,bool integer_flags=false){
     if((alignment && at%alignment) || !size || size>16)throw WeatherDeclined{};
@@ -182,7 +182,7 @@ template<auto Kernel>wr::U32 weather_sse_to_i32(wr::Cpu& s,WeatherFrame& frame,w
     }
     fp::sse_execute<Kernel>(s,operand.data());return wr::U32(fp::detail::read_word(operand.data(),4));
 }
-inline bool weather_color_direct(wr::Cpu& s,WeatherFrame& frame){
+template<bool EbpFrame=false>inline bool weather_color_direct(wr::Cpu& s,WeatherFrame& frame){
     // Cached 0x43b290..0x43b3be: one corner's signed image-mode test,
     // three channel expansions and ARGB packing. Retain its scratch words,
     // saved registers, volatile results, final ADD flags and source return.
@@ -197,14 +197,21 @@ inline bool weather_color_direct(wr::Cpu& s,WeatherFrame& frame){
         const auto expand=[](unsigned& channel){const auto original=channel;channel=original>=128?255:original*2;return original>=128?original*2-256:0u;};
         red_extra=expand(red);green_extra=expand(green);blue_extra=expand(blue);
     }
-    frame.store<32>(sp-12,s.r[wr::EBX]);frame.store<32>(sp-16,s.r[wr::EBP]);frame.store<32>(sp-20,s.r[wr::ESI]);
-    frame.store<32>(sp-8,green_extra);frame.store<32>(sp-4,blue_extra);
+    if constexpr(EbpFrame){
+        frame.store<32>(sp-4,s.r[wr::EBP]);frame.store<32>(sp-16,s.r[wr::EBX]);frame.store<32>(sp-20,s.r[wr::ESI]);
+        frame.store<32>(sp-8,green_extra);frame.store<32>(sp-12,blue_extra);
+    }else{
+        frame.store<32>(sp-12,s.r[wr::EBX]);frame.store<32>(sp-16,s.r[wr::EBP]);frame.store<32>(sp-20,s.r[wr::ESI]);
+        frame.store<32>(sp-8,green_extra);frame.store<32>(sp-4,blue_extra);
+    }
     if(mode>=0){frame.store<32>(sp+16,red);frame.store<32>(sp+20,green);}
     const auto offset=index*256+corner*4;
     frame.store<32>(frame.source.objects+0x53+offset,0xff000000u|(red_extra<<16)|(green_extra<<8)|blue_extra);
     const auto color=(unsigned(std::clamp(alpha,0,255))<<24)|(red<<16)|(green<<8)|blue;
     frame.store<32>(frame.source.objects+0x63+offset,color);s.r[wr::EAX]=color;s.r[wr::ECX]=green;s.r[wr::EDX]=blue;
-    (void)wr::add(s,sp-8,8,32);s.r[wr::ESP]=sp+4;s.eip=returning;
+    if constexpr(EbpFrame){(void)wr::add(s,index*64+corner,index*64+corner,32);(void)wr::logic(s,color,32);}
+    else (void)wr::add(s,sp-8,8,32);
+    s.r[wr::ESP]=sp+4;s.eip=returning;
     if(current_work_samples)++current_work_samples->weather_color_completed;return true;
 }
 inline bool writable_frame(const wr::Memory::ExecutionScope& lock,wr::U32 at,unsigned size){

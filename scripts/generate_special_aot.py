@@ -14,7 +14,7 @@ import re
 
 from generate_shared_aot import (CASE, PROOF, HELPERS, PENDING_TRANSCENDENTAL,
     CONTRACT_FAULT, emit_body, fixed_memory, portable_floating, merge_bodies,
-    dead_flag_operations, register_floating, register_integers)
+    dead_flag_operations, register_floating, register_integers, floating_neutral_leaves)
 from prepare_special_contents import ROOT, digest, write_json
 
 OUT = ROOT/'generated/special-contents/aot'
@@ -135,7 +135,7 @@ def generate():
     fast={key:int(contracts['fast_forward'][key],0) if isinstance(contracts['fast_forward'][key],str) else contracts['fast_forward'][key] for key in fast_fields}
     image_fields=('image_check','image_load','dictionary','trace_set','trace_clear')
     image_resources={key:int(contracts['image_resources'][key],0) for key in image_fields}
-    for section in ('fast_forward','image_resources','image_pixels'):
+    for section in ('fast_forward','image_resources','image_pixels','source_optimizations'):
         for source in contracts[section]['source_proofs']:
             entry=int(source['entry'],0)
             if entry not in merged or owners.get(entry)!=entry:raise ValueError('Special performance source must retain its own function')
@@ -179,7 +179,7 @@ def generate():
         raise ValueError('Special save reader profile must name cached instruction boundaries')
     weather=contracts['weather']
     weather_region={key:[int(value,0) for value in weather[key]] for key in ('entries','ends','region','iterations','callees')}
-    weather_region.update(typed_color=weather['typed_color'],vector_clear=weather['vector_clear'],component_oracle=True)
+    weather_region.update(typed_color=int(weather['typed_color'],0) if weather['typed_color'] else None,vector_clear=int(weather['vector_clear'],0) if weather['vector_clear'] else None,component_oracle=True)
     if drawing['first_weather']!=int(weather['objects'],0)+81*256 or sorting['objects']!=int(weather['objects'],0)+1:
         raise ValueError('Special weather, sprite drawing and sorting must share the cached object layout')
     weather_owner=owners.get(weather_region['entries'][0])
@@ -189,6 +189,8 @@ def generate():
     OUT.mkdir(parents=True,exist_ok=True)
     positions={pc:index for record in merged.values() for index,pc in enumerate(record['locations'])}
     weather_own,weather_external=generate_weather(bodies,edges,owners,positions,graph['instructions'],weather_region,write)
+    from generate_special_optimizations import Optimizations
+    optimizations=Optimizations(ROOT,contracts,graph,bodies,edges,merged,owners,write)
     # The original bodies stay available to finite memory reference checks.
     # Direct calls must use the same host boundary as indirect calls. Keeping
     # a service in this map silently bypasses its installed native adapter.
@@ -205,19 +207,23 @@ def generate():
             pixel_hooks[entry]=(end,kind)
     hot_config=json.loads((ROOT/'config/special_hot_functions.json').read_text())
     hot=set(hot_config['entries'])
+    text_helpers=set(hot_config['text_helper_entries'])
     if (hot_config['input_sha256']!=receipt['input_sha256'] or
             (hot_config['shared_optimization'],hot_config['other_generated_functions'])!=('O2','Oz') or
             len(hot)!=len(hot_config['entries']) or not hot.issubset(merged) or
             set(hot_config['register_floating_point_entries'])!=hot or
             set(hot_config['register_integer_entries'])!=hot):
         raise ValueError('Special measured hot-function contract differs from the common compiler policy')
+    if text_helpers & hot or len(text_helpers)!=6 or not text_helpers.issubset(merged):
+        raise ValueError('SC text helper optimization must retain six distinct cached owners')
     OUT.mkdir(parents=True, exist_ok=True)
     ordered = sorted(merged)
     positions = {pc: index for record in merged.values() for index, pc in enumerate(record['locations'])}
     dead_flags = {pc: op for record in merged.values() for pc, op in dead_flag_operations(record, bodies, edges).items()}
+    fp_neutral=floating_neutral_leaves(merged,bodies,edges,optimizations.hook_owners | set(draw_entries) | {weather_owner,sort_owner,thumbnail_owner} | {owners[p] for p in pixel_hooks} | set(subtitle_events))
     header = ['#pragma once', '#include "functions.hpp"', '#include "integer_value.hpp"',
               '#include "native_string.hpp"', '#include "work_samples.hpp"', '#include "special/lzss.hpp"',
-              '#include "fp_registers.hpp"', '#include "gpr_registers.hpp"',
+              '#include "fp_registers.hpp"', '#include "gpr_registers.hpp"', '#include "text_stack.hpp"',
               'namespace wa2::special {', 'using aot::Context;using aot::Scope;',
               'using aot::CodeSpan;using aot::Function;using aot::Location;',
               'using aot::call_leaf_service;using aot::call_source_indirect;']
@@ -269,8 +275,9 @@ def generate():
     sources = []
     transcendental = sorted(pc for pc, (body, _, _) in bodies.items() if PENDING_TRANSCENDENTAL.search(body))
     pending = []
-    shards=[(f'functions_{shard}.cpp',[entry for entry in ordered[shard::16] if entry not in hot]) for shard in range(16)]
+    shards=[(f'functions_{shard}.cpp',[entry for entry in ordered[shard::16] if entry not in hot|text_helpers]) for shard in range(16)]
     shards.append(('functions_hot.cpp',sorted(hot)))
+    shards.append(('functions_text_helpers.cpp',sorted(text_helpers)))
     for name, entries in shards:
         sources.append(name)
         cpp = ['#include "bodies.hpp"', 'namespace wa2::special {']
@@ -279,6 +286,10 @@ def generate():
         if set(entries)&(draw_entries.keys()|{sort_owner}):cpp.insert(1,'#include "special/render.hpp"')
         if thumbnail_owner in entries:cpp.insert(1,'#include "save_profile.hpp"')
         if weather_owner in entries:cpp.insert(1,'#include "special/weather.hpp"')
+        if set(entries)&optimizations.hook_owners:
+            cpp.insert(1,'#include "special/optimizations.hpp"')
+            cpp.insert(1,'#include "optimization_profile.hpp"')
+            cpp.insert(1,'#include "text_jump_budget.hpp"')
         for entry in entries:
             record = merged[entry]
             parameters='bool Metered,bool NativeRegisters' if entry in hot else 'bool Metered'
@@ -289,6 +300,7 @@ def generate():
                 # The serialized specialization is a finite memory-test oracle.
                 cpp += ['wa2::aot::fp::RegisterFrame<Metered || !NativeRegisters> floating(s,m,scope);',
                         'wa2::aot::IntegerRegisters<Metered || !NativeRegisters> integer(s,m,scope);']
+            cpp += optimizations.prelude(entry)
             cpp += [
                     'switch(resume){', *[f'case {positions[pc]}u:goto L_{pc:x};' for pc in record['locations']],
                     'default:throw wr::GuestFault(wr::FaultKind::untranslated,s.eip,"invalid Special resume entry");}']
@@ -313,8 +325,15 @@ def generate():
                 native = fixed_memory(portable_floating(native.replace(
                     'wr::string_op(', 'wr::aot_string_op<Metered>(')))
                 if entry in hot:
-                    native=register_integers(register_floating(native))
+                    native=register_integers(register_floating(native,fp_neutral))
+                else:
+                    native,n=re.subn(r'wr::push\(s,m,(value|0x[0-9a-f]+u)(?:,32)?\);',r'wa2::aot::text_push(s,scope,\1);',native)
+                    optimizations.stack_sites+=n
+                    native,n=re.subn(r'wr::pop\(s,m(?:,32)?\)',r'wa2::aot::text_pop(s,scope)',native)
+                    optimizations.stack_sites+=n
+                native=optimizations.transform(entry,pc,native)
                 cpp += [f'L_{pc:x}:{{s.eip=0x{pc:x}u;', 'if constexpr(Metered)wr::tick(budget,s.eip);']
+                cpp += optimizations.hooks(entry,pc,entry in hot)
                 if pc in draw_entries:
                     invocation=f'wa2::special::{draw_entries[pc]}(s,m)'
                     if entry in hot:
@@ -339,7 +358,7 @@ def generate():
                     spans[-1][1].extend(raw)
                 else:
                     spans.append((pc, bytearray(raw)))
-            cpp += ['}']
+            cpp += optimizations.end(entry)+['}']
             if entry in hot:
                 cpp += [f'template void f_{entry:x}<false,{native}>(Context&,wr::Memory&,Scope&,std::uint64_t&,std::uint32_t);' for native in ('false','true')]
             else:
@@ -437,6 +456,10 @@ def generate():
         shared_subtitle_events=subtitles,
         shared_fast_forward_profile=fast,shared_image_resources=image_resources,
         shared_resource_direct_call_boundaries=sorted(service_entries),shared_image_pixel_profile=pixels,
+        shared_source_optimizations=contracts['source_optimizations'],scoped_stack_sites=optimizations.stack_sites,
+        floating_neutral_leaves=sorted(fp_neutral),local_text_jump_sites=[0x448193,0x448235,0x4482d8],
+        existing_static_text_jump_sites=[0x448695,0x448a6c],
+        optimized_text_helper_entries=sorted(text_helpers),
         hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,

@@ -109,11 +109,18 @@ def generate(bodies,edges,owners,positions,instructions,profile=None,writer=None
                 todo.extend(e['to'] for e in following if e['to'] is not None and e['kind']!='data_callback_initial')
         functions[entry]=sorted(seen)
     color_nodes=[];color_hash=None
+    if vector_clear==0x47ce8b:
+        vector_nodes=sorted({pc for locations in functions.values() for pc in locations if 0x47ce8b<=pc<0x47cebb})
+        if len(vector_nodes)!=11 or hashlib.sha256(b''.join(bodies[pc][1] for pc in vector_nodes)).hexdigest()!='225ae24a1e8ab945fa797284e20dfb25d459eded6638ba4f33f062e6de50cec5':
+            raise ValueError('SC vector clear source ABI changed')
     if color:
-        if color!=0x43b290:raise ValueError('Unknown typed weather color ABI')
-        color_nodes=[pc for pc in functions[color] if 0x43b290<=pc<=0x43b3be]
+        color_proofs={0x43b290:(0x43b3be,101,'8479b6d4e1c4fce17247dea97c65da581c5822540bcca4febcabfc8a6f27b53f'),
+                      0x43c690:(0x43c7ac,99,'c840ed719632687854cbfb87ed1df89fe296173746b40ffcc87c145b4abaf965')}
+        if color not in color_proofs:raise ValueError('Unknown typed weather color ABI')
+        color_last,color_count,color_expected=color_proofs[color]
+        color_nodes=[pc for pc in functions[color] if color<=pc<=color_last]
         color_hash=hashlib.sha256(b''.join(bodies[pc][1] for pc in color_nodes)).hexdigest()
-        if len(color_nodes)!=101 or color_hash!='8479b6d4e1c4fce17247dea97c65da581c5822540bcca4febcabfc8a6f27b53f':
+        if len(color_nodes)!=color_count or color_hash!=color_expected:
             raise ValueError('Cached source of the typed weather color replacement changed')
     dead_flags=flag_elisions(g,functions,bodies,edges,yields,ends)
     output=['// Generated only from the checked cached C++/CFG; common to all hosts.']
@@ -122,7 +129,7 @@ def generate(bodies,edges,owners,positions,instructions,profile=None,writer=None
     for entry,nodes in sorted(functions.items()):
         root=entry==entries[0]
         output += [f'[[gnu::noinline]] void weather_{entry:x}(wr::Cpu& s,WeatherFrame& scope,WeatherFloating& floating){{']
-        if color and entry==color:output.append('if(weather_color_direct(s,scope))return;')
+        if color and entry==color:output.append('if(weather_color_direct'+('<true>' if color==0x43c690 else '')+'(s,scope))return;')
         if root:output.append(f'if(s.eip==0x{entries[1]:x}u)goto L_{entries[1]:x};')
         output.append(f'goto L_{entry:x};')
         for pc in nodes:
@@ -152,7 +159,10 @@ def generate(bodies,edges,owners,positions,instructions,profile=None,writer=None
             if 'm.' in body or re.search(r'\bm\b|\bbudget\b|f_[0-9a-f]+<Metered>|wr_(?:x87|sse)_',body):
                 raise ValueError('Unbridged batch state consumer at '+hex(pc)+': '+body)
             # Keep the already proved vector clear as one local buffer write.
-            if vector_clear and pc==vector_clear:body='weather_vector_clear(s,scope);\ngoto L_47e7c8;'
+            if vector_clear and pc==vector_clear:
+                if vector_clear==0x47e798:body='weather_vector_clear(s,scope);\ngoto L_47e7c8;'
+                elif vector_clear==0x47ce8b:body='weather_vector_clear(s,scope,wr::EAX,wr::ECX);\ngoto L_47cebb;'
+                else:raise ValueError('Unknown weather vector clear ABI')
             output += [body,'}']
         if root:
             output += [f'L_{pc:x}: s.eip=0x{pc:x}u;return;' for pc in sorted(ends)]
@@ -168,7 +178,7 @@ def generate(bodies,edges,owners,positions,instructions,profile=None,writer=None
     write('weather_batch.json',json.dumps(dict(entries=entries,normal_ends=sorted(ends),
         own_exit_targets=own,external_exit_targets=external,callee_entries=sorted(functions.keys()-{entries[0]}),
         cached_locations=sum(map(len,functions.values())),elided_flag_calculations=len(dead_flags),
-        native_color=dict(entry=color,last_source_location=0x43b3be,cached_locations=len(color_nodes),
+        native_color=dict(entry=color,last_source_location=color_last,cached_locations=len(color_nodes),
             cached_bytes_sha256=color_hash,implementation='recompiled/native_weather.cpp',
             domain='index < 2048; corner < 4; RGB <= 255; signed 32-bit alpha') if color else None,
         source='cached checked C++/CFG only'),indent=2)+'\n')

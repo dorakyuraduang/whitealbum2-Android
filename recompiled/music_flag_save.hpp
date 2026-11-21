@@ -13,7 +13,13 @@ struct MusicFlagStamp {
     bool operator==(const MusicFlagStamp&)const=default;
 };
 using MusicFlagStampReader=std::optional<MusicFlagStamp>(*)(void*);
+struct MusicFlagSource {
+    wr::U32 flags,path,registration_return,write_return;
+    unsigned registration_slot,close_frame,close_return_slot;
+};
+inline constexpr MusicFlagSource main_music_flag_source{0x521930,0x4bf530,0x40fb98,0x405361,28,12,8};
 class MusicFlagSaves {
+    MusicFlagSource source_;
     struct Snapshot {
         std::array<std::uint8_t,4096> flags{};
         std::array<std::uint8_t,260> path{};
@@ -24,8 +30,9 @@ class MusicFlagSaves {
     wr::U32 stack_{};
     bool valid_{},pending_{},closed_{};
     std::uint64_t attempts_{},committed_{},skipped_{},declined_{};
-    static Snapshot capture(wr::Memory&);
+    Snapshot capture(wr::Memory&)const;
 public:
+    explicit MusicFlagSaves(const MusicFlagSource& source=main_music_flag_source):source_(source){}
     bool prepare(wr::Cpu&,wr::Memory&,MusicFlagStampReader,void*)noexcept;
     void closed(const wr::Cpu&,wr::Memory&)noexcept;
     void complete(const wr::Cpu&,wr::Memory&,MusicFlagStampReader,void*)noexcept;

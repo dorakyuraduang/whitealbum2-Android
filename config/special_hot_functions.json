@@ -1,10 +1,30 @@
 {
   "schema": "wa2.special-hot-functions.v1",
   "input_sha256": "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
-  "source": "User-controlled Android scenes: 0.2.115 748 app-only CPU samples put 0x43cb90 in 75.13% of call chains; after shared drawing, 0.2.117 632 samples put owner 0x44aeb0 in 73.73%. Both 8-second profiles lost no samples.",
-  "entries": [4443024],
-  "register_floating_point_entries": [4443024],
-  "register_integer_entries": [4443024],
+  "source": "User-controlled Android scenes: 0.2.115 748 app-only CPU samples put 0x43cb90 in 75.13% of call chains; after shared drawing, 0.2.117 632 samples put owner 0x44aeb0 in 73.73%. Both 8-second profiles lost no samples.; 0.2.123 app-only story sampling also identifies text 0x447f60 and renderer 0x44aeb0. Serialized specializations remain the finite-memory oracle.",
+  "entries": [
+    4443024,
+    4489056,
+    4501168
+  ],
+  "register_floating_point_entries": [
+    4443024,
+    4489056,
+    4501168
+  ],
+  "register_integer_entries": [
+    4443024,
+    4489056,
+    4501168
+  ],
   "shared_optimization": "O2",
-  "other_generated_functions": "Oz"
+  "other_generated_functions": "Oz",
+  "text_helper_entries": [
+    4198480,
+    4484208,
+    4484320,
+    4488560,
+    4682082,
+    4682101
+  ]
 }

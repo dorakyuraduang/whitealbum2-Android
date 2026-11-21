@@ -11,6 +11,7 @@ import sys
 from prepare_special_contents import ROOT, digest, write_json
 
 RECEIPT = ROOT/'logs/special-aot-verification.json'
+CHECKS=('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle','fast','image','main_resource','pixel','music','optimization','main_ftol','main_text','main_music','main_profile','main_page')
 
 
 def source_bindings():
@@ -26,7 +27,7 @@ def source_bindings():
         'tests/special_drawing.cpp','tests/native_sprite_cpu.cpp','tests/glyph_scheduling.cpp','tests/special_sort.cpp','tests/io_diagnostics.cpp',
         'tests/special_save.cpp','tests/save_inventory.cpp','tests/save_thumbnail.cpp',
         'tests/special_weather.cpp','tests/special_language.cpp','tests/special_subtitles.cpp','tests/special_fast_forward.cpp','tests/special_images.cpp','tests/special_image_pixels.cpp','tests/native_resource_cache.cpp','scripts/generate_weather_batch.py',
-        'scripts/read_android_counters.py',
+        'scripts/read_android_counters.py','scripts/generate_special_optimizations.py','tests/special_optimizations.cpp','tests/special_music_flags.cpp','tests/text_ftol.cpp','tests/text_control.cpp','tests/music_flag_saves.cpp','tests/profile_batch.cpp','tests/novel_cpu.cpp','tests/novel_layout_oracle.hpp','tests/glyph_command_oracle.hpp',
         'generated/special-contents/preparation.json','generated/special-contents/aot/manifest.json',
         'generated/special-contents/callback-upgrade/manifest.json','scripts/audit_special_callbacks.py',
         'scripts/analysis/ExportCachedListing.java',
@@ -67,7 +68,7 @@ def checked_hot_policy(directory):
         path=Path(entry['file']).resolve()
         if not path.is_relative_to(generated) or path.name=='probe_oracle.cpp':continue
         options=re.findall(r'(?<!\S)-O(?:[0123sz]|fast)(?=\s|$)',entry['command'])
-        expected='-O2' if path.name=='functions_hot.cpp' else '-Oz'
+        expected='-O2' if path.name in ('functions_hot.cpp','functions_text_helpers.cpp') else '-Oz'
         if not options or options[-1]!=expected:
             raise ValueError('Special compile optimization differs from measured policy: '+str(path))
         policies[path.name]=expected
@@ -107,6 +108,12 @@ def compiled_image_resources(directory):
 
 def compiled_image_pixels(directory):
     paths={(ROOT/name).resolve() for name in ('recompiled/image_chroma.cpp','recompiled/image_colours.cpp','recompiled/special/images.cpp')}
+    entries=json.loads((directory/'compile_commands.json').read_text())
+    return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file'])) for e in entries if Path(e['file']).resolve() in paths}
+
+
+def compiled_optimizations(directory):
+    paths={(ROOT/name).resolve() for name in ('recompiled/native_math.cpp','recompiled/text_ftol.cpp','recompiled/music_flag_save.cpp','recompiled/special/optimizations.cpp')}
     entries=json.loads((directory/'compile_commands.json').read_text())
     return {Path(e['file']).resolve().relative_to(ROOT).as_posix():digest(Path(e['file'])) for e in entries if Path(e['file']).resolve() in paths}
 
@@ -165,11 +172,13 @@ def main():
                 '-DWA2_SHARED_SDL_ARCHIVE='+str(ROOT/'build/test-content-046/materials/windows/archives/libSDL2.a')])
             run([cmake,'--build',win,'--target','wa2_special_memory_tests','wa2_special_runtime_tests','wa2_special_codec_tests','wa2_special_render_tests',
                  'wa2_special_drawing_tests','wa2_special_main_sprite_tests','wa2_special_main_glyph_tests','wa2_special_sort_tests','wa2_special_io_tests',
-                 'wa2_special_save_tests','wa2_special_main_save_tests','wa2_special_main_thumbnail_tests','wa2_special_weather_tests','wa2_special_language_tests','wa2_special_subtitle_tests','wa2_special_fast_tests','wa2_special_image_tests','wa2_special_main_resource_tests','wa2_special_pixel_tests','wa2_special_windows','--parallel','1'],7200)
-            for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle','fast','image','main_resource','pixel'):
+                 'wa2_special_save_tests','wa2_special_main_save_tests','wa2_special_main_thumbnail_tests','wa2_special_weather_tests','wa2_special_language_tests','wa2_special_subtitle_tests','wa2_special_fast_tests','wa2_special_image_tests','wa2_special_main_resource_tests','wa2_special_pixel_tests','wa2_special_music_tests','wa2_special_optimization_tests','wa2_special_main_ftol_tests','wa2_special_main_text_tests','wa2_special_main_music_tests','wa2_special_main_profile_tests','wa2_special_main_page_tests','wa2_special_windows','--parallel','1'],7200)
+            for stem in CHECKS:
                 command=[win/f'shared_runtime/special/wa2_special_{stem}_tests.exe',ROOT/f'logs/special-{stem}-check.json']
                 if stem=='main_sprite':command.append('--correctness-only')
+                if stem=='main_page':env['WA2_NOVEL_TIMING']='page'
                 run(command,60)
+                env.pop('WA2_NOVEL_TIMING',None)
             run([acmake,'-S',ROOT/'tests/shared-aot-android','-B',android,'-G','Ninja',
                 '-DCMAKE_MAKE_PROGRAM='+str(ROOT/'tools/python/bin/ninja.exe'),
                 '-DCMAKE_TOOLCHAIN_FILE='+str(ndk/'build/cmake/android.toolchain.cmake'),
@@ -193,7 +202,7 @@ def main():
             raise ValueError('Windows/Android compiled different Special C++ source inventories')
         hot_policy=checked_hot_policy(win)
         if hot_policy!=checked_hot_policy(android):raise ValueError('Host hot optimization policies differ')
-        if (manifest.get('measured_hot_entries')!=[0x43cb90] or
+        if (manifest.get('measured_hot_entries')!=[0x43cb90,0x447f60,0x44aeb0] or
                 not manifest.get('shared_register_fp_and_integer_kernels')):
             raise ValueError('Missing measured Special shared register kernels')
         math_windows,math_android=compiled_math(win),compiled_math(android)
@@ -218,6 +227,9 @@ def main():
         pixel_sources=compiled_image_pixels(win)
         if pixel_sources!=compiled_image_pixels(android) or len(pixel_sources)!=3:
             raise ValueError('Both hosts must compile the same Main/SC image pixel kernels')
+        optimization_sources=compiled_optimizations(win)
+        if optimization_sources!=compiled_optimizations(android) or len(optimization_sources)!=4:
+            raise ValueError('Both hosts must compile identical shared scalar/progress kernels and SC source bindings')
         if manifest.get('shared_resource_direct_call_boundaries')!=[0x438490,0x4385a0,0x458630,0x458660,0x458700,0x458890]:
             raise ValueError('Direct resource calls must unwind through the installed service boundary')
         if manifest.get('shared_image_pixel_profile')!=json.loads((ROOT/'config/special_native_contracts.json').read_text())['image_pixels']:
@@ -231,11 +243,17 @@ def main():
             raise ValueError('Missing Special shared codec host boundaries')
         if manifest.get('shared_subtitle_events')!=json.loads((ROOT/'config/special_native_contracts.json').read_text())['subtitles']:
             raise ValueError('Missing SHA-bound SC BGM/chapter subtitle events')
+        if manifest.get('shared_source_optimizations')!=json.loads((ROOT/'config/special_native_contracts.json').read_text())['source_optimizations'] or manifest.get('scoped_stack_sites',0)<1000:
+            raise ValueError('Missing checked SC source optimization bindings')
         checks={}
-        for stem in ('memory','runtime','codec','render','drawing','main_sprite','main_glyph','sort','io','save','main_save','main_thumbnail','weather','language','subtitle','fast','image','main_resource','pixel'):
+        for stem in CHECKS:
             path=ROOT/f'logs/special-{stem}-check.json';check=json.loads(path.read_text())
             if not check['passed'] or check['game_launched'] or check['screen_access']:
                 raise ValueError('Invalid Special headless verification')
+            if stem=='optimization' and (check.get('integer_source_cases',0)<5000 or check.get('trig_source_cases',0)<100 or check.get('exact_layout_cases',0)<100 or check.get('actual_text_calls',0)<48 or check.get('actual_page_spans',0)<1 or check.get('actual_layout_hits',0)<1 or check.get('cache_guard_cases')!=18 or check.get('hot_scene_prefix_cases')!=24 or check.get('write_scope_guards')!=116):
+                raise ValueError('Missing actual SC text/cache/scalar source regression')
+            if stem=='main_page' and not check.get('page_cache_capacity_checked'):
+                raise ValueError('Missing Main page span/cache extraction regression')
             if stem=='fast' and (check.get('source_predicate_comparisons')!=4608 or not all(check.get(k) for k in ('original_sleep_caller_checked','settings_save_load_pacing_preserved','all_draws_preserved'))):
                 raise ValueError('Missing SC source/fast-forward PC component checks')
             if stem=='image' and (check.get('source_image_comparisons')!=30 or check.get('source_direct_call_comparisons')!=6 or check.get('declined_service_static_comparisons')!=6 or not check.get('dictionary_and_trace_preserved') or not check.get('original_static_loader_used')):
@@ -349,7 +367,7 @@ def main():
             symbol_inputs=[symbol_input]
             if name=='windows':symbol_inputs.extend([win/'shared_runtime/libwa2_x87_transcend.a',
                 win/'shared_runtime/libwa2_function_process.a',win/'shared_runtime/native_engine/libwa2_engine.a',
-                win/'shared_runtime/libwa2_source_drawing.a',win/'shared_runtime/libwa2_source_image_pixels.a',win/'shared_runtime/special/libwa2_special_process.a'])
+                win/'shared_runtime/libwa2_source_text_math.a',win/'shared_runtime/libwa2_source_drawing.a',win/'shared_runtime/libwa2_source_image_pixels.a',win/'shared_runtime/special/libwa2_special_process.a'])
             symbols=subprocess.run([str(nm),'--defined-only','--demangle',*map(str,symbol_inputs)],
                 cwd=ROOT,env=env,creationflags=flags,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                 check=True,timeout=60).stdout.decode('utf-8',errors='replace')
@@ -362,13 +380,14 @@ def main():
                 shared_source_drawing='wa2::aot::native_draw_sprite(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols and
                     'wa2::aot::native_draw_glyph_or_yield(wr::Cpu&, wr::Memory&, wa2::aot::SpriteSource const&)' in symbols,
                 shared_source_sort='wa2::aot::source_sort_full(wr::Cpu&, wr::Memory&, wa2::aot::SortSource const&)' in symbols,
+                shared_scalar_kernels='wa2::aot::native_integer_ftol(' in symbols and 'wa2::aot::native_sine(' in symbols and 'wa2::aot::native_cosine(' in symbols,
                 shared_image_resource_adapter='wr::install_wa2_native_resources(wr::Process&, wr::NativeResourceProfile, bool)' in symbols,
                 shared_image_pixel_kernels='wa2::aot::native_image_chroma(wr::Cpu&, wr::Memory&, wa2::aot::ImageChromaSource const&)' in symbols and 'wa2::aot::native_image_colours(wr::Cpu&, wr::Memory&, wa2::aot::ImageColourSource const&)' in symbols,
                 shared_source_subtitles='wa2::special::SubtitleState::returned(' in symbols and 'wa2::subtitles::compile_special_binary(' in symbols,
                 shared_source_weather='wa2::special::update_weather(wr::Cpu&, wr::Memory&)' in symbols and 'weather_408507(' in symbols,
                 main_story_static_functions='wa2::aot::f_' in symbols,
                 runtime_instruction_decoder='wr::Decoder::' in symbols)
-            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or not audit['shared_source_sort'] or not audit['shared_source_weather'] or not audit['shared_source_subtitles'] or not audit['shared_image_resource_adapter'] or not audit['shared_image_pixel_kernels'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
+            if not audit['special_static_functions'] or not audit['shared_bulk_string_kernel'] or not audit['scalar_x87_math'] or not audit['shared_vorbis_codec'] or not audit['shared_source_drawing'] or not audit['shared_source_sort'] or not audit['shared_source_weather'] or not audit['shared_source_subtitles'] or not audit['shared_image_resource_adapter'] or not audit['shared_image_pixel_kernels'] or not audit['shared_scalar_kernels'] or audit['main_story_static_functions'] or audit['runtime_instruction_decoder']:
                 raise ValueError('Special link audit failed: '+name+' '+json.dumps(audit))
             symbol_audits[name]=audit
         proof=dict(schema='wa2.special-aot-verification.v1',input_sha256=manifest['input_sha256'],
@@ -377,6 +396,8 @@ def main():
             compiled_shared_codec_sources=codec_windows,shared_vorbis_host_boundaries=manifest['shared_vorbis_host_boundaries'],
             compiled_shared_image_resources=image_sources,compiled_shared_subtitle_sources=subtitle_sources,compiled_shared_drawing_sources=drawing_sources,shared_sprite_and_glyph_entries=manifest['shared_sprite_and_glyph_entries'],
             compiled_shared_image_pixels=pixel_sources,shared_resource_direct_call_boundaries=manifest['shared_resource_direct_call_boundaries'],
+            compiled_shared_source_optimizations=optimization_sources,shared_source_optimizations=manifest['shared_source_optimizations'],
+            optimized_text_helper_entries=manifest['optimized_text_helper_entries'],scoped_stack_sites=manifest['scoped_stack_sites'],
             shared_sort_prefix=manifest['shared_sort_prefix'],
             measured_hot_entries=manifest['measured_hot_entries'],compiled_optimization_policy=hot_policy,
             scalar_math_notice=dict(file=str(notice),sha256=digest(notice)),

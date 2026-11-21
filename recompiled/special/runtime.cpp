@@ -3,6 +3,9 @@
 #include "render.hpp"
 #include "weather.hpp"
 #include "images.hpp"
+#include "optimizations.hpp"
+#include "optimization_profile.hpp"
+#include "../text_jump_budget.hpp"
 #include "../native_weather.hpp"
 #include "native_entries.hpp"
 #include "performance_profile.hpp"
@@ -44,8 +47,16 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     shared_resources_(shared_resources),
     subtitle_player_(std::make_shared<subtitles::Playback>()),
     subtitle_state_(std::make_shared<SubtitleState>(subtitle_player_)),
-    execute_([this,samples=std::make_shared<aot::FunctionWorkSamples>(functions()),reported=false](wr::Cpu& cpu,wr::Memory& memory,bool source)mutable{
-        if(!reported){process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};reported=true;}
+    execute_([this,samples=std::make_shared<aot::FunctionWorkSamples>(functions()),music_flags=std::make_shared<aot::MusicFlagSaves>(music_flag_source),reported=false](wr::Cpu& cpu,wr::Memory& memory,bool source)mutable{
+        if(!reported){process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};process_.state().reports["music_flag_saves"]=[music_flags]{return music_flags->report();};reported=true;}
+        aot::MusicFlagScope music_saves{*music_flags,memory,[](void* owner)->std::optional<aot::MusicFlagStamp>{
+            const auto& state=static_cast<wr::Process*>(owner)->state();
+            if(state.current_thread_id!=1)return {};
+            for(const auto& [id,file]:state.files)if(file.owned && file.stream && file.write)return {};
+            const auto revision=platform::compat::save_files_revision(state.mutable_files.get());
+            if(!revision)return {};
+            return aot::MusicFlagStamp{state.mutable_files.get(),*revision};
+        },&process_};
         aot::FunctionWorkScope work{samples.get()};
         aot::SubtitleEventScope subtitle_events{memory,[](std::uint32_t entry,const wr::Cpu& state,wr::Memory& ram,std::uint32_t args,void* owner){static_cast<SubtitleState*>(owner)->returned(entry,state,ram,args);},subtitle_state_.get()};
         aot::LeafServiceScope services{[](wr::Cpu& cpu,wr::Memory& memory,void* owner){
@@ -71,7 +82,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
         try{auto m=p.memory.execution_scope();if(!locate(m.load<32>(p.cpu.r[wr::ESP])).function)return {};
             return m.load<32>(save_source.update);
         }catch(const wr::GuestFault&){return {};}
-    });
+    },[](wr::Process& p){return aot::source_profile_write_scope(p,profile_write_source,locate);});
     platform::compat::install_text(process_);
     platform::compat::install_locale(process_);
     platform::compat::install_extended_system(process_);
@@ -80,6 +91,13 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     process_.state().reports["native_sort"]=sort_report;
     process_.state().reports["native_weather"]=weather_report;
     process_.state().reports["native_image_pixels"]=image_pixel_report;
+    process_.state().reports["native_scalar_optimizations"]=scalar_optimization_report;
+    process_.state().reports["source_text_replay"]=[]{const auto c=aot::source_text_counts;const auto j=aot::text_jump_counts;
+        return "{\"layout_hits\":"+std::to_string(c.layout_hits)+",\"layout_captures\":"+std::to_string(c.layout_captures)+
+            ",\"page_spans\":"+std::to_string(c.page_spans)+",\"page_glyphs\":"+std::to_string(c.page_glyphs)+
+            ",\"page_captures\":"+std::to_string(c.page_captures)+",\"cancelled\":"+std::to_string(c.cancelled)+
+            ",\"local_jumps\":"+std::to_string(j.local_jumps)+",\"budget_yields\":"+std::to_string(j.budget_yields)+
+            ",\"external_targets\":"+std::to_string(j.external_targets)+",\"maximum_local_jumps\":128}";};
     process_.state().reports["special_flow"]=[this]{try{
         auto m=process_.memory.execution_scope();return "{\"source_state\":"+std::to_string(m.load<32>(save_source.screen))+
             ",\"source_updates\":"+std::to_string(m.load<32>(save_source.update))+
@@ -104,7 +122,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     }
     // Continuous BGM must not spend all 64 I/O snapshots before the user
     // opens a save page. Keep the initial codec progress and later file work.
-    process_.state().resource_io_activity=[this,image_activity]{return (image_activity?image_activity():0)+lzss_activity()+std::min<std::uint64_t>(256,wr::wa2_native_vorbis_activity(process_))+aot::save_page_timing.pages+unsigned(aot::weather_batch_counts.completed!=0);};
+    process_.state().resource_io_activity=[this,image_activity]{return (image_activity?image_activity():0)+lzss_activity()+std::min<std::uint64_t>(256,wr::wa2_native_vorbis_activity(process_))+aot::save_page_timing.pages+unsigned(aot::weather_batch_counts.completed!=0)+unsigned(aot::source_text_counts.layout_hits!=0)+unsigned(aot::source_text_counts.page_spans!=0);};
     if(shared_codecs_)wr::install_wa2_native_vorbis(process_,wr::NativeVorbisProfile{
         "1a93d3126a90c68d07c0f79ec19e3b282b3084538e1f92c3456525ba93103ae1",
         codec_boundary_entries[0],codec_boundary_entries[1],codec_boundary_entries[2],codec_boundary_entries[3],

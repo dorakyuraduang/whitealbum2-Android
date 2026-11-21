@@ -14,8 +14,8 @@ bool overlaps(const void* a,unsigned na,const void* b,unsigned nb){
 void enable_integer_ftol(bool value)noexcept{enabled.store(value,std::memory_order_relaxed);}
 bool integer_ftol_enabled()noexcept{return enabled.load(std::memory_order_relaxed);}
 std::uint64_t integer_ftol_calls()noexcept{return calls.load(std::memory_order_relaxed);}
-bool native_integer_ftol(wr::Cpu& s,wr::Memory&,wr::Memory::ExecutionScope& scope){
-    if(s.eip!=0x474f00 || !integer_ftol_enabled())return false;
+bool native_integer_ftol(wr::Cpu& s,wr::Memory&,wr::Memory::ExecutionScope& scope,const IntegerFtolSource& source){
+    if(s.eip!=source.entry || !integer_ftol_enabled())return false;
     const auto cw=s.fp.get16(0),status=s.fp.get16(2);const unsigned top=(status>>11)&7;
     if((cw&0x3f)!=0x3f || (status&0x8080) || !(s.fp.bytes[4]&(1u<<top)) ||
        (s.fp.get32(24)&0xffff1f80u)!=0x1f80u)return false;
@@ -33,14 +33,14 @@ bool native_integer_ftol(wr::Cpu& s,wr::Memory&,wr::Memory::ExecutionScope& scop
     }
     const auto sp=s.r[wr::ESP];if(sp<32)return false;
     const auto saved=sp-4,operand=(sp-12)&~7u;
-    const auto* feature=fp::detail::operand_page(scope,0xbc8310,4,wr::Memory::Read);
+    const auto* feature=fp::detail::operand_page(scope,source.feature,4,wr::Memory::Read);
     const auto* ret=fp::detail::operand_page(scope,sp,4,wr::Memory::Read);
     const auto* save=fp::detail::operand_page(scope,saved,4,wr::Memory::Read|wr::Memory::Write);
     const auto* data=fp::detail::operand_page(scope,operand,8,wr::Memory::Read|wr::Memory::Write);
     if(!feature || !ret || !save || !data || ((save->permissions|data->permissions)&wr::Memory::Execute))return false;
     const auto* rp=ret->data+(sp&4095);const auto* bp=save->data+(saved&4095);const auto* dp=data->data+(operand&4095);
     if(overlaps(rp,4,bp,4) || overlaps(rp,4,dp,8) || overlaps(bp,4,dp,8))return false;
-    if(!scope.load<32>(0xbc8310))return false;
+    if(!scope.load<32>(source.feature))return false;
     const auto returning=scope.load<32>(sp),old_bp=s.r[wr::EBP];
     // These are the exact source stack stores and final arithmetic flags.
     // Earlier CMP flags are overwritten before any later use or fault.
@@ -52,7 +52,7 @@ bool native_integer_ftol(wr::Cpu& s,wr::Memory&,wr::Memory::ExecutionScope& scop
         stack.environment.status&=~fp::RoundUp;
         stack.pop();
     }
-    s.fp.put64(8,0x474f12);s.fp.put16(6,1308&0x7ff);s.fp.put64(16,operand);
+    s.fp.put64(8,source.store_ip);s.fp.put16(6,1308&0x7ff);s.fp.put64(16,operand);
     std::array<std::uint8_t,8> bytes;fp::detail::write_word(bytes.data(),binary,8);
     scope.write_bytes(operand,bytes);
     s.r[wr::EAX]=value.sign()?0u-magnitude:magnitude;

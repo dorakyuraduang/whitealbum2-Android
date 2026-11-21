@@ -3,13 +3,13 @@ include("${WA2_SHARED_ROOT}/generated/special-contents/aot/sources.cmake")
 add_library(wa2_special_aot STATIC ${WA2_SPECIAL_AOT_SOURCES}
     "${WA2_SHARED_ROOT}/recompiled/extended80.cpp"
     "${WA2_SHARED_ROOT}/recompiled/native_string.cpp")
-target_sources(wa2_special_aot PRIVATE lzss.cpp render.cpp weather.cpp images.cpp)
+target_sources(wa2_special_aot PRIVATE lzss.cpp render.cpp weather.cpp images.cpp optimizations.cpp)
 target_compile_features(wa2_special_aot PUBLIC cxx_std_20)
 target_include_directories(wa2_special_aot PUBLIC
     "${WA2_SHARED_ROOT}/generated/special-contents/aot"
     "${WA2_SHARED_ROOT}/recompiled"
     "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
-target_link_libraries(wa2_special_aot PUBLIC wa2_aot_memory wa2_scalar_math wa2_x87_transcend wa2_engine wa2_source_drawing wa2_source_image_pixels)
+target_link_libraries(wa2_special_aot PUBLIC wa2_aot_memory wa2_scalar_math wa2_x87_transcend wa2_engine wa2_source_drawing wa2_source_image_pixels wa2_source_text_math)
 set_target_properties(wa2_special_aot PROPERTIES POSITION_INDEPENDENT_CODE ON)
 add_library(wa2_special_process STATIC runtime.cpp storage.cpp subtitles.cpp
     "${WA2_SHARED_ROOT}/platform/compat/extended_system.cpp")
@@ -20,6 +20,7 @@ set_target_properties(wa2_special_process PROPERTIES POSITION_INDEPENDENT_CODE O
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(wa2_special_aot PRIVATE -Oz)
     set_source_files_properties("${WA2_SHARED_ROOT}/generated/special-contents/aot/functions_hot.cpp"
+        "${WA2_SHARED_ROOT}/generated/special-contents/aot/functions_text_helpers.cpp"
         PROPERTIES COMPILE_OPTIONS "-O2")
     set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/weather.cpp" PROPERTIES COMPILE_OPTIONS "-O2;-ffp-contract=off;-frounding-math")
 endif()
@@ -66,4 +67,16 @@ if(WA2_SPECIAL_CHECKS AND NOT ANDROID)
     target_link_libraries(wa2_special_main_resource_tests PRIVATE wa2_function_process)
     add_executable(wa2_special_pixel_tests "${WA2_SHARED_ROOT}/tests/special_image_pixels.cpp")
     target_link_libraries(wa2_special_pixel_tests PRIVATE wa2_special_process)
+    add_executable(wa2_special_optimization_tests "${WA2_SHARED_ROOT}/tests/special_optimizations.cpp")
+    target_link_libraries(wa2_special_optimization_tests PRIVATE wa2_special_process)
+    add_executable(wa2_special_music_tests "${WA2_SHARED_ROOT}/tests/special_music_flags.cpp")
+    target_link_libraries(wa2_special_music_tests PRIVATE wa2_special_process)
+    foreach(pair "ftol|text_ftol" "text|text_control" "music|music_flag_saves" "profile|profile_batch" "page|novel_cpu")
+        string(REPLACE "|" ";" parts "${pair}")
+        list(GET parts 0 stem)
+        list(GET parts 1 source)
+        add_executable(wa2_special_main_${stem}_tests "${WA2_SHARED_ROOT}/tests/${source}.cpp")
+        target_link_libraries(wa2_special_main_${stem}_tests PRIVATE wa2_function_process)
+        target_include_directories(wa2_special_main_${stem}_tests PRIVATE "${WA2_SHARED_ROOT}/generated/shared-aot/native-text")
+    endforeach()
 endif()
