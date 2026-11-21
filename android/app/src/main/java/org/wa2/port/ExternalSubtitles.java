@@ -14,6 +14,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import org.libsdl.app.SDL;
+import static org.wa2.port.LauncherText.Key.EXTERNAL_CAPTION_FILE_UNAVAILABLE;
+import static org.wa2.port.LauncherText.Key.SC_CAPTION_FILE_REQUIRED;
 
 /** Document and off-screen font adapters. Parsing/timing use the shared C++. */
 final class ExternalSubtitles {
@@ -34,8 +36,8 @@ final class ExternalSubtitles {
         if(Looper.myLooper()==Looper.getMainLooper())throw new IOException("字幕文件必须在后台读取");
         final Uri uri=Uri.parse(LaunchProfile.subtitleUri(location));if(!"content".equals(uri.getScheme()))throw new IOException("请选择系统文件选择器提供的字幕文件（sub.yaml 或 Todokanai 格式）");
         ByteArrayOutputStream result=new ByteArrayOutputStream();byte[] buffer=new byte[8192];
-        try(InputStream input=context.getContentResolver().openInputStream(uri)){
-            if(input==null)throw new IOException("无法打开外置字幕文件，请重新选择并授权");
+        String unavailable = LauncherLocale.load(context).text(EXTERNAL_CAPTION_FILE_UNAVAILABLE);
+        try(InputStream input=SubtitleFiles.require(unavailable, () -> context.getContentResolver().openInputStream(uri))){
             for(;;){int count=input.read(buffer);if(count<0)break;if(count==0)throw new IOException("无法完整读取外置字幕文件");if(count>1024*1024-result.size())throw new IOException("外置字幕不能超过 1 MiB");result.write(buffer,0,count);}
         }
         if(result.size()==0)throw new IOException("外置字幕文件为空");return result.toByteArray();
@@ -51,17 +53,16 @@ final class ExternalSubtitles {
     }
     static void checkSpecialResources(Context context,Uri tree,LaunchProfile profile)throws IOException{
         ReadOnlyDocuments documents=new ReadOnlyDocuments(context.getContentResolver(),tree);
-        String data=LaunchTarget.SPECIAL.subtitleFile(profile);
-        for(String name:profile.language==LaunchProfile.CHINESE?new String[]{data,"subfont.tga","songfont.tga"}:new String[]{data}){
-            String[] info=documents.metadata(name,false);long limit=name.endsWith(".dat")?1024*1024:8*1024*1024;
-            if(info.length!=4 || Long.parseLong(info[1])<=0 || Long.parseLong(info[1])>limit || "16".equals(info[3]))throw new IOException("SC 当前版本字幕需要所选目录中的 "+name+"；请添加对应版本文件，或关闭补充字幕。");
-        }
+        SubtitleFiles.checkSpecial(LauncherLocale.load(context), profile, name -> documents.metadata(name, false));
     }
     private static byte[] readSpecial(Context context,Uri tree,String name,int maximum)throws IOException{
         if(Looper.myLooper()==Looper.getMainLooper() || tree==null)throw new IOException("SC 字幕文件必须在有效目录的后台会话读取");
-        ReadOnlyDocuments documents=new ReadOnlyDocuments(context.getContentResolver(),tree);int fd=documents.open(name);
-        if(fd<0)throw new IOException("SC 字幕资源缺失："+name);
-        try(InputStream input=new ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.adoptFd(fd))){
+        ReadOnlyDocuments documents=new ReadOnlyDocuments(context.getContentResolver(),tree);
+        String unavailable = LauncherLocale.load(context).text(SC_CAPTION_FILE_REQUIRED, name);
+        try(InputStream input=SubtitleFiles.require(unavailable, () -> {
+            int fd = documents.open(name);
+            return fd < 0 ? null : new ParcelFileDescriptor.AutoCloseInputStream(ParcelFileDescriptor.adoptFd(fd));
+        })){
             ByteArrayOutputStream output=new ByteArrayOutputStream();byte[] buffer=new byte[8192];
             for(;;){int count=input.read(buffer);if(count<0)break;if(count==0 || count>maximum-output.size())throw new IOException("SC 字幕资源大小异常："+name);output.write(buffer,0,count);}if(output.size()==0)throw new IOException("SC 字幕资源为空："+name);return output.toByteArray();
         }

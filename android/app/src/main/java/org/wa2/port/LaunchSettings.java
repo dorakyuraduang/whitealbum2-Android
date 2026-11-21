@@ -43,6 +43,7 @@ final class LaunchSettings {
     static void applySession(Context context,Intent intent) {
         LaunchProfileStore store=store(context);String selected=key(context);if(store==null || selected==null || store.dirty())throw new IllegalStateException("Launcher settings are not saved in the selected game directory");
         target(context).validate(store.current());intent.putExtra(SESSION,store.current().encode());intent.putExtra(SESSION_TREE,selected);intent.putExtra(SESSION_TARGET,target(context).id);
+        LauncherLocale.attachToSession(context,intent);
     }
     private static LaunchProfile profile(Context context) { LaunchProfile session=session(context);if(session!=null)return session;LaunchProfileStore store=store(context);return store==null?(target(context)==LaunchTarget.MAIN?previous(context):target(context).defaults()):store.current(); }
     static boolean showFps(Context context) { return profile(context).enabled(LaunchProfile.FPS); }
