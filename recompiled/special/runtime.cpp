@@ -17,6 +17,7 @@
 #include "../../platform/compat/shell.hpp"
 #include "../../platform/compat/media.hpp"
 #include "../../platform/compat/resource_mount.hpp"
+#include "../../platform/compat/language_resources.hpp"
 #include "../../platform/compat/save_files.hpp"
 #include "../../platform/window/gui.hpp"
 #include "../../platform/compat/legacy_display.hpp"
@@ -117,6 +118,7 @@ std::uint32_t run(host::Startup startup){
         phase("resource_mount");
         if(startup.mount_resources)startup.mount_resources(process);
         else platform::compat::install_resource_mount(process,platform::compat::local_resource_mount(process.options.data_root));
+        platform::compat::select_language_resources(process,startup.language,resource::ResourceTitle::special_contents);
         phase("image_load");
         const auto image=initial_image();std::ostringstream missing;unsigned count{};
         for(const auto& item:image.imports){const auto name=item.ordinal?"#"+std::to_string(*item.ordinal):item.name;

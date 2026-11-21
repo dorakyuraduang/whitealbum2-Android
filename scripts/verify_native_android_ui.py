@@ -25,7 +25,7 @@ def main():
     if digest(api)!=official['android_jar_sha256']:raise ValueError('Android API stubs changed')
     source_sets={backend:java_sources(backend) for backend in ('shared-aot','native')}
     sdl=sorted((ROOT/'tools/SDL-release-2.32.10/android-project/app/src/main/java').rglob('*.java'))
-    tests=[ROOT/'tests/android/org/wa2/port'/name for name in ('TouchGesturesTest.java','TextWorkWindowsTest.java','ResourceLocationTest.java','LegacySettingsPathTest.java','LegacySavePathTest.java','GameStorageTest.java','LaunchProfileTest.java','LauncherTextTest.java','CompatibleStoragePathTest.java','DocumentDirectoryTest.java','DocumentReadBatchTest.java','RuntimeReportFileTest.java','LooseResourcesTest.java')]
+    tests=[ROOT/'tests/android/org/wa2/port'/name for name in ('TouchGesturesTest.java','TextWorkWindowsTest.java','ResourceLocationTest.java','LegacySettingsPathTest.java','LegacySavePathTest.java','GameStorageTest.java','LaunchProfileTest.java','LaunchTargetTest.java','LauncherTextTest.java','CompatibleStoragePathTest.java','DocumentDirectoryTest.java','DocumentReadBatchTest.java','RuntimeReportFileTest.java','LooseResourcesTest.java')]
     inputs={path.relative_to(ROOT).as_posix():digest(path) for path in {*sdl,*tests,*[path for sources in source_sets.values() for path in sources],Path(__file__),ROOT/'scripts/android_source_sets.py',ROOT/'android/app/src/main/AndroidManifest.xml'}}
     identity=hashlib.sha256(json.dumps(inputs,sort_keys=True).encode()).hexdigest()[:16];directory=ROOT/'build/native-android-ui'/identity;directory.mkdir(parents=True,exist_ok=True)
     flags=subprocess.CREATE_NO_WINDOW|subprocess.BELOW_NORMAL_PRIORITY_CLASS;records={}
@@ -83,8 +83,10 @@ def main():
         if profile['v6_migrations']!=192:raise ValueError('Incomplete v6 migration to English-capable launcher settings')
         if profile['v7_migrations']!=288:raise ValueError('Incomplete v7 migration retaining Chinese/Japanese/English settings')
         if profile['v8_migrations']!=384 or not profile['frame_cap_persisted']:raise ValueError('Incomplete 60 FPS setting persistence and v8 migration checks')
+        target=reports['LaunchTargetTest']
+        if target['cases']!=41 or target['guards']!=100 or not all(target[k] for k in ('same_folder_title_isolation','failed_write_retry','special_defaults_restored','japanese_ui_script_font','unsupported_special_options_rejected')):raise ValueError('Incomplete Main/SC profile isolation and routing checks')
         text=reports['LauncherTextTest']
-        if text['languages']!=28 or text['translated_messages']!=1260 or text['formatted_message_cases']!=308 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=25 or text['automatic_language_cases']!=56 or text['manual_language_cases']!=31 or not all(text[key] for key in ('system_language_default','english_fallback','manual_language_override_preserved','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue and automatic locale checks')
+        if text['languages']!=28 or text['translated_messages']!=1316 or text['formatted_message_cases']!=336 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=25 or text['automatic_language_cases']!=56 or text['manual_language_cases']!=31 or not all(text[key] for key in ('system_language_default','english_fallback','manual_language_override_preserved','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue and automatic locale checks')
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Android UI input changed during verification: '+name)
     report=dict(schema='wa2.native-android-ui.v1',source_sha256=inputs,source_sets=records,api_jar_sha256=digest(api),javac_sha256=digest(jdk/'bin/javac.exe'),d8_sha256=digest(bt/'lib/d8.jar'),

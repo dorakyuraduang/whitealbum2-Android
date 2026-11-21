@@ -2,14 +2,18 @@
 #include <stdexcept>
 
 namespace wa2::resource {
-const LanguageProfile& language_profile(GameLanguage language){
-    static constexpr LanguageProfile chinese{"zh-CN","ck-gal.pak","fon.pak"},japanese{"ja-JP","script.pak","fnt.pak"},english{"en-US","en.pak","fon_en.pak"},ukrainian{"uk-UA","ua.pak","font_ua.pak"};
+const LanguageProfile& language_profile(GameLanguage language,ResourceTitle title){
+    static constexpr LanguageProfile chinese{"zh-CN","ck-gal.pak","fon.pak","grp.pak"},japanese{"ja-JP","script.pak","fnt.pak","grp.pak"},english{"en-US","en.pak","fon_en.pak","grp.pak"},ukrainian{"uk-UA","ua.pak","font_ua.pak","grp.pak"},special_chinese{"zh-CN","script_cn.pak","fon.pak","gcn.pak"};
+    if(title==ResourceTitle::special_contents){
+        if(language==GameLanguage::chinese)return special_chinese;
+        if(language!=GameLanguage::japanese)throw std::invalid_argument("SC resource profiles support zh-CN and ja-JP only");
+    }else if(title!=ResourceTitle::main_story)throw std::invalid_argument("Unsupported resource title");
     switch(language){case GameLanguage::chinese:return chinese;case GameLanguage::japanese:return japanese;case GameLanguage::english:return english;case GameLanguage::ukrainian:return ukrainian;}
     throw std::invalid_argument("Unsupported game language");
 }
 GameLanguage parse_language(std::string_view value){if(value=="zh-CN")return GameLanguage::chinese;if(value=="ja-JP")return GameLanguage::japanese;if(value=="en-US")return GameLanguage::english;if(value=="uk-UA")return GameLanguage::ukrainian;throw std::invalid_argument("Unsupported game language: "+std::string(value)+" (use zh-CN, ja-JP, en-US or uk-UA)");}
-void validate_language_resources(const LanguageResources& value){
-    (void)language_profile(value.language);
+void validate_language_resources(const LanguageResources& value,ResourceTitle title){
+    (void)language_profile(value.language,title);
 }
 bool language_launch_option(std::span<const std::string_view> arguments,std::size_t& at,LanguageResources& value){
     if(at>=arguments.size())return false;const auto option=arguments[at];

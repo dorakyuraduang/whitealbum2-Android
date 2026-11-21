@@ -13,6 +13,7 @@
 #include <SDL_main.h>
 #include <android/log.h>
 #include <string_view>
+#include <vector>
 
 extern "C" int SDL_main(int argc,char** argv){
     try{
@@ -25,11 +26,14 @@ extern "C" int SDL_main(int argc,char** argv){
         startup.options.allow_file_write=true;startup.files=wa2::android::compiled_save_files();
         startup.report_file=startup.options.data_root/"wa2-runtime.json";
         wa2::window::SdlHostOptions options;
-        for(int n=1;n<argc;++n){
-            const std::string_view argument=argv[n];
+        std::vector<std::string_view> arguments;for(int n=1;n<argc;++n)arguments.emplace_back(argv[n]);
+        for(std::size_t n=0;n<arguments.size();++n){
+            const auto argument=arguments[n];
             if(argument=="--limit-60-fps")options.limit_60_fps=true;
+            else if(wa2::resource::language_launch_option(arguments,n,startup.language)){}
             else throw std::runtime_error("Unsupported Special launch argument: "+std::string(argument));
         }
+        wa2::resource::validate_language_resources(startup.language,wa2::resource::ResourceTitle::special_contents);
         options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();
         options.frame_submitted=[]{wa2::android::frame_presented_with_text([]{
             const auto glyphs=wa2::aot::native_glyph_counts();

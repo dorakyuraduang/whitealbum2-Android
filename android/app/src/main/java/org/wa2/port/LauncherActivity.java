@@ -37,13 +37,24 @@ public final class LauncherActivity extends Activity {
     private static final int TEXT = 0xffedf4f3, MUTED = 0xffa4b7b6, ACCENT = 0xff76d6c4;
     private TextView directory, status, languagePaths;
     private Button choose, start, language, subtitle, uiLanguage, diagnostics;
-    private Button special;
+    private Button mainConfig, specialConfig;
+    private LaunchTarget selectedTarget=LaunchTarget.MAIN;
     private GameFolderSelection gameFolders;
     private ScrollView root;
     private LauncherText ui;
     private Switch fps, limit60Fps, longPress, testMode, chineseSubtitles, showMenu;
     private boolean busy, launching, refreshing, profileReady;
     private int generation;
+
+    LaunchTarget configurationTarget(){return selectedTarget;}
+    Uri configurationTree(){return selectedTarget==LaunchTarget.MAIN?ResourceDirectory.selectedTree(this):gameFolders.saved(GameFolderSelection.SPECIAL);}
+    private void selectConfiguration(LaunchTarget target){
+        if(busy || target==selectedTarget)return;
+        if(LaunchSettings.saving(this)){status.setText(t(SAVING));return;}
+        selectedTarget=target;profileReady=false;++generation;
+        getSharedPreferences("launcher-view",MODE_PRIVATE).edit().putString("configuration",target.id).apply();
+        refresh();Uri tree=configurationTree();if(tree!=null)prepare(tree,0,false);
+    }
 
     private String t(LauncherText.Key key,Object... args){return ui.text(key,args);}
     private void showDialog(AlertDialog dialog){dialog.show();dialog.getWindow().getDecorView().setLayoutDirection(ui.rtl()?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);}
@@ -115,6 +126,7 @@ public final class LauncherActivity extends Activity {
         super.onCreate(state);
         ui=LauncherLocale.load(this);
         gameFolders = new GameFolderSelection(this);
+        selectedTarget="special".equals(getSharedPreferences("launcher-view",MODE_PRIVATE).getString("configuration","main"))?LaunchTarget.SPECIAL:LaunchTarget.MAIN;
         getWindow().setStatusBarColor(0xff10191c); getWindow().setNavigationBarColor(0xff10191c);
         root = new ScrollView(this);root.setFillViewport(true);root.setBackgroundColor(0xff10191c);
         LinearLayout outer = new LinearLayout(this);outer.setOrientation(LinearLayout.VERTICAL);outer.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);
@@ -124,6 +136,10 @@ public final class LauncherActivity extends Activity {
         TextView title = text("WHITE ALBUM2",22,TEXT);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);title.setSingleLine();title.setEllipsize(TextUtils.TruncateAt.END);title.setTextDirection(View.TEXT_DIRECTION_LTR);
         content.addView(title);
         uiLanguage=button(t(UI_LANGUAGE));uiLanguage.setOnClickListener(view -> chooseInterfaceLanguage());content.addView(uiLanguage,row(4));
+        LinearLayout configurations=new LinearLayout(this);configurations.setBaselineAligned(false);content.addView(configurations,row(4));
+        mainConfig=button(t(MAIN_CONFIG));mainConfig.setOnClickListener(view -> selectConfiguration(LaunchTarget.MAIN));configurations.addView(mainConfig,new LinearLayout.LayoutParams(0,-2,1));
+        specialConfig=button("SC");specialConfig.setOnClickListener(view -> selectConfiguration(LaunchTarget.SPECIAL));
+        LinearLayout.LayoutParams scPosition=new LinearLayout.LayoutParams(0,-2,1);scPosition.setMarginStart(dp(4));configurations.addView(specialConfig,scPosition);
         LinearLayout card = new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setPadding(dp(12),dp(8),dp(12),dp(8));
         GradientDrawable background = new GradientDrawable(); background.setColor(0xff1b292d); background.setCornerRadius(dp(12)); card.setBackground(background);
         content.addView(card, row(8));
@@ -162,16 +178,11 @@ public final class LauncherActivity extends Activity {
         start = button(t(START));start.setTextSize(16);start.setTextColor(0xff102723);
         start.setBackgroundTintList(ColorStateList.valueOf(ACCENT));
         launchButtons.addView(start, new LinearLayout.LayoutParams(0, -2, 1));
-        start.setOnClickListener(view -> prepare(ResourceDirectory.selectedTree(this), 0, true));
-        special = button("Special Contents");
-        LinearLayout.LayoutParams specialPosition = new LinearLayout.LayoutParams(0, -2, 1);
-        specialPosition.setMarginStart(dp(4));
-        launchButtons.addView(special, specialPosition);
-        special.setOnClickListener(view -> showSpecialContents());
+        start.setOnClickListener(view -> prepare(configurationTree(), 0, true));
         diagnostics=button(t(COPY_LOG));content.addView(diagnostics,row(4));
         diagnostics.setOnClickListener(view->{if(!busy)RuntimeDiagnostics.copy(this,status);});
         status = text("", 13, MUTED);status.setMinHeight(dp(20));content.addView(status,row(6));
-        installSafeArea(content);setContentView(root);refresh();Uri remembered=ResourceDirectory.selectedTree(this);if(remembered!=null)prepare(remembered,0,false);
+        installSafeArea(content);setContentView(root);refresh();Uri remembered=configurationTree();if(remembered!=null)prepare(remembered,0,false);
     }
     private void saved(String problem) {runOnUiThread(() -> {if(isFinishing() || isDestroyed() || busy)return;refresh();status.setText(problem!=null?t(SAVE_ERROR,problem):LaunchSettings.saving(this)?t(SAVING):t(SAVED));});}
     private String folderLocation(Uri tree){
@@ -179,7 +190,7 @@ public final class LauncherActivity extends Activity {
         catch(RuntimeException error){return tree.toString();}
     }
     private void refresh() {
-        Uri tree = ResourceDirectory.selectedTree(this);
+        Uri tree = configurationTree();
         root.setLayoutDirection(ui.rtl()?View.LAYOUT_DIRECTION_RTL:View.LAYOUT_DIRECTION_LTR);
         String location=tree==null?t(FOLDER_NONE):folderLocation(tree);
         directory.setText(location);directory.setContentDescription(t(FOLDER_FMT,location));directory.setTooltipText(location);
@@ -188,11 +199,17 @@ public final class LauncherActivity extends Activity {
         choose.setText(t(PICK_FOLDER));start.setText(t(START));
         fps.setText(t(FPS));fps.setContentDescription(t(FPS_DETAIL));limit60Fps.setText(t(LIMIT_60_FPS));longPress.setText(t(LONG_PRESS));testMode.setText(t(TEST_MODE));chineseSubtitles.setText(t(CAPTIONS));showMenu.setText(t(SHOW_MENU));
         choose.setEnabled(!busy); start.setEnabled(!busy && tree != null && profileReady);
-        special.setEnabled(!busy);
+        mainConfig.setText(t(MAIN_CONFIG));
+        for(Button control:new Button[]{mainConfig,specialConfig}){
+            boolean selected=control==(selectedTarget==LaunchTarget.MAIN?mainConfig:specialConfig);
+            control.setSelected(selected);control.setEnabled(!busy);control.setTextColor(selected?0xff102723:TEXT);
+            control.setBackgroundTintList(ColorStateList.valueOf(selected?ACCENT:0xff30474b));
+        }
         refreshing=true;fps.setChecked(LaunchSettings.showFps(this));limit60Fps.setChecked(LaunchSettings.limit60Fps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));showMenu.setChecked(LaunchSettings.showMenu(this));refreshing=false;
         for(Switch control:new Switch[]{fps,limit60Fps,longPress,testMode,chineseSubtitles,showMenu})control.setEnabled(!busy && profileReady);
+        for(View control:new View[]{testMode,chineseSubtitles,subtitle})control.setVisibility(selectedTarget==LaunchTarget.MAIN?View.VISIBLE:View.GONE);
         language.setText(t(PICK_GAME)+" · "+LaunchSettings.languageLabel(this));language.setEnabled(!busy && profileReady);
-        languagePaths.setText(t(SCRIPT_PATH,"./"+LaunchSettings.script(this))+"\n"+t(FONT_PATH,"./"+LaunchSettings.font(this)));
+        languagePaths.setText(t(UI_PATH,"./"+LaunchSettings.uiArchive(this))+"\n"+t(SCRIPT_PATH,"./"+LaunchSettings.script(this))+"\n"+t(FONT_PATH,"./"+LaunchSettings.font(this)));
         String source=LaunchSettings.subtitle(this);subtitle.setText(t(SUBTITLE_FMT,t(source.isEmpty()?BUILT_IN:EXTERNAL)));
         String sourceName=source.isEmpty()?t(BUILT_IN):source;subtitle.setContentDescription(t(SUBTITLE_FMT,sourceName));subtitle.setTooltipText(sourceName);subtitle.setEnabled(!busy && profileReady);
         if(!busy)status.setText(t(tree==null?NEED_FOLDER:LOCATION_HINT));
@@ -206,16 +223,17 @@ public final class LauncherActivity extends Activity {
     private void chooseLanguage() {
         if(busy || !profileReady)return;
         showDialog(new AlertDialog.Builder(this).setTitle(t(PICK_GAME))
-            .setSingleChoiceItems(new String[]{"简体中文","日本語","English","Українська"},LaunchSettings.language(this),(dialog,which) -> {
+            .setSingleChoiceItems(selectedTarget==LaunchTarget.SPECIAL?new String[]{"简体中文","日本語"}:new String[]{"简体中文","日本語","English","Українська"},LaunchSettings.language(this),(dialog,which) -> {
                 dialog.dismiss();status.setText(t(SAVING));
                 LaunchSettings.setLanguage(this,which,this::saved);refresh();
                 if(LaunchSettings.saving(this))status.setText(t(SAVING));
             }).setNegativeButton(t(CANCEL),null).create());
     }
     private void pickDirectory() {
+        if(selectedTarget==LaunchTarget.SPECIAL){pickSpecialFolder();return;}
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
-        Uri saved = ResourceDirectory.selectedTree(this);
+        Uri saved = configurationTree();
         intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, saved == null ? DocumentsContract.buildDocumentUri(ResourceLocation.AUTHORITY, ResourceLocation.DOCUMENT_ID) : saved);
         try { startActivityForResult(intent, PICK_DIRECTORY); }
         catch (RuntimeException error) {status.setText(t(PICKER_FAILED));}
@@ -238,21 +256,6 @@ public final class LauncherActivity extends Activity {
         }
     }
 
-    private void showSpecialContents() {
-        Uri saved = gameFolders.saved(GameFolderSelection.SPECIAL);
-        Uri folder = gameFolders.granted(saved);
-        Intent runtime = specialRuntime();
-        String details = folder != null ? t(FOLDER_FMT, folderLocation(folder))
-            : t(saved == null ? NEED_FOLDER : NEED_REAUTHORIZE);
-        if (runtime == null) details += "\n\n" + missingSpecialRuntime();
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Special Contents").setMessage(details)
-            .setNeutralButton(t(PICK_FOLDER), (ignored, which) -> pickSpecialFolder())
-            .setNegativeButton(t(CANCEL), null)
-            .setPositiveButton(t(START), (ignored, which) -> startSpecial(runtime, folder)).create();
-        showDialog(dialog);
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(runtime != null && folder != null);
-    }
-
     private void pickSpecialFolder() {
         try {
             startActivityForResult(gameFolders.picker(GameFolderSelection.SPECIAL), PICK_SPECIAL);
@@ -264,9 +267,12 @@ public final class LauncherActivity extends Activity {
     private void startSpecial(Intent runtime, Uri folder) {
         if (runtime == null || gameFolders.granted(folder) == null) return;
         runtime.setClipData(ClipData.newRawUri("Special Contents", folder));
+        LaunchSettings.applySession(this,runtime);
         try {
+            launching=true;busy=true;refresh();status.setText(t(STARTING));
             startActivity(runtime);
         } catch (ActivityNotFoundException | SecurityException error) {
+            launching=false;busy=false;refresh();
             Toast.makeText(this, t(OPERATION_FAILED, missingSpecialRuntime()), Toast.LENGTH_LONG).show();
         }
     }
@@ -307,10 +313,16 @@ public final class LauncherActivity extends Activity {
         if (busy || tree == null) return;
         busy = true; profileReady=false; final int token = ++generation; refresh();status.setText(t(CHECKING_RESOURCES));
         final android.content.Context application = getApplicationContext();
+        final LaunchTarget target=selectedTarget;
         new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             String problem = null; int count = 0;boolean ready=false;
-            try {Uri previous=ResourceDirectory.selectedTree(application);count = ResourceDirectory.prepareSelection(application, tree, flags);LaunchSettings.prepare(application,tree,tree.equals(previous));ready=true;if(launch){ResourceDirectory.validatePreparedSelection(application);String external=LaunchSettings.subtitle(application);if(LaunchSettings.chineseSubtitles(application) && !external.isEmpty())ExternalSubtitles.validate(application,external);}}
+            try {
+                Uri previous=ResourceDirectory.selectedTree(application);
+                count=target==LaunchTarget.SPECIAL?ResourceDirectory.inspectSpecialSelection(application,tree):ResourceDirectory.prepareSelection(application,tree,flags);
+                LaunchSettings.prepare(application,tree,tree.equals(previous),target);ready=true;
+                if(launch && target==LaunchTarget.MAIN){ResourceDirectory.validatePreparedSelection(application);String external=LaunchSettings.subtitle(application);if(LaunchSettings.chineseSubtitles(application) && !external.isEmpty())ExternalSubtitles.validate(application,external);}
+            }
             catch (LinkageError error) {problem="Subtitle validation module: "+error.getMessage();}
             catch (Exception error) {problem=error.getMessage();if(problem==null)problem=error.toString();}
             final String failure = problem; final int found = count;final boolean loaded=ready;
@@ -319,7 +331,8 @@ public final class LauncherActivity extends Activity {
                 busy = false;profileReady=loaded;refresh();
                 if(failure!=null){status.setText(t(OPERATION_FAILED,failure)+(loaded?"":"\n"+t(NEED_REAUTHORIZE)));return;}
                 status.setText(t(READY,found));
-                if(launch){Intent session=new Intent(this,Wa2Activity.class);LaunchSettings.applySession(this,session);launching=true;busy=true;refresh();status.setText(t(STARTING));startActivity(session);}
+                if(launch && target==LaunchTarget.SPECIAL){Intent runtime=specialRuntime();if(runtime==null){status.setText(missingSpecialRuntime());return;}startSpecial(runtime,tree);}
+                else if(launch){Intent session=new Intent(this,Wa2Activity.class);LaunchSettings.applySession(this,session);launching=true;busy=true;refresh();status.setText(t(STARTING));startActivity(session);}
             });
         }, "WA2 launcher resources").start();
     }
@@ -335,7 +348,7 @@ public final class LauncherActivity extends Activity {
                     Toast.makeText(this, message, Toast.LENGTH_LONG).show();
                 }
             }
-            if (!isFinishing()) showSpecialContents();
+            if (!isFinishing()){profileReady=false;refresh();Uri tree=configurationTree();if(tree!=null)prepare(tree,0,false);}
             return;
         }
         if (request != PICK_DIRECTORY) { super.onActivityResult(request, result, data); return; }
@@ -345,6 +358,6 @@ public final class LauncherActivity extends Activity {
     @Override protected void onDestroy() { ++generation; super.onDestroy(); }
     @Override protected void onResume() {
         super.onResume();
-        if (launching) { launching = false; busy = false;refresh();Uri tree=ResourceDirectory.selectedTree(this);if(tree!=null)prepare(tree,0,false); }
+        if (launching) { launching = false; busy = false;refresh();Uri tree=configurationTree();if(tree!=null)prepare(tree,0,false); }
     }
 }

@@ -7,6 +7,7 @@
 #include <array>
 #include <cerrno>
 #include <map>
+#include <initializer_list>
 #include <set>
 
 namespace wa2::platform::compat {
@@ -92,7 +93,7 @@ public:
         const auto* base=ic?(ic_script_?&*ic_script_:nullptr):base_script_?&*base_script_:nullptr;
         return LanguageMember{base,base?base->find_first(name):resource::Archive::missing,ic?0x8000000000000003ull:0x8000000000000002ull};
     }
-    void select(std::string_view physical,std::array<std::string_view,2> targets,std::string_view legacy_folder,std::string_view pc_folder){
+    void select(std::string_view physical,std::initializer_list<std::string_view> targets,std::string_view legacy_folder,std::string_view pc_folder){
         if(physical.empty())return;
         const auto name=std::string(physical);
         const auto stem=fold(legacy_folder.substr(0,legacy_folder.size()-4));for(const auto target:targets)folders_.insert_or_assign(std::string(target.substr(0,target.size()-4)),std::array<std::string,2>{std::string(pc_folder),stem});
@@ -151,10 +152,18 @@ void check_pack(wr::Process& process,const std::string& name,bool font){
     }catch(const resource::Error& error){throw resource::Error("Cannot use selected "+std::string(font?"font":"script")+" PAK "+name+": "+error.what());}
 }
 }
-void select_language_resources(wr::Process& process,const resource::LanguageResources& selection){
-    resource::validate_language_resources(selection);
+void select_language_resources(wr::Process& process,const resource::LanguageResources& selection,resource::ResourceTitle title){
+    resource::validate_language_resources(selection,title);
     if(process.entry)throw std::logic_error("Language resources must be selected before image load");
-    const auto profile=resource::language_profile(selection.language);std::string script(profile.script),font(profile.font);bool packed_font{};
+    const auto profile=resource::language_profile(selection.language,title);std::string script(profile.script),font(profile.font);bool packed_font{};
+    const bool special=title==resource::ResourceTitle::special_contents;
+    if(special && selection.language==resource::GameLanguage::chinese){
+        // Keep both original Chinese script banks and their source fallback
+        // order. The second bank must never become an alias of the first.
+        if(!process.state().read_only_files)throw resource::Error("Language PAK selection needs a mounted game directory");
+        process.state().reports["language_resources"]=[]{return std::string("{\"language\":\"zh-CN\",\"ui\":\"gcn.pak\",\"script\":\"script_cn.pak / script_cn2.pak\",\"font\":\"fon.pak\",\"source_banks_preserved\":true,\"resource_payloads_copied\":false}");};
+        return;
+    }
     {
         if(!process.state().read_only_files)throw resource::Error("Language PAK selection needs a mounted game directory");
         // Validate against the unmodified mount before publishing any alias.
@@ -166,11 +175,14 @@ void select_language_resources(wr::Process& process,const resource::LanguageReso
         auto selected=std::make_shared<SelectedResources>(process.state().read_only_files);
         if(translated)selected->english(process,selection.language==resource::GameLanguage::ukrainian,script,packed_font);
         const bool chinese=selection.language==resource::GameLanguage::chinese;
-        selected->select(script,{"ck-gal.pak","script.pak"},profile.script,chinese?"ck-gal":"script");
+        if(special){
+            selected->select(profile.ui,{"gcn.pak","grp.pak"},profile.ui,"grp");
+            selected->select(script,{"script_cn.pak","script_cn2.pak","script.pak"},profile.script,"script");
+        }else selected->select(script,{"ck-gal.pak","script.pak"},profile.script,chinese?"ck-gal":"script");
         selected->select(font,{"fon.pak","fnt.pak"},profile.font,chinese?"fon":"fnt");
         install_resource_mount(process,std::move(selected));
     }
-    process.state().reports["language_resources"]=[selection,profile,script,font,packed_font]{return "{\"language\":"+wr::quote(std::string(profile.tag))+",\"script\":"+wr::quote(script)+",\"font\":"+wr::quote(font)+",\"font_from_patch_group\":"+(packed_font?"true":"false")+
+    process.state().reports["language_resources"]=[selection,profile,script,font,packed_font]{return "{\"language\":"+wr::quote(std::string(profile.tag))+",\"ui\":"+wr::quote(std::string(profile.ui))+",\"script\":"+wr::quote(script)+",\"font\":"+wr::quote(font)+",\"font_from_patch_group\":"+(packed_font?"true":"false")+
         ",\"chinese_subtitles\":"+(selection.chinese_subtitles?"true":"false")+",\"patch_priority_preserved\":true,\"resource_payloads_copied\":false}";};
 }
 std::optional<LanguageMember> language_resource_member(wr::Process& process,const std::filesystem::path& path,std::string_view member){

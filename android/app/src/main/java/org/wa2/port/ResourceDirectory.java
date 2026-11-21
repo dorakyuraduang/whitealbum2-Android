@@ -156,6 +156,14 @@ final class ResourceDirectory {
         return found.size();
     }
 
+    // SC has its own process and grant. Check it without rewriting Main's
+    // persisted selection or publishing an index into the Main SDL session.
+    static int inspectSpecialSelection(Context application,Uri tree) throws IOException {
+        if(Looper.myLooper()==Looper.getMainLooper())throw new IOException("目录检查必须在后台执行");
+        if(new GameFolderSelection(application).granted(tree)==null)throw new IOException("请重新授权 SC 游戏目录的持久读写权限。");
+        return scan(application.getContentResolver(),tree).size();
+    }
+
     private static boolean current(Activity activity, int token) {
         synchronized (LOCK) { return owner == activity && generation == token; }
     }

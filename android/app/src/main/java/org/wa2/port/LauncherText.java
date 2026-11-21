@@ -10,13 +10,16 @@ final class LauncherText {
         UI_LANGUAGE, LOGS, COPY_LOG, FOLDER_NONE, FOLDER_FMT, PICK_FOLDER, GAME_FMT, PICK_GAME, SUBTITLE_FMT, BUILT_IN,
         EXTERNAL, SUBTITLE_SOURCE, CHOOSE_SUBTITLE, CAPTIONS, FPS, FPS_DETAIL, LONG_PRESS, TEST_MODE, START, CANCEL,
         SAVING, SAVED, SAVE_ERROR, NEED_FOLDER, LOCATION_HINT, CHECKING_RESOURCES, READY, STARTING, CHECKING_SUBTITLE, SUBTITLE_OK,
-        SUBTITLE_REJECTED, CANCELLED_SUBTITLE, CANCELLED_FOLDER, OPERATION_FAILED, PICKER_FAILED, NEED_REAUTHORIZE, REQUIRE_LOCAL_SUBTITLE, READING_LOGS, COPIED_LOGS, LOG_MISSING, LOG_FAILED, SHOW_MENU, SCRIPT_PATH, FONT_PATH, LIMIT_60_FPS
+        SUBTITLE_REJECTED, CANCELLED_SUBTITLE, CANCELLED_FOLDER, OPERATION_FAILED, PICKER_FAILED, NEED_REAUTHORIZE, REQUIRE_LOCAL_SUBTITLE, READING_LOGS, COPIED_LOGS, LOG_MISSING, LOG_FAILED, SHOW_MENU, SCRIPT_PATH, FONT_PATH, LIMIT_60_FPS, MAIN_CONFIG, UI_PATH
     }
     private static final class Entry {
         final String tag,name;final boolean rtl;final String[] words;
         Entry(String tag,String name,boolean rtl,String words){this.tag=tag;this.name=name;this.rtl=rtl;this.words=words.split("\\|",-1);}
     }
-    private static Entry entry(String tag,String name,boolean rtl,String menuLabel,String scriptPath,String fontPath,String frameLimit,String words){return new Entry(tag,name,rtl,words+"|"+menuLabel+"|"+scriptPath+"|"+fontPath+"|"+frameLimit);}
+    private static Entry entry(String tag,String name,boolean rtl,String menuLabel,String scriptPath,String fontPath,String frameLimit,String words){
+        String main=tag.equals("zh-CN") || tag.equals("zh-TW")?"本体":tag.equals("ja")?"本編":"Main";
+        return new Entry(tag,name,rtl,words+"|"+menuLabel+"|"+scriptPath+"|"+fontPath+"|"+frameLimit+"|"+main+"|UI PAK: %s");
+    }
     private static final Entry[] ENTRIES={
         entry("zh-CN","简体中文",false,"显示右上角菜单","脚本包（游戏目录内）：%s","字库包（游戏目录内）：%s","限制为 60 FPS",
             "界面语言|诊断|复制上次运行诊断|未选择游戏目录|游戏目录：%s|选择目录|游戏：%s|选择游戏语言|字幕：%s|内置|"+
