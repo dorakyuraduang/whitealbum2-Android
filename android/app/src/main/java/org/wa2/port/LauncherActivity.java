@@ -207,11 +207,12 @@ public final class LauncherActivity extends Activity {
         }
         refreshing=true;fps.setChecked(LaunchSettings.showFps(this));limit60Fps.setChecked(LaunchSettings.limit60Fps(this));longPress.setChecked(LaunchSettings.longPressFastForward(this));testMode.setChecked(LaunchSettings.testMode(this));chineseSubtitles.setChecked(LaunchSettings.chineseSubtitles(this));showMenu.setChecked(LaunchSettings.showMenu(this));refreshing=false;
         for(Switch control:new Switch[]{fps,limit60Fps,longPress,testMode,chineseSubtitles,showMenu})control.setEnabled(!busy && profileReady);
-        for(View control:new View[]{testMode,chineseSubtitles,subtitle})control.setVisibility(selectedTarget==LaunchTarget.MAIN?View.VISIBLE:View.GONE);
+        testMode.setVisibility(selectedTarget==LaunchTarget.MAIN?View.VISIBLE:View.GONE);
         language.setText(t(PICK_GAME)+" · "+LaunchSettings.languageLabel(this));language.setEnabled(!busy && profileReady);
         languagePaths.setText(t(UI_PATH,"./"+LaunchSettings.uiArchive(this))+"\n"+t(SCRIPT_PATH,"./"+LaunchSettings.script(this))+"\n"+t(FONT_PATH,"./"+LaunchSettings.font(this)));
-        String source=LaunchSettings.subtitle(this);subtitle.setText(t(SUBTITLE_FMT,t(source.isEmpty()?BUILT_IN:EXTERNAL)));
-        String sourceName=source.isEmpty()?t(BUILT_IN):source;subtitle.setContentDescription(t(SUBTITLE_FMT,sourceName));subtitle.setTooltipText(sourceName);subtitle.setEnabled(!busy && profileReady);
+        String source=LaunchSettings.subtitle(this);String defaultSource=selectedTarget==LaunchTarget.SPECIAL?"subtext.dat":t(BUILT_IN);
+        subtitle.setText(t(SUBTITLE_FMT,source.isEmpty()?defaultSource:t(EXTERNAL)));
+        String sourceName=source.isEmpty()?defaultSource:source;subtitle.setContentDescription(t(SUBTITLE_FMT,sourceName));subtitle.setTooltipText(sourceName);subtitle.setEnabled(!busy && profileReady);
         if(!busy)status.setText(t(tree==null?NEED_FOLDER:LOCATION_HINT));
     }
     private void chooseInterfaceLanguage(){
@@ -279,11 +280,11 @@ public final class LauncherActivity extends Activity {
 
     private void chooseSubtitle() {
         if(busy || !profileReady)return;
-        showDialog(new AlertDialog.Builder(this).setTitle(t(SUBTITLE_SOURCE)).setItems(new String[]{t(BUILT_IN),t(CHOOSE_SUBTITLE)},(dialog,which) -> {
+        showDialog(new AlertDialog.Builder(this).setTitle(t(SUBTITLE_SOURCE)).setItems(new String[]{selectedTarget==LaunchTarget.SPECIAL?"subtext.dat":t(BUILT_IN),t(CHOOSE_SUBTITLE)},(dialog,which) -> {
             if(which==0){LaunchSettings.setSubtitle(this,"",this::saved);refresh();return;}
             Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType("*/*");intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,ResourceDirectory.selectedTree(this));
+            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,configurationTree());
             try{startActivityForResult(intent,PICK_SUBTITLE);}catch(RuntimeException error){status.setText(t(PICKER_FAILED));}
         }).setNegativeButton(t(CANCEL),null).create());
     }
@@ -321,7 +322,14 @@ public final class LauncherActivity extends Activity {
                 Uri previous=ResourceDirectory.selectedTree(application);
                 count=target==LaunchTarget.SPECIAL?ResourceDirectory.inspectSpecialSelection(application,tree):ResourceDirectory.prepareSelection(application,tree,flags);
                 LaunchSettings.prepare(application,tree,tree.equals(previous),target);ready=true;
-                if(launch && target==LaunchTarget.MAIN){ResourceDirectory.validatePreparedSelection(application);String external=LaunchSettings.subtitle(application);if(LaunchSettings.chineseSubtitles(application) && !external.isEmpty())ExternalSubtitles.validate(application,external);}
+                if(launch){
+                    if(target==LaunchTarget.MAIN)ResourceDirectory.validatePreparedSelection(application);
+                    LaunchProfile profile=LaunchSettings.prepared(tree,target);
+                    if(profile.enabled(LaunchProfile.CHINESE_SUBTITLES)){
+                        if(!profile.subtitle.isEmpty())ExternalSubtitles.validate(application,profile.subtitle);
+                        else if(target==LaunchTarget.SPECIAL)ExternalSubtitles.checkSpecialResources(application,tree);
+                    }
+                }
             }
             catch (LinkageError error) {problem="Subtitle validation module: "+error.getMessage();}
             catch (Exception error) {problem=error.getMessage();if(problem==null)problem=error.toString();}

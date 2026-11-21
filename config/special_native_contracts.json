@@ -111,5 +111,47 @@
   },
   "whole_program_complete": false,
   "android_gameplay_validation": "pending-user-controlled-run",
-  "android_performance_validation": "pending-comparable-device-run"
+  "android_performance_validation": "pending-comparable-device-run",
+  "subtitles": {
+    "events": [
+      {
+        "event": "bgm",
+        "entry": "0x460bb0",
+        "arguments": 7,
+        "cached_body_sha256": "124590123ad3113ca8dd6489b03e43c937e27033993868b8c7855bc3a90f659b",
+        "return_locations": [
+          4590859,
+          4591365
+        ]
+      },
+      {
+        "event": "chapter",
+        "entry": "0x44b790",
+        "arguments": 3,
+        "cached_body_sha256": "8407de8a2cded9a8e34163b05d17b293a950626712ac072c90b10609a4b1f12b",
+        "return_locations": [
+          4503472
+        ]
+      },
+      {
+        "event": "reset",
+        "entry": "0x406a30",
+        "arguments": 1,
+        "cached_body_sha256": "c117f8521c32ea8a6b17bd979b58123d7bcb914c28518798dee17b1e79cd1cc7",
+        "return_locations": [
+          4221526
+        ]
+      }
+    ],
+    "playing_chapter": "0xa6fde4",
+    "next_chapter": "0x4bf2d0",
+    "chapter_delay_ms": 1000,
+    "resources": [
+      "subtext.dat",
+      "subfont.tga",
+      "songfont.tga"
+    ],
+    "upstream_commit": "bb3cbc2f459549f8afbcb56cafd4b861d763bd29",
+    "implementation": "shared subtitle Playback, Catalogue, viewport and drawing; SC BGM/chapter/reset source-return ABI; external SC data only"
+  }
 }

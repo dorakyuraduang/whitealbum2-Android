@@ -34,16 +34,23 @@ aot::StaticProgram& Runtime::program(){
         shared_codecs_?std::span<const std::uint32_t>(codec_boundary_entries):std::span<const std::uint32_t>{});
     return *program_;
 }
-Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> surface,bool shared_codecs):
+Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::shared_ptr<graphics::SurfaceHost> surface,bool shared_codecs,bool captions_enabled,std::shared_ptr<const subtitles::Catalogue> captions):
     shared_codecs_(shared_codecs),
+    subtitle_player_(std::make_shared<subtitles::Playback>()),
+    subtitle_state_(std::make_shared<SubtitleState>(subtitle_player_)),
     process_(wr::FunctionExecutor{[this,samples=std::make_shared<aot::FunctionWorkSamples>(functions()),reported=false](wr::Cpu& cpu,wr::Memory& memory)mutable{
         if(!reported){process_.state().reports["static_cpu_work"]=[samples]{return samples->report();};reported=true;}
         aot::FunctionWorkScope work{samples.get()};
+        aot::SubtitleEventScope subtitle_events{memory,[](std::uint32_t entry,const wr::Cpu& state,wr::Memory& ram,std::uint32_t args,void* owner){static_cast<SubtitleState*>(owner)->returned(entry,state,ram,args);},subtitle_state_.get()};
         aot::LeafServiceScope services{[](wr::Cpu& cpu,wr::Memory& memory,void* owner){
             auto& p=*static_cast<wr::Process*>(owner);return &cpu==&p.cpu && &memory==&p.memory && p.dispatch_leaf_api();
         },&process_};
         return program().invoke(cpu);
     }},std::move(options),std::move(backends)){
+    subtitle_player_->enabled(captions_enabled);
+    if(captions_enabled && !captions)throw std::invalid_argument("SC captions need external subtext.dat/fonts or a selected subtitle document");
+    subtitle_player_->catalogue(std::move(captions));
+    process_.state().reports["special_subtitles"]=[state=subtitle_state_]{return state->report();};
     platform::compat::install_scheduler(process_);
     platform::compat::install_system(process_,aot::prepare_movie_profile,[](wr::Process& p)->std::optional<std::uint64_t>{
         if(p.state().current_thread_id!=1)return {};
@@ -79,7 +86,7 @@ Runtime::Runtime(wr::ProcessOptions options,wr::ProcessBackends backends,std::sh
     platform::compat::install_shell(process_,platform::compat::native_shell_services(process_.options.data_root));
     auto audio=wr::install_wa2_audio_service(process_);
     if(surface){
-        auto renderer=graphics::install(process_,std::move(surface));
+        auto renderer=graphics::install(process_,std::move(surface),subtitle_player_);
         platform::compat::install_media(process_,std::move(audio),std::move(renderer));
         platform::compat::install_d3dx43_aliases(process_);
     }
@@ -104,7 +111,7 @@ std::uint32_t run(host::Startup startup){
     wr::ProcessBackends backends;
     backends.gui=[adapter=startup.window](wr::Process& p){return window::install(p,adapter);};
     backends.directdraw=[adapter=startup.window](wr::Process& p){return platform::compat::install_legacy_display(p,adapter);};
-    Runtime runtime(std::move(startup.options),std::move(backends),startup.window);
+    Runtime runtime(std::move(startup.options),std::move(backends),startup.window,true,startup.language.chinese_subtitles,std::move(startup.captions));
     auto& process=runtime.process();
     process.state().reports["host_event_pump"]=[host=startup.window]{return host->event_pump_report();};
     const auto report=[&](std::string_view error){

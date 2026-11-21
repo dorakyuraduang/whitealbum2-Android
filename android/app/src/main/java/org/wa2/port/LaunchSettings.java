@@ -59,6 +59,7 @@ final class LaunchSettings {
     static String subtitle(Context context) {return profile(context).subtitle;}
     static String[] gameArguments(Context context) {return target(context).arguments(profile(context));}
     static boolean saving(Context context) {LaunchProfileStore current=store(context);return current!=null && current.dirty();}
+    static LaunchProfile prepared(Uri tree,LaunchTarget target){synchronized(LOCK){LaunchProfileStore store=profiles.get(target.storageKey(tree.toString()));if(store==null || store.dirty())throw new IllegalStateException("Launcher configuration is not saved");return store.current();}}
     // Called after read/write authorization on a launcher worker. Queueing on
     // the same executor drains earlier toggle writes before reload/game start.
     static void prepare(Context context,Uri tree,boolean importPrevious,LaunchTarget target) throws IOException {

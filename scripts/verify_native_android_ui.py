@@ -84,7 +84,7 @@ def main():
         if profile['v7_migrations']!=288:raise ValueError('Incomplete v7 migration retaining Chinese/Japanese/English settings')
         if profile['v8_migrations']!=384 or not profile['frame_cap_persisted']:raise ValueError('Incomplete 60 FPS setting persistence and v8 migration checks')
         target=reports['LaunchTargetTest']
-        if target['cases']!=41 or target['guards']!=100 or not all(target[k] for k in ('same_folder_title_isolation','failed_write_retry','special_defaults_restored','japanese_ui_script_font','unsupported_special_options_rejected')):raise ValueError('Incomplete Main/SC profile isolation and routing checks')
+        if target['cases']!=75 or target['guards']!=67 or not all(target[k] for k in ('sc_subtitle_toggle_and_source_persisted','same_folder_title_isolation','failed_write_retry','special_defaults_restored','japanese_ui_script_font','unsupported_special_options_rejected')):raise ValueError('Incomplete Main/SC profile isolation and routing checks')
         text=reports['LauncherTextTest']
         if text['languages']!=28 or text['translated_messages']!=1316 or text['formatted_message_cases']!=336 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=25 or text['automatic_language_cases']!=56 or text['manual_language_cases']!=31 or not all(text[key] for key in ('system_language_default','english_fallback','manual_language_override_preserved','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue and automatic locale checks')
     for name,value in inputs.items():

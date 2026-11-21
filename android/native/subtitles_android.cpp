@@ -1,11 +1,12 @@
 #include "subtitles_android.hpp"
+#include "../../engine/special_subtitles.hpp"
 #include <SDL_system.h>
 #include <string>
 #include <stdexcept>
 
 namespace wa2::android {
 namespace {
-jclass subtitles_class{};jmethodID read_method{},raster_method{};
+jclass subtitles_class{};jmethodID read_method{},raster_method{},special_font_method{};
 std::string exception(JNIEnv* env){
     auto error=env->ExceptionOccurred();if(!error)return "Android subtitle operation failed";env->ExceptionClear();std::string message="Android subtitle operation failed";
     auto cls=env->GetObjectClass(error);auto method=cls?env->GetMethodID(cls,"toString","()Ljava/lang/String;"):nullptr;auto value=method?static_cast<jstring>(env->CallObjectMethod(error,method)):nullptr;
@@ -13,8 +14,9 @@ std::string exception(JNIEnv* env){
     if(env->ExceptionCheck())env->ExceptionClear();if(value)env->DeleteLocalRef(value);if(cls)env->DeleteLocalRef(cls);env->DeleteLocalRef(error);return message;
 }
 void check(JNIEnv* env){if(env->ExceptionCheck())throw std::runtime_error(exception(env));}
-std::vector<std::uint8_t> bytes(JNIEnv* env,jbyteArray array){
-    const auto size=env->GetArrayLength(array);check(env);if(size<=0 || std::size_t(size)>subtitles::maximum_yaml_bytes)throw std::runtime_error("sub.yaml must be nonempty and no larger than 1 MiB");
+std::vector<std::uint8_t> bytes(JNIEnv* env,jbyteArray array,std::size_t maximum=subtitles::maximum_yaml_bytes){
+    if(!array)throw std::runtime_error("Missing subtitle resource");
+    const auto size=env->GetArrayLength(array);check(env);if(size<=0 || std::size_t(size)>maximum)throw std::runtime_error("Subtitle resource exceeds its size bound");
     std::vector<std::uint8_t> result(std::size_t(size),0);env->GetByteArrayRegion(array,0,size,reinterpret_cast<jbyte*>(result.data()));check(env);return result;
 }
 std::vector<subtitles::GlyphMask> rasterize(JNIEnv* env,std::span<const char32_t> characters){
@@ -35,13 +37,23 @@ std::shared_ptr<const subtitles::Catalogue> compile(JNIEnv* env,jbyteArray array
 bool initialize_subtitles_jni(JNIEnv* env)noexcept{
     const auto local=env->FindClass("org/wa2/port/ExternalSubtitles");if(!local)return false;subtitles_class=static_cast<jclass>(env->NewGlobalRef(local));env->DeleteLocalRef(local);if(!subtitles_class)return false;
     read_method=env->GetStaticMethodID(subtitles_class,"readForGame","()[B");if(read_method)raster_method=env->GetStaticMethodID(subtitles_class,"rasterize","([I)[I");
-    if(!read_method || !raster_method){release_subtitles_jni(env);return false;}return true;
+    if(raster_method)special_font_method=env->GetStaticMethodID(subtitles_class,"readSpecialFont","(Z)[B");
+    if(!read_method || !raster_method || !special_font_method){release_subtitles_jni(env);return false;}return true;
 }
-void release_subtitles_jni(JNIEnv* env)noexcept{if(subtitles_class)env->DeleteGlobalRef(subtitles_class);subtitles_class=nullptr;read_method=raster_method=nullptr;}
+void release_subtitles_jni(JNIEnv* env)noexcept{if(subtitles_class)env->DeleteGlobalRef(subtitles_class);subtitles_class=nullptr;read_method=raster_method=special_font_method=nullptr;}
 std::shared_ptr<const subtitles::Catalogue> selected_subtitles(){
     auto* env=static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());if(!env || !subtitles_class || !read_method)throw std::runtime_error("External subtitle bridge is unavailable");
     if(env->PushLocalFrame(12)<0)throw std::runtime_error(exception(env));
-    try{auto array=static_cast<jbyteArray>(env->CallStaticObjectMethod(subtitles_class,read_method));check(env);auto result=array?compile(env,array):nullptr;env->PopLocalFrame(nullptr);return result;}catch(...){env->PopLocalFrame(nullptr);throw;}
+    try{auto array=static_cast<jbyteArray>(env->CallStaticObjectMethod(subtitles_class,read_method));check(env);std::shared_ptr<const subtitles::Catalogue> result;
+        if(array){const auto data=bytes(env,array);
+            if(data.size()>=4 && data[0]=='x' && data[1]=='s' && data[2]=='n' && data[3]=='7'){
+                auto dialogue=static_cast<jbyteArray>(env->CallStaticObjectMethod(subtitles_class,special_font_method,JNI_FALSE));check(env);
+                auto song=static_cast<jbyteArray>(env->CallStaticObjectMethod(subtitles_class,special_font_method,JNI_TRUE));check(env);
+                result=subtitles::compile_special_binary(data,bytes(env,dialogue,8*1024*1024),bytes(env,song,8*1024*1024));
+            }else result=compile(env,array);
+        }
+        env->PopLocalFrame(nullptr);return result;
+    }catch(...){env->PopLocalFrame(nullptr);throw;}
 }
 }
 extern "C" JNIEXPORT jstring JNICALL Java_org_wa2_port_ExternalSubtitles_nativeValidate(JNIEnv* env,jclass,jbyteArray array){

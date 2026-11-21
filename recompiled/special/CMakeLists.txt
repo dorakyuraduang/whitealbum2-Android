@@ -11,7 +11,7 @@ target_include_directories(wa2_special_aot PUBLIC
     "${WA2_SHARED_ROOT}/tools/WindowsRecompTool-main/include")
 target_link_libraries(wa2_special_aot PUBLIC wa2_aot_memory wa2_scalar_math wa2_x87_transcend wa2_engine wa2_source_drawing)
 set_target_properties(wa2_special_aot PROPERTIES POSITION_INDEPENDENT_CODE ON)
-add_library(wa2_special_process STATIC runtime.cpp storage.cpp
+add_library(wa2_special_process STATIC runtime.cpp storage.cpp subtitles.cpp
     "${WA2_SHARED_ROOT}/platform/compat/extended_system.cpp")
 target_compile_features(wa2_special_process PUBLIC cxx_std_20)
 target_link_libraries(wa2_special_process PUBLIC wa2_special_aot wa2_function_process)
@@ -56,4 +56,6 @@ if(WA2_SPECIAL_CHECKS AND NOT ANDROID)
     target_link_libraries(wa2_special_weather_tests PRIVATE wa2_special_process wa2_function_process)
     add_executable(wa2_special_language_tests "${WA2_SHARED_ROOT}/tests/special_language.cpp")
     target_link_libraries(wa2_special_language_tests PRIVATE wa2_function_process)
+    add_executable(wa2_special_subtitle_tests "${WA2_SHARED_ROOT}/tests/special_subtitles.cpp" "${WA2_SHARED_ROOT}/platform/special_subtitle_files.cpp")
+    target_link_libraries(wa2_special_subtitle_tests PRIVATE wa2_special_process)
 endif()

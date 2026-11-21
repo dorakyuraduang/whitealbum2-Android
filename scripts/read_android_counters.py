@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import subprocess
 
-KEYS={'startup_stage','selected_directory_io','save_read_scope','native_resources','native_vorbis','scheduler','host_event_pump','frame_work','static_cpu_work','native_image_chroma','music_flag_saves','native_glyph_commands','native_sprite_commands','native_sort','native_weather','directshow','movie_resource_settings','language_resources','special_flow','file_io','profile_io','text_local_control_flow','run_completion'}
+KEYS={'startup_stage','selected_directory_io','save_read_scope','native_resources','native_vorbis','scheduler','host_event_pump','frame_work','static_cpu_work','native_image_chroma','music_flag_saves','native_glyph_commands','native_sprite_commands','native_sort','native_weather','directshow','movie_resource_settings','language_resources','special_subtitles','special_flow','file_io','profile_io','text_local_control_flow','run_completion'}
 
 def parse_records(text,release):
     pattern=re.compile(re.escape(release)+r' #(\d+) (\w+) (.*)')

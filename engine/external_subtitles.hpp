@@ -21,6 +21,7 @@ struct Atlas {FontSpec spec;FontImage image;};
 Atlas compose_atlas(std::span<const GlyphMask>);
 class Catalogue {
     friend std::shared_ptr<const Catalogue> compile_external(const Document&,const GlyphRasterizer&);
+    friend std::shared_ptr<const Catalogue> compile_special_binary(std::span<const std::uint8_t>,std::span<const std::uint8_t>,std::span<const std::uint8_t>);
     std::vector<std::uint16_t> glyphs_;
     std::vector<Cue> cues_;
     std::vector<Track> tracks_;

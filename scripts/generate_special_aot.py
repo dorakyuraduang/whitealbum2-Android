@@ -2,7 +2,8 @@
 
 Consumes the verified, local-only preparation cache, never an executable.
 Uses the existing shared AOT control-flow, integer, memory and FP transforms.
-No main-story address hooks, UI patches or subtitles apply.
+No main-story address hooks or UI patches apply. SC captions observe their
+own SHA-bound BGM/chapter/reset returns and use the shared subtitle engine.
 """
 from __future__ import annotations
 from collections import defaultdict
@@ -130,6 +131,13 @@ def generate():
     math_proof=verified_transcendental()
     graph, bodies, edges, merged, owners, receipt = analyze()
     contracts=json.loads((ROOT/'config/special_native_contracts.json').read_text())
+    subtitles=contracts['subtitles'];subtitle_events={int(e['entry'],0):e for e in subtitles['events']}
+    if set(subtitle_events)!={0x460bb0,0x44b790,0x406a30}:raise ValueError('Unexpected SC subtitle event entries')
+    for entry,event in subtitle_events.items():
+        if entry not in merged or owners.get(entry)!=entry:raise ValueError('SC subtitle ABI needs a complete cached function')
+        locations=merged[entry]['locations'];snapshot=b''.join(pc.to_bytes(4,'little')+bodies[pc][1] for pc in locations)
+        returns=[pc for pc in locations if any(e['kind']=='return' for e in edges[pc])]
+        if hashlib.sha256(snapshot).hexdigest()!=event['cached_body_sha256'] or returns!=event['return_locations']:raise ValueError('SC subtitle source ABI changed: '+event['event'])
     codec_entries=[int(contracts['vorbis'][key],0) for key in ('construct','reset','format','decode')]
     if len(set(codec_entries))!=4 or any(pc not in owners for pc in codec_entries):
         raise ValueError('Missing distinct Special codec ABI functions')
@@ -210,6 +218,9 @@ def generate():
               *[int(weather[key],0) for key in ('count','objects','weather')],weather['required_register'],weather['required_value']]))+'};\n}\n')
     write('native_entries.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+
           'inline constexpr std::uint32_t codec_boundary_entries[]={'+','.join(hex(pc)+'u' for pc in codec_entries)+'};\n}\n')
+    subtitle_constants={**{f"{event['event']}_entry":entry for entry,event in subtitle_events.items()},
+        'playing_chapter':int(subtitles['playing_chapter'],0),'next_chapter':int(subtitles['next_chapter'],0),'chapter_delay':subtitles['chapter_delay_ms']}
+    write('subtitle_profile.hpp','#pragma once\n#include <cstdint>\nnamespace wa2::special {\n'+''.join(f'inline constexpr std::uint32_t subtitle_{key}={value}u;\n' for key,value in subtitle_constants.items())+'}\n')
     spans_by_entry = {}
     sample_indices={entry:index for index,entry in enumerate(ordered)}
     sources = []
@@ -220,6 +231,7 @@ def generate():
     for name, entries in shards:
         sources.append(name)
         cpp = ['#include "bodies.hpp"', 'namespace wa2::special {']
+        if set(entries)&subtitle_events.keys():cpp.insert(1,'#include "subtitle_events.hpp"')
         if set(entries)&(draw_entries.keys()|{sort_owner}):cpp.insert(1,'#include "special/render.hpp"')
         if thumbnail_owner in entries:cpp.insert(1,'#include "save_profile.hpp"')
         if weather_owner in entries:cpp.insert(1,'#include "special/weather.hpp"')
@@ -240,6 +252,9 @@ def generate():
             for pc in record['locations']:
                 body, raw, _ = bodies[pc]
                 native = CONTRACT_FAULT if pc in pending else emit_body(pc, body, edges, call_owners, positions)
+                if entry in subtitle_events and pc in subtitle_events[entry]['return_locations']:
+                    if not native.endswith('\nreturn;'):raise ValueError('SC subtitle observer must follow the original RET')
+                    native=('const auto subtitle_arguments=std::uint32_t(s.r[wr::ESP]+4u);\n'+native[:-len('\nreturn;')]+f'\nwa2::aot::notify_subtitle_return<Metered>(0x{entry:x}u,s,m,subtitle_arguments);\nreturn;')
                 if pc==0x4382a6:
                     native='if constexpr(!Metered)wa2::special::try_lzss_prefix(s,m);\n'+native
                 if pc in dead_flags:
@@ -372,6 +387,7 @@ def generate():
         shared_sort_prefix=sorting,shared_sort_owner=sort_owner,
         shared_save_read_profile=save,shared_thumbnail_prefix=thumbnail,
         shared_weather_profile=weather,weather_own_exits=weather_own,weather_external_exits=weather_external,
+        shared_subtitle_events=subtitles,
         hot_optimization='O2',other_optimization='Oz',
         main_story_address_hooks_applied=False, source_executable_opened=False,
         game_launched=False, screen_access=False, whole_program_complete=False,

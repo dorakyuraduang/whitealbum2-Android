@@ -127,6 +127,7 @@ std::vector<GlyphQuad> Playback::layout(const Cue& cue)const{return subtitles::l
 std::span<const Track> Playback::tracks()const noexcept{return catalogue_?catalogue_->tracks():main_story_tracks();}
 const Cue* Playback::current(std::uint64_t now) noexcept {
     if(!enabled_ || !track_)return nullptr;
+    if(now<started_)return nullptr;
     const auto elapsed=now>=started_?now-started_:0;
     if(elapsed>=track_->cues.back().end_ms){reset();return nullptr;}
     const auto cues=track_->cues;

@@ -5,6 +5,7 @@
 #include "../android/native/compiled_resources.hpp"
 #include "../android/native/android_resources.hpp"
 #include "../android/native/android_host.hpp"
+#include "../android/native/subtitles_android.hpp"
 #include "../platform/compat/diagnostic_chunks.hpp"
 #include "../platform/render/particle_commands.hpp"
 #include "../recompiled/native_glyphs.hpp"
@@ -34,6 +35,7 @@ extern "C" int SDL_main(int argc,char** argv){
             else throw std::runtime_error("Unsupported Special launch argument: "+std::string(argument));
         }
         wa2::resource::validate_language_resources(startup.language,wa2::resource::ResourceTitle::special_contents);
+        startup.captions=wa2::android::selected_subtitles();
         options.embedded_gl=true;options.mobile=true;options.widgets=wa2::window::native_widgets();
         options.frame_submitted=[]{wa2::android::frame_presented_with_text([]{
             const auto glyphs=wa2::aot::native_glyph_counts();
