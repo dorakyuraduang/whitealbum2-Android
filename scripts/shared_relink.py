@@ -31,7 +31,7 @@ def main():
         compiler=toolchain/'bin'/('clang++.exe' if os.name=='nt' else 'clang++')
         command=[str(compiler),'--target=aarch64-none-linux-android26','--sysroot='+str(toolchain/'sysroot'),
             '-shared','-fPIC','-Wl,--gc-sections','-Wl,--no-undefined','-Wl,-z,max-page-size=16384',
-            '-Wl,-soname,libwa2_android.so','-Wl,--exclude-libs,ALL','-Wl,-Bsymbolic']
+            '-Wl,-soname,'+recipe['output_name'],'-Wl,--exclude-libs,ALL','-Wl,-Bsymbolic']
         tail=[str(base/'native/libSDL2.so'),'-llog','-landroid','-lm','-latomic','-nostdlib++','-lc++_shared']
     else:
         if not args.zig:parser.error('--zig is required for Windows')

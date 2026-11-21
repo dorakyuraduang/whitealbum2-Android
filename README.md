@@ -2,24 +2,24 @@
 
 **简体中文** · [English](README.en.md)
 
-面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前开发版本：**0.2.108-shared-aot**。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
+面向 **Android ARM64** 的静态重编译移植，各平台共用游戏逻辑。当前发行版本：**0.2.126-special-aot**（版本码 129）。一个 APK 提供 **本体 / Special Contents（SC）** 两个入口，分别保存资源目录和启动配置。游戏资源需自行准备，直接读取原版 PAK，无需批量解包。
 
-**[下载与发行页面](https://github.com/dorakyuraduang/whitealbum2-Android/releases)**
+**[下载 0.2.126](https://github.com/dorakyuraduang/whitealbum2-Android/releases/tag/r0.2.126)** · [全部发行](https://github.com/dorakyuraduang/whitealbum2-Android/releases)
 
-Special Contents 已接入同一套共享 AOT 编译流程，可构建一个 APK 双入口的测试包。
-两部作品使用独立资源目录和运行进程；整部兼容性及手机实际运行验证仍待完成。
-构建方式和存档隔离见 [Special Contents](docs/SPECIAL_CONTENTS.md)。
+SC 支持**中文、日文、English**，提供 FPS 显示、60 FPS 限制、长按快进和补充字幕设置。英文支持对应 **Special Contents full patch v1.0**，字幕按所选版本自动读取。整合包保留本体 `0.2.108-shared-aot` 运行库，SC 使用独立进程；完整英文流程和手机字幕同步仍待手动确认。更新内容见[发行说明](docs/releases/0.2.126.md)，构建及存档隔离见 [Special Contents](docs/SPECIAL_CONTENTS.md)。
 
 ## 快速启动
 
 要求：**Android 8.0 及以上、ARM64、OpenGL ES 3.0**。
 
-1. 安装 `WA2-arm64-<版本名>.apk`。
-2. 将完整游戏资源复制到手机的任意文件夹，保留原有 `IC` 子目录。**文件夹名称不限，PAK 不用解压。**
-3. 打开应用，选择这个游戏文件夹，并授予读写权限。
+1. 安装 `WA2-arm64-0.2.126-special-aot.apk`。更新旧版时原位覆盖安装，保留应用数据。
+2. 将对应作品的完整游戏资源复制到手机的任意文件夹，本体保留原有 `IC` 子目录。两部作品分别使用各自的资源文件夹。**文件夹名称不限，PAK 不用解压。**
+3. 打开应用，先选择 **本体** 或 **SC** 配置，再选择对应游戏文件夹并授予读写权限。
 4. 选择游戏语言，按需开启帧数显示、限制为 60 FPS（默认关闭）、长按快进或补充字幕，然后点击 **“开始游戏”**。
 
 影片支持 MP4/MOV、MKV/WebM、AVI、WMV/ASF、MPEG/TS、FLV 等常用格式，以及原版和 **Final Full Patch 1.0.3.0** 的视频 PAK。保留游戏原文件名和 `IC` 路径；无法读取、解析或解码的影片会自动跳过并继续剧情，原因记录在运行诊断中。详见[影片格式与容错](docs/MOVIE_FORMATS.md)。
+
+### 本体语言与资源
 
 游戏语言默认中文。所选文件夹保留完整原版资源，再按语言放置补丁：
 
@@ -38,11 +38,31 @@ Special Contents 已接入同一套共享 AOT 编译流程，可构建一个 APK
 
 旧版已准备的 `fon_en.pak`，或 `ua.pak`、`font_ua.pak` 仍可使用；对应旧版外置目录也保留兼容。详见[语言资源](docs/LANGUAGE_RESOURCES.md)与[乌克兰语说明](docs/UKRAINIAN_SUPPORT.md)。补丁 EXE/DLL 不参与运行。
 
+### SC 语言与英文资源准备
+
+SC 配置可切换以下版本，完整背景、人物、音频和影片等原版资源仍需保留：
+
+| SC 语言 | 界面 | 脚本 | 字体 |
+| --- | --- | --- | --- |
+| 中文 | `gcn.pak` | `script_cn.pak`、`script_cn2.pak` | `fon.pak` |
+| 日文 | `grp.pak` | `script.pak` | `fnt.pak` |
+| English | `en.pak` 的 `grp` / `bak` 分组，原版图片后备 | `en.pak` 的 `script` 分组，保留原版 `script.pak` | `en.pak` 的 `fnt` 分组 |
+
+英文准备工具随发行提供为 **`WA2-SC-English-resource-tools.zip`**。解压后使用 Python 3.9+ 运行，只需标准库和自行准备的完整英文补丁 ZIP、原版 SC 资源目录：
+
+```powershell
+python scripts/prepare_special_english_resources.py "D:\download\White Album 2 Special Contents full patch (v1.0).zip" --base-root "D:\WHITE ALBUM2 Special Contents"
+```
+
+把工具输出的 `out/special-english-resources/` 中 **`en.pak`、`subtext_en.dat`、`mv000_en.pak`、`credits_en.pak`** 四个新增文件放入手机上所选的 SC 目录，然后选择 **SC → English**。无需编译器或私有分析缓存；工具不会运行原 EXE，也不覆盖原中日文影片。工具包和 APK 都不附带这些游戏资源。
+
+**SC 没有外置字幕选择入口。** 开启补充字幕后，中文自动读取 `subtext.dat`、`subfont.tga`、`songfont.tga`，英文自动读取 `subtext_en.dat`。日文对应 `subtext_ja.dat`，此英文补丁没有提供该文件；缺少时请关闭补充字幕或补齐对应文件。详见 [SC 说明](docs/SPECIAL_CONTENTS.md)。
+
 ## 存档、配置与字幕
 
 ### 普通存档
 
-**游戏存档全部外置。** `<游戏目录>` 指启动页选择的游戏文件夹。普通存档按 PC 目录布局放置：
+**游戏存档全部外置。** `<游戏目录>` 指启动页为对应作品选择的游戏文件夹。本体普通存档按 PC 目录布局放置：
 
 ```text
 <游戏目录>/Documents/Leaf/WHITE ALBUM2/
@@ -52,23 +72,26 @@ Special Contents 已接入同一套共享 AOT 编译流程，可构建一个 APK
 
 从 0.2.76 起，普通存档只在上述目录读取和保存，首次保存会自动创建目录。游戏根目录的旧 `.sav` 不再读取、合并或自动搬迁；需要继续使用的存档请自行复制到上述目录。
 
+SC 存档使用其独立资源目录下的 `Documents/Leaf/WHITE ALBUM2 Special Contents/`，与本体分别保存，不会自动合并两部作品的存档。
+
 ### 测试模式存档
 
-开启“测试模式（全部解锁）”后，独立使用同一外置游戏目录中的：
+本体开启“测试模式（全部解锁）”后，独立使用同一外置游戏目录中的：
 
 ```text
 <游戏目录>/test-mode/
 ```
 
 例如 `test-mode/Sys.sav`、`test-mode/save_00.sav`。关闭测试模式即可恢复使用普通存档。
+SC 不提供全部解锁测试模式。
 
 ### 配置
 
-安卓启动器选项保存在 `<游戏目录>/native-launcher.wa2cfg`。游戏配置沿用 `SYSTEM.ini`、`D3D.ini`，保留已有文件所在目录。
+本体启动器选项保存在 `<本体目录>/native-launcher.wa2cfg`，SC 使用 `<SC 目录>/native-launcher-special.wa2cfg`。两者的语言和开关独立保存。游戏配置沿用 `SYSTEM.ini`、`D3D.ini`，保留已有文件所在目录。
 
 ### 补充字幕
 
-默认内置正篇中文字幕，可通过“补充字幕”开关控制。使用外置字幕时，在 **“字幕来源”** 中手动选择 UTF-8 的 `sub.yaml` 或原 Todokanai `subtitles` 文件，并开启补充字幕。外置文件替换整份内置补充字幕，Todokanai 文件无需转换为 YAML；英文字母和空格按实际字宽居中、换行。
+本体默认内置正篇中文字幕，可通过“补充字幕”开关控制。本体使用外置字幕时，在 **“字幕来源”** 中手动选择 UTF-8 的 `sub.yaml` 或原 Todokanai `subtitles` 文件，并开启补充字幕。外置文件替换整份内置补充字幕，Todokanai 文件无需转换为 YAML；英文字母和空格按实际字宽居中、换行。SC 按上述版本规则自动读取字幕。
 
 剧情对白由所选脚本和字库提供，补充字幕语言由字幕文件内容决定。UA 0.1.5 附带的字幕为英文，可自行翻译后选择。
 
@@ -77,6 +100,8 @@ Special Contents 已接入同一套共享 AOT 编译流程，可构建一个 APK
 - [Windows PAK 打包 / 解包工具](docs/PAK_TOOL.md)：选择文件夹打包，或选择 PAK 解包，支持 KCAP/LAC。
 - [Android 安装与目录授权](docs/ANDROID.md)
 - [安卓启动入口与运行模块接入](docs/STANDALONE_LAUNCHER.md)
+- [SC 语言、字幕与构建](docs/SPECIAL_CONTENTS.md)
+- [0.2.126 发行说明](docs/releases/0.2.126.md)
 - [游戏语言与汉化补丁适配](docs/LANGUAGE_RESOURCES.md)
 - [乌克兰语资源打包与字幕使用](docs/UKRAINIAN_SUPPORT.md)
 - [外置字幕规则（中文）](docs/EXTERNAL_SUBTITLES.md) / [English](docs/EXTERNAL_SUBTITLES.en.md)
@@ -89,3 +114,4 @@ Special Contents 已接入同一套共享 AOT 编译流程，可构建一个 APK
 ## 许可
 
 原创代码与文档采用 [MIT](LICENSE)，原游戏及第三方内容遵循各自许可，见 [NOTICE](NOTICE.md) 和 [第三方声明](THIRD_PARTY_NOTICES.md)。分发静态链接 FFmpeg 的程序时，需同时提供匹配的重新链接材料及对应源码、配置，详见构建文档。
+本次发行附带 `WA2-0.2.126-special-aot-relink.zip`，同时覆盖本体和 SC；普通安装只需 APK。附件哈希见 `SHA256SUMS.txt`。

@@ -44,7 +44,7 @@ Special 存档和 INI 配置位于：
 
 ```powershell
 python scripts/prepare_special_contents.py --exe 'D:\WHITE ALBUM2 Special Contents\WA2_Special_cn.exe'
-python scripts/prepare_special_english_resources.py 'D:\download\White Album 2 Special Contents full patch (v1.0).zip' --base-root 'D:\WHITE ALBUM2 Special Contents'
+python scripts/prepare_special_english_resources.py 'D:\download\White Album 2 Special Contents full patch (v1.0).zip' --base-root 'D:\WHITE ALBUM2 Special Contents' --prepare-aot
 python scripts/verify_special_contents.py
 python scripts/package_launcher.py --integrated --with-special
 ```
@@ -839,7 +839,11 @@ SC 的「补充字幕」开关决定是否加载对应版本的固定资源：
 时间区间、122296 个 Unicode 码点；不解码 HEVC 画面、不播放音频或视频。
 手机上的主观字幕同步仍须用户手动确认。
 
-资源准备命令见上文。输出仅位于被忽略的 `out/special-english-resources/`，
+APK 用户准备英文资源时运行同一命令并省略 `--prepare-aot`，只需 Python 3.9+
+标准库、英文完整补丁 ZIP 与原始 SC 资源，不需要开发工具链或私有 AOT 缓存。
+发行附带 `WA2-SC-English-resource-tools.zip`，解压后在其目录运行命令即可。
+开发者使用上文命令的 `--prepare-aot` 额外生成构建所需英文初始映像数据。
+输出仅位于工具目录中的 `out/special-english-resources/`，
 以下四个新增文件应放在已授权的 SC 原资源目录中：
 
 ```text

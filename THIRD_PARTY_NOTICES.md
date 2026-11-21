@@ -23,6 +23,10 @@ statically linked host must be accompanied by matching source, configuration
 and application link materials for relinking with a modified LGPL library.
 `scripts/package_shared_hosts.py` checks the matching `WA2-shared-relink.zip`;
 publishing an APK or EXE alone is not the project's complete release procedure.
+For integrated Main/SC releases, `scripts/package_special_release.py` combines
+the matching retained Main relink archive with SC's own checked link materials,
+corresponding FFmpeg source/configuration and notices. Its relink recipe uses
+SC's `libwa2_special.so` SONAME and is verified without launching a game.
 
 The separate native-engine development assembler,
 `scripts/package_native_preview.py`, supplies

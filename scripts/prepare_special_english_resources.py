@@ -14,7 +14,7 @@ from pathlib import Path
 import re
 import struct
 import zipfile
-from prepare_special_english import prepare,sha,ROOT
+from prepare_special_english import prepare,sha,ROOT,EN
 from special_mkv_subtitles import inspect,ogg
 
 AAC_NAME='Audio Drama/Bedtime Stories - Crankiness of a Faithful Dog.mkv'
@@ -117,11 +117,14 @@ def encode(tracks):
     return bytes(output),dict(tracks=len(tracks),cues=cues,codepoints=points,characters=len(charset))
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('patch',type=Path);p.add_argument('--base-root',type=Path,required=True);p.add_argument('--output',type=Path,default=ROOT/'out/special-english-resources');args=p.parse_args()
-    prepare(args.patch);sources=audio_sources(args.base_root);output=args.output.resolve()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('patch',type=Path);p.add_argument('--base-root',type=Path,required=True);p.add_argument('--output',type=Path,default=ROOT/'out/special-english-resources');p.add_argument('--prepare-aot',action='store_true',help='Also prepare localized AOT image data from the existing private SC cache (developers only)');args=p.parse_args()
+    if args.prepare_aot:prepare(args.patch)
+    sources=audio_sources(args.base_root);output=args.output.resolve()
     if not output.is_relative_to(ROOT/'out'):raise ValueError('Output must stay in the workspace out directory')
     output.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(args.patch) as z:
+        executable=z.getinfo('WA2_Special_en.exe')
+        if executable.file_size!=943104 or sha(z.read(executable))!=EN:raise ValueError('Unsupported SC English executable identity')
         en=z.read('en.pak')
         if sha(en)!=EN_PAK_SHA:raise ValueError('Unsupported SC English resource pack')
         tracks,proof=captions(z,sources);subtitles,counts=encode(tracks)
@@ -135,7 +138,7 @@ def main():
         if path.exists() and path.read_bytes()!=data:raise ValueError('Refusing to overwrite different exported data: '+name)
         path.write_bytes(data);resources[name]=dict(size=len(data),sha256=sha(data))
     receipt=dict(schema='wa2.special-english-resources.v1',resources=resources,subtitles=counts,audio_mapping=proof,game_launched=False,screen_access=False,device_gameplay_verified=False)
-    (ROOT/'logs/special-english-resources.json').write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
+    log=ROOT/'logs/special-english-resources.json';log.parent.mkdir(parents=True,exist_ok=True);log.write_text(json.dumps(receipt,indent=2)+'\n',encoding='utf-8')
     print(json.dumps(dict(output=str(output),subtitles=counts,resources=resources)),flush=True)
 
 if __name__=='__main__':main()

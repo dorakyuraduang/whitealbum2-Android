@@ -3,13 +3,35 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
-The default delivery returned to shared AOT on 2026-11-08; the current version
-is **0.2.83-shared-aot**. Use the
-standard `out/android/WA2-arm64-0.2.83-shared-aot.apk` for the retained AOT application, or
-`out/android/WA2-0.2.83-shared-aot-replace-native.apk` to update the experimental
-0.3.x app in place. The latter retains its application ID and signing identity;
-both APKs have identical DEX/native game code. No app is uninstalled by the
-build tools. Native-format manual saves remain present but are not AOT saves.
+The current release is **0.2.126-special-aot** (version code 129), distributed as
+`WA2-arm64-0.2.126-special-aot.apk` for package `org.wa2.port`. It integrates
+**Main / SC** entries, separate resource folders and separate launcher settings.
+Main retains its verified `0.2.108-shared-aot` runtime. Install in place to
+preserve application data; no uninstall or save conversion is required for an
+existing installation of this AOT package. Earlier experimental native-format
+saves are not AOT saves.
+
+Choose the title before choosing its folder. Main needs its existing `IC`
+layout; SC uses its own complete original resources. Both provide FPS display,
+a 60 FPS limit, hold-to-skip and supplementary captions. SC supports Chinese,
+Japanese and English; unlock-all test mode remains Main only.
+
+SC English requires the full English patch v1.0. Extract the release's
+`WA2-SC-English-resource-tools.zip` and follow [the resource preparation
+instructions](../README.en.md#sc-languages-and-english-resource-preparation).
+The Python tool works without private analysis caches or a compiler. Copy its
+four output files into the SC folder; keep original resources packed.
+SC captions load automatically by version, without an external-file picker.
+Japanese supplementary caption data are not supplied by the English patch;
+disable extra captions if the corresponding file is unavailable.
+
+The release includes matching Main and SC LGPL relink materials. Download the
+APK for installation; the relink ZIP is for rebuilding compatible libraries and
+is not copied to the phone. See [release notes](releases/0.2.126.md) and
+[SC resource, save and validation details](SPECIAL_CONTENTS.md). Full English
+gameplay and on-device synchronization remain pending user-controlled testing.
+
+## Earlier Main storage and resource changes
 
 0.2.83 corrects the 0.2.82 loose script/font routing: Japanese, English and
 Ukrainian first read `script/`, `IC/script/` and `fnt/` in the selected tree.

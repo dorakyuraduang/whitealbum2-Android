@@ -9,6 +9,23 @@ finite memory checks. `scripts/package_launcher.py --integrated --with-special`
 adds the verified module to the audited main APK, then attempts an in-place ADB
 installation without starting it. See [the Special Contents scope and commands](SPECIAL_CONTENTS.md).
 
+### Preparing the integrated release
+
+After verification and APK installation, run `python scripts/package_special_release.py`.
+This uses the existing verified APK; it does not rebuild or install one. The
+matching retained Main relink archive must identify the APK's audited base, and
+all preserved APK entries and SC library hashes must match their receipts.
+It collects SC's actual Android link objects/archives and matching FFmpeg
+source/configuration, then verifies a hidden, below-normal-priority relink,
+public exports, SC SONAME and 16 KiB load alignment. No game is executed.
+
+`out/releases/0.2.126-special-aot/` contains the combined Main/SC relink ZIP,
+the standalone English resource-tool ZIP and `SHA256SUMS.txt`; the APK remains
+at its verified `out/android/` path. Publish these four assets together. No PAK,
+external SC caption text, original EXE, signing key or analysis cache is included.
+The resource tool uses Python 3.9+ standard-library modules; developers may add
+`--prepare-aot` when preparing localized image data from their authorized cache.
+
 ## Active AOT host refresh
 
 The primary delivery returned to shared AOT on 2026-11-08; the native core
