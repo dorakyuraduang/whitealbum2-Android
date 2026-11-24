@@ -9,6 +9,7 @@
 | stb_vorbis 1.22 | Streaming Ogg/Vorbis decoding | [source and embedded MIT/public-domain terms](third_party/stb/stb_vorbis.c), [version record](third_party/stb/README.md) |
 | FFmpeg 9.0.2, selected components | WMV/WMA and selected legacy media codecs | LGPL-2.1-or-later; [license](third_party/ffmpeg/COPYING.LGPLv2.1), [source/configuration record](third_party/ffmpeg/NOTICE.txt) |
 | nxs7 WA2-CHS-Subtitle-Patch | Embedded main-story audio-only captions; SpecialContents excluded | [MIT](third_party/wa2_subtitles/LICENSE), [scope and pinned source](third_party/wa2_subtitles/README.md) |
+| Todokanai TL English Patch v1.0.3.0 | Main's embedded English audio-only captions | [BSD 3-Clause](third_party/todokanai/LICENSE), [original installer manifest](https://github.com/TodokanaiTL/WA2EnglishPatch/blob/v1.0.3.0/src/WA2.iss) |
 | AOSP Droid Sans Fallback | Only the 891 characters used by the embedded captions, as bitmap coverage | [Apache 2.0 and original font notices](third_party/wa2_subtitles/FONT-NOTICE.txt), [font source record](third_party/wa2_subtitles/source.json) |
 
 SDL and MojoShader source folders may include additional file-level notices;

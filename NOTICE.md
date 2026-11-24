@@ -33,3 +33,8 @@ caption file only; it does not grant rights to other translation patches or
 game assets. SpecialContents subtitle data is excluded. The small caption
 bitmap charset uses AOSP Droid Sans Fallback under its separately preserved
 Apache 2.0 font notices.
+
+The Android package embeds the English audio-only captions from the Todokanai TL
+English Patch v1.0.3.0. The build verifies the exact `subtitles` file against the
+publisher's [installer manifest](https://github.com/TodokanaiTL/WA2EnglishPatch/blob/v1.0.3.0/src/WA2.iss).
+The package includes the publisher's [BSD 3-Clause license](third_party/todokanai/LICENSE).

@@ -71,8 +71,37 @@ public final class SubtitleFilesTest {
         IOException readError = new IOException("read failed");
         failsWith(readError.getMessage(), null, () -> SubtitleFiles.require(expected, () -> { throw readError; }));
 
+        check(SubtitleFiles.ENGLISH_ASSET.equals("todokanai/subtitles"));
+        byte[] builtInEnglish = {1};
+        byte[] externalFile = {2};
+        String selected = "content://provider/tree/patch/document/todokanai%2Fsubtitles";
+        int mainSourceCases = 0;
+        for (int language = LaunchProfile.CHINESE; language <= LaunchProfile.UKRAINIAN; language++) {
+            for (int flags : new int[]{0, LaunchProfile.CHINESE_SUBTITLES}) {
+                for (String uri : new String[]{"", selected}) {
+                    LaunchProfile profile = LaunchProfile.decode(new LaunchProfile(flags, language, uri).encode());
+                    boolean useExternal = flags != 0 && uri.equals(selected);
+                    boolean useEnglish = flags != 0 && uri.isEmpty() && language == LaunchProfile.ENGLISH;
+                    byte[] data = SubtitleFiles.readMain(profile, () -> {
+                        check(useExternal && profile.subtitle.equals(selected));
+                        return externalFile;
+                    }, () -> {
+                        check(useEnglish);
+                        return builtInEnglish;
+                    });
+                    check(data == (useExternal ? externalFile : useEnglish ? builtInEnglish : null));
+                    mainSourceCases++;
+                }
+            }
+        }
+        LaunchProfile englishProfile = japanese.withLanguage(LaunchProfile.ENGLISH);
+        check(SubtitleFiles.readMain(englishProfile, () -> { throw new AssertionError(); }, () -> null) == null);
+        failsWith(readError.getMessage(), null, () -> SubtitleFiles.readMain(englishProfile.withSubtitle(selected),
+            () -> { throw readError; }, () -> { throw new AssertionError(); }));
+
         String report = "{\"passed\":true,\"sc_missing_file_cases\":" + missingFiles
-            + ",\"external_unavailable_cases\":" + unavailableDocuments + "}\n";
+            + ",\"external_unavailable_cases\":" + unavailableDocuments
+            + ",\"main_caption_source_cases\":" + mainSourceCases + "}\n";
         Files.write(Paths.get(args[0]), report.getBytes(StandardCharsets.UTF_8));
     }
 }

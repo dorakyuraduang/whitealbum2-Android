@@ -17,7 +17,7 @@ Special 的原程序地址、CRT、资源表和部分 UI 与正篇不同，不�
 和配置互不覆盖，也无需维护第二个应用的安装、签名和启动接口。
 
 合包核验会逐字节保留已验证正篇 APK 的三个运行库和许可证条目，只新增 Special
-运行库及对应入口。当前合包版本为 `0.2.127-special-aot`；正篇运行库的诊断版本仍是
+运行库及对应入口。当前合包版本为 `0.2.128-special-aot`；正篇运行库的诊断版本仍是
 `0.2.108-shared-aot`。安装使用 `adb install -r`，核对版本、UID、首次安装时间和
 已安装 APK 的 SHA-256，不卸载、不清数据、不启动应用。
 
@@ -46,7 +46,7 @@ Special 存档和 INI 配置位于：
 python scripts/prepare_special_contents.py --exe 'D:\WHITE ALBUM2 Special Contents\WA2_Special_cn.exe'
 python scripts/prepare_special_english_resources.py 'D:\download\White Album 2 Special Contents full patch (v1.0).zip' --base-root 'D:\WHITE ALBUM2 Special Contents' --prepare-aot
 python scripts/verify_special_contents.py
-python scripts/package_launcher.py --integrated --with-special
+python scripts/package_launcher.py --integrated --with-special --english-captions subtitles
 ```
 
 首次准备检查授权和 SHA，进行静态 CFG/回调发现并保存初始内存。
@@ -56,6 +56,8 @@ python scripts/package_launcher.py --integrated --with-special
 比较实际编译的 Special 源文件清单与哈希，并核验 ARM64 ELF 的 16 KiB 装载对齐。
 合包必须有当前源码绑定的验证记录，完成签名/内容核验后自动尝试在已授权手机原位安装。
 设备不可用时明确记录安装待完成。
+
+`--english-captions subtitles` 使用调用者提供的原版 Todokanai 字幕文件，仅供正篇英文版的内置来源。
 
 本地产物和记录：
 

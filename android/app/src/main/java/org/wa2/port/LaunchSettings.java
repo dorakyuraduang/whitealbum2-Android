@@ -32,7 +32,7 @@ final class LaunchSettings {
     static Uri tree(Context context) {return context instanceof LauncherActivity?((LauncherActivity)context).configurationTree():ResourceDirectory.selectedTree(context);}
     private static String key(Context context) {Uri tree=tree(context);return target(context).storageKey(tree==null?null:tree.toString());}
     private static LaunchProfileStore store(Context context) { synchronized(LOCK){return profiles.get(key(context));} }
-    private static LaunchProfile session(Context context) {
+    static LaunchProfile session(Context context) {
         if(ResourceDirectory.specialSession() && !ResourceDirectory.validSpecialSession())return null;
         if(!(context instanceof Wa2Activity))return null;Intent intent=((Activity)context).getIntent();String selected=key(context);
         if(intent==null || selected==null || !selected.equals(intent.getStringExtra(SESSION_TREE)))return null;

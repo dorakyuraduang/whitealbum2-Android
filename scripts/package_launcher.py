@@ -19,10 +19,25 @@ ROOT = Path(__file__).resolve().parents[1]
 STANDALONE_SOURCE = ROOT / 'android/launcher/src/main'
 INTEGRATED_SOURCE = ROOT / 'android/app/src/main'
 ANDROID = '{http://schemas.android.com/apk/res/android}'
+ENGLISH_CAPTIONS_ENTRY = 'assets/todokanai/subtitles'
+ENGLISH_CAPTIONS_LICENSE = 'assets/licenses/todokanai/LICENSE'
+# The v1.0.3.0 installer identifies the audio-only caption file by this hash.
+ENGLISH_CAPTIONS_SHA256 = '44b40b444bdd45c943f795cd2c8fdbc59bb35696cac7c79a7bb3e2e6f70220e9'
 
 
 def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def english_caption_entries(path):
+    if path is None:
+        return {}
+    with path.open('rb') as source:
+        captions = source.read(25692)
+    if len(captions) != 25691 or hashlib.sha256(captions).hexdigest() != ENGLISH_CAPTIONS_SHA256:
+        raise ValueError('Expected the original Todokanai v1.0.3.0 subtitles file')
+    license_text = (ROOT / 'third_party/todokanai/LICENSE').read_bytes()
+    return {ENGLISH_CAPTIONS_ENTRY: captions, ENGLISH_CAPTIONS_LICENSE: license_text}
 
 
 def verify_content(apk, expected, preserved):
@@ -147,6 +162,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--integrated', action='store_true', help='Update the launcher in the audited regular Android APK')
     parser.add_argument('--with-special', action='store_true', help='Include the verified Special module in the integrated APK and install in place')
+    parser.add_argument('--english-captions', type=Path, help='Embed the verified Todokanai v1.0.3.0 subtitles file in the integrated APK')
     parser.add_argument('--sdk', type=Path, default=ROOT / 'tools/android-sdk')
     parser.add_argument('--jdk', type=Path, default=ROOT / 'tools/source-analysis/jdk-21.0.12.1+1')
     parser.add_argument('--keystore', type=Path)
@@ -154,6 +170,9 @@ def main():
     args = parser.parse_args()
     if args.with_special and not args.integrated:
         raise ValueError('--with-special requires --integrated')
+    if args.english_captions is not None and not args.integrated:
+        raise ValueError('--english-captions requires --integrated')
+    caption_entries = english_caption_entries(args.english_captions)
     special_library, special_info = audited_special() if args.with_special else (None, None)
 
     key = args.keystore or ROOT / 'private/android-signing/wa2-native-dev.p12'
@@ -283,6 +302,12 @@ def main():
             if args.integrated:
                 preserved = copy_runtime(base, apk, libraries)
                 expected.update(preserved)
+                for name, content in caption_entries.items():
+                    if name in expected:
+                        raise ValueError('Duplicate English caption entry: ' + name)
+                    apk.writestr(name, content, compress_type=zipfile.ZIP_DEFLATED)
+                    preserved[name] = hashlib.sha256(content).hexdigest()
+                    expected.add(name)
                 if args.with_special:
                     special_entry = 'lib/arm64-v8a/libwa2_special.so'
                     apk.write(special_library, special_entry, compress_type=zipfile.ZIP_DEFLATED)
@@ -337,6 +362,7 @@ def main():
                     entries=entries, signature_v2_verified=True, alignment_verified=True,
                     base_apk_sha256=sha256(base) if args.integrated else None,
                     preserved_entries=preserved,
+                    embedded_english_captions_sha256=preserved.get(ENGLISH_CAPTIONS_ENTRY),
                     special_contents=special_info,
                     special_jni=special_jni,
                     app_launched=False, passed=True)

@@ -14,7 +14,7 @@ import java.util.List;
 final class ReadOnlyDocuments {
     private static final String[] FIELDS={DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME,
         DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE,DocumentsContract.Document.COLUMN_LAST_MODIFIED};
-    private static final class Node {
+    static final class Node {
         final Uri uri;final String name;final boolean directory;final long size,modified;
         Node(Uri uri,String name,boolean directory,long size,long modified){this.uri=uri;this.name=name;this.directory=directory;this.size=size;this.modified=modified;}
     }
@@ -51,6 +51,14 @@ final class ReadOnlyDocuments {
         try{return resolve(parts);}catch(FileNotFoundException missing){index.clear();return resolve(parts);}
     }
     private static void record(ArrayList<String> result,Node node){result.add(node.name);result.add(Long.toString(node.size));result.add(Long.toString(node.modified));result.add(node.directory?"16":"128");}
+    synchronized List<Node> files() throws IOException {
+        List<Node> result = new ArrayList<>();
+        for (Node entry : index.at(root.uri, true).entries) {
+            if (!entry.directory) result.add(entry);
+        }
+        result.sort((left, right) -> String.CASE_INSENSITIVE_ORDER.compare(left.name, right.name));
+        return result;
+    }
     synchronized String[] metadata(String name,boolean list) throws IOException {
         String[] parts=LooseResourcePath.parts(name,list);Node file=settled(parts);ArrayList<String> result=new ArrayList<>();
         if(file!=null){if(list){if(file.directory){boolean fixed=parts.length==0 || (parts.length==1 && LooseResourcePath.fold(parts[0]).equals("ic"));for(Node child:index.at(file.uri,fixed).entries)record(result,child);}}

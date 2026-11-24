@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import org.libsdl.app.SDL;
@@ -35,21 +36,45 @@ final class ExternalSubtitles {
     static byte[] read(Context context,String location) throws IOException {
         if(Looper.myLooper()==Looper.getMainLooper())throw new IOException("字幕文件必须在后台读取");
         final Uri uri=Uri.parse(LaunchProfile.subtitleUri(location));if(!"content".equals(uri.getScheme()))throw new IOException("请选择系统文件选择器提供的字幕文件（sub.yaml 或 Todokanai 格式）");
-        ByteArrayOutputStream result=new ByteArrayOutputStream();byte[] buffer=new byte[8192];
         String unavailable = LauncherLocale.load(context).text(EXTERNAL_CAPTION_FILE_UNAVAILABLE);
         try(InputStream input=SubtitleFiles.require(unavailable, () -> context.getContentResolver().openInputStream(uri))){
-            for(;;){int count=input.read(buffer);if(count<0)break;if(count==0)throw new IOException("无法完整读取外置字幕文件");if(count>1024*1024-result.size())throw new IOException("外置字幕不能超过 1 MiB");result.write(buffer,0,count);}
+            return readText(input);
         }
-        if(result.size()==0)throw new IOException("外置字幕文件为空");return result.toByteArray();
+    }
+    private static byte[] readText(InputStream input) throws IOException {
+        ByteArrayOutputStream result = new ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        for (int count; (count = input.read(buffer)) >= 0;) {
+            if (count == 0) throw new IOException("无法完整读取字幕文件");
+            if (count > 1024 * 1024 - result.size()) throw new IOException("字幕文件不能超过 1 MiB");
+            result.write(buffer, 0, count);
+        }
+        if (result.size() == 0) throw new IOException("字幕文件为空");
+        return result.toByteArray();
+    }
+    private static byte[] readEmbeddedEnglish(Context context) throws IOException {
+        InputStream captions;
+        try {
+            captions = context.getAssets().open(SubtitleFiles.ENGLISH_ASSET);
+        } catch (FileNotFoundException absent) {
+            // Source-only builds may be packaged without the optional English asset.
+            return null;
+        }
+        try (InputStream input = captions) {
+            return readText(input);
+        }
     }
     public static byte[] readForGame() throws IOException {
         Context context=SDL.getContext();if(!(context instanceof Wa2Activity))throw new IOException("字幕运行会话尚未准备好");
-        if(!LaunchSettings.sessionValid((Wa2Activity)context))throw new IOException("字幕设置与当前游戏目录不匹配");
-        if(!LaunchSettings.chineseSubtitles(context))return null;
-        if(ResourceDirectory.specialSession())return readSpecial(context,ResourceDirectory.selectedTree(context),LaunchTarget.SPECIAL.subtitleFile(new LaunchProfile(0,LaunchSettings.language(context),"")),1024*1024);
-        String location=LaunchSettings.subtitle(context);
-        if(!location.isEmpty())return read(context,location);
-        return null;
+        LaunchProfile profile = LaunchSettings.session(context);
+        if (profile == null) throw new IOException("字幕设置与当前游戏目录不匹配");
+        if (ResourceDirectory.specialSession()) {
+            if (!profile.enabled(LaunchProfile.CHINESE_SUBTITLES)) return null;
+            return readSpecial(context, ResourceDirectory.selectedTree(context),
+                LaunchTarget.SPECIAL.subtitleFile(profile), 1024 * 1024);
+        }
+        return SubtitleFiles.readMain(profile, () -> read(context, profile.subtitle),
+            () -> readEmbeddedEnglish(context));
     }
     static void checkSpecialResources(Context context,Uri tree,LaunchProfile profile)throws IOException{
         ReadOnlyDocuments documents=new ReadOnlyDocuments(context.getContentResolver(),tree);

@@ -6,10 +6,19 @@ import java.io.IOException;
 import static org.wa2.port.LauncherText.Key.SC_CAPTION_FILE_REQUIRED;
 
 final class SubtitleFiles {
+    static final String ENGLISH_ASSET = "todokanai/subtitles";
+
     private SubtitleFiles() { }
 
     interface Opener<T> { T open() throws IOException; }
     interface Metadata { String[] get(String name) throws IOException; }
+
+    static byte[] readMain(LaunchProfile profile, Opener<byte[]> selected, Opener<byte[]> english)
+            throws IOException {
+        if (!profile.enabled(LaunchProfile.CHINESE_SUBTITLES)) return null;
+        if (!profile.subtitle.isEmpty()) return selected.open();
+        return profile.language == LaunchProfile.ENGLISH ? english.open() : null;
+    }
 
     // Document providers may report an unavailable file as null or an exception.
     static <T> T require(String message, Opener<T> opener) throws IOException {

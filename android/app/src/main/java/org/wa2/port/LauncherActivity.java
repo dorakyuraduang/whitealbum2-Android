@@ -27,6 +27,7 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
+import java.io.IOException;
 import java.util.List;
 import org.wa2.launcher.GameFolderSelection;
 import static org.wa2.port.LauncherText.Key.*;
@@ -34,6 +35,8 @@ import static org.wa2.port.LauncherText.Key.*;
 /** Configure the external resources before loading SDL or the game library. */
 public final class LauncherActivity extends Activity {
     private static final int PICK_DIRECTORY = 0x5742, PICK_SUBTITLE=0x5743, PICK_SPECIAL=0x5744;
+    private static final int PICK_SUBTITLE_FOLDER = 0x5745;
+    private static final String SUBTITLE_PICKER_TREE = "subtitle-picker-tree";
     private static final int TEXT = 0xffedf4f3, MUTED = 0xffa4b7b6, ACCENT = 0xff76d6c4;
     private TextView directory, status, languagePaths;
     private Button choose, start, language, subtitle, uiLanguage, diagnostics;
@@ -45,6 +48,8 @@ public final class LauncherActivity extends Activity {
     private Switch fps, limit60Fps, longPress, testMode, chineseSubtitles, showMenu;
     private boolean busy, launching, refreshing, profileReady;
     private int generation;
+    private Uri subtitlePickerTree;
+    private Runnable afterProfileReady;
 
     LaunchTarget configurationTarget(){return selectedTarget;}
     Uri configurationTree(){return selectedTarget==LaunchTarget.MAIN?ResourceDirectory.selectedTree(this):gameFolders.saved(GameFolderSelection.SPECIAL);}
@@ -124,6 +129,7 @@ public final class LauncherActivity extends Activity {
     }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        if (state != null) subtitlePickerTree = state.getParcelable(SUBTITLE_PICKER_TREE);
         ui=LauncherLocale.load(this);
         gameFolders = new GameFolderSelection(this);
         selectedTarget="special".equals(getSharedPreferences("launcher-view",MODE_PRIVATE).getString("configuration","main"))?LaunchTarget.SPECIAL:LaunchTarget.MAIN;
@@ -280,26 +286,81 @@ public final class LauncherActivity extends Activity {
     }
 
     private void chooseSubtitle() {
-        if(busy || !profileReady || selectedTarget==LaunchTarget.SPECIAL)return;
-        showDialog(new AlertDialog.Builder(this).setTitle(t(SUBTITLE_SOURCE)).setItems(new String[]{selectedTarget==LaunchTarget.SPECIAL?"subtext.dat":t(BUILT_IN),t(CHOOSE_SUBTITLE)},(dialog,which) -> {
+        if(busy || !profileReady || subtitlePickerTree != null || selectedTarget==LaunchTarget.SPECIAL)return;
+        showDialog(new AlertDialog.Builder(this).setTitle(t(SUBTITLE_SOURCE)).setItems(
+            new String[]{t(BUILT_IN), t(CHOOSE_SUBTITLE), t(CHOOSE_SUBTITLE_FOLDER)},(dialog,which) -> {
             if(which==0){LaunchSettings.setSubtitle(this,"",this::saved);refresh();return;}
-            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType("*/*");intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,configurationTree());
-            try{startActivityForResult(intent,PICK_SUBTITLE);}catch(RuntimeException error){status.setText(t(PICKER_FAILED));}
+            pickSubtitle(which == 2);
         }).setNegativeButton(t(CANCEL),null).create());
     }
-    private void validateSubtitle(Uri uri,int flags) {
+    private void pickSubtitle(boolean folder) {
+        Uri tree = configurationTree();
+        if (tree == null) return;
+        Intent intent = new Intent(folder ? Intent.ACTION_OPEN_DOCUMENT_TREE : Intent.ACTION_OPEN_DOCUMENT);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        if (folder) {
+            intent.addFlags(Intent.FLAG_GRANT_PREFIX_URI_PERMISSION);
+        } else {
+            intent.setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
+        }
+        intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,
+            DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree)));
+        subtitlePickerTree = tree;
+        try {
+            startActivityForResult(intent, folder ? PICK_SUBTITLE_FOLDER : PICK_SUBTITLE);
+        } catch (RuntimeException error) {
+            subtitlePickerTree = null;
+            status.setText(t(PICKER_FAILED));
+        }
+    }
+    private void chooseSubtitleInFolder(Uri folder) {
+        busy = true;
+        final int token = ++generation;
+        refresh();
+        status.setText(t(CHECKING_SUBTITLE));
+        new Thread(() -> {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+            try {
+                ReadOnlyDocuments documents = new ReadOnlyDocuments(getContentResolver(), folder);
+                List<ReadOnlyDocuments.Node> files = documents.files();
+                String[] names = new String[files.size()];
+                for (int n = 0; n < names.length; n++) names[n] = files.get(n).name;
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed() || generation != token) return;
+                    busy = false;
+                    refresh();
+                    if (names.length == 0) {
+                        status.setText(t(SUBTITLE_FOLDER_EMPTY));
+                        return;
+                    }
+                    showDialog(new AlertDialog.Builder(this).setTitle(t(CHOOSE_SUBTITLE))
+                        .setItems(names, (dialog, which) -> validateSubtitle(files.get(which).uri, folder))
+                        .setNegativeButton(t(CANCEL), null).create());
+                });
+            } catch (IOException | RuntimeException error) {
+                runOnUiThread(() -> {
+                    if (isFinishing() || isDestroyed() || generation != token) return;
+                    busy = false;
+                    refresh();
+                    status.setText(t(SUBTITLE_REJECTED, error.getMessage()));
+                });
+            }
+        }, "WA2 subtitle folder").start();
+    }
+    private void validateSubtitle(Uri uri, Uri grant) {
         if(busy || !profileReady || uri==null || selectedTarget==LaunchTarget.SPECIAL)return;
         busy=true;final int token=++generation;refresh();status.setText(t(CHECKING_SUBTITLE));
         final android.content.Context application=getApplicationContext();
         new Thread(() -> {
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);String problem=null,summary=null;
             try{
-                if(!"content".equals(uri.getScheme()))throw new java.io.IOException(t(REQUIRE_LOCAL_SUBTITLE));
+                if(!"content".equals(uri.getScheme()))throw new IOException(t(REQUIRE_LOCAL_SUBTITLE));
                 summary=ExternalSubtitles.validate(application,uri.toString());
-                if((flags&Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)==0 || (flags&Intent.FLAG_GRANT_READ_URI_PERMISSION)==0)throw new java.io.IOException(t(REQUIRE_LOCAL_SUBTITLE));
-                application.getContentResolver().takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                try {
+                    application.getContentResolver().takePersistableUriPermission(grant, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (SecurityException error) {
+                    throw new IOException(t(REQUIRE_LOCAL_SUBTITLE), error);
+                }
             }catch(Exception | LinkageError error){problem=error.getMessage();if(problem==null)problem=error.toString();}
             final String failure=problem,details=summary;
             runOnUiThread(() -> {
@@ -338,15 +399,44 @@ public final class LauncherActivity extends Activity {
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed() || generation != token) return;
                 busy = false;profileReady=loaded;refresh();
+                Runnable pending = afterProfileReady;
+                afterProfileReady = null;
                 if(failure!=null){status.setText(t(OPERATION_FAILED,failure)+(loaded?"":"\n"+t(NEED_REAUTHORIZE)));return;}
                 status.setText(t(READY,found));
+                if (pending != null && !launch) {
+                    pending.run();
+                    return;
+                }
                 if(launch && target==LaunchTarget.SPECIAL){Intent runtime=specialRuntime();if(runtime==null){status.setText(missingSpecialRuntime());return;}startSpecial(runtime,tree);}
                 else if(launch){Intent session=new Intent(this,Wa2Activity.class);LaunchSettings.applySession(this,session);launching=true;busy=true;refresh();status.setText(t(STARTING));startActivity(session);}
             });
         }, "WA2 launcher resources").start();
     }
+    @Override protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        state.putParcelable(SUBTITLE_PICKER_TREE, subtitlePickerTree);
+    }
     @Override protected void onActivityResult(int request, int result, Intent data) {
-        if(request==PICK_SUBTITLE){if(result==RESULT_OK && data!=null && data.getData()!=null)validateSubtitle(data.getData(),data.getFlags());else status.setText(t(CANCELLED_SUBTITLE));return;}
+        if (request == PICK_SUBTITLE || request == PICK_SUBTITLE_FOLDER) {
+            Uri gameTree = subtitlePickerTree;
+            subtitlePickerTree = null;
+            Uri selected = data == null ? null : data.getData();
+            if (result != RESULT_OK || selected == null || gameTree == null ||
+                    selectedTarget != LaunchTarget.MAIN || !gameTree.equals(configurationTree())) {
+                status.setText(t(CANCELLED_SUBTITLE));
+                return;
+            }
+            Runnable choose = request == PICK_SUBTITLE_FOLDER ? () -> chooseSubtitleInFolder(selected)
+                : () -> validateSubtitle(selected, selected);
+            if (busy || !profileReady) {
+                // The activity can have been recreated while the picker was open.
+                afterProfileReady = choose;
+                if (!busy) prepare(gameTree, 0, false);
+            } else {
+                choose.run();
+            }
+            return;
+        }
         if (request == PICK_SPECIAL) {
             if (result == RESULT_OK && data != null) {
                 GameFolderSelection.Result saved = gameFolders.remember(GameFolderSelection.SPECIAL, data,

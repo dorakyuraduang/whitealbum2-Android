@@ -3,8 +3,8 @@
 Requirements: Android 8.0+, ARM64 and OpenGL ES 3.0. The game resources remain
 external; the APK contains no PAKs and requires no whole-archive extraction.
 
-The current release is **0.2.126-special-aot** (version code 129), distributed as
-`WA2-arm64-0.2.126-special-aot.apk` for package `org.wa2.port`. It integrates
+The current release is **0.2.128-special-aot** (version code 131), distributed as
+`WA2-arm64-0.2.128-special-aot.apk` for package `org.wa2.port`. It integrates
 **Main / SC** entries, separate resource folders and separate launcher settings.
 Main retains its verified `0.2.108-shared-aot` runtime. Install in place to
 preserve application data; no uninstall or save conversion is required for an
@@ -15,6 +15,10 @@ Choose the title before choosing its folder. Main needs its existing `IC`
 layout; SC uses its own complete original resources. Both provide FPS display,
 a 60 FPS limit, hold-to-skip and supplementary captions. SC supports Chinese,
 Japanese and English; unlock-all test mode remains Main only.
+
+Main uses the supplied Todokanai captions with **English**, **Built-in** and
+**Extra captions** selected. External captions can also be chosen from their
+parent folder, including files without an extension. See the [caption guide](EXTERNAL_SUBTITLES.en.md).
 
 SC English requires the full English patch v1.0. Extract the release's
 `WA2-SC-English-resource-tools.zip` and follow [the resource preparation
@@ -27,7 +31,7 @@ disable extra captions if the corresponding file is unavailable.
 
 The release includes matching Main and SC LGPL relink materials. Download the
 APK for installation; the relink ZIP is for rebuilding compatible libraries and
-is not copied to the phone. See [release notes](releases/0.2.126.md) and
+is not copied to the phone. See [release notes](releases/0.2.128.md) and
 [SC resource, save and validation details](SPECIAL_CONTENTS.md). Full English
 gameplay and on-device synchronization remain pending user-controlled testing.
 

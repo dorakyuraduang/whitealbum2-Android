@@ -86,9 +86,9 @@ def main():
         target=reports['LaunchTargetTest']
         if target['cases']!=107 or target['guards']!=99 or not all(target[k] for k in ('sc_subtitle_toggle_and_source_persisted','same_folder_title_isolation','failed_write_retry','special_defaults_restored','japanese_ui_script_font','unsupported_special_options_rejected')):raise ValueError('Incomplete Main/SC profile isolation and routing checks')
         text=reports['LauncherTextTest']
-        if text['languages']!=28 or text['translated_messages']!=1372 or text['formatted_message_cases']!=364 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=25 or text['automatic_language_cases']!=56 or text['manual_language_cases']!=31 or not all(text[key] for key in ('system_language_default','english_fallback','manual_language_override_preserved','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue and automatic locale checks')
+        if text['languages']!=28 or text['translated_messages']!=1428 or text['formatted_message_cases']!=364 or text['rtl_languages']!=4 or text['locale_resolution_cases']!=25 or text['automatic_language_cases']!=56 or text['manual_language_cases']!=31 or not all(text[key] for key in ('system_language_default','english_fallback','manual_language_override_preserved','process_locale_unchanged','game_profiles_unchanged')):raise ValueError('Incomplete launcher language catalogue and automatic locale checks')
         subtitles=reports['SubtitleFilesTest']
-        if subtitles['sc_missing_file_cases']!=140 or subtitles['external_unavailable_cases']!=84:raise ValueError('Incomplete localized subtitle file checks')
+        if subtitles['sc_missing_file_cases']!=140 or subtitles['external_unavailable_cases']!=84 or subtitles['main_caption_source_cases']!=16:raise ValueError('Incomplete subtitle file checks')
     for name,value in inputs.items():
         if digest(ROOT/name)!=value:raise ValueError('Android UI input changed during verification: '+name)
     report=dict(schema='wa2.native-android-ui.v1',source_sha256=inputs,source_sets=records,api_jar_sha256=digest(api),javac_sha256=digest(jdk/'bin/javac.exe'),d8_sha256=digest(bt/'lib/d8.jar'),

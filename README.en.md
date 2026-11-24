@@ -3,24 +3,24 @@
 [简体中文](README.md) · **English**
 
 A static-recompilation port for **Android ARM64**, using shared game logic
-across platforms. Current release: **0.2.126-special-aot** (version code 129).
+across platforms. Current release: **0.2.128-special-aot** (version code 131).
 One APK provides **Main / Special Contents (SC)** entries with separate resource
 folders and launcher settings. SC supports **Chinese, Japanese and English**.
 Supply your own original PAK resources; whole-archive extraction is not required.
 
-**[Download 0.2.126](https://github.com/dorakyuraduang/whitealbum2-Android/releases/tag/r0.2.126)** · [All releases](https://github.com/dorakyuraduang/whitealbum2-Android/releases)
+**[Download 0.2.128](https://github.com/dorakyuraduang/whitealbum2-Android/releases/tag/r0.2.128)** · [All releases](https://github.com/dorakyuraduang/whitealbum2-Android/releases)
 
 The integrated APK retains the Main `0.2.108-shared-aot` runtime and runs SC in
 a separate process. English SC uses the **Special Contents full patch v1.0**.
 Complete English gameplay and on-phone caption synchronization still need manual
-verification. See the [release notes](docs/releases/0.2.126.md) and
+verification. See the [release notes](docs/releases/0.2.128.md) and
 [SC details](docs/SPECIAL_CONTENTS.md).
 
 ## Quick start
 
 Requirements: **Android 8.0+, ARM64 and OpenGL ES 3.0**.
 
-1. Install `WA2-arm64-0.2.126-special-aot.apk`. Update an existing installation
+1. Install `WA2-arm64-0.2.128-special-aot.apk`. Update an existing installation
    in place to retain its application data.
 2. Copy the corresponding game's complete resources to any folder on your phone.
    Keep Main's `IC` subfolder and use separate folders for Main and SC.
@@ -144,12 +144,11 @@ directories.
 
 ### Supplementary captions
 
-Embedded Main supplementary captions are Chinese by default, controlled
-by **Extra captions**. To use an external file for Main, select a UTF-8 `sub.yaml` or
-original Todokanai `subtitles` file under **Caption source** and enable
-**Extra captions**. The external file replaces the complete embedded set;
-Todokanai files need no YAML conversion. English letters and spaces use measured
-advances for centring and wrapping.
+Enable **Extra captions** in Main to use the built-in Todokanai captions with
+**English** game resources. Other game languages use the built-in Chinese
+captions. An existing external choice takes precedence. Select **Caption source
+→ Built-in** to restore the default. To pick an external `sub.yaml` or Todokanai
+`subtitles` file that the system picker hides, use **Choose subtitles from a folder**.
 SC follows the automatic version-specific caption rules above.
 
 Story dialogue comes from the selected scripts and fonts; supplementary caption
@@ -163,7 +162,7 @@ and can be translated before selection.
 - [Android setup](docs/ANDROID.md)
 - [Android launcher and runtime integration (Chinese)](docs/STANDALONE_LAUNCHER.md)
 - [SC languages, captions and builds (Chinese)](docs/SPECIAL_CONTENTS.md)
-- [0.2.126 release notes](docs/releases/0.2.126.md)
+- [0.2.128 release notes](docs/releases/0.2.128.md)
 - [Ukrainian resource preparation and captions](docs/UKRAINIAN_SUPPORT.md)
 - [External caption format](docs/EXTERNAL_SUBTITLES.en.md)
 - [Building](docs/BUILDING.md) / [Architecture](docs/ARCHITECTURE.md)
@@ -184,5 +183,5 @@ third-party content retain their own terms: see [NOTICE](NOTICE.md) and
 [third-party notices](THIRD_PARTY_NOTICES.md). Distributions statically linking
 FFmpeg must include matching relink materials, corresponding source and build
 configuration as described in the build documentation.
-This release includes `WA2-0.2.126-special-aot-relink.zip` for both Main and SC;
+This release includes `WA2-0.2.128-special-aot-relink.zip` for both Main and SC;
 phone installation needs only the APK. Asset hashes are in `SHA256SUMS.txt`.

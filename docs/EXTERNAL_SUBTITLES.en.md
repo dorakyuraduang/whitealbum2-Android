@@ -2,10 +2,11 @@
 
 [中文说明](EXTERNAL_SUBTITLES.md)
 
-From **0.2.70**, the same file picker also accepts original Todokanai `subtitles`
-files. Select the file yourself; its filename is unrestricted and the format is
-detected from its contents. Embedded captions remain the default. Both formats
-require UTF-8 and have a 1 MiB limit.
+External captions support `sub.yaml` and the original Todokanai `subtitles`
+format. The parser detects the format from the contents. Both formats require
+UTF-8 and have a 1 MiB limit. Android **0.2.128** includes built-in Todokanai
+captions for Main when the game language is English. A saved external choice
+takes precedence.
 
 ```text
 {
@@ -35,10 +36,11 @@ still requires compatible game scripts, fonts and any necessary code changes.
 
 ## Load a file
 
-On Android, choose **Caption source → Choose sub.yaml**, select your file using
-the system file picker, wait for validation, enable extra captions and start the
-game from the launcher. Embedded Chinese captions remain the default; choose the
-embedded source to restore them. One caption switch controls either source.
+On Android, select **Caption source → Choose subtitle file**. If the system picker
+hides a file without an extension, use **Choose subtitles from a folder**,
+grant access to its parent folder and tap the filename. Enable **Extra captions**
+after validation. Select **Built-in** to restore the default captions for the
+current game language.
 
 The file can have any name, such as `sub-uk.yaml`. It can be anywhere the system
 picker grants persistent read access; it does not need to be inside the APK or
