@@ -158,6 +158,7 @@ and can be translated before selection.
 
 ## Documentation and development
 
+- [Windows-to-Android static recompilation and optimization workflow (Chinese)](docs/WINDOWS_TO_ANDROID_AOT.md)
 - [Windows PAK pack/unpack tool](docs/PAK_TOOL.md): folder-to-PAK and PAK-to-folder; KCAP/LAC support.
 - [Android setup](docs/ANDROID.md)
 - [Android launcher and runtime integration (Chinese)](docs/STANDALONE_LAUNCHER.md)
